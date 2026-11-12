@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"sort"
 	"strings"
 
 	ts "github.com/odvcencio/gotreesitter"
@@ -290,8 +291,19 @@ func findMacroCandidates(src []byte, language string) []macroCandidate {
 				add(c)
 			}
 		}
+		for _, c := range s.trailingMacros(i) {
+			add(c)
+		}
 	}
-	return out
+	sort.Slice(out, func(a, b int) bool { return out[a].start < out[b].start })
+	kept := out[:0]
+	for _, c := range out {
+		if len(kept) > 0 && c.start < kept[len(kept)-1].end {
+			continue
+		}
+		kept = append(kept, c)
+	}
+	return kept
 }
 
 type candScan struct {
@@ -528,6 +540,81 @@ loop:
 	return found
 }
 
+// trailingKeywords may stand between a parameter list and an annotation macro.
+var trailingKeywords = map[string]bool{
+	"const": true, "noexcept": true, "override": true, "final": true, "volatile": true,
+}
+
+// controlWords are followed by a parenthesised condition, not a parameter list.
+var controlWords = map[string]bool{
+	"if": true, "for": true, "while": true, "switch": true, "catch": true, "return": true,
+	"sizeof": true, "defined": true, "alignof": true, "decltype": true, "typeof": true,
+}
+
+// trailingMacros handles an annotation written after the parameter list:
+//
+//	void Compact() LOCKS_EXCLUDED(mutex_) {      int f(int a) NORETURN;
+//
+// Left alone the grammar reads `LOCKS_EXCLUDED(mutex_)` as the function's name.
+// The list it follows must belong to a function: an identifier in front of its
+// opening parenthesis that is not a control word and is not written as a macro.
+func (s *candScan) trailingMacros(i int) []macroCandidate {
+	if s.toks[i].kind != ctIdent || i == 0 {
+		return nil
+	}
+	j := i - 1
+	for trailingKeywords[s.word(j)] {
+		j--
+	}
+	if !s.punct(j, ')') {
+		return nil
+	}
+	open := j
+	for depth := 0; open >= 0 && open > j-400; open-- {
+		if s.toks[open].kind == ctDir {
+			return nil
+		}
+		if s.punct(open, ')') {
+			depth++
+		} else if s.punct(open, '(') {
+			depth--
+			if depth == 0 {
+				break
+			}
+		}
+	}
+	if open <= 0 || !s.punct(open, '(') {
+		return nil
+	}
+	name := s.word(open - 1)
+	if name == "" || controlWords[name] || notDeclaration[name] || isMacroName(name) {
+		return nil
+	}
+	var found []macroCandidate
+	k := i
+	for {
+		c, next, ok := s.macroAt(k)
+		if !ok {
+			break
+		}
+		found = append(found, c)
+		k = next
+	}
+	if len(found) == 0 {
+		return nil
+	}
+	switch {
+	case s.punct(k, '{'):
+		for n := range found {
+			found[n].expect = s.toks[open-1].start
+		}
+	case s.punct(k, ';'):
+	default:
+		return nil
+	}
+	return found
+}
+
 // definesBody reports whether the parameter list that opens at token i is
 // followed by a function body rather than `;`.
 func (s *candScan) definesBody(i int) bool {
@@ -725,10 +812,12 @@ func maskIsBetter(plainRoot *ts.Node, plain []ts.Tag, maskedRoot *ts.Node, maske
 		if !isDefinitionTag(t.Kind) {
 			continue
 		}
-		nPlain++
 		if names[t.Name] {
+			// A definition named after a masked token is the macro mistaken
+			// for a name; it is not one the mask can lose.
 			continue
 		}
+		nPlain++
 		if have[t.Name] == 0 {
 			return false
 		}

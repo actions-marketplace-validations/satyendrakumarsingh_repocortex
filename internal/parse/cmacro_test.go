@@ -44,6 +44,11 @@ func TestMacroCandidateForms(t *testing.T) {
 		{"macro alone on a line before a directive", "c", "G_BEGIN_DECLS\n#include <x.h>\nint f(void);", []string{"G_BEGIN_DECLS"}},
 		{"macro alone on a line before an Objective-C declaration", "objc", "NS_ASSUME_NONNULL_BEGIN\n@interface Foo : NSObject\n@end", []string{"NS_ASSUME_NONNULL_BEGIN"}},
 
+		{"annotation after the parameter list", "cpp", "void DBImpl::Compact() LOCKS_EXCLUDED(mutex_) {\n}", []string{"LOCKS_EXCLUDED(mutex_)"}},
+		{"annotation after const", "cpp", "int Get() const EXCLUSIVE_LOCKS_REQUIRED(mu_) { return 1; }", []string{"EXCLUSIVE_LOCKS_REQUIRED(mu_)"}},
+		{"annotation without arguments on a prototype", "c", "void die(int code) NORETURN;", []string{"NORETURN"}},
+		{"a macro loop after a condition is not an annotation", "c", "void f(void) {\n  if (x) FOREACH(a, b) {\n  }\n  while (y) EACH(c) {\n  }\n}", nil},
+
 		// What is not a candidate.
 		{"a pointer-returning function of a library type", "c", "FILE *open_it(void) { return 0; }", nil},
 		{"a variable of a library type", "c", "DWORD x;", nil},
@@ -156,6 +161,7 @@ func TestGuardAcceptsAMaskThatHelps(t *testing.T) {
 	for _, src := range []string{
 		"class LEVELDB_EXPORT Comparator {\n public:\n  virtual int Compare(int a, int b) const = 0;\n};\n",
 		"struct API_EXPORT Foo : Bar {\n  int a;\n};\n",
+		"void Foo::Compact() LOCKS_EXCLUDED(mu_) {\n}\nint Foo::Other() { return 1; }\n",
 		"static REDIS_NO_SANITIZE(\"bounds\") int f(int a) { return a; }\n",
 	} {
 		better, had := verdict(t, "cpp", src)
