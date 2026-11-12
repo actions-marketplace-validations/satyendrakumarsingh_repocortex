@@ -35,6 +35,7 @@ func newDeadCodeCmd(g *Global) *cobra.Command {
 		limit           int
 		all             bool
 		includeExported bool
+		includeTestOnly bool
 	)
 	cmd := &cobra.Command{
 		Use:   "dead-code",
@@ -51,6 +52,7 @@ far that can be trusted:
   repocortex dead-code --path internal/billing/
   repocortex dead-code --all --limit 100
   repocortex dead-code --include-exported
+  repocortex dead-code --include-test-only
 
 Only the likely tier is listed unless --all is given. The possible tier is
 mostly what a static index could not bind rather than what is unused, so it is
@@ -64,7 +66,17 @@ before deleting anything listed here.
 Tests, entry points and, unless --include-exported is given, exported
 definitions are left out: an empty caller list is their normal state. Languages
 the index parses without binding references (see 'repocortex languages') are not
-judged at all, and the count of what that hides is printed.`,
+judged at all, and the count of what that hides is printed.
+
+A function a framework calls is never likely: a definition spelled like the
+handler of an HTTP route, or one that consumes an event topic, has no caller by
+construction and is graded possible with that reason.
+
+--include-test-only adds a second, separate list: definitions that DO have
+callers, every one of them in a test file. Those rows are always possible and
+never likely. Code only its tests keep alive may be finished work that lost its
+last caller or a helper written for the tests, and an index cannot tell which.
+It is a second pass over the index, so it is off unless asked for.`,
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			ctx := cmd.Context()
@@ -77,6 +89,9 @@ judged at all, and the count of what that hides is printed.`,
 			opts := deadcode.Options{
 				Limit: limit, PathPrefix: pathPrefix,
 				IncludeExported: includeExported, Judgeable: bindsReferences,
+			}
+			if includeTestOnly {
+				opts.TestOnly = s.reg
 			}
 			// An exported definition is never better than possible, so asking
 			// for them is asking for that tier.
@@ -92,6 +107,9 @@ judged at all, and the count of what that hides is printed.`,
 				return emitJSON(cmd.OutOrStdout(), rep)
 			}
 			renderDeadCode(cmd.OutOrStdout(), rep, includeExported, all || includeExported)
+			if rep.TestOnly != nil {
+				renderTestOnly(cmd.OutOrStdout(), rep.TestOnly, includeExported)
+			}
 			return nil
 		},
 	}
@@ -99,6 +117,8 @@ judged at all, and the count of what that hides is printed.`,
 	cmd.Flags().IntVarP(&limit, "limit", "n", deadcode.DefaultLimit, "maximum candidates to list")
 	cmd.Flags().BoolVar(&all, "all", false, "also list candidates graded possible")
 	cmd.Flags().BoolVar(&includeExported, "include-exported", false, "also list exported definitions (implies --all)")
+	cmd.Flags().BoolVar(&includeTestOnly, "include-test-only", false,
+		"also list, separately, definitions whose every caller is in a test file (always possible)")
 	return cmd
 }
 
@@ -185,6 +205,11 @@ func renderDeadCode(out io.Writer, rep *deadcode.Report, includeExported, showin
 			"binding references, so every definition in them would look unused.\n",
 			rep.SkippedUnjudged, strings.Join(rep.UnjudgedLangs, ", "))
 	}
+	if rep.EntryPoints > 0 {
+		fmt.Fprintf(out, "Entry points: %d of the possible candidate(s) are spelled like a route's handler or "+
+			"consume an event topic. A framework calls such a function without a call expression, so they "+
+			"are never graded likely.\n", rep.EntryPoints)
+	}
 	if rep.Completeness.Truncated {
 		fmt.Fprintf(out, "TRUNCATED: %s.\n", rep.Completeness.TruncatedReason)
 	}
@@ -194,6 +219,86 @@ func renderDeadCode(out io.Writer, rep *deadcode.Report, includeExported, showin
 			100*rep.Completeness.BindingRate)
 	}
 	fmt.Fprintf(out, "\n%s\n", wrapText(deadcode.Limits, 100))
+}
+
+// renderTestOnly prints the second finding under its own heading, after
+// everything about the first, so neither its rows nor its counts can be read
+// as unused code.
+func renderTestOnly(out io.Writer, to *deadcode.TestOnlyReport, includeExported bool) {
+	fmt.Fprintln(out)
+	fmt.Fprintln(out, "REACHED ONLY FROM TESTS")
+	if to.TestFiles == 0 {
+		fmt.Fprintln(out, "The index holds no file it recognises as a test, so no definition can have all "+
+			"its callers in one. This is not a finding of none.")
+		return
+	}
+	if to.Found == 0 {
+		fmt.Fprintln(out, "No definition has callers only in test files.")
+	} else {
+		fmt.Fprintf(out, "%d definition(s) have callers, every one of them in a test file. All are graded "+
+			"possible, never likely.\n\n", to.Found)
+		usedReasons := map[deadcode.Reason]bool{}
+		tw := tabwriter.NewWriter(out, 0, 8, 2, ' ', 0)
+		fmt.Fprintln(tw, "CERTAINTY\tKIND\tSYMBOL\tLOCATION\tLINES\tTEST REFS\tWHY IT IS NOT CERTAIN")
+		for _, c := range to.Candidates {
+			parts := make([]string, 0, len(c.Reasons))
+			for _, r := range c.Reasons {
+				parts = append(parts, r.Label())
+				usedReasons[r] = true
+			}
+			fmt.Fprintf(tw, "%s\t%s\t%s\t%s:%d\t%d\t%d\t%s\n",
+				c.Certainty, c.Kind, c.Name, c.Path, c.Line, c.Lines(), c.TestReferences, strings.Join(parts, "; "))
+		}
+		_ = tw.Flush()
+		if len(to.Candidates) < to.Found {
+			fmt.Fprintf(out, "\nShowing %d of %d, confirmed against the source text first, then largest first. "+
+				"Raise --limit or narrow with --path.\n", len(to.Candidates), to.Found)
+		}
+		fmt.Fprintln(out)
+		for _, r := range deadcode.Reasons() {
+			if usedReasons[r] {
+				fmt.Fprintf(out, "  %s: %s.\n", r.Label(), r.Text())
+			}
+		}
+		fmt.Fprintf(out, "\n%s\n", wrapText(testOnlyCheckNote(to), 100))
+	}
+
+	fmt.Fprintln(out)
+	if n := to.Skipped - to.SkippedUnjudged; n > 0 {
+		what := "exported definitions (--include-exported lists them) and definitions named like an entry point"
+		if includeExported {
+			what = "definitions named like an entry point"
+		}
+		fmt.Fprintf(out, "Left out as expected: %d %s.\n", n, what)
+	}
+	if to.SkippedUnjudged > 0 {
+		fmt.Fprintf(out, "Not judged: %d definition(s) in languages the index parses without binding references.\n",
+			to.SkippedUnjudged)
+	}
+	if to.EntryPoints > 0 {
+		fmt.Fprintf(out, "Entry points left out: %d route handler(s) or event consumer(s) whose only call "+
+			"expressions are in tests. A framework calls them; their tests do not keep them alive.\n", to.EntryPoints)
+	}
+	if to.Truncated {
+		fmt.Fprintf(out, "TRUNCATED: %s.\n", to.TruncatedReason)
+	}
+	fmt.Fprintf(out, "\n%s\n", wrapText(deadcode.TestOnlyLimits, 100))
+}
+
+// testOnlyCheckNote says how far the test-only count can be trusted.
+func testOnlyCheckNote(to *deadcode.TestOnlyReport) string {
+	note := fmt.Sprintf("%d of them were checked against the indexed source text", to.TextChecked)
+	if to.NameElsewhere > 0 {
+		note += fmt.Sprintf("; %d have their name in code that is not a test, which is either a production "+
+			"use the graph has no edge for (a function passed as a value, a type used without a call) or "+
+			"an unrelated identifier spelled the same. Those are listed last", to.NameElsewhere)
+	}
+	note += "."
+	if unchecked := to.Found - to.TextChecked; unchecked > 0 {
+		note += fmt.Sprintf(" %d more were found from the graph alone and not checked, so the total is an "+
+			"upper bound. Narrow with --path to check them.", unchecked)
+	}
+	return note
 }
 
 // ---------------------------------------------------------------- hotspots

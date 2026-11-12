@@ -3,12 +3,16 @@ package registry
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"strings"
+
+	"github.com/satyendrakumarsingh/repocortex/pkg/model"
 )
 
 // This file holds the read queries behind the two whole-repository structural
-// reports: unreferenced definitions (internal/capability/deadcode) and per-file
-// structure for a set of paths (internal/capability/hotspots).
+// reports: unreferenced definitions and definitions referenced only from one
+// set of files (internal/capability/deadcode), and per-file structure for a
+// set of paths (internal/capability/hotspots).
 //
 // Both are streamed or bounded by the caller, never materialised for the whole
 // run. A repository with a million symbols has a few hundred thousand
@@ -45,6 +49,11 @@ type UnreferencedSymbol struct {
 	// something. A method reached only through its interface has no direct
 	// caller by construction.
 	Overrides bool
+
+	// ConsumesEvent is true when the symbol consumes a message-broker topic or
+	// queue. A listener is invoked by the broker's client library, which is a
+	// caller no call expression in the repository names.
+	ConsumesEvent bool
 }
 
 // unreferencedKinds are the definition kinds worth reporting.
@@ -64,31 +73,70 @@ var unreferencedKinds = []string{"function", "method", "class", "interface"}
 // candidate symbol. On a 5,000-symbol, 20,000-edge fixture that was 8.5
 // seconds; with the indexes named it is milliseconds. The scale suite found
 // it (tests/scale), and TestUnreferencedSymbolsUsesItsIndexes pins the plan.
+//
+// The symbols table itself is read NOT INDEXED, in primary-key order, for the
+// same kind of reason. Left to choose, the planner reached the run's symbols
+// through idx_symbols_fqn and then sorted them by id, so every PAGE probed
+// every remaining symbol in the run before LIMIT applied: the scan was
+// quadratic in the number of pages, and nothing showed it until a run held
+// more unreferenced definitions than one page. Read in key order, `s.id > ?`
+// is a seek, ORDER BY needs no sort and LIMIT stops the statement. CROSS JOIN
+// keeps symbols as the outer loop, which is what makes that true.
 func unreferencedSQL(n int) string {
 	return `
 		SELECT s.id, s.kind, s.name, s.fqn, f.path, f.language,
 		       s.start_line, s.end_line, s.exported,
 		       f.parse_status <> 'ok',
-		       EXISTS (SELECT 1 FROM symbol_references sr INDEXED BY idx_refs_run_name
-		                WHERE sr.index_run_id = s.index_run_id
-		                  AND sr.name = s.name
-		                  AND sr.resolution IN ('pending','ambiguous','unresolved')),
-		       EXISTS (SELECT 1 FROM edges o INDEXED BY idx_edges_src
-		                WHERE o.index_run_id = s.index_run_id
-		                  AND o.src_id = s.id
-		                  AND o.kind IN ('IMPLEMENTS','EXTENDS'))
-		  FROM symbols s
-		  JOIN files f ON f.id = s.file_id
+		       ` + nameUnboundProbe + `,
+		       ` + overridesProbe + `,
+		       ` + consumesEventProbe + `
+		  FROM symbols s NOT INDEXED
+		 CROSS JOIN files f ON f.id = s.file_id
 		 WHERE s.index_run_id = ?
 		   AND s.id > ?
-		   AND s.kind IN (` + strings.TrimSuffix(strings.Repeat("?,", n), ",") + `)
+		   AND s.kind IN (` + placeholders(n) + `)
 		   AND NOT EXISTS (SELECT 1 FROM edges e INDEXED BY idx_edges_dst
-		                    WHERE e.index_run_id = s.index_run_id
-		                      AND e.dst_id = s.id
-		                      AND e.kind <> 'CONTAINS'
-		                      AND e.src_id <> s.id)
+		                    WHERE ` + incomingEdge + `)
 		 ORDER BY s.id
 		 LIMIT ?`
+}
+
+// The fragments every definition query here shares, so two queries cannot
+// grade the same definition differently. Each is correlated on `s` and each
+// probe names its index; see unreferencedSQL for why.
+const (
+	// incomingEdge is what "something points at s" means, as the WHERE clause
+	// of a probe over `edges e`: CONTAINS records nesting rather than use, and
+	// a symbol's edges to itself are recursion.
+	incomingEdge = `e.index_run_id = s.index_run_id
+		                      AND e.dst_id = s.id
+		                      AND e.kind <> 'CONTAINS'
+		                      AND e.src_id <> s.id`
+
+	nameUnboundProbe = `EXISTS (SELECT 1 FROM symbol_references sr INDEXED BY idx_refs_run_name
+		                WHERE sr.index_run_id = s.index_run_id
+		                  AND sr.name = s.name
+		                  AND sr.resolution IN ('pending','ambiguous','unresolved'))`
+
+	overridesProbe = `EXISTS (SELECT 1 FROM edges o INDEXED BY idx_edges_src
+		                WHERE o.index_run_id = s.index_run_id
+		                  AND o.src_id = s.id
+		                  AND o.kind IN ('IMPLEMENTS','EXTENDS'))`
+
+	// consumesEventProbe checks the destination's kind because CONSUMES is
+	// also the edge a client call draws to the endpoint it requests, and a
+	// function that calls an HTTP API is not thereby an entry point.
+	consumesEventProbe = `EXISTS (SELECT 1 FROM edges c INDEXED BY idx_edges_src
+		                WHERE c.index_run_id = s.index_run_id
+		                  AND c.src_id = s.id
+		                  AND c.kind = 'CONSUMES'
+		                  AND EXISTS (SELECT 1 FROM symbols t
+		                               WHERE t.id = c.dst_id AND t.kind = 'event'))`
+)
+
+// placeholders renders n comma-separated bind markers.
+func placeholders(n int) string {
+	return strings.TrimSuffix(strings.Repeat("?,", n), ",")
 }
 
 // UnreferencedSymbols returns up to limit definitions with no incoming
@@ -102,9 +150,10 @@ func unreferencedSQL(n int) string {
 // than use, and excludes a symbol's edges to itself, so plain recursion does
 // not keep a function alive.
 //
-// Both EXISTS probes are index lookups: idx_edges_dst (index_run_id, dst_id,
-// kind) for the incoming check and idx_refs_run_name (index_run_id, name) for
-// the unbound-name check. Neither scans.
+// Every EXISTS probe is an index lookup: idx_edges_dst (index_run_id, dst_id,
+// kind) for the incoming check, idx_refs_run_name (index_run_id, name) for
+// the unbound-name check and idx_edges_src (index_run_id, src_id, kind) for
+// the two outgoing checks. None scans.
 func (r *Registry) UnreferencedSymbols(ctx context.Context, runID, afterID int64, limit int) ([]UnreferencedSymbol, error) {
 	if limit <= 0 {
 		limit = 500
@@ -127,10 +176,249 @@ func (r *Registry) UnreferencedSymbols(ctx context.Context, runID, afterID int64
 		var u UnreferencedSymbol
 		if err := rows.Scan(&u.ID, &u.Kind, &u.Name, &u.FQN, &u.FilePath, &u.Language,
 			&u.StartLine, &u.EndLine, &u.Exported,
-			&u.PartialParse, &u.NameUnbound, &u.Overrides); err != nil {
+			&u.PartialParse, &u.NameUnbound, &u.Overrides, &u.ConsumesEvent); err != nil {
 			return nil, fmt.Errorf("registry: scan unreferenced symbol: %w", err)
 		}
 		out = append(out, u)
+	}
+	return out, rows.Err()
+}
+
+// ConfinedSymbol is a definition that IS referenced, and only from inside one
+// set of files the caller named.
+//
+// Like UnreferencedSymbol it is a candidate and not a verdict, and it carries
+// the same signals for the same reason: "every reference the index bound
+// starts in these files" leaves open every reference the index did not bind.
+type ConfinedSymbol struct {
+	ID        int64
+	Kind      string
+	Name      string
+	FQN       string
+	FilePath  string
+	Language  string
+	StartLine int
+	EndLine   int
+	Exported  bool
+
+	// PartialParse, NameUnbound, Overrides and ConsumesEvent mean what they
+	// mean on UnreferencedSymbol.
+	PartialParse  bool
+	NameUnbound   bool
+	Overrides     bool
+	ConsumesEvent bool
+
+	// Referrers counts the incoming relationships, every one of which starts
+	// inside the set. It counts edges, not distinct callers.
+	Referrers int
+}
+
+// ConfinedPage is one window of a confined-symbol scan.
+type ConfinedPage struct {
+	Symbols []ConfinedSymbol
+
+	// Examined is how many of the run's symbols, of any kind, the window
+	// covered. Zero means the scan has reached the end of the run.
+	Examined int
+
+	// LastID is the id to pass as afterID for the next window.
+	LastID int64
+}
+
+// confinedWindowSQL finds where a window of `limit` symbols ends. The scan is
+// windowed by id rather than by a LIMIT on its result because its result is
+// sparse: with a LIMIT on matches, one statement would read to the end of the
+// run looking for a page that is not there, and the caller could neither
+// bound the work nor report how much of it was done.
+const confinedWindowSQL = `
+	SELECT COALESCE(MAX(id), 0), COUNT(*)
+	  FROM (SELECT s.id AS id
+	          FROM symbols s NOT INDEXED
+	         WHERE s.index_run_id = ? AND s.id > ?
+	         ORDER BY s.id
+	         LIMIT ?)`
+
+// confinedSQL is the confined-symbol query for n kinds over one id window.
+//
+// The file set arrives as ONE bound parameter holding a JSON array, which the
+// engine materialises once per statement into a lookup (each use below is a
+// LIST SUBQUERY in the plan). It is not an IN list of bind markers because a
+// repository can have more test files than a statement may have variables,
+// and not a temporary table because this is a read path that may run on any
+// pooled connection.
+//
+// The last probe is what the query is for, and it is the one that could go
+// quadratic. For each definition it walks the incoming edges through
+// idx_edges_dst and stops at the FIRST one that starts outside the set, so a
+// definition with ten thousand callers in ordinary code costs a handful of
+// probes. Only a definition every one of whose callers is inside the set has
+// all its edges read, and those rows are the answer. Each edge costs one
+// primary-key lookup of the symbol it starts at; CROSS JOIN keeps edges as the
+// outer loop so that lookup is never turned into a scan of symbols.
+// TestConfinedSymbolsUsesItsIndexes pins the plan.
+func confinedSQL(n int) string {
+	// The kinds are numbered from ?5 by hand. A bare `?` takes the number
+	// after the highest one seen so far in the text, and the kinds appear
+	// before the first use of ?4, so bare markers would collide with it.
+	kinds := make([]string, n)
+	for i := range kinds {
+		kinds[i] = "?" + strconv.Itoa(i+5)
+	}
+	return `
+		SELECT s.id, s.kind, s.name, s.fqn, f.path, f.language,
+		       s.start_line, s.end_line, s.exported,
+		       f.parse_status <> 'ok',
+		       ` + nameUnboundProbe + `,
+		       ` + overridesProbe + `,
+		       ` + consumesEventProbe + `,
+		       (SELECT COUNT(*) FROM edges e INDEXED BY idx_edges_dst
+		         WHERE ` + incomingEdge + `)
+		  FROM symbols s NOT INDEXED
+		 CROSS JOIN files f ON f.id = s.file_id
+		 WHERE s.index_run_id = ?1
+		   AND s.id > ?2
+		   AND s.id <= ?3
+		   AND s.kind IN (` + strings.Join(kinds, ",") + `)
+		   AND s.file_id NOT IN (SELECT value FROM json_each(?4))
+		   AND EXISTS (SELECT 1 FROM edges e INDEXED BY idx_edges_dst
+		                WHERE ` + incomingEdge + `)
+		   AND NOT EXISTS (SELECT 1 FROM edges e INDEXED BY idx_edges_dst
+		                    CROSS JOIN symbols c ON c.id = e.src_id
+		                    WHERE ` + incomingEdge + `
+		                      AND c.file_id NOT IN (SELECT value FROM json_each(?4)))
+		 ORDER BY s.id`
+}
+
+// SymbolsReferencedOnlyFrom returns the definitions outside fileIDs whose
+// every incoming relationship starts in a symbol inside fileIDs, examining at
+// most window symbols after afterID.
+//
+// The registry holds no opinion about what the set means. The caller that
+// exists passes the run's test files, which makes the answer "code only its
+// tests reach"; that classification lives in internal/capability, where the
+// one definition of a test file is.
+//
+// "Incoming relationship" means what it means in UnreferencedSymbols: not
+// CONTAINS, and not the symbol's own edges to itself. So the two queries
+// partition the same definitions three ways: nothing points at it, everything
+// that points at it is in the set, or something outside the set points at it.
+//
+// A definition with no incoming relationship at all is NOT returned (it is
+// unreferenced, which is the other query's finding), and neither is one that
+// sits inside the set itself.
+func (r *Registry) SymbolsReferencedOnlyFrom(ctx context.Context, runID, afterID int64, window int, fileIDs []int64) (ConfinedPage, error) {
+	if window <= 0 {
+		window = 500
+	}
+	var page ConfinedPage
+	if err := r.db.QueryRowContext(ctx, confinedWindowSQL, runID, afterID, window).
+		Scan(&page.LastID, &page.Examined); err != nil {
+		return ConfinedPage{}, fmt.Errorf("registry: confined-symbol window for run %d: %w", runID, err)
+	}
+	if page.Examined == 0 || len(fileIDs) == 0 {
+		// An empty set confines nothing: any definition with a referrer has
+		// one outside it. The window is still reported, so a caller's count of
+		// what was examined stays true.
+		return page, nil
+	}
+
+	// Every parameter is numbered in the statement, because the file set is
+	// used twice: run, window start, window end, the set, then the kinds.
+	args := make([]any, 0, len(unreferencedKinds)+4)
+	args = append(args, runID, afterID, page.LastID, jsonIDs(fileIDs))
+	for _, k := range unreferencedKinds {
+		args = append(args, k)
+	}
+
+	rows, err := r.db.QueryContext(ctx, confinedSQL(len(unreferencedKinds)), args...)
+	if err != nil {
+		return ConfinedPage{}, fmt.Errorf("registry: confined symbols for run %d: %w", runID, err)
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var c ConfinedSymbol
+		if err := rows.Scan(&c.ID, &c.Kind, &c.Name, &c.FQN, &c.FilePath, &c.Language,
+			&c.StartLine, &c.EndLine, &c.Exported,
+			&c.PartialParse, &c.NameUnbound, &c.Overrides, &c.ConsumesEvent,
+			&c.Referrers); err != nil {
+			return ConfinedPage{}, fmt.Errorf("registry: scan confined symbol: %w", err)
+		}
+		page.Symbols = append(page.Symbols, c)
+	}
+	return page, rows.Err()
+}
+
+// jsonIDs renders ids as a JSON array for json_each.
+func jsonIDs(ids []int64) string {
+	var b strings.Builder
+	b.Grow(len(ids)*8 + 2)
+	b.WriteByte('[')
+	for i, id := range ids {
+		if i > 0 {
+			b.WriteByte(',')
+		}
+		b.WriteString(strconv.FormatInt(id, 10))
+	}
+	b.WriteByte(']')
+	return b.String()
+}
+
+// FilePaths returns the path of every file in the run, keyed by file id.
+//
+// It is what lets a caller turn a rule about paths ("is this a test file")
+// into the set of file ids SymbolsReferencedOnlyFrom takes, without the
+// registry learning the rule. Memory follows the number of FILES, which is
+// far below the number of symbols.
+func (r *Registry) FilePaths(ctx context.Context, runID int64) (map[int64]string, error) {
+	return r.filePaths(ctx, runID)
+}
+
+// unboundHandlersSQL lists the handler names routes declare and nothing was
+// bound to.
+//
+// One pass over the run's symbols, in key order. There is no index on kind,
+// and the planner's own choice was to walk idx_symbols_fqn and fetch every
+// row out of order to test it; the table read in order is the same rows for
+// less. The edge probe names its index for the reason unreferencedSQL gives.
+const unboundHandlersSQL = `
+	SELECT DISTINCT e.signature
+	  FROM symbols e NOT INDEXED
+	 WHERE e.index_run_id = ?
+	   AND e.kind = ?
+	   AND COALESCE(e.signature, '') <> ''
+	   AND NOT EXISTS (SELECT 1 FROM edges x INDEXED BY idx_edges_src
+	                    WHERE x.index_run_id = e.index_run_id
+	                      AND x.src_id = e.id
+	                      AND x.kind = ?)`
+
+// UnboundRouteHandlers returns the handler names that HTTP routes in the run
+// declare and that no definition was bound to.
+//
+// A route whose handler WAS bound has an EXPOSES edge to it, so that handler
+// has an incoming relationship and UnreferencedSymbols never returns it. What
+// is left is the routes whose handler could not be bound: the name is defined
+// in more than one file, or in none the binder would accept. Every definition
+// spelled like one of these names may be the handler, and a caller grading
+// "nothing calls this" needs to know that.
+//
+// The list is as long as the number of unbound routes, and it is read in one
+// statement.
+func (r *Registry) UnboundRouteHandlers(ctx context.Context, runID int64) ([]string, error) {
+	rows, err := r.db.QueryContext(ctx, unboundHandlersSQL,
+		runID, string(model.KindEndpoint), string(model.EdgeExposes))
+	if err != nil {
+		return nil, fmt.Errorf("registry: unbound route handlers for run %d: %w", runID, err)
+	}
+	defer rows.Close()
+
+	var out []string
+	for rows.Next() {
+		var name string
+		if err := rows.Scan(&name); err != nil {
+			return nil, fmt.Errorf("registry: scan unbound route handler: %w", err)
+		}
+		out = append(out, name)
 	}
 	return out, rows.Err()
 }
@@ -180,7 +468,7 @@ func fileStructureSQL(n int) string {
 		           AND e.kind <> 'CONTAINS')
 		  FROM files f
 		 WHERE f.index_run_id = ?
-		   AND f.path IN (` + strings.TrimSuffix(strings.Repeat("?,", n), ",") + `)`
+		   AND f.path IN (` + placeholders(n) + `)`
 }
 
 // FileStructureFor returns structure for the named files that exist in runID.

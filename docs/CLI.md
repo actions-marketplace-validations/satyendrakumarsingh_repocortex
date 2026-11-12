@@ -1413,6 +1413,7 @@ Lists definitions nothing in the index calls, graded `likely` or `possible`.
 ```bash
 repocortex dead-code
 repocortex dead-code --path internal/billing/ --all
+repocortex dead-code --include-test-only
 ```
 
 | Flag | Meaning |
@@ -1420,12 +1421,36 @@ repocortex dead-code --path internal/billing/ --all
 | `--path PREFIX` | Only files under this prefix |
 | `--all` | Also list candidates graded `possible` |
 | `--include-exported` | Also list exported definitions (implies `--all`) |
+| `--include-test-only` | Also list, in a separate section, definitions whose every caller is in a test file |
 | `-n`, `--limit N` | Most candidates to list (default 50) |
 
 A row is `likely` only when it is unexported, its file parsed cleanly, no
 unbound reference is spelled like it, and its name appears nowhere in the code
 outside its own definition. Never delete on this evidence alone. Agent tool:
 `list_dead_code`.
+
+A function a framework calls is never `likely`. The handler a route was bound
+to has the route pointing at it, so it is not listed at all. A definition
+spelled like a handler some route names and could not bind (`route handler`),
+and a definition that consumes an event topic (`event consumer`), are graded
+`possible` with that reason, and the count of them is printed.
+
+`--include-test-only` adds a second list under its own heading, `REACHED ONLY
+FROM TESTS`: definitions that do have callers, every one of them in a test
+file. It does not change the first list or its counts.
+
+| What | How it is reported |
+|---|---|
+| Certainty | Always `possible`, reason `only reached from tests`. Never `likely`: code only its tests keep alive may be finished work that lost its last caller or a helper written for the tests, and an index cannot tell which |
+| Order | Rows confirmed against the source text first, largest first; then rows whose name also appears in code that is not a test, marked `name appears elsewhere` (a production use the graph has no edge for, such as a function passed as a value, or an unrelated identifier spelled the same) |
+| `TEST REFS` | How many references point at the definition, all from test files |
+| Left out | Exported definitions unless `--include-exported`, definitions named like an entry point, languages the index does not bind references for, and route handlers and event consumers |
+
+Its limits are printed with it. Callers are direct callers only, so a helper
+called by a test-only function is not listed. A use the index could not bind is
+not counted. Tests written in the same file as the code they test, as in Rust,
+are not seen as tests. It is a second pass over the index, bounded by its own
+scan budget, and says so if it stops short.
 
 ### `hotspots`
 

@@ -372,6 +372,185 @@ func init() { setup() }
 	}
 }
 
+// testOnlyProject is a real indexed project with one definition of each kind
+// the test-only pass has to tell apart.
+func testOnlyProject(t *testing.T) string {
+	t.Helper()
+	root := isolate(t)
+	writeFiles(t, root, map[string]string{
+		"app/app.go": `package app
+
+func Run() { used(); setup() }
+
+// used is called from production and from a test.
+func used() {}
+
+// legacyParse is called by its test and by nothing else.
+func legacyParse(s string) int {
+	return len(s)
+}
+
+// registered is called by its test, and handed to register as a value.
+func registered() {}
+
+func setup() { register(registered) }
+
+func register(f func()) { f() }
+
+// orphan is called by nothing at all.
+func orphan() int { return 1 }
+`,
+		"app/main.go": `package app
+
+func init() { Run() }
+`,
+		"app/app_test.go": `package app
+
+import "testing"
+
+func TestUsed(t *testing.T) { used() }
+
+func TestLegacyParse(t *testing.T) {
+	if legacyParse("ab") != 2 {
+		t.Fatal("wrong length")
+	}
+}
+
+func TestRegistered(t *testing.T) { registered() }
+`,
+	})
+	indexProject(t, root)
+	return root
+}
+
+// testOnlySection returns the part of out from the test-only heading on, or "".
+func testOnlySection(out string) string {
+	i := strings.Index(out, "REACHED ONLY FROM TESTS")
+	if i < 0 {
+		return ""
+	}
+	return out[i:]
+}
+
+func TestDeadCodeListsTestOnlyCodeSeparatelyAndOnlyWhenAsked(t *testing.T) {
+	root := testOnlyProject(t)
+
+	plain, err := run(t, root, "dead-code")
+	if err != nil {
+		t.Fatalf("dead-code: %v\n%s", err, plain)
+	}
+	if testOnlySection(plain) != "" || strings.Contains(plain, "legacyParse") {
+		t.Errorf("the default answer must not mention code only tests reach:\n%s", plain)
+	}
+	if !strings.HasPrefix(rowFor(plain, "orphan"), "likely") {
+		t.Errorf("orphan has no caller and should be listed as likely:\n%s", plain)
+	}
+
+	out, err := run(t, root, "dead-code", "--include-test-only")
+	if err != nil {
+		t.Fatalf("dead-code --include-test-only: %v\n%s", err, out)
+	}
+	// Everything about the first finding is exactly what it was.
+	if before, _, _ := strings.Cut(out, "REACHED ONLY FROM TESTS"); strings.TrimRight(before, "\n") != strings.TrimRight(plain, "\n") {
+		t.Errorf("asking for the second list changed the first.\nwithout:\n%s\nwith:\n%s", plain, before)
+	}
+	sec := testOnlySection(out)
+	if sec == "" {
+		t.Fatalf("the test-only section is missing:\n%s", out)
+	}
+
+	row := rowFor(sec, "legacyParse")
+	if !strings.HasPrefix(row, "possible") || !strings.Contains(row, "only reached from tests") {
+		t.Errorf("legacyParse should be listed as possible, only reached from tests:\n%s", sec)
+	}
+	for _, line := range strings.Split(sec, "\n") {
+		if strings.HasPrefix(line, "likely") {
+			t.Errorf("a test-only row is graded likely: %q", line)
+		}
+	}
+	// used has a production caller; orphan has no caller and belongs above.
+	for _, name := range []string{"used", "orphan", "Run", "setup", "register", "TestUsed"} {
+		if r := rowFor(sec, name); r != "" {
+			t.Errorf("%s must not be listed as reached only from tests: %q", name, r)
+		}
+	}
+	// registered is passed as a value in production. The graph has test
+	// callers only; the text has the production use, and the row says so and
+	// comes after the confirmed one.
+	reg := rowFor(sec, "registered")
+	if !strings.Contains(reg, "name appears elsewhere") {
+		t.Errorf("registered is used as a value in app.go; its row must say the name appears elsewhere:\n%s", sec)
+	}
+	if strings.Index(sec, " registered ") < strings.Index(sec, " legacyParse ") {
+		t.Errorf("the confirmed row must come before the one whose name appears in production code:\n%s", sec)
+	}
+	if !strings.Contains(sec, "judgement") {
+		t.Errorf("the section must say that deleting is a judgement it does not make:\n%s", sec)
+	}
+}
+
+func TestDeadCodeJSONCarriesTheTestOnlySectionOnlyWhenAsked(t *testing.T) {
+	root := testOnlyProject(t)
+
+	type report struct {
+		Likely     int `json:"likely"`
+		Possible   int `json:"possible"`
+		Candidates []struct {
+			Name string `json:"name"`
+		} `json:"candidates"`
+		TestOnly *struct {
+			Found      int `json:"found"`
+			TestFiles  int `json:"test_files"`
+			Candidates []struct {
+				Name           string   `json:"name"`
+				Certainty      string   `json:"certainty"`
+				Reasons        []string `json:"reasons"`
+				TestReferences int      `json:"test_references"`
+			} `json:"candidates"`
+		} `json:"test_only"`
+	}
+	read := func(args ...string) report {
+		t.Helper()
+		raw, err := run(t, root, append([]string{"--json", "dead-code"}, args...)...)
+		if err != nil {
+			t.Fatalf("dead-code --json %v: %v\n%s", args, err, raw)
+		}
+		var rep report
+		if err := json.Unmarshal([]byte(raw), &rep); err != nil {
+			t.Fatalf("not JSON: %v\n%s", err, raw)
+		}
+		return rep
+	}
+
+	plain := read()
+	if plain.TestOnly != nil {
+		t.Errorf("the default JSON report has a test_only section: %+v", plain.TestOnly)
+	}
+
+	with := read("--include-test-only")
+	if with.TestOnly == nil {
+		t.Fatal("--include-test-only produced no test_only section")
+	}
+	if with.Likely != plain.Likely || with.Possible != plain.Possible || len(with.Candidates) != len(plain.Candidates) {
+		t.Errorf("the unreferenced counts changed: %d/%d/%d without, %d/%d/%d with",
+			plain.Likely, plain.Possible, len(plain.Candidates), with.Likely, with.Possible, len(with.Candidates))
+	}
+	if with.TestOnly.TestFiles != 1 || with.TestOnly.Found != 2 {
+		t.Errorf("test_only = %+v, want 2 found across 1 test file", with.TestOnly)
+	}
+	for _, c := range with.TestOnly.Candidates {
+		if c.Certainty != "possible" {
+			t.Errorf("%s is %q; a test-only row is never likely", c.Name, c.Certainty)
+		}
+		if len(c.Reasons) == 0 || c.Reasons[0] != "only_reached_from_tests" {
+			t.Errorf("%s reasons = %v, want only_reached_from_tests first", c.Name, c.Reasons)
+		}
+		if c.TestReferences == 0 {
+			t.Errorf("%s reports no test references; it is listed because it has them", c.Name)
+		}
+	}
+}
+
 // rowFor returns the table row whose SYMBOL column is exactly name, or "".
 func rowFor(out, name string) string {
 	for _, line := range strings.Split(out, "\n") {

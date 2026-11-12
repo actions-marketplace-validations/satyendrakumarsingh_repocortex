@@ -77,6 +77,151 @@ func TestDeadCodeScanWithANarrowPrefixStillReturns(t *testing.T) {
 	requireWithin(t, "dead-code scan, narrow prefix", m, budget{fixed: 2 * time.Second, perUnit: 60 * time.Microsecond}, f.info.Symbols)
 }
 
+// The test-only pass asks a harder question than the unreferenced scan: not
+// "does anything point at this definition" but "where does everything that
+// points at it live". Asked naively that reads every edge in the run once per
+// definition. It has its own budget here, measured on its own, so a change
+// that makes it quadratic fails this test and not somebody else's.
+//
+// What keeps it linear, and what this test is the tripwire for:
+//
+//   - every edge probe goes through idx_edges_dst (pinned by
+//     TestConfinedSymbolsUsesItsIndexes in internal/registry);
+//   - the probe stops at the first caller outside a test file, so a hub with a
+//     thousand ordinary callers costs a few lookups, not a thousand;
+//   - the set of test files is bound once per window, not once per definition.
+func TestTestOnlyScanIsBoundedAtScale(t *testing.T) {
+	f := load(t)
+	ctx := context.Background()
+	opts := deadcode.Options{Limit: 50, IncludeExported: true}
+
+	// The unreferenced scan alone, as the baseline the pass is added to.
+	var base *deadcode.Report
+	baseline := measure(func() {
+		var err error
+		if base, err = deadcode.Find(ctx, f.deps, f.reg, f.runID, opts); err != nil {
+			t.Fatalf("dead-code scan: %v", err)
+		}
+	})
+
+	opts.TestOnly = f.reg
+	var rep *deadcode.Report
+	m := measure(func() {
+		var err error
+		if rep, err = deadcode.Find(ctx, f.deps, f.reg, f.runID, opts); err != nil {
+			t.Fatalf("dead-code scan with the test-only pass: %v", err)
+		}
+	})
+	to := rep.TestOnly
+	if to == nil {
+		t.Fatal("the pass was asked for and the report has no test-only section")
+	}
+	t.Logf("fixture: %d symbols, %d edges, %d test files of %d; %d definitions reached only from tests, "+
+		"%d skipped, %d text-checked, %d symbols examined",
+		f.info.Symbols, f.info.Edges, to.TestFiles, f.info.Files, to.Found, to.Skipped, to.TextChecked, to.SymbolsExamined)
+	t.Logf("the pass itself: %s on top of a %s unreferenced scan",
+		(m.elapsed - baseline.elapsed).Round(time.Microsecond), baseline.elapsed.Round(time.Microsecond))
+
+	// A tenth of the fixture's files are test files and its edges are random,
+	// so some definitions are always called only from them.
+	if to.Found == 0 {
+		t.Fatal("a random graph with test files always has definitions only they call; the pass found none")
+	}
+	if to.TestFiles == 0 {
+		t.Fatal("the fixture has test files; the pass recognised none")
+	}
+	if len(to.Candidates) > 50 {
+		t.Errorf("returned %d test-only candidates, over the limit of 50", len(to.Candidates))
+	}
+	for _, c := range to.Candidates {
+		if c.Certainty != deadcode.CertaintyPossible {
+			t.Errorf("%s is graded %s; a test-only row is never likely", c.Name, c.Certainty)
+		}
+		if strings.HasSuffix(c.Path, "_test.go") {
+			t.Errorf("%s is in a test file (%s); test code is not what the pass reports", c.Name, c.Path)
+		}
+		if c.TestReferences == 0 {
+			t.Errorf("%s has no test references; it is listed because it has them", c.Name)
+		}
+	}
+	// Every symbol is walked exactly once.
+	if to.SymbolsExamined != f.info.Symbols && f.info.Symbols <= deadcode.DefaultTestOnlyScanBudget {
+		t.Errorf("examined %d symbols of %d", to.SymbolsExamined, f.info.Symbols)
+	}
+	if to.Truncated && f.info.Symbols <= deadcode.DefaultTestOnlyScanBudget {
+		t.Errorf("the pass reported itself truncated on a fixture inside its budget: %s", to.TruncatedReason)
+	}
+	// The pass adds a section. It does not change the answer it is added to.
+	if rep.Likely != base.Likely || rep.Possible != base.Possible || len(rep.Candidates) != len(base.Candidates) {
+		t.Errorf("the unreferenced answer changed: %d likely, %d possible, %d rows without the pass; %d, %d, %d with it",
+			base.Likely, base.Possible, len(base.Candidates), rep.Likely, rep.Possible, len(rep.Candidates))
+	}
+
+	// The whole call, both passes: 2s fixed, 90µs per symbol. That is the
+	// unreferenced scan's 60µs plus 30µs for this pass, which walks every
+	// symbol once and reads the edges of the few it reports.
+	requireWithin(t, "dead-code scan with the test-only pass", m,
+		budget{fixed: 2 * time.Second, perUnit: 90 * time.Microsecond}, f.info.Symbols)
+	// Two shortlists of a few thousand rows, and the ids of the test files.
+	requireRetainedUnder(t, "dead-code scan with the test-only pass", m, 48<<20)
+}
+
+// The answer an agent gets with the second section on must fit the inline
+// limit like every other, however much test-only code the index holds.
+func TestTestOnlyAnswerStaysBoundedAtScale(t *testing.T) {
+	f := load(t)
+	ctx := context.Background()
+
+	cfg := config.Defaults()
+	cfg.ProjectName = "scale"
+	cfg.MCPProfile = config.MCPFull
+	srv, err := devmcp.New(devmcp.Deps{
+		Registry: f.reg, Graph: f.graph, Config: cfg,
+		Judgeable: func(string) bool { return true },
+	})
+	if err != nil {
+		t.Fatalf("build server: %v", err)
+	}
+	inv, err := srv.NewInvoker(ctx, "scale")
+	if err != nil {
+		t.Fatalf("invoker: %v", err)
+	}
+	defer func() { _ = inv.Close() }()
+
+	payload, _ := json.Marshal(map[string]any{"include_test_only": true, "include_exported": true, "limit": 50})
+	if _, err := inv.Call(ctx, "list_dead_code", payload); err != nil {
+		t.Fatalf("list_dead_code: %v", err)
+	}
+	const samples = 5
+	times := make([]time.Duration, 0, samples)
+	var text string
+	for i := 0; i < samples; i++ {
+		start := time.Now()
+		res, err := inv.Call(ctx, "list_dead_code", payload)
+		if err != nil {
+			t.Fatalf("list_dead_code: %v", err)
+		}
+		times = append(times, time.Since(start))
+		text = res.Text
+	}
+	if !strings.Contains(text, "reached only from tests") {
+		t.Errorf("the answer has no test-only rows on a fixture that holds them:\n%s", firstLines(text, 12))
+	}
+	if limit := devmcp.DefaultLimits().MaxTotalBytes; len(text) > limit {
+		t.Errorf("list_dead_code with include_test_only answered with %d bytes on a %d-symbol index; the inline limit is %d",
+			len(text), f.info.Symbols, limit)
+	}
+	// 1.5s fixed, 40µs per symbol at p95: the every-tool budget of 25µs plus
+	// 15µs for the second pass.
+	b := budget{fixed: 1500 * time.Millisecond, perUnit: 40 * time.Microsecond}
+	got := p95(times)
+	t.Logf("%-26s p95 %10s  answer %6d bytes", "list_dead_code +test-only", got.Round(time.Microsecond), len(text))
+	if got > b.at(f.info.Symbols) {
+		t.Errorf("list_dead_code with include_test_only: p95 %s over %d warm calls, budget %s at %d symbols",
+			got.Round(time.Millisecond), samples, b.at(f.info.Symbols).Round(time.Millisecond), f.info.Symbols)
+	}
+}
+
 // Hotspot ranking reads structure for exactly the files history touched, in
 // chunks, through the destination index. Its cost must follow the commit
 // window, not the repository.
