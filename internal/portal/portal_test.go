@@ -6,7 +6,9 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"path/filepath"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"testing"
@@ -148,9 +150,160 @@ func TestThePageNeedsNothingThePolicyForbids(t *testing.T) {
 		t.Fatal(err)
 	}
 	// Repository text reaches the page as text nodes only.
-	for _, banned := range []string{".innerHTML", "insertAdjacentHTML", "document.write", "eval("} {
+	for _, banned := range []string{".innerHTML", ".outerHTML", "insertAdjacentHTML", "document.write", "eval("} {
 		if strings.Contains(string(script), banned) {
 			t.Errorf("app.js uses %s; repository content must never be parsed as markup", banned)
+		}
+	}
+	// A style attribute is inline style however it is written, and the policy
+	// drops it without a word. Dimensions go through the element's style
+	// object, which the policy permits.
+	for _, banned := range []string{"setAttribute('style'", `setAttribute("style"`, ".cssText", "style:"} {
+		if strings.Contains(string(script), banned) {
+			t.Errorf("app.js sets inline style with %s; the policy discards it silently", banned)
+		}
+	}
+}
+
+// ---------------------------------------------------------------- pages
+
+func asset(t *testing.T, name string) string {
+	t.Helper()
+	b, err := os.ReadFile(filepath.Join("assets", name))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(b)
+}
+
+// Every address the page writes into a link must be one its router answers.
+// A link to a page that does not exist falls through to Home, which looks
+// like a working link and is a dead end.
+func TestEveryAddressThePageLinksToIsRouted(t *testing.T) {
+	script := asset(t, "app.js")
+	routed := map[string]bool{"home": true} // the router's fallback
+	for _, m := range regexp.MustCompile(`head === '([a-z]+)'`).FindAllStringSubmatch(script, -1) {
+		routed[m[1]] = true
+	}
+	// The pages this portal is made of. Losing one from the router is a
+	// regression no other test would notice.
+	for _, page := range []string{"s", "f", "r", "t", "search", "explore", "change", "health", "agents"} {
+		if !routed[page] {
+			t.Errorf("the router has no page for #/%s", page)
+		}
+	}
+	linked := regexp.MustCompile("#/([a-z]+)")
+	for _, name := range []string{"app.js", "index.html"} {
+		for _, m := range linked.FindAllStringSubmatch(asset(t, name), -1) {
+			if !routed[m[1]] {
+				t.Errorf("%s links to #/%s, which the router does not answer", name, m[1])
+			}
+		}
+	}
+}
+
+// The page has no data routes of its own, so every figure on it is a tool's
+// answer. A tool the page calls by a name the server does not register would
+// draw as a failure on a live page and nowhere else; this reads the names the
+// server registers and checks each call against them.
+func TestThePageCallsOnlyToolsTheServerRegisters(t *testing.T) {
+	sources, err := filepath.Glob(filepath.Join("..", "mcp", "*.go"))
+	if err != nil || len(sources) == 0 {
+		t.Fatalf("cannot read the tool registrations in internal/mcp: %v", err)
+	}
+	registered := map[string]bool{}
+	name := regexp.MustCompile(`Name:\s+"([a-z]+_[a-z_]+)"`)
+	for _, src := range sources {
+		if strings.HasSuffix(src, "_test.go") {
+			continue
+		}
+		b, err := os.ReadFile(src)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, m := range name.FindAllStringSubmatch(string(b), -1) {
+			registered[m[1]] = true
+		}
+	}
+	if len(registered) < 10 {
+		t.Fatalf("found only %d registered tools; the registrations have moved and this test must follow them", len(registered))
+	}
+
+	script := asset(t, "app.js")
+	called := map[string]bool{}
+	for _, pattern := range []string{
+		`\b(?:ask|call|statusRow)\('([a-z_]+)'`, // a direct call
+		`liveSection\([^,]+, '([a-z_]+)'`,       // a section that loads one tool
+		`tool: '([a-z_]+)'`,                     // a tab of the symbol page
+		`commandFor\('([a-z_]+)'`,               // a command shown to the reader
+	} {
+		for _, m := range regexp.MustCompile(pattern).FindAllStringSubmatch(script, -1) {
+			called[m[1]] = true
+		}
+	}
+	if len(called) < 10 {
+		t.Fatalf("found only %d tool calls in app.js; the way it calls tools has changed and this test must follow it", len(called))
+	}
+	var missing []string
+	for tool := range called {
+		if !registered[tool] {
+			missing = append(missing, tool)
+		}
+	}
+	sort.Strings(missing)
+	if len(missing) > 0 {
+		t.Errorf("app.js calls tools the server does not register: %s", strings.Join(missing, ", "))
+	}
+	// The file, route and table pages each rest on these. If one is renamed
+	// the page must be changed with it.
+	for _, tool := range []string{"get_file_outline", "list_hotspots", "list_dead_code", "list_api_endpoints",
+		"list_db_tables", "find_references", "find_callees", "find_tests", "trace_call_path"} {
+		if !called[tool] {
+			t.Errorf("app.js no longer calls %s, which a file, route or table page is built on", tool)
+		}
+	}
+}
+
+// ---------------------------------------------------------------- stylesheet
+
+// A rule that names a token no theme defines falls back to nothing: text in
+// the browser's default colour on the portal's ground, unchecked by the
+// contrast test. And a literal colour below the theme blocks is a colour only
+// one theme was designed for.
+func TestEveryColourIsADefinedToken(t *testing.T) {
+	css := asset(t, "app.css")
+	defined := map[string]bool{"display": true, "body": true, "mono": true} // the three type stacks
+	for name := range themes(t)[0] {
+		defined[name] = true
+	}
+	for _, m := range regexp.MustCompile(`var\(--([a-z0-9-]+)\)`).FindAllStringSubmatch(css, -1) {
+		if !defined[m[1]] {
+			t.Errorf("app.css uses var(--%s), which no theme defines", m[1])
+		}
+	}
+	rules := css[strings.LastIndex(css, "color-scheme: dark"):]
+	if hex := regexp.MustCompile(`#[0-9a-fA-F]{3,8}\b`).FindString(rules); hex != "" {
+		t.Errorf("app.css uses the literal colour %s in a rule; rules use tokens so both themes are covered", hex)
+	}
+}
+
+// Motion is only ever a response to waiting, and a reader who asked for less
+// of it gets none.
+func TestMotionIsSwitchedOffOnRequest(t *testing.T) {
+	css := asset(t, "app.css")
+	moving := regexp.MustCompile(`(?m)^([.#][^{}\n]+)\{[^}]*\b(?:animation|transition):`).FindAllStringSubmatch(css, -1)
+	if len(moving) == 0 {
+		return
+	}
+	at := strings.Index(css, "@media (prefers-reduced-motion: reduce)")
+	if at < 0 {
+		t.Fatal("app.css animates and has no prefers-reduced-motion rule")
+	}
+	reduced := css[at:]
+	for _, m := range moving {
+		selector := strings.TrimSpace(m[1])
+		if !strings.Contains(reduced, selector) {
+			t.Errorf("%s moves and is not stilled under prefers-reduced-motion", selector)
 		}
 	}
 }
@@ -229,6 +382,10 @@ func TestThemesMeetContrast(t *testing.T) {
 		{"line-strong", "sheet", 3, "a control's edge on a sheet"},
 		{"line-strong", "ground", 3, "a control's edge on the page"},
 		{"ink", "well", 7, "a command in a well"},
+		// The file, route and table pages.
+		{"accent", "well", 4.5, "a linked name inside a block of code"},
+		{"accent-hi", "well", 4.5, "a hovered link inside a block of code"},
+		{"accent-hi", "ground", 4.5, "a hovered link on the page"},
 	}
 	names := []string{"light", "dark (system)", "dark (chosen)"}
 	for i, theme := range themes(t) {

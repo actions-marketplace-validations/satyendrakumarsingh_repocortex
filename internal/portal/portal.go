@@ -5,12 +5,12 @@
 //
 // internal/web is the current portal: twenty-three report screens over its own
 // JSON routes. This one is built differently on purpose (see
-// docs/design/PORTAL_UX_PLAN.md): five sections, a page per symbol, and NO
-// routes of its own. Every figure on every page comes from a tool call to the
-// REST surface in internal/restapi, which in turn calls the MCP server
-// in-process. So a page and an agent cannot disagree about an answer, because
-// there is one implementation of each answer, and "ask your agent the same
-// thing" beside a table is literally true.
+// docs/design/PORTAL_UX_PLAN.md): five sections, a page for each symbol, file,
+// route and table, and NO routes of its own. Every figure on every page comes
+// from a tool call to the REST surface in internal/restapi, which in turn calls
+// the MCP server in-process. So a page and an agent cannot disagree about an
+// answer, because there is one implementation of each answer, and "ask your
+// agent the same thing" beside a table is literally true.
 //
 // The two portals live side by side until this one covers every screen of the
 // other; `repocortex ui --next` serves this one.

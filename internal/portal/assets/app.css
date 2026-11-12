@@ -104,6 +104,9 @@ main:focus { outline: none; }
 .cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 6px 44px; }
 .with-aside { display: grid; grid-template-columns: minmax(0, 1fr) 330px; gap: 44px; align-items: start; }
 .with-aside > aside { margin-top: 20px; }
+/* A wide table or a block of code scrolls inside its own frame. Without this
+   the column grows to hold it and the whole page scrolls sideways. */
+.with-aside > * { min-width: 0; }
 
 .rows { list-style: none; margin: 0; padding: 0; }
 .rows > li { border-bottom: 1px solid var(--line); }
@@ -139,6 +142,15 @@ td { padding: 10px 14px 10px 0; border-bottom: 1px solid var(--line); vertical-a
 td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
 .name { font-family: var(--mono); font-size: 13.5px; overflow-wrap: anywhere; }
 .where { font: 12.5px var(--mono); color: var(--ink-3); overflow-wrap: anywhere; }
+/* In a table a name or a place is not broken mid-word: a column three letters
+   wide is unreadable. The column takes the room its longest word needs, and
+   the table scrolls inside its own frame when that is more than the page has. */
+td .name, td .where { overflow-wrap: normal; }
+td .name { white-space: nowrap; }
+/* A place is a link to its file's page. It stays as quiet as the text it
+   replaced; the underline, not the colour, says it can be followed. */
+a.where { text-decoration-color: var(--line-strong); }
+a.where:hover { color: var(--accent); text-decoration-color: currentColor; }
 .why { font-size: 13px; color: var(--ink-2); max-width: 56ch; }
 .kindtag { font-size: 12.5px; color: var(--ink-2); white-space: nowrap; }
 
@@ -147,8 +159,13 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
 .entity { margin-top: 6px; display: flex; flex-wrap: wrap; align-items: baseline; gap: 10px 14px; }
 .entity h1 { font-family: var(--mono); font-size: clamp(24px, 2.6vw, 34px); overflow-wrap: anywhere; }
 .tag { font-size: 13px; color: var(--ink-2); border: 1px solid var(--line-strong); border-radius: 5px; padding: 1px 8px; }
+a.tag { color: var(--accent); text-decoration: none; }
+a.tag:hover { background: var(--accent-soft); border-color: var(--accent); }
+.tags { display: contents; }
 .verdict { margin-top: 16px; font: 700 22px/1.3 var(--display); max-width: 48ch; text-wrap: balance; }
 .verdict b { color: var(--accent); font-weight: 700; }
+/* A name inside the sentence is read at the sentence's size, in the code face. */
+.verdict .name { font-size: .86em; font-weight: 600; }
 .tabs { display: flex; gap: 2px; margin-top: 26px; border-bottom: 1px solid var(--line-strong); overflow-x: auto; }
 .tabs button { background: none; border: 0; border-bottom: 3px solid transparent; margin-bottom: -1px; padding: 9px 14px; cursor: pointer; font-weight: 600; color: var(--ink-2); white-space: nowrap; }
 .tabs button .c { font-family: var(--display); font-weight: 700; margin-left: 6px; color: var(--ink-3); }
@@ -172,6 +189,16 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
 .cmd button { position: absolute; top: 6px; right: 6px; background: var(--sheet); border: 1px solid var(--line-strong); border-radius: 5px; padding: 2px 9px; font-size: 12px; cursor: pointer; }
 .cmd button:hover { border-color: var(--accent); color: var(--accent); }
 
+/* ---------------------------------------------------------------- file, route and table pages */
+.outline { margin: 14px 0 0; padding: 12px 14px; background: var(--well); border-radius: 6px; overflow-x: auto; font: 12.5px/1.6 var(--mono); color: var(--ink); tab-size: 4; }
+.outline code { font: inherit; }
+.outline a { font: inherit; }
+.chain { font: 13px var(--mono); overflow-wrap: anywhere; }
+.chain .name { font-size: inherit; }
+.chain .arrow { color: var(--ink-3); }
+.minor { margin-top: 26px; font-size: 16px; }
+.sub + .cmd { max-width: 74ch; }
+
 .facts { display: flex; flex-wrap: wrap; gap: 8px 34px; margin-top: 16px; }
 .fact { max-width: 24ch; }
 .fact b { display: block; font: 700 28px var(--display); font-variant-numeric: tabular-nums; }
@@ -189,16 +216,18 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
 .toast.on { opacity: 1; }
 
 @media (max-width: 900px) {
-  .top { grid-template-columns: auto minmax(0, 1fr); height: auto; padding: 10px 14px; gap: 10px; }
-  .brand { padding-left: 0; }
-  .top-right { grid-column: 1 / -1; justify-content: space-between; }
-  .shell { grid-template-columns: 1fr; }
+  /* Search is what a reader came for, so on a phone it has a row to itself. */
+  .top { grid-template-columns: minmax(0, 1fr) auto; height: auto; padding: 10px 14px; gap: 10px; }
+  .brand { padding-left: 0; grid-row: 1; grid-column: 1; }
+  .top-right { grid-row: 1; grid-column: 2; }
+  .search { grid-row: 2; grid-column: 1 / -1; max-width: none; }
+  .shell { grid-template-columns: minmax(0, 1fr); }
   .side { position: static; height: auto; flex-direction: row; overflow-x: auto; border-right: 0; border-bottom: 1px solid var(--line); padding: 6px 10px; }
   .side a { white-space: nowrap; }
   .side a .d, .side-foot { display: none; }
   .side a[aria-current="page"] { box-shadow: inset 0 -3px 0 var(--accent); }
   main { padding: 22px 16px 60px; }
-  .with-aside { grid-template-columns: 1fr; gap: 10px; }
+  .with-aside { grid-template-columns: minmax(0, 1fr); gap: 10px; }
   .legend li { grid-template-columns: 26px 1fr; }
   .legend .use { grid-column: 2; }
 }
