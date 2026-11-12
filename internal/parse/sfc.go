@@ -438,7 +438,7 @@ func (r *registry) sfcDelegate(ext string) *genericParser {
 	d = plain
 	if plain.initErr == nil && plain.tagsQ != nil {
 		if built := newGenericParser(plain.entry, plain.cfg); built.initErr == nil {
-			query := built.tagsQuery + "\n" + sfcDefinitions
+			query := built.tagsQuery + "\n" + hostedDefinitions(sfcDefinitions)
 			if q, err := ts.NewQuery(query, built.lang); err == nil {
 				built.tagsQuery, built.tagsQ = query, q
 				d = built
@@ -447,6 +447,58 @@ func (r *registry) sfcDelegate(ext string) *genericParser {
 	}
 	r.parsers[key] = d
 	return d
+}
+
+// hostedTagSuffix marks a definition captured by a pattern a host adds to a
+// script language's query. A component's script is JavaScript or TypeScript
+// with different rules about what is a definition: a top-level `const count =
+// ref(0)` is component state, where in a plain module a constant nobody
+// exports is not indexed. The script language's refiner (lang_javascript.go)
+// enforces the plain-module rules by position, so without the mark it dropped
+// or re-labelled every symbol the component patterns exist to add.
+const hostedTagSuffix = ".hosted"
+
+var definitionCapture = regexp.MustCompile(`@definition\.[a-z_]+`)
+
+// unmarkHostedTags removes the mark from every tag that carries it and reports
+// which tags did, by position. It runs before anything else reads a tag's
+// kind, so the rest of the parser sees ordinary kinds and only the step that
+// applies the script language's refinements needs to know.
+func unmarkHostedTags(tags []ts.Tag) map[int]bool {
+	var hosted map[int]bool
+	for i := range tags {
+		if !strings.HasSuffix(tags[i].Kind, hostedTagSuffix) {
+			continue
+		}
+		tags[i].Kind = strings.TrimSuffix(tags[i].Kind, hostedTagSuffix)
+		if hosted == nil {
+			hosted = make(map[int]bool, 8)
+		}
+		hosted[i] = true
+	}
+	return hosted
+}
+
+// hostedDefinitions marks every definition capture in a query as the host's.
+func hostedDefinitions(query string) string {
+	return definitionCapture.ReplaceAllStringFunc(query, func(c string) string { return c + hostedTagSuffix })
+}
+
+// bindingRank orders the kinds two patterns can give one declaration, most
+// specific first: what a component says about a name outranks what the script
+// language says about the same statement.
+func bindingRank(k model.EntityKind) int {
+	switch k {
+	case model.KindFunction, model.KindMethod, model.KindClass, model.KindInterface, model.KindTypeAlias:
+		return 0
+	case model.KindField:
+		return 1
+	case model.KindConstant:
+		return 2
+	case model.KindVariable:
+		return 3
+	}
+	return 4
 }
 
 // dropShadowedBindings removes a constant or variable that is the same
@@ -464,12 +516,28 @@ func dropShadowedBindings(in []model.Symbol) []model.Symbol {
 			callable[site{s.Name, s.Range.Start.Line}] = true
 		}
 	}
+	// The script language's own patterns and the component's can both match
+	// one declaration, with the same kind or with different ones (`export let
+	// name` is an exported variable to JavaScript and a prop to Svelte). One
+	// symbol is kept per name and line: the most specific kind, first seen.
+	best := map[site]int{}
+	for _, s := range in {
+		k := site{s.Name, s.Range.Start.Line}
+		if r, seen := best[k]; !seen || bindingRank(s.Kind) < r {
+			best[k] = bindingRank(s.Kind)
+		}
+	}
+	kept := map[site]bool{}
 	out := in[:0]
 	for _, s := range in {
-		if (s.Kind == model.KindConstant || s.Kind == model.KindVariable || s.Kind == model.KindField) &&
-			callable[site{s.Name, s.Range.Start.Line}] {
+		k := site{s.Name, s.Range.Start.Line}
+		if (s.Kind == model.KindConstant || s.Kind == model.KindVariable || s.Kind == model.KindField) && callable[k] {
 			continue
 		}
+		if bindingRank(s.Kind) != best[k] || kept[k] {
+			continue
+		}
+		kept[k] = true
 		out = append(out, s)
 	}
 	return out

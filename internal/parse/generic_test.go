@@ -442,14 +442,16 @@ func TestBenignSymbollessFilesAreStatusOk(t *testing.T) {
 			src:  "Write-Host 'Installing...'\n",
 		},
 		{
+			// A constant that is not exported declares nothing a caller can
+			// reach; an exported one is a definition (lang_javascript.go).
 			name: "example configuration file",
 			path: "internal/web/e2e/support/local-fixtures.example.mjs",
-			src:  "export const LOCAL_REPOS = { small: { name: 'small-service' } };\n",
+			src:  "const LOCAL_REPOS = { small: { name: 'small-service' } };\nmodule.exports = LOCAL_REPOS;\n",
 		},
 		{
 			name: "test support port table",
 			path: "internal/web/e2e/support/port-table.mjs",
-			src:  "export const PORTS = { payment: 7925, local1: 7920 };\n",
+			src:  "const PORTS = { payment: 7925, local1: 7920 };\n",
 		},
 	}
 

@@ -162,6 +162,13 @@ type CallTraits struct {
 	// calls to such candidates and were right 10 times in 31.
 	NoFreeFunctions bool
 
+	// ValuesAreCallable reports that a constant or a variable may hold a
+	// function, so that a call may name one: `export const parse =
+	// _parse(Err)` is called as `parse(x)`. ECMAScript only. The cost is a
+	// call that names a constant which holds something else, and the tier of
+	// every rule that reaches one is the one measured for the language.
+	ValuesAreCallable bool
+
 	// Overloads reports that one type may declare several different methods
 	// under one name, told apart by their parameters: Java, C#, C++. Where it
 	// holds, knowing the type and the name still leaves a choice, and unless
@@ -226,7 +233,9 @@ type ruleTiers struct {
 	//	c_sharp     22/24                                     medium
 	//	java        11/12                                     medium
 	//	rust        9/12                                      medium
-	//	typescript  7/12                                      low
+	//	typescript  7/12, then 24/30 on zod (docs/accuracy.md,
+	//	            "JavaScript, TypeScript and TSX")         medium
+	//	javascript  1/5 on express                            low
 	//	ruby        4/8                                       low
 	//	cpp         3/12                                      low
 	//
@@ -237,7 +246,9 @@ type ruleTiers struct {
 
 	// NamedAfterType is the tier of "the receiver is named after the type that
 	// declares the member". Zero means medium. Measured 54 right of 55 across
-	// Go, Java, C++, Rust and Ruby, and high in those five.
+	// Go, Java, C++, Rust and Ruby, and high in those five; 33 right of 33 on
+	// express, where the owner of a prototype or object method is the name its
+	// callers give the object (`res.send`, `app.use`), and high in JavaScript.
 	NamedAfterType model.Confidence
 
 	// UniqueTypeName is the tier of a member binding whose type was identified
@@ -349,9 +360,9 @@ var callTraitsByLanguage = map[string]CallTraits{
 	"kotlin":     {Measured: ruleTiers{Extension: model.ConfidenceHigh}, ClassBodyCode: true, ExtensionCalls: true, CallConstructs: true, ImplicitSelf: true, Overloads: true, TypesAreCapitalised: true, Imports: ImportsNameClasses, ExternalRoots: []string{"java", "javax", "kotlin"}, Builtins: javaBuiltins},
 	"scala":      {Measured: ruleTiers{UnknownReceiver: model.ConfidenceMedium, NamedAfterType: model.ConfidenceHigh}, ClassBodyCode: true, CallConstructs: true, ImplicitSelf: true, Overloads: true, TypesAreCapitalised: true, Imports: ImportsNameClasses, ExternalRoots: []string{"java", "javax", "scala"}, Builtins: javaBuiltins},
 	"python":     {CallConstructs: true, TypesAreCapitalised: true, Imports: ImportsNameModules},
-	"javascript": {TypesAreCapitalised: true, Imports: ImportsNameModules, Builtins: scriptBuiltins},
-	"typescript": {TypesAreCapitalised: true, Imports: ImportsNameModules, Builtins: scriptBuiltins},
-	"tsx":        {TypesAreCapitalised: true, Imports: ImportsNameModules, Builtins: scriptBuiltins},
+	"javascript": {Measured: ruleTiers{NamedAfterType: model.ConfidenceHigh}, CallConstructs: true, ValuesAreCallable: true, TypesAreCapitalised: true, Imports: ImportsNameModules, Builtins: scriptBuiltins},
+	"typescript": {Measured: ruleTiers{UnknownReceiver: model.ConfidenceMedium}, CallConstructs: true, ValuesAreCallable: true, TypesAreCapitalised: true, Imports: ImportsNameModules, Builtins: scriptBuiltins},
+	"tsx":        {CallConstructs: true, ValuesAreCallable: true, TypesAreCapitalised: true, Imports: ImportsNameModules, Builtins: scriptBuiltins},
 	"vue":        {TypesAreCapitalised: true, Imports: ImportsNameModules, Builtins: scriptBuiltins},
 	"svelte":     {TypesAreCapitalised: true, Imports: ImportsNameModules, Builtins: scriptBuiltins},
 	"astro":      {TypesAreCapitalised: true, Imports: ImportsNameModules, Builtins: scriptBuiltins},
@@ -406,7 +417,8 @@ func (s LanguageSpec) canBind(c registry.SymbolIndexEntry, kind model.EdgeKind) 
 	}
 	switch kind {
 	case model.EdgeCalls:
-		return isCallableKind(c.Kind) || (isConstructibleKind(c.Kind) && (s.Calls.CallConstructs || s.Calls.NewConstructs))
+		return isCallableKind(c.Kind) || (isConstructibleKind(c.Kind) && (s.Calls.CallConstructs || s.Calls.NewConstructs)) ||
+			(s.Calls.ValuesAreCallable && isValueKind(c.Kind))
 	case model.EdgeExtends, model.EdgeImplements:
 		return isTypeKind(c.Kind)
 	default:
@@ -417,6 +429,11 @@ func (s LanguageSpec) canBind(c registry.SymbolIndexEntry, kind model.EdgeKind) 
 // isCallableKind reports whether a symbol kind is something a call invokes.
 func isCallableKind(kind string) bool {
 	return kind == string(model.KindFunction) || kind == string(model.KindMethod)
+}
+
+// isValueKind reports whether a symbol kind is a constant or a variable.
+func isValueKind(kind string) bool {
+	return kind == string(model.KindConstant) || kind == string(model.KindVariable)
 }
 
 // isConstructibleKind reports whether calling a symbol of this kind constructs

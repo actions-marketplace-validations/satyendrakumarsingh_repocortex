@@ -1827,6 +1827,263 @@ any `@reference.` capture and so could not see the query being dropped.
 `super X -> ID` (a hierarchy edge to that definition, and to nothing else) and
 `nosuper X`.
 
+## JavaScript, TypeScript and TSX: CommonJS, JSX, wrapped components (13 November 2026)
+
+A hand check on real projects found that most call sites in these three
+languages ended in no edge: 12.5% on express (CommonJS), 34% on a React TSX
+project, 44% on zod (56% after the earlier resolver fix). This section is what
+changed, measured on `expressjs/express` (`43fca52d`), `colinhacks/zod`
+(`19c40d20`) and `shadcn-ui/taxonomy` (`298a8857`, a Next.js application with
+131 files indexed as JavaScript, TypeScript or TSX), `--depth 1` clones, each indexed
+and resolved by a binary built before the change and one built after it.
+
+The reviewer of every sample below is the AI assistant that wrote the change,
+reading the caller's source and the target, strictly: a call bound to a
+same-named member of another object is wrong. It is not the independent
+sub-agent review the sections above used, and the per-tier samples are 30 edges
+or all of them; read the intervals accordingly.
+
+### What is extracted and bound now
+
+| | Before | After | Example |
+|---|---|---|---|
+| `exports.f = function`, `module.exports.f = ...` | not a definition | function `f` | express `lib/utils.js`: `exports.setCharset = function setCharset(...)` |
+| `module.exports = function createApp() {}`; anonymous, named after the file | not a definition | function `createApp`; `merge-options.js` is `mergeOptions`, `widget/index.js` is `widget` | |
+| `module.exports = { a, b() {}, c: function () {} }` | `b` only | `b` (method), `c` (function) | |
+| `Foo.prototype.bar = function` | not a definition | method `bar` owned by `Foo`; `function Foo` is a class | express `lib/view.js`: `View.prototype.lookup` |
+| `obj.name = function` at the top of a file, on an object the file declares | not a definition | method `name` owned by `obj` | express `res.send = function send(body)`, `app.use = ...` |
+| `const x = require('./x')`, `{ a, b: c } = require(...)`, `require('./x').y` | no import row | module alias `x`, members `.a` `.c`, `.y` | express `var setCharset = require('./utils').setCharset` |
+| `exports.f()` / `module.exports.f()` inside the module | unbound | the module's own `f` | express `utils.js` |
+| `new Foo()` | no reference | a call on `Foo`, bound as `INSTANTIATES` | zod `new core.$ZodAsyncError()` |
+| `<Button />`, `<Foo.Bar />` | no reference | a call on `Button`, shaped like `Button()`; `CALLS` to a function component, `INSTANTIATES` to a class component | taxonomy `<DashboardHeader />` |
+| `<Ctx.Provider>`, `<Ctx.Consumer>` | no reference | a `reference.jsx` to `Ctx` (`REFERENCES`) | |
+| `const X = forwardRef(...)`, `memo`, `lazy`, `observer`, `defineComponent`, `styled.x\`...\``, `styled(Y)\`...\`` | no symbol, or none for a call-valued constant | function | taxonomy `const Menubar = React.forwardRef(...)` |
+| `createContext(...)` | no symbol | constant | |
+| `export const X = value`, `export let/var` | no symbol | constant / variable; also when an `export { X }` clause lists a top-level `const X = call()` | zod `export const $ZodType = core.$constructor(...)` |
+| `PostItem.Skeleton = function`, `<PostItem.Skeleton />` | unbound | method `Skeleton` owned by `PostItem`, bound through the import | taxonomy `PostItem.Skeleton` (5 uses) |
+
+**JSX is a call.** A function component is a function React calls, and a class
+component is one React constructs, which is exactly the split between `CALLS`
+and `INSTANTIATES` that a call bound to a function or to a class already makes.
+So the tag is recorded the way a call is, from the element's name (a bare
+`<Button />` is a bare call, `<Foo.Bar />` is a call of `Bar` on `Foo`), and
+every rule that binds a call binds it, including the import-exact ones.
+`find_callers` on a function component lists where it is rendered:
+`repocortex callers DashboardHeader` on taxonomy lists six callers, where it
+listed none before. Only capitalised names are components; `<div>` records
+nothing. A context's `.Provider` and `.Consumer` are parts of the context
+object, so those two record a plain reference to the object instead.
+
+The limits, because each is a decision:
+
+- `exports.x = ...` and `module.exports = ...` define only as a statement at
+  the top of the file, or as the value of a top-level `var x = ` chain
+  (`var app = exports = module.exports = {}`).
+- `obj.name = function` defines only as a top-level statement on an object the
+  same file declares at its top level. Inside a function, on `this`, on an
+  undeclared object, or assigning a name (`exports.alias = exports.parse`), it
+  defines nothing.
+- `Foo.prototype.bar = function` defines wherever it is written.
+- A non-exported `const x = 5` or `const y = compute()` is not a definition. The
+  inferred function patterns are untouched.
+- A renamed require or import (`{ b: c }`) binds under the local name `c`, so
+  `c()` looks for a definition named `c`, not `b`.
+- `require` is read at the top of a file only. A `require` inside a function
+  records its path and binds no name.
+- `require('..')` and `require('./')` name a directory, and the resolver's
+  import table drops a path with no name in it, so the binding row names the
+  directory's `index`. A test that required the package under test through
+  `'..'` had bound `express.json(...)` by name alone, to `res.json`.
+
+### What the change touched outside the language files
+
+Everything above is in `lang_javascript.go`, `lang_typescript.go`,
+`lang_tsx.go`, the script entries of `queries.go` and `import_bindings.go`, and
+the JavaScript, TypeScript and TSX rows of `calltraits.go`. Four things could
+not be said there, and each is the smallest edit that says it:
+
+| File | Edit | Why it could not be said otherwise |
+|---|---|---|
+| `parse/generic.go` | one hook, `refineDefinitions`, called beside the shape walk and applied to each definition tag | a query cannot see the file's path (an anonymous `module.exports` is named after the file), cannot tell whether `app` is declared at the top of the file, and cannot write a qualified name (`Foo.bar`), which is how an owner is carried |
+| `infer/shaped.go` | a name bound by `require` arrives as a declared value and is read as the import; `exports.f()` and `module.exports.f()` bind to the file's own `f`; a required module called by its name binds as a member of that module; `this.f()` in an ES5 constructor reads `Shape.prototype.f`; `Foo.Bar` binds a member assigned onto an imported function | each is a construct of this module system that the shared shape rules have no word for |
+| `infer/calltraits.go` | `CallConstructs` (a class is reached by `new X()` and `<X />`) and `ValuesAreCallable` (a constant may hold a function: `export const parse = _parse(Err)`) for the three rows | the guard `canBind` had to be told |
+| `cli/supplychain_test.go` | the expectation that a top-level `require` arrives as a call whose argument is read back from the text | it arrives as an import now, so the site no longer carries a `require` note |
+
+`parse/shape.go` was not edited.
+
+### Counts
+
+References extracted, and what the resolver did with them. "Edges" are `CALLS`
+and `INSTANTIATES` from source code, by tier.
+
+| Project | Binary | Symbols | References | Resolved | Ambiguous | Unresolved (of which external) | Edges high / medium / low |
+|---|---|---:|---:|---:|---:|---:|---|
+| express | before | 755 | 11,832 | 304 | 21 | 11,507 (147) | 7 / 0 / 0 |
+| express | after | 844 | 12,054 | 2,180 | 1,676 | 8,198 (1,913) | 158 / 0 / 7 |
+| zod | before | 6,732 | 54,321 | 7,200 | 10,581 | 36,540 (13,603) | 2,730 / 1 / 74 |
+| zod | after | 7,216 | 55,720 | 7,540 | 10,597 | 37,583 (13,671) | 3,700 / 227 / 7 |
+| taxonomy | before | 1,329 | 757 | 248 | 0 | 509 (277) | 122 / 0 / 0 |
+| taxonomy | after | 1,510 | 1,190 | 429 | 0 | 761 (461) | 408 / 0 / 0 |
+
+zod's 155 `INSTANTIATES` edges are in its high count; taxonomy's one is too.
+Express's ambiguous count rose from 21 to 1,676 because calls on `res`, `req`
+and `app` now find several members of one name (`get` is a method of all three)
+and refuse to choose: they were unresolved before, for want of any candidate.
+
+### Recall
+
+The five largest non-test source files per project (express: `lib/response.js`,
+`application.js`, `request.js`, `utils.js`, `view.js`; zod:
+`v4/core/schemas.ts`, `v3/types.ts`, `v4/classic/schemas.ts`,
+`v4/core/compile.ts`, `v4/mini/schemas.ts`; taxonomy: `app/(marketing)/page.tsx`,
+`components/ui/menubar.tsx`, `dropdown-menu.tsx`, `context-menu.tsx`,
+`app/api/og/route.tsx`, which has no call to a repository definition). In each
+file the first eight call sites and JSX usages, in source order, whose target
+the repository defines; fewer where the file has fewer. `this.f()` in a
+`defineGetter` callback and `Object.defineProperty`-style attachments count
+only where a plain definition of the target exists.
+
+| Project | Sites | Binary | Edge to the right definition | Edge to a wrong one | No edge |
+|---|---:|---|---:|---:|---:|
+| express | 31 | before | 0 | 0 | 31 (11 resolved to the right definition, with no symbol to be the caller) |
+| express | 31 | after | 22 | 0 | 9 (8 resolved to the right definition at the top of the file; 1 ambiguous) |
+| zod | 40 | before | 25 | 0 | 15 |
+| zod | 40 | after | 33 | 0 | 7 |
+| taxonomy | 29 | before | 3 | 0 | 26 |
+| taxonomy | 29 | after | 29 | 0 | 0 |
+
+Taxonomy's sites are nearly all `cn(...)` and `buttonVariants(...)` inside
+components built by `forwardRef`, which had no symbol to be the caller. Over
+the whole project, 133 JSX usages in source of the 175 components defined in
+`.tsx` files gave no edge before and 133 edges after (read against the text
+with `grep`, not site by site); the 30-edge sample below read the callers.
+
+What stays unbound in the zod sites: `en()` (an anonymous default export), four
+`parse.parse(...)` calls (the module re-exports constants from another module,
+and a re-export is not followed), and two `this.clone(...)` in an object
+literal's methods, where `clone` has six definitions. Express: `this.get()`
+in a callback passed to `defineGetter`, where `this` is not a method's.
+
+### Precision per tier
+
+30 edges per tier that has that many, ordered by `(id * 2654435761) mod 2^32`,
+judged by reading the caller. A tier with fewer is listed whole.
+
+| Project | Tier | Right / judged | Edges | Notes |
+|---|---|---:|---:|---|
+| express | high | 30 / 30 | 158 | 11 of the 30 are "receiver is named after the type that declares it", 68 of the 158 |
+| express | low | 4 / 7 | 7 | the only-member rule: 1 / 4; the naming rule: 3 / 3 |
+| zod | high | 30 / 30 | 3,700 | 3 of 30 `INSTANTIATES` |
+| zod | medium | 27 / 30 | 227 | 22 are `Schema.init(inst, def)` bound to `$constructor.init`, the interface method; the unknown-receiver rule: 5 / 8 |
+| zod | low | 7 / 7 | 7 | |
+| taxonomy | high | 30 / 30 | 408 | |
+
+The wrong ones, whole: `z.null()`, `z.number()`, `z.cidrv4()` and `z.e164()`
+bound to a method of the same name on a test class and on `ZodString` (`z` is a
+local object, not a module); `this._def.shape()` bound to the `shape` getter of
+`ZodObject` (a function stored in `_def`, not the getter); `self.engine(...)`
+and `this.engine(...)` bound to `app.engine` (a view's own property);
+`obj.range(...)` bound to `req.range`. All are the unknown-receiver rule, which
+is why it is not above `medium` anywhere.
+
+### Definitions
+
+Express: every definition in the five files listed by hand from the source
+(72: the 22 `res.*`, 16 `app.*` and 8 `req.*` assignments, the `exports.*` and
+`View.prototype.*` ones, and the named functions). zod and taxonomy: an
+independent enumeration by regular expression of classes, interfaces, type
+aliases, enums, function declarations, exported constants, names an export
+clause lists, and constants bound to an arrow function, a function expression
+or a wrapper, scored by (type or value, name); methods and fields are not
+scored on either side. The enumeration listed 16 names after the change that
+were not extracted; every one is a local `const x = (...)` that is not a
+function, or a local `lazy(...)` schema, so the expected count is 1,263.
+
+| Project | Expected | Extracted correctly, before | after | Spurious, before | after |
+|---|---:|---:|---:|---:|---:|
+| express | 72 | 17 | 72 | 0 | 0 |
+| zod | 1,263 | 993 | 1,263 | 0 | 0 |
+| taxonomy | 50 | 6 | 50 | 0 | 0 |
+
+Scoring is by (type or value, name), so `export interface $ZodType` and
+`export const $ZodType` are two expected definitions. The 270 constants zod's
+five files gained are most of the difference, and many share a name with an
+interface that was already extracted.
+
+### The tiers set
+
+| Row | Field | Value | Evidence |
+|---|---|---|---|
+| javascript | `NamedAfterType` | high | 33 / 33 on express (the 30 sampled when it was `medium`, and the 3 at `low`), across more than ten distinct call names; promoted because the rule passed the high floor with more than one call shape |
+| typescript | `UnknownReceiver` | medium | 24 / 30 on zod (80%) while the rule was still `low`, and 5 / 8 in the medium sample above, against 7 / 12 before; the floor is 60% |
+| javascript | `UnknownReceiver` | low (default) | 1 / 4 on express |
+| tsx | none | defaults | no unknown-receiver or named-after-type edge in the taxonomy sample |
+| typescript | `UniqueTypeName` | medium (default) | 22 / 22 in the sample, all one call shape (`X.init(inst, def)`), so not enough to promote |
+
+No rule measured below its floor, so none was demoted. The sample above found
+nothing at `high` that was wrong.
+
+### Module-level calls
+
+A call made outside any function resolves and then produces no edge because an
+edge needs a caller symbol: `bind` in `internal/resolve/infer/resolver.go`
+records the resolution and returns when `enclosing(fr.Symbols, ref.Line)` finds
+no symbol. Resolved references with no enclosing symbol:
+
+| Project | Before | After |
+|---|---:|---:|
+| express | 297 of 304 | 2,015 of 2,180 |
+| zod | 3,742 of 7,200 | 2,952 of 7,540 |
+| taxonomy | 125 of 248 | 20 of 429 |
+
+Of the 2,015 and 2,952, 1,811 (express) and 2,217 (zod) are in test files, in
+callbacks passed to `describe` and `it`. Making `export const X = factory(...)`
+a symbol brought the zod figure down by 790 and the taxonomy figure by 105
+(most of it, not all: the other changes move it too), because the initialiser's
+calls now have a caller: that is a side effect of item 4, not a fix.
+
+**Not implemented, and what it needs.** A synthetic module symbol per file as
+the caller of every call outside a symbol would add one symbol to every
+JavaScript, TypeScript and TSX file (131 on taxonomy, 522 on zod, 142 on express) and
+change what a caller list contains: a module that "calls" `describe` is a
+caller of a different kind than a function. It needs a kind (`package` is taken
+by modules and namespaces and means a type that can be extended; a new kind
+touches `pkg/model` and every consumer that switches on kind), a name and FQN
+that cannot collide with a function of the file's name, a range of the whole
+file so that `enclosing` picks it only when nothing narrower contains the line
+(it picks the last symbol that starts before the line, so it must sort first
+among symbols starting on line 1), and a decision about whether it is counted
+as a symbol or as an edge source only. It would change symbol counts for the
+three languages and the corpus pins for them. The brief allowed it only if it
+changed neither, so it is left, with the counts above to size it.
+
+### What is still missed or bound wrongly
+
+- Module-level calls, above.
+- A required module whose exports object owns its members: `var m =
+  require('./lib/proto'); m.initThing()` is unresolved when `initThing` is
+  assigned onto `var proto = module.exports = {}`. The method is owned by
+  `proto`, not module-level, and the module alias reaches only module-level
+  definitions. Express's own `app.*` calls bind by the receiver's name instead.
+- A re-export is not followed: zod `mini/schemas.ts` calls `parse.parse(...)`
+  through `mini/parse.ts`, which re-exports it from `core/parse.ts`.
+- Anonymous default exports: `export default function () {}` has no name to
+  bind (zod `en()`).
+- Methods attached by a loop (`methods.forEach(function (m) { app[m] = ... })`
+  makes express's `app.get`) and properties defined by `Object.defineProperty`.
+- `this.f()` in a callback that is not a method: ambiguous when several types
+  declare `f`.
+- Renamed imports and requires bind under the local name.
+- The unknown-receiver rule's wrong bindings above, at `medium` in TypeScript.
+
+Vue and Svelte single-file components reuse these parsers through `sfc.go`,
+which was not edited. No `.vue` or `.svelte` fixture changed what it extracts:
+the corpus gate, which pins a Vue file, passes unchanged.
+
+Reproduce with `fixtures/receivers/{js,ts,tsx}` (`TestReceiverFixtureBindsNothingWrongly`),
+`fixtures/langs/{javascript,typescript,tsx}` (`TestLanguageConformance`), and the
+three clones above indexed with `repocortex init`, `index` and `resolve`.
+
 ## Reproducing
 
 The numbers above came from:

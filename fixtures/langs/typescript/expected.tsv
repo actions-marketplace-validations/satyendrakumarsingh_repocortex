@@ -1,0 +1,23 @@
+# TypeScript definitions. Rule, in addition to JavaScript's (fixtures/langs/javascript):
+#  - interfaces are interface, type aliases type_alias, enums and classes (abstract or not) class, methods method, class fields field;
+#  - `export const/let/var x = value` is a constant (variable for let and var), whatever the type annotation; a constant that is not exported, or whose value is a call that builds nothing (`const built = build()`), is not a definition;
+#  - `export const h = async () => {}` is a function; a component built by a wrapper (memo, forwardRef, lazy, styled) is a function; createContext(...) is a constant;
+#  - CommonJS and prototype assignments are definitions under the same limits as JavaScript.
+module.ts	1	interface	Options
+module.ts	2	type_alias	Handler
+module.ts	3	class	Mode
+module.ts	5	constant	API_URL
+module.ts	6	variable	current
+module.ts	7	constant	defaults
+module.ts	8	constant	schema
+module.ts	9	function	handler
+module.ts	10	function	Panel
+module.ts	13	constant	Ctx
+module.ts	15	function	load
+module.ts	17	class	Client
+module.ts	18	field	url
+module.ts	19	method	get
+module.ts	22	class	Base
+module.ts	23	method	run
+module.ts	26	function	legacy
+module.ts	27	method	close
