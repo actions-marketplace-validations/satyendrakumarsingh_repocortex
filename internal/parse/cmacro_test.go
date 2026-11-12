@@ -365,7 +365,7 @@ char* name(int a) { return 0; }
 			t.Errorf("unexpected symbol %s", s.Name)
 			continue
 		}
-		if s.Kind != w.kind || !strings.HasSuffix(string(s.FQN), w.owned) {
+		if s.Kind != w.kind || !strings.HasSuffix(s.FQN, w.owned) {
 			t.Errorf("%s: kind %s fqn %s, want kind %s fqn ending %s", s.Name, s.Kind, s.FQN, w.kind, w.owned)
 		}
 		delete(want, s.Name)

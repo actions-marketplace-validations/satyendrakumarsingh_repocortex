@@ -107,7 +107,7 @@ func scanCTokens(src []byte) []ctok {
 			}
 		case c == '/' && i+1 < n && src[i+1] == '*':
 			i += 2
-			for i < n && !(src[i] == '*' && i+1 < n && src[i+1] == '/') {
+			for i < n && (src[i] != '*' || i+1 >= n || src[i+1] != '/') {
 				i++
 			}
 			i += 2
@@ -124,7 +124,7 @@ func scanCTokens(src []byte) []ctok {
 					}
 				} else if src[i] == '/' && i+1 < n && src[i+1] == '*' {
 					i += 2
-					for i < n && !(src[i] == '*' && i+1 < n && src[i+1] == '/') {
+					for i < n && (src[i] != '*' || i+1 >= n || src[i+1] != '/') {
 						i++
 					}
 					i++
@@ -243,7 +243,7 @@ func isMacroName(s string) bool {
 			return false
 		}
 	}
-	return letters > 0 && s[0] != '0' && !(s[0] >= '0' && s[0] <= '9')
+	return letters > 0 && (s[0] < '0' || s[0] > '9')
 }
 
 // cStorage are the words that may precede an attribute macro in a declaration.
@@ -666,7 +666,7 @@ func (s *candScan) aloneOnLine(from, to int) bool {
 		return false
 	}
 	next := s.toks[to]
-	if !(next.kind == ctDir || next.kind == ctPunct && (next.c == '@' || next.c == '}')) {
+	if next.kind != ctDir && (next.kind != ctPunct || next.c != '@' && next.c != '}') {
 		return false
 	}
 	if bytes.IndexByte(s.src[s.toks[to-1].end:next.start], '\n') < 0 {
