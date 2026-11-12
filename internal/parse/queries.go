@@ -375,6 +375,37 @@ var inheritanceQueries = map[string]string{
 (class_definition superclasses: (argument_list (identifier) @name @reference.inherit))
 (class_definition superclasses: (argument_list (attribute attribute: (identifier) @name) @reference.inherit))
 `,
+
+	// Ruby: a single superclass and any number of mixins.
+	//
+	//	class A < B           -> (class (constant) (superclass (constant)))
+	//	class A < Mod::B      -> (superclass (scope_resolution (constant) (constant)))
+	//	include M, extend M,
+	//	prepend M             -> (call (identifier) (argument_list (constant)))
+	//
+	// The superclass is EXTENDS. A mixin is IMPLEMENTS, the relation Java gives
+	// an interface and Rust a trait: the module contributes methods without
+	// being the class's parent. `include` and `prepend` put the module in the
+	// instance ancestry. `extend` puts it in the CLASS's singleton ancestry
+	// (its methods become class methods), which this graph cannot tell apart,
+	// so a call to a method that only an extended module defines may bind to it
+	// from an instance method too; the resolver only ever consults ancestry for
+	// a call it could not bind by name, which bounds the damage.
+	//
+	// `!receiver` keeps the mixin patterns to the bare statement. `foo.include
+	// M` and `Class.new { include M }` on a receiver are not a class body
+	// declaring its ancestry. Only a constant is captured: `include
+	// Comparable` names a module, `include some_helper` does not.
+	//
+	// `class A < Struct.new(:x)` and `class A < Class.new(B)` put a CALL where
+	// the superclass is, and capture nothing, deliberately: the base is built at
+	// run time, not named.
+	"ruby": `
+(superclass (constant) @name @reference.extends)
+(superclass (scope_resolution name: (constant) @name @reference.extends))
+(call !receiver method: (identifier) @_m arguments: (argument_list (constant) @name @reference.implementation) (#match? @_m "^(include|extend|prepend)$"))
+(call !receiver method: (identifier) @_m arguments: (argument_list (scope_resolution name: (constant) @name @reference.implementation)) (#match? @_m "^(include|extend|prepend)$"))
+`,
 }
 
 // InheritanceQuery returns the supertype-reference patterns for a language, or

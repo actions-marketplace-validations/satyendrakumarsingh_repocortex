@@ -26,7 +26,11 @@ type receiverMarker struct {
 	file string
 	line int
 
-	// verb is "call" or "nocall".
+	// verb is "call", "nocall", "super" or "nosuper". A super marker says the
+	// supertype clause on that line names <name> and the index holds a
+	// hierarchy edge (EXTENDS or IMPLEMENTS) to the def labelled target, or
+	// none. A nosuper marker says only that no hierarchy edge to a type called
+	// <name> starts on that line, whether or not the clause was extracted.
 	verb, name string
 
 	// target is a def label, or "none" or "external". instantiates is true
@@ -44,8 +48,9 @@ type receiverDef struct {
 var (
 	// A marker comment is the last comment on its line, in any of the three
 	// comment syntaxes the fixture's languages use.
-	receiverComment = regexp.MustCompile(`(?:^|\s)(?://|#|/\*)\s*((?:def|call|nocall)\s.*?)\s*(?:\*/)?\s*$`)
+	receiverComment = regexp.MustCompile(`(?:^|\s)(?://|#|/\*)\s*((?:def|call|nocall|super|nosuper)\s.*?)\s*(?:\*/)?\s*$`)
 	receiverCall    = regexp.MustCompile(`^call\s+(\S+)\s*->\s*(new\s+)?(\S+)(?:\s+(high|medium|low))?$`)
+	receiverSuper   = regexp.MustCompile(`^super\s+(\S+)\s*->\s*(\S+)$`)
 )
 
 func readReceiverMarkers(t *testing.T, root string) (map[string]receiverDef, []receiverMarker) {
@@ -93,6 +98,16 @@ func readReceiverMarkers(t *testing.T, root string) (map[string]receiverDef, []r
 				case strings.HasPrefix(part, "nocall "):
 					markers = append(markers, receiverMarker{file: rel, line: line, verb: "nocall",
 						name: strings.TrimSpace(strings.TrimPrefix(part, "nocall "))})
+				case strings.HasPrefix(part, "nosuper "):
+					markers = append(markers, receiverMarker{file: rel, line: line, verb: "nosuper",
+						name: strings.TrimSpace(strings.TrimPrefix(part, "nosuper ")), target: "none"})
+				case strings.HasPrefix(part, "super "):
+					c := receiverSuper.FindStringSubmatch(part)
+					if c == nil {
+						t.Fatalf("%s:%d: malformed marker %q", rel, line, part)
+					}
+					markers = append(markers, receiverMarker{file: rel, line: line, verb: "super",
+						name: c[1], target: c[2]})
 				case strings.HasPrefix(part, "call "):
 					c := receiverCall.FindStringSubmatch(part)
 					if c == nil {
@@ -111,7 +126,7 @@ func readReceiverMarkers(t *testing.T, root string) (map[string]receiverDef, []r
 		t.Fatal(err)
 	}
 	for _, m := range markers {
-		if m.verb != "call" || m.target == "none" || m.target == "external" {
+		if (m.verb != "call" && m.verb != "super") || m.target == "none" || m.target == "external" {
 			continue
 		}
 		if _, ok := defs[m.target]; !ok {
@@ -166,6 +181,10 @@ func TestReceiverFixtureBindsNothingWrongly(t *testing.T) {
 	}
 
 	for _, m := range markers {
+		if m.verb == "super" || m.verb == "nosuper" {
+			checkHierarchyMarker(t, db, defs, m)
+			continue
+		}
 		var refs, external int
 		if err := db.QueryRow(`
 			SELECT COUNT(*), COALESCE(SUM(sr.external), 0)
@@ -270,5 +289,62 @@ func TestReceiverFixtureBindsNothingWrongly(t *testing.T) {
 	}
 	if err := rows.Err(); err != nil {
 		t.Fatal(err)
+	}
+}
+
+// checkHierarchyMarker verifies one `super` marker: the supertype clause on the
+// line was extracted as a reference, and it produced an EXTENDS or IMPLEMENTS
+// edge to the labelled definition and to nothing else, or to nothing at all
+// when the target is "none".
+func checkHierarchyMarker(t *testing.T, db *sql.DB, defs map[string]receiverDef, m receiverMarker) {
+	t.Helper()
+	var refs int
+	if err := db.QueryRow(`
+		SELECT COUNT(*) FROM symbol_references sr JOIN files f ON f.id = sr.file_id
+		 WHERE f.path = ? AND sr.start_line = ? AND sr.name = ?
+		   AND (sr.kind LIKE '%extend%' OR sr.kind LIKE '%inherit%' OR sr.kind LIKE '%implementation%')`,
+		m.file, m.line, m.name).Scan(&refs); err != nil {
+		t.Fatal(err)
+	}
+	if refs == 0 && m.verb == "super" {
+		t.Errorf("%s:%d: no supertype reference named %q was extracted", m.file, m.line, m.name)
+		return
+	}
+	rows, err := db.Query(`
+		SELECT e.kind, f.path, s.start_line
+		  FROM edges e
+		  JOIN symbols s ON s.id = e.dst_id
+		  JOIN files f ON f.id = s.file_id
+		 WHERE e.source = 'source_code' AND e.kind IN ('EXTENDS', 'IMPLEMENTS')
+		   AND e.evidence_file = ? AND e.evidence_line = ? AND s.name = ?`,
+		m.file, m.line, m.name)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = rows.Close() }()
+	found := false
+	for rows.Next() {
+		var kind, path string
+		var line int
+		if err := rows.Scan(&kind, &path, &line); err != nil {
+			t.Fatal(err)
+		}
+		if m.target == "none" {
+			t.Errorf("%s:%d: %s must have no hierarchy edge, and has %s to %s:%d", m.file, m.line, m.name, kind, path, line)
+			continue
+		}
+		want := defs[m.target]
+		if path != want.file || line != want.line {
+			t.Errorf("%s:%d: %s has a %s edge to %s:%d; it is %s at %s:%d",
+				m.file, m.line, m.name, kind, path, line, m.target, want.file, want.line)
+			continue
+		}
+		found = true
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatal(err)
+	}
+	if m.target != "none" && !found {
+		t.Errorf("%s:%d: %s produced no hierarchy edge to %s", m.file, m.line, m.name, m.target)
 	}
 }

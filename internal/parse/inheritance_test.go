@@ -304,6 +304,7 @@ func TestInheritanceQueriesCompileForEveryLanguage(t *testing.T) {
 	probe := map[string]string{
 		"go": "x.go", "java": "X.java", "typescript": "x.ts",
 		"tsx": "x.tsx", "javascript": "x.js", "python": "x.py",
+		"ruby": "x.rb", "c_sharp": "x.cs", "rust": "x.rs", "cpp": "x.cc",
 	}
 	for _, lang := range InheritanceLanguages() {
 		file, ok := probe[lang]
@@ -324,7 +325,7 @@ func TestInheritanceQueriesCompileForEveryLanguage(t *testing.T) {
 			t.Errorf("%s: parser construction failed: %v", lang, gp.initErr)
 			continue
 		}
-		if !strings.Contains(gp.tagsQuery, "@reference.") {
+		if !strings.Contains(gp.tagsQuery, strings.TrimSpace(InheritanceQuery(lang))) {
 			t.Errorf("%s: inheritance patterns were dropped from the tags query — "+
 				"the grammar rejected them and EXTENDS/IMPLEMENTS recall is now zero for this language", lang)
 		}
