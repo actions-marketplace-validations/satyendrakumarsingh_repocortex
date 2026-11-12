@@ -66,9 +66,35 @@ func buildCoreMembers() map[string]map[string]struct{} {
 		name ordinal getName getMessage getCause printStackTrace close flush read write run
 		start interrupt sleep currentThread getKey getValue setValue peek push pop poll offer
 		first last`)
-	for _, lang := range []string{"java", "kotlin", "scala", "groovy"} {
+	for _, lang := range []string{"java", "scala", "groovy"} {
 		coreMembers[lang] = jvm
 	}
+
+	// Kotlin has the JVM's names and its own standard library on top: the
+	// number conversions, the scope functions and the collection and string
+	// extensions. `use` is left out on purpose: okio, which targets platforms
+	// without kotlin.io, declares its own Closeable.use, and 211 high-tier
+	// calls to it were right. Measured on okio, 608 edges (of 1500 at the low tier) bound
+	// `x.toLong()` to the one private `LARGE_INTEGER.toLong()` the repository
+	// declares, and 11 of 30 sampled low edges were wrong, nine of them that.
+	coreMembers["kotlin"] = merge(jvm, words(`
+		toInt toLong toShort toByte toChar toDouble toFloat toUInt toULong toUShort toUByte
+		toList toMutableList toSet toMutableSet toMap toTypedArray toByteArray toCharArray
+		toIntArray toLongArray toSortedSet toBoolean toBooleanStrict toIntOrNull toLongOrNull
+		toDoubleOrNull toRegex toPair
+		let also apply run takeIf takeUnless
+		lowercase uppercase lowercaseChar uppercaseChar replaceFirst substringBefore
+		substringAfter substringBeforeLast substringAfterLast removePrefix removeSuffix
+		removeRange isNullOrEmpty isNullOrBlank isNotEmpty isNotBlank orEmpty ifEmpty ifBlank
+		padStart padEnd trimStart trimEnd trimIndent trimMargin lineSequence
+		copyOf copyOfRange getOrNull getOrElse getOrPut firstOrNull
+		lastOrNull singleOrNull elementAt elementAtOrNull indices lastIndex
+		joinToString forEachIndexed mapIndexed mapNotNull filterNot filterIsInstance
+		filterNotNull flatten associate associateBy associateWith groupBy partition zip
+		sortedBy sortedWith sortedDescending sortBy sortWith minOrNull maxOrNull minBy maxBy
+		sumOf fold foldRight onEach takeWhile dropWhile takeLast dropLast chunked windowed
+		asSequence asList asIterable coerceAtLeast coerceAtMost coerceIn isNaN isInfinite
+		isDigit isLetter isLetterOrDigit isWhitespace isUpperCase isLowerCase digitToInt`))
 
 	coreMembers["ruby"] = words(`
 		to_s to_i to_f to_a to_h to_sym to_str to_proc to_json inspect class is_a? kind_of?
@@ -124,11 +150,56 @@ func buildCoreMembers() map[string]map[string]struct{} {
 		capitalize encode decode find rfind isdigit isalpha isspace zfill splitlines partition
 		read write readline readlines close flush seek tell`)
 
-	coreMembers["php"] = words(`__toString __construct count getMessage getCode current key next rewind valid`)
+	// PHP: the language's own interfaces and classes, then the two things
+	// nearly every PHP repository calls into without declaring: PSR-7/17/18
+	// (the HTTP message, factory and client interfaces, which frameworks and
+	// libraries both implement and take as arguments) and PHPUnit. Measured on guzzle, 27 of 30 sampled low edges were wrong, and
+	// every one of the 27 was a PSR-7 method (`getBody`, `getHeaderLine`,
+	// `getUri`, `hasHeader`, `withHeader`, `getHost`, `detach`, `getContents`)
+	// or PHPUnit's `fail`, bound to a test double or a private helper that
+	// happens to declare the one other method of the name. PHPUnit's
+	// assert*/expect*/markTest* families are matched by prefix (corePrefixes).
+	coreMembers["php"] = words(`
+		__toString __construct __invoke __get __set __isset __unset __call __callStatic __clone
+		__destruct __debugInfo __serialize __unserialize __set_state
+		count getMessage getCode getPrevious getFile getLine getTrace getTraceAsString
+		current key next rewind valid send getReturn offsetGet offsetSet offsetExists offsetUnset
+		jsonSerialize getTimestamp setTimezone bindTo fromCallable
+		setAccessible newInstanceArgs newInstanceWithoutConstructor
+		getMethod getProtocolVersion withProtocolVersion getHeaders hasHeader getHeader getHeaderLine
+		withHeader withAddedHeader withoutHeader getBody withBody withMethod getUri
+		withUri getRequestTarget withRequestTarget getStatusCode withStatus getReasonPhrase
+		getServerParams getCookieParams withCookieParams getQueryParams withQueryParams
+		getUploadedFiles withUploadedFiles getParsedBody withParsedBody getAttributes getAttribute
+		withAttribute withoutAttribute
+		close detach getSize tell eof isSeekable seek isWritable write isReadable read
+		getContents getMetadata
+		getScheme getAuthority getUserInfo getHost getPort getPath getQuery getFragment
+		withScheme withUserInfo withHost withPort withPath withQuery withFragment
+		getStream moveTo getError getClientFilename getClientMediaType
+		createRequest createServerRequest createResponse createStream createStreamFromFile
+		createStreamFromResource createUploadedFile createUri sendRequest
+		fail setUp tearDown setUpBeforeClass tearDownAfterClass createMock createStub
+		createConfiguredMock createPartialMock getMockBuilder addToAssertionCount
+		once never atLeastOnce atLeast exactly willReturn willReturnCallback
+		willReturnSelf willReturnMap willReturnOnConsecutiveCalls willThrowException
+		returnValue returnCallback withConsecutive onlyMethods disableOriginalConstructor
+		getMock`)
 	coreMembers["swift"] = words(`
 		append insert remove removeAll contains count isEmpty first last map filter reduce
 		forEach sorted sort joined split hasPrefix hasSuffix lowercased uppercased description`)
 	return coreMembers
+}
+
+// merge is the union of several name sets, as a new set.
+func merge(sets ...map[string]struct{}) map[string]struct{} {
+	out := make(map[string]struct{})
+	for _, set := range sets {
+		for k := range set {
+			out[k] = struct{}{}
+		}
+	}
+	return out
 }
 
 func words(s string) map[string]struct{} {
@@ -144,6 +215,23 @@ func words(s string) map[string]struct{} {
 // member of this name, so that a repository declaring exactly one says nothing
 // about what a call on an unknown receiver reaches.
 func (s LanguageSpec) isCoreMember(name string) bool {
-	_, ok := coreMembers[s.Name][name]
-	return ok
+	if _, ok := coreMembers[s.Name][name]; ok {
+		return true
+	}
+	for _, p := range corePrefixes[s.Name] {
+		// A family, not a word: assertSame, assertCount, assertStringContainsString.
+		// The letter after the prefix is a capital, so `assertion` is not one.
+		if len(name) > len(p) && strings.HasPrefix(name, p) && name[len(p)] >= 'A' && name[len(p)] <= 'Z' {
+			return true
+		}
+	}
+	return false
+}
+
+// corePrefixes are families of member names a language's dominant test
+// framework declares by the dozen. PHPUnit's TestCase has some hundred
+// assert* methods and the expect* and markTest* groups; listing them by name
+// would be a list nobody could keep current.
+var corePrefixes = map[string][]string{
+	"php": {"assert", "expect", "markTest"},
 }
