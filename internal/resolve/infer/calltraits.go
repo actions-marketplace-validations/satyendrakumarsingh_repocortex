@@ -139,6 +139,13 @@ type CallTraits struct {
 	// Python) needs no flag for it, and records its `new` the same way.
 	NewConstructs bool
 
+	// ClassBodyCode reports that code may stand directly in a type's body, with
+	// no member around it: Kotlin's property initialisers and `init` blocks,
+	// Scala's statements in an object or class (`test("x") { ... }`,
+	// `val p = parser()`). The enclosing definition of such a call is the type
+	// itself, and a bare name in it denotes a member of that type.
+	ClassBodyCode bool
+
 	// ExtensionCalls reports that a function declared outside any type can be
 	// written as a call on a value: Kotlin's `fun String.shout()` called as
 	// `"x".shout()`. The index records neither that a function is an extension
@@ -339,8 +346,8 @@ var (
 var callTraitsByLanguage = map[string]CallTraits{
 	"go":         {Measured: ruleTiers{UnknownReceiver: model.ConfidenceHigh, NamedAfterType: model.ConfidenceHigh}, CallConstructs: true, OpenTypes: true, Imports: ImportsNameDirectories, Builtins: goBuiltins},
 	"java":       {NewConstructs: true, NoFreeFunctions: true, Measured: ruleTiers{UnknownReceiver: model.ConfidenceMedium, NamedAfterType: model.ConfidenceHigh}, ImplicitSelf: true, Overloads: true, TypesAreCapitalised: true, Imports: ImportsNameClasses, ExternalRoots: []string{"java", "javax"}, Builtins: javaBuiltins},
-	"kotlin":     {ExtensionCalls: true, CallConstructs: true, ImplicitSelf: true, Overloads: true, TypesAreCapitalised: true, Imports: ImportsNameClasses, ExternalRoots: []string{"java", "javax", "kotlin"}, Builtins: javaBuiltins},
-	"scala":      {CallConstructs: true, ImplicitSelf: true, Overloads: true, TypesAreCapitalised: true, Imports: ImportsNameClasses, ExternalRoots: []string{"java", "javax", "scala"}, Builtins: javaBuiltins},
+	"kotlin":     {Measured: ruleTiers{Extension: model.ConfidenceHigh}, ClassBodyCode: true, ExtensionCalls: true, CallConstructs: true, ImplicitSelf: true, Overloads: true, TypesAreCapitalised: true, Imports: ImportsNameClasses, ExternalRoots: []string{"java", "javax", "kotlin"}, Builtins: javaBuiltins},
+	"scala":      {Measured: ruleTiers{UnknownReceiver: model.ConfidenceMedium, NamedAfterType: model.ConfidenceHigh}, ClassBodyCode: true, CallConstructs: true, ImplicitSelf: true, Overloads: true, TypesAreCapitalised: true, Imports: ImportsNameClasses, ExternalRoots: []string{"java", "javax", "scala"}, Builtins: javaBuiltins},
 	"python":     {CallConstructs: true, TypesAreCapitalised: true, Imports: ImportsNameModules},
 	"javascript": {TypesAreCapitalised: true, Imports: ImportsNameModules, Builtins: scriptBuiltins},
 	"typescript": {TypesAreCapitalised: true, Imports: ImportsNameModules, Builtins: scriptBuiltins},
@@ -353,7 +360,7 @@ var callTraitsByLanguage = map[string]CallTraits{
 	"c_sharp":    {NoFreeFunctions: true, Measured: ruleTiers{UnknownReceiver: model.ConfidenceMedium, UniqueTypeName: model.ConfidenceHigh}, ImplicitSelf: true, Overloads: true, OpenTypes: true, TypesAreCapitalised: true, ExternalRoots: []string{"System", "Microsoft"}, Builtins: csharpBuiltins},
 	"cpp":        {Measured: ruleTiers{NamedAfterType: model.ConfidenceHigh, Neighbour: model.ConfidenceLow}, CallConstructs: true, ImplicitSelf: true, Overloads: true, OpenTypes: true, ScopeNamesModule: true, ExternalRoots: []string{"std"}},
 	"c":          {OpenTypes: true},
-	"php":        {NewConstructs: true, TypesAreCapitalised: true, Imports: ImportsNameClasses},
+	"php":        {Measured: ruleTiers{NamedAfterType: model.ConfidenceHigh, UniqueTypeName: model.ConfidenceHigh}, NewConstructs: true, TypesAreCapitalised: true, Imports: ImportsNameClasses},
 	"swift":      {CallConstructs: true, ImplicitSelf: true, Overloads: true, OpenTypes: true, TypesAreCapitalised: true},
 	"dart":       {CallConstructs: true, ImplicitSelf: true, TypesAreCapitalised: true},
 	"groovy":     {ImplicitSelf: true, Overloads: true, TypesAreCapitalised: true, Imports: ImportsNameClasses, ExternalRoots: []string{"java", "javax", "groovy"}, Builtins: javaBuiltins},

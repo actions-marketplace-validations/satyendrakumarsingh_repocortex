@@ -14,7 +14,7 @@ class Savings(id: Int) : Account(id) { // def kt.Savings
         val r = Row(amount) // call Row -> none
         Account.open(2) // call open -> kt.Account.open high
         Registry.lookup(3) // call lookup -> kt.Registry.lookup
-        "x".shout() // call shout -> kt.shout low
+        "x".shout() // call shout -> kt.shout high
         println("x") // call println -> none
         listOf(1).map { it } // call listOf -> none; call map -> none
         val xs = ArrayList<String>() // call ArrayList -> none

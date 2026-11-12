@@ -22,7 +22,7 @@ class Widget extends Base // def php.Widget
         parent::run($x); // call run -> php.Base.run high
         self::boot(); // call boot -> php.Base.boot high
         static::boot(); // call boot -> php.Base.boot high
-        Helper::make(2); // call make -> php.Helper.make medium
+        Helper::make(2); // call make -> php.Helper.make high
         $h = new Helper(); // call Helper -> new php.Helper
         $w = new Widget(3); // call Widget -> new php.Widget
         helper_fn($x); // call helper_fn -> php.helper_fn

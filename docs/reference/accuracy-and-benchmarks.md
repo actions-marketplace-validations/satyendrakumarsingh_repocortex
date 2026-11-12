@@ -1648,3 +1648,133 @@ The numbers above came from:
 
 `scip-go` on prometheus takes about eight minutes and produces a 57 MB index.
 On RepoCortex's own source it takes nineteen seconds and produces 7 MB.
+
+## 2026-11-12: calls in PHP, Kotlin and Scala, and `new` in Java
+
+PHP, Kotlin and Scala recorded definitions and not one call, so every "who
+calls this" answer was empty while the tier promised cross-file references.
+Java recorded no `new Widget(3)`, so a class that was only constructed looked
+unused. All four now record them. Projects: guzzle/guzzle (PHP), square/okio
+(Kotlin), scopt/scopt (Scala), google/gson (Java), shallow clones, `init`,
+`index`, `resolve`. Every edge below was judged by reading the caller and the
+definition, strictly (bound to a same-named method of another class is wrong;
+unclear counts as not right), by sub-agents of an AI assistant. Samples are
+random with a fixed order (a multiplicative hash of the edge id), 30 per tier
+(all, when fewer), across rules.
+
+### What is extracted
+
+| | Now extracted | Not extracted |
+|---|---|---|
+| PHP | `f()`, `$x->m()`, `$x?->m()`, `A::m()`, `self/static/parent::m()`, `new A`; `use` (aliases, `use function`, groups) as dotted paths; `extends`, `implements`, trait `use` | `$f()`, `new $cls`, `new static`; the receiver of a name written with `\` (`\A\B::m()` keeps the call, loses the receiver); `$x?->m()` records the receiver as `x?`; `(new A)->m()` has an unreadable receiver |
+| Kotlin | `f()`, `x.m()`, `x?.m()`, `A.m()`, `this/super.m()`, `A(...)` constructor calls, extension calls; `import` with aliases; supertypes; classes with no body; `object` (now a variable, not a function) | infix and operator calls (`a and b`), declared types of parameters (the grammar has no fields) |
+| Scala | `f()`, `x.m()`, `x m y` (infix by name), `f[T](x)`, `A(...)`, `new A`, `new p.A`, `new A {}`; imports with selectors, renames and wildcards; `extends ... with ...`; `object` members | calls written without parentheses (`x.size`, `x.desc`) |
+| Java | `new A()`, `new p.A()`, `new A<T>()`, `outer.new A()`, `new A() {}` as INSTANTIATES to the class | `this(...)` and `super(...)` delegation |
+
+An anonymous class constructs the type it names. It binds when that type is a
+class; `new Runnable() {}` names an interface, which is never instantiated, so
+it binds to nothing.
+
+### Before and after (`repocortex resolve`)
+
+| Project | References | Resolved | Ambiguous | Unresolved (external) | Edges | `INSTANTIATES` edges |
+|---|---:|---:|---:|---:|---:|---:|
+| gson, before | 20,468 | 8,332 | 1,230 | 10,906 (6,620) | 8,263 | 0 |
+| gson, after | 24,068 | 10,930 | 1,274 | 11,864 (7,290) | 10,794 | 2,531 |
+| guzzle, before | 0 | 0 | 0 | 0 | 0 | 0 |
+| guzzle, after | 23,254 | 7,787 | 1,801 | 13,666 (1,826) | 7,753 | 2,242 refs resolved |
+| okio, before | 504 | 67 | 26 | 411 (112) | 67 | 0 |
+| okio, after | 23,806 | 5,022 | 9,657 | 9,127 (1,582) | 4,790 | 464 refs resolved |
+| scopt, before | 0 | 0 | 0 | 0 | 0 | 0 |
+| scopt, after | 2,653 | 684 | 656 | 1,313 (75) | 681 | 52 refs resolved |
+
+gson's `CALLS` edges are the same set before and after: the same 8,053, equal
+by file, line, target and confidence. Its `high` tier grew by the 2,460
+`INSTANTIATES` edges. okio's 9,657 ambiguous references are mostly names that
+a multiplatform project declares once per source set (`Buffer`, `toPath`,
+`writeUtf8`).
+
+Edges per tier after the tiers below were set:
+
+| Project | high | medium | low |
+|---|---:|---:|---:|
+| gson | 8,245 | 143 | 2,406 |
+| guzzle | 5,824 | 30 | 1,899 |
+| okio | 2,281 | 763 | 1,746 |
+| scopt | 558 | 10 | 113 |
+
+### Precision (right / judged)
+
+Sampled with the tiers that were in force when the samples were drawn.
+
+| Project | high | medium | low |
+|---|---:|---:|---:|
+| gson (`CALLS` and `INSTANTIATES`) | 30 / 30; `INSTANTIATES` alone 30 / 30 | 25 / 30 | not drawn (unchanged) |
+| guzzle | 30 / 30 | 30 / 30 | 11 / 30 |
+| okio | 29 / 30 | 21 / 30 | 19 / 30 |
+| scopt | 30 / 30 | 25 / 25 | 20 / 30 |
+
+Java `high` did not fall on gson: the `CALLS` set is identical and the new
+`INSTANTIATES` edges were 30 / 30 (and 20 / 20 for the rule alone).
+
+By rule, where a rule decided a tier:
+
+| Rule | guzzle (PHP) | okio (Kotlin) | scopt (Scala) | Tier set |
+|---|---:|---:|---:|---|
+| unknown receiver, the only member of that name | 7 / 20 (the low tier, all this rule: 11 / 30) | 7 / 20 (the low tier: 19 / 30) | 20 / 20 | PHP low, Kotlin low, Scala medium |
+| receiver named after the type | 20 / 20 | 15 / 20 (3 wrong, 2 unclear) | 20 / 20 | PHP high, Kotlin medium, Scala high |
+| type identified only as the one of that name | 20 / 20 | 3 / 3 | 1 / 1 | PHP high |
+| `new T` / `T(..)` bound to the class | 20 / 20 (+30 / 30 in medium) | 18 / 20 | 15 / 15 | follows the previous row |
+| only function of the name, called as a method (extension) | none | 18 / 20 | none | Kotlin high |
+| overloaded, the first declaration | | 1 / 5 | 5 / 14 | unchanged: low |
+
+The wrong edges have three causes. A call on a library object bound to the
+repository's only method of that name: PSR interface methods and PHPUnit's
+`self::fail` in guzzle (13 of 20), the JDK's `Class.isAssignableFrom` in gson
+(5 of 9), the standard library's `Int.toLong` bound to a private extension in
+okio (12 of 13). A type name that exists twice (`File`: `java.io.File` and the
+fake file system's, 2 of 20 constructions in okio). And the first declaration
+of an overloaded name, which the index cannot choose among because Kotlin and
+Scala record no parameter counts.
+
+### Recall
+
+The five largest non-test source files of each project, the first 8 call
+sites per file that target a definition in the repository, decided by reading
+before the index was consulted. okio's `BufferedSource.kt` has no qualifying
+site (an `expect` interface), hence 26.
+
+| Project | Sites | Bound right | Bound wrong | Unbound |
+|---|---:|---:|---:|---:|
+| gson | 40 | 38 | 1 | 1 (`this(...)`) |
+| guzzle | 40 | 40 | 0 | 0 |
+| okio | 26 | 5 | 2 | 19 (2 not extracted) |
+| scopt | 40 | 17 | 1 | 22 (18 not extracted) |
+
+guzzle's sample is mostly `new` of exception classes and `self::` calls, so
+its 100% is the easy end. okio's unbound sites are calls to names declared once
+per source set (ambiguous) and bare calls with an implicit extension receiver.
+Of scopt's 18 not extracted, 11 are accessors called without parentheses
+(`option.desc`), which are not call expressions in the grammar. The wrong
+bindings are overload choices (`append(cs, 0, n)` bound to the one-argument
+`append`) and a `this(...)` bound to the constructor it is written in.
+
+### Tiers
+
+`CallTraits.Measured` was set from the tables above: PHP `NamedAfterType` and
+`UniqueTypeName` high (20 / 20 each), Kotlin `Extension` high (18 / 20),
+Scala `NamedAfterType` high (20 / 20) and `UnknownReceiver` medium (20 / 20,
+but every one of them was `programName` under one `import builder._`, which is
+too narrow to earn `high`). PHP and Kotlin unknown receivers measured below the
+`medium` floor of 60% and stay `low`. `parse.TierFor` still derives all three
+languages' tier from their queries: `resolved`, because none has an arity
+query or a scope analysis, so none can reach `typed`.
+
+### Method notes
+
+PHP's namespaces are mapped to directories by Composer, not by the file, so a
+`use` path is matched to a class by that class being the one of its name, not
+by its directory. Kotlin's grammar defines no fields; the scope walk reads a
+class's or function's name and body by position instead. A Scala `object`
+opens a scope, and a statement written directly in a Kotlin or Scala type's
+body is a member's caller.

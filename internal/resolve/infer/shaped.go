@@ -127,6 +127,9 @@ func (r *Resolver) resolveCall(c call, stats *Stats) decision {
 	c.scope = enclosingScope(c.fr, c.ref.Line)
 	c.class = enclosingClass(c.scope)
 	c.within, _ = enclosing(c.fr.Symbols, c.ref.Line)
+	if c.class == "" && c.spec.Calls.ClassBodyCode && c.scope != "" && declaresMembers(c.fr, c.scope) {
+		c.class = c.scope
+	}
 
 	if isConstruction(c.ref.Kind) {
 		return r.callNew(c, stats)
@@ -1018,6 +1021,19 @@ func (r *Resolver) callOnTypeOrValue(c call, name string, stats *Stats) decision
 	return r.memberByName(c, model.ConfidenceHigh, stats)
 }
 
+// declaresMembers reports whether the definition with this qualified name has
+// members of its own in the file: it is a type, and not a function with local
+// functions.
+func declaresMembers(fr registry.FileRefs, scope string) bool {
+	prefix := fr.Path + ":" + scope + "."
+	for _, s := range fr.Symbols {
+		if rest, ok := strings.CutPrefix(s.FQN, prefix); ok && !strings.HasPrefix(rest, localsSegment+".") {
+			return true
+		}
+	}
+	return false
+}
+
 // constructedKind marks a reference the parser tagged on the type of a `new`
 // expression: `new Widget(3)` in Java, PHP and Scala. Its name is the type's,
 // never a method's, and it is bound to a class or to nothing.
@@ -1055,6 +1071,11 @@ func (r *Resolver) callNew(c call, stats *Stats) decision {
 			return unresolvedCall
 		}
 		if d, ok := r.constructs(c, t); ok {
+			if !t.strong {
+				// Identified only as the one type of that name: the tier
+				// the language measured for that (docs/accuracy.md).
+				d.best.confidence = c.spec.Calls.Measured.uniqueTypeName()
+			}
 			return d
 		}
 		// An interface, an enum, an alias: named by a `new`, never built by it.
@@ -1399,6 +1420,11 @@ func (r *Resolver) memberByName(c call, limit model.Confidence, stats *Stats) de
 // exists that a call written like a method could reach at all, and the tier
 // is the one measured for the rule (CallTraits.Measured.Extension).
 func (r *Resolver) extensionFunction(c call) decision {
+	if c.ref.ReceiverKind == model.ReceiverBare {
+		// Nothing was written before the name, so this is not a method-style
+		// call; the bare-name rules have already had their say.
+		return unresolvedCall
+	}
 	var free []registry.SymbolIndexEntry
 	for _, s := range c.cands {
 		if !isCallableKind(s.Kind) || s.ID == c.within {

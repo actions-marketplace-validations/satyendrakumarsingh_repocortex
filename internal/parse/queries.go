@@ -625,6 +625,7 @@ func SupplementedLanguages() []string {
 var receiverLanguages = map[string]bool{
 	"java": true, "go": true, "python": true, "typescript": true, "javascript": true,
 	"kotlin": true, "rust": true, "c_sharp": true, "cpp": true, "ruby": true,
+	"php": true, "scala": true,
 }
 
 // HasMeasuredReceivers reports whether a language's receiver handling is part
