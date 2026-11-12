@@ -179,6 +179,16 @@ type coverage struct {
 	// boundSiteSet.conflict.
 	Misbound string
 
+	// Elsewhere is the text check for a function passed as a value: the name of
+	// the symbol, or of one on the path to it, occurs in code the index records
+	// no reference for. Zero when the check was not made or found nothing.
+	Elsewhere capability.ValueUse
+
+	// FloorEmpty is non-empty when the number of callers the answer shows is
+	// zero only because the confidence floor kept some out, and holds the
+	// sentence. A bare zero there reads as "nothing calls it".
+	FloorEmpty string
+
 	// Known is false when the index holds no resolution outcomes to judge — no
 	// references at all, or none resolved yet. Distinct from a LOW rate: one
 	// says RepoCortex looked and found little, the other says it never looked.
@@ -289,7 +299,7 @@ func (c coverage) level() ReliabilityLevel {
 		return ReliabilityLow
 	case c.Misbound != "":
 		return ReliabilityUnverified
-	case c.Binding.Known && c.Binding.Unlisted() > 0, c.Structural != "":
+	case c.Binding.Known && c.Binding.Unlisted() > 0, c.Structural != "", c.Elsewhere.Any(), c.FloorEmpty != "":
 		return ReliabilityIncomplete
 	default:
 		return ReliabilityGood
@@ -362,11 +372,23 @@ func (c coverage) lead() string {
 	case ReliabilityUnverified:
 		return c.Misbound
 	case ReliabilityIncomplete:
+		// Every reason the index holds, strongest first. They were one
+		// either-or before, which is how a function passed as a value could not
+		// be said beside an unbound name.
+		var parts []string
 		if c.Binding.Known && c.Binding.Unlisted() > 0 {
-			return fmt.Sprintf("%d of the %d references spelled %q are not among the rows below.",
-				c.Binding.Unlisted(), c.Binding.References, bindingName(c.Binding))
+			parts = append(parts, fmt.Sprintf("%d of the %d references spelled %q are not among the rows below.",
+				c.Binding.Unlisted(), c.Binding.References, bindingName(c.Binding)))
+		} else if c.Structural != "" {
+			parts = append(parts, structuralLead(c.Language))
 		}
-		return structuralLead(c.Language)
+		if c.FloorEmpty != "" {
+			parts = append(parts, c.FloorEmpty)
+		}
+		if c.Elsewhere.Any() {
+			parts = append(parts, c.Elsewhere.Lead()+".")
+		}
+		return strings.Join(parts, " ")
 	}
 	return ""
 }
@@ -407,6 +429,12 @@ func (c coverage) caveat(subject string) []string {
 		}
 		if c.Structural != "" {
 			out = append(out, "INCOMPLETE FOR THIS TYPE — "+c.Structural)
+		}
+		if c.FloorEmpty != "" {
+			out = append(out, "INCOMPLETE — "+c.FloorEmpty)
+		}
+		if c.Elsewhere.Any() {
+			out = append(out, "INCOMPLETE FOR THIS SYMBOL — "+c.Elsewhere.Detail())
 		}
 		return out
 

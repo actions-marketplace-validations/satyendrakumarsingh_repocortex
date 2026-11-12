@@ -129,7 +129,7 @@ func (s *Server) impactAnalysis(ctx stdctx.Context, req *sdk.CallToolRequest, ar
 	// a "NOT VISIBLE (below_confidence_floor)" unknown rendered below. Saying
 	// it twice would spend the item budget on a repeat.
 	rep, err := impact.AnalyzeTarget(ctx, s.capDeps, runID, capability.TargetFromCandidate(args.Symbol, sel.Target),
-		impact.Options{MinConfidence: minConf, HubDegreeLimit: args.HubDegreeLimit})
+		impact.Options{MinConfidence: minConf, HubDegreeLimit: args.HubDegreeLimit, CheckValueUse: true})
 	if err != nil {
 		// A traversal that errored produced no report, and an agent must not
 		// read that as "nothing depends on this symbol".
@@ -149,12 +149,14 @@ func (s *Server) impactAnalysis(ctx stdctx.Context, req *sdk.CallToolRequest, ar
 	// The blast radius is built on the same bindings find_callers lists, so
 	// the same evidence against them applies to it.
 	cov.Misbound = s.boundSites(ctx, runID, sel.Target).conflict(sel.Target)
+	cov.Elsewhere = rep.ValueUse
+	cov.FloorEmpty = floorEmptyLead(rep)
 
 	resp := &Response{
 		IndexRevision: runID,
 		IndexStatus:   status,
-		Summary: fmt.Sprintf("%s (%s:%d): %s. %s",
-			rep.Target.Name, rep.Target.FilePath, rep.Target.Line, reach.summary(),
+		Summary: fmt.Sprintf("%s (%s:%d): %s%s. %s",
+			rep.Target.Name, rep.Target.FilePath, rep.Target.Line, reach.summary(), floorClause(rep),
 			riskSentence(rep.Risk, cov.saysWhyNothingIsKnown())),
 	}
 	paginate(resp, page, items)
@@ -165,6 +167,11 @@ func (s *Server) impactAnalysis(ctx stdctx.Context, req *sdk.CallToolRequest, ar
 	// claim is on the item's own Why, and repeating the section's meaning 40
 	// times would spend the budget the items need.
 	resp.Notes = append(resp.Notes, reach.notes(rep)...)
+	if sites := directSites(rep); sites > len(rep.Direct) {
+		resp.Notes = append(resp.Notes, fmt.Sprintf(
+			"%d direct counts the SYMBOLS that call the target; they make %d call site(s) between them, which "+
+				"is what find_callers lists, so its count is the larger of the two.", len(rep.Direct), sites))
+	}
 
 	// Show the risk score's inputs. A bare "Risk: HIGH" is unactionable — the
 	// factors are what tell a developer whether to slow down and why.
@@ -220,10 +227,82 @@ func riskSentence(r impact.Risk, reasonAlreadyGiven bool) string {
 	case r.Level == impact.LevelUnknown:
 		return fmt.Sprintf("Risk unknown: %s.", strings.TrimSuffix(r.Undetermined, "."))
 	case r.Undetermined != "":
-		return fmt.Sprintf("Risk %s or higher (score %d counts only the callers that were bound).", r.Level, r.Score)
+		why := "score " + fmt.Sprint(r.Score) + " counts only the callers that were bound"
+		if r.Partial != "" {
+			why += "; " + r.Partial
+		}
+		return fmt.Sprintf("Risk %s or higher (%s).", r.Level, why)
+	case r.Partial != "":
+		// A floor for a reason of its own: the walk stopped at a bound, or the
+		// name occurs where no call is recorded. A bare "low" there is the one
+		// word an agent acts on, and it is a lower bound.
+		return fmt.Sprintf("Risk %s or higher (score %d; %s).", r.Level, r.Score, r.Partial)
 	default:
 		return fmt.Sprintf("Risk %s (score %d).", r.Level, r.Score)
 	}
+}
+
+// floorClause is the part of the first line that says the confidence floor kept
+// callers out, with the count and the argument that brings them back. Empty when
+// the floor kept nothing out.
+//
+// The hidden-by-floor count used to sit in a NOT VISIBLE note below the sixth
+// line, so a first line reading "6 direct" was read as the number of callers
+// while find_callers, which has no floor by default, listed 9 of them.
+func floorClause(rep impact.Report) string {
+	if rep.LowConfidenceHidden == 0 {
+		return ""
+	}
+	tier := floorTier(rep.ConfidenceFloor)
+	count := fmt.Sprintf("%d more symbol(s)", rep.LowConfidenceHidden)
+	if floorCountBounded(rep) {
+		count = fmt.Sprintf("at least %d more symbol(s)", rep.LowConfidenceHidden)
+	}
+	direct := ""
+	if d := rep.LowConfidenceHiddenDirect; d > 0 && d != rep.LowConfidenceHidden {
+		direct = fmt.Sprintf(" (%d of them direct)", d)
+	}
+	return fmt.Sprintf("; %s %s are excluded%s; pass min_confidence=low", count, tier, direct)
+}
+
+// directSites is how many call sites the direct callers make between them. Zero
+// when the report carries no evidence for them (too many to load).
+func directSites(rep impact.Report) int {
+	n := 0
+	for _, d := range rep.Direct {
+		n += len(d.Evidence)
+	}
+	return n
+}
+
+// floorTier names the confidences a floor excludes.
+func floorTier(floor model.Confidence) string {
+	switch floor {
+	case model.ConfidenceMedium:
+		return "at low confidence"
+	case model.ConfidenceHigh:
+		return "at medium or low confidence"
+	}
+	return "below " + string(floor) + " confidence"
+}
+
+func floorCountBounded(rep impact.Report) bool {
+	for _, u := range rep.Unknown {
+		if u.Kind == impact.UnknownBelowConfidenceFloor {
+			return u.CountIsLowerBound
+		}
+	}
+	return false
+}
+
+// floorEmptyLead is the lead sentence for a report that shows no direct caller
+// only because the floor kept some out. Empty otherwise.
+func floorEmptyLead(rep impact.Report) string {
+	if len(rep.Direct) > 0 || rep.LowConfidenceHiddenDirect == 0 {
+		return ""
+	}
+	return fmt.Sprintf("0 direct callers are shown only because %d %s are excluded (pass min_confidence=low).",
+		rep.LowConfidenceHiddenDirect, floorTier(rep.ConfidenceFloor))
 }
 
 // Item kinds an impact report can carry.
@@ -500,6 +579,7 @@ func (s *Server) findTests(ctx stdctx.Context, req *sdk.CallToolRequest, args ta
 	rep, err := tests.FindTestsForTarget(ctx, deps, runID, tgt, tests.Options{
 		MinConfidence:  minConf,
 		HubDegreeLimit: args.HubDegreeLimit,
+		CheckValueUse:  true,
 	})
 	if err != nil {
 		return failFrom(err, "test discovery: %v", err)
@@ -511,6 +591,7 @@ func (s *Server) findTests(ctx stdctx.Context, req *sdk.CallToolRequest, args ta
 	// is judged before that claim is worded, not after.
 	cov := s.coverageFor(ctx, runID, rep.Target.Language, rep.Target.FilePath, rep.Binding, aboutTests)
 	cov.Misbound = s.boundSites(ctx, runID, sel.Target).conflict(sel.Target)
+	cov.Elsewhere = rep.ValueUse
 
 	resp := &Response{IndexRevision: runID, IndexStatus: status}
 	where := fmt.Sprintf("%s (%s:%d)", rep.Target.Name, rep.Target.FilePath, rep.Target.Line)
@@ -523,6 +604,12 @@ func (s *Server) findTests(ctx stdctx.Context, req *sdk.CallToolRequest, args ta
 		// says which.
 		resp.Summary = fmt.Sprintf("%s: no test found, and whether one reaches it is UNKNOWN: %s.",
 			where, strings.TrimSuffix(rep.Undetermined, "."))
+	case rep.Untested && rep.ValueUse.Any():
+		// The same refusal for the same reason: a test that reaches the symbol
+		// through a function passed as a value leaves no edge, and the name
+		// occurs where one would be.
+		resp.Summary = fmt.Sprintf("%s: no test found, and whether one reaches it is NOT KNOWN: a function passed "+
+			"as a value is reached without a call edge, and its name occurs where no call is recorded.", where)
 	default:
 		resp.Summary = fmt.Sprintf("%s: %d test(s), %d proven by a call edge.",
 			where, len(rep.Tests), rep.ProvenByGraph)
@@ -580,6 +667,10 @@ func (s *Server) findTests(ctx stdctx.Context, req *sdk.CallToolRequest, args ta
 			"No test was found by a call edge, a naming convention or a sibling test file. The call-edge "+
 				"search could not have found one: "+strings.TrimSuffix(rep.Undetermined, ".")+
 				". This says nothing about whether the symbol is tested. Search for the name in the test files.")
+	case rep.Untested && rep.ValueUse.Any():
+		resp.Notes = append(resp.Notes,
+			"No test was found by a call edge, a naming convention or a sibling test file. Whether one "+
+				"reaches the symbol is not known: "+rep.ValueUse.Detail()+" Do not read this as untested.")
 	case rep.Untested:
 		resp.Notes = append(resp.Notes,
 			"No tests found for this symbol. That is a positive finding — but it is bounded "+
@@ -641,6 +732,7 @@ func (s *Server) planChange(ctx stdctx.Context, req *sdk.CallToolRequest, args t
 	}
 	cov := s.coverageFor(ctx, runID, sel.Target.Language, sel.Target.FilePath, binding, aboutCallers)
 	cov.Misbound = s.boundSites(ctx, runID, sel.Target).conflict(sel.Target)
+	cov.Elsewhere = plan.ValueUse
 
 	where := fmt.Sprintf("%s (%s:%d)", plan.Target.Name, plan.Target.FilePath, plan.Target.Line)
 	resp := &Response{IndexRevision: runID, IndexStatus: status}
@@ -656,9 +748,17 @@ func (s *Server) planChange(ctx stdctx.Context, req *sdk.CallToolRequest, args t
 			"the %d caller(s) that could be bound: %s.",
 			where, plan.DirectCallers, strings.TrimSuffix(plan.RiskUndetermined, "."))
 	case plan.RiskUndetermined != "":
-		resp.Summary = fmt.Sprintf("Change plan for %s: Risk %s or higher (%d/100 counts only the callers "+
-			"that were bound), %d direct caller(s) found, %d total reached.",
-			where, strings.ToUpper(plan.RiskLevel), plan.RiskScore, plan.DirectCallers, plan.TotalCallers)
+		why := fmt.Sprintf("%d/100 counts only the callers that were bound", plan.RiskScore)
+		if plan.RiskPartial != "" {
+			why += "; " + plan.RiskPartial
+		}
+		resp.Summary = fmt.Sprintf("Change plan for %s: Risk %s or higher (%s), %d direct caller(s) found, "+
+			"%d total reached.",
+			where, strings.ToUpper(plan.RiskLevel), why, plan.DirectCallers, plan.TotalCallers)
+	case plan.RiskPartial != "":
+		resp.Summary = fmt.Sprintf("Change plan for %s: Risk %s or higher (%d/100; %s), %d direct caller(s) "+
+			"found, %d total reached.",
+			where, strings.ToUpper(plan.RiskLevel), plan.RiskScore, plan.RiskPartial, plan.DirectCallers, plan.TotalCallers)
 	default:
 		resp.Summary = fmt.Sprintf("Change plan for %s: Risk %s (%d/100), %d direct caller(s), %d total affected.",
 			where, strings.ToUpper(plan.RiskLevel), plan.RiskScore, plan.DirectCallers, plan.TotalCallers)
@@ -697,6 +797,10 @@ func (s *Server) planChange(ctx stdctx.Context, req *sdk.CallToolRequest, args t
 
 	if len(plan.AffectedTests) > 0 {
 		resp.Notes = append(resp.Notes, fmt.Sprintf("Covering tests to execute: %s", strings.Join(plan.AffectedTests, ", ")))
+	}
+	if plan.ValueUse.Any() && len(plan.AffectedTests) == 0 {
+		resp.Notes = append(resp.Notes,
+			"No covering test is listed, which does not mean none exists: "+plan.ValueUse.Detail())
 	}
 	if plan.TestsUndetermined != "" {
 		resp.Notes = append(resp.Notes,

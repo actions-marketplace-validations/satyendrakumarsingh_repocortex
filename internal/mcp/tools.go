@@ -964,7 +964,7 @@ func (s *Server) relationshipQuery(ctx context.Context, req *sdk.CallToolRequest
 	// filtered registry query, item construction, coverage — is shared with
 	// plan_rename via referencesFor (rename.go) so there is one implementation
 	// of it, not two.
-	lookup, shortCircuit := s.referencesFor(ctx, req, q, minConf, kinds, page)
+	lookup, shortCircuit := s.referencesFor(ctx, req, q, minConf, kinds, page, callersOnly)
 	if shortCircuit != nil {
 		return shortCircuit, lookup.Resp, nil
 	}

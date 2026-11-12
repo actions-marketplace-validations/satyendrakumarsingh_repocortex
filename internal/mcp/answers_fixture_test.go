@@ -63,9 +63,18 @@ func symKey(path, name string, line int) string { return fmt.Sprintf("%s:%s@%d",
 func (b *indexBuilder) file(path, lang string, lines int, syms ...symDef) {
 	var text strings.Builder
 	for i := 1; i <= lines; i++ {
-		fmt.Fprintf(&text, "line %d of %s\n", i, path)
+		// No path in the text: a path holds the names it files, and a
+		// fixture that said "ui/cn.go" on every line would mention the symbol
+		// "cn" 20 times, which no real source file does.
+		fmt.Fprintf(&text, "line %d of the file\n", i)
 	}
 	b.files = append(b.files, fileDef{path: path, lang: lang, text: text.String(), syms: syms})
+}
+
+// fileText adds a source file with the text given, for a test about what the
+// text says: a name used where no call is recorded.
+func (b *indexBuilder) fileText(path, lang, text string, syms ...symDef) {
+	b.files = append(b.files, fileDef{path: path, lang: lang, text: text, syms: syms})
 }
 
 func fn(name string, start, end int) symDef {

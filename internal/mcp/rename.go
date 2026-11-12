@@ -178,6 +178,7 @@ func (s *Server) referencesFor(
 	minConf model.Confidence,
 	kinds []string,
 	page *Page,
+	checkValueUse bool,
 ) (refLookup, *sdk.CallToolResult) {
 	sel, sc, scResp := s.selectSymbol(ctx, req, q)
 	if sc != nil {
@@ -243,6 +244,16 @@ func (s *Server) referencesFor(
 	}
 	cov := s.coverageFor(ctx, runID, target.Language, target.FilePath, binding, aboutCallers)
 	cov.Misbound = sites.conflict(target)
+	if checkValueUse {
+		// A caller list is short by every use of the function as a value. The
+		// target's own name is checked; there is no path to walk here.
+		vu, verr := s.capDeps.ValueUse(ctx, runID, capability.TargetFromCandidate(q.Name, target), nil, nil)
+		if verr != nil {
+			sc, r, _ := failFrom(verr, "relationship lookup failed: %v", verr)
+			return refLookup{Resp: r, Target: target, RunID: runID, Status: status}, sc
+		}
+		cov.Elsewhere = vu
+	}
 
 	// THE GATE COMES FIRST, AHEAD OF EVERY OTHER NOTE: whether the answer can
 	// be trusted at all outranks the detail below it. Reliability is the same
@@ -571,7 +582,7 @@ func (s *Server) planRename(ctx context.Context, req *sdk.CallToolRequest, args 
 	q := symbolQuery{Tool: "plan_rename", Param: "name", PathParam: "path", LineParam: "line",
 		Name: args.Name, Path: args.Path, Line: args.Line,
 		Rest: " new_name=" + quoteArg(args.NewName)}
-	lookup, shortCircuit := s.referencesFor(ctx, req, q, minConf, nil, page)
+	lookup, shortCircuit := s.referencesFor(ctx, req, q, minConf, nil, page, false)
 	if shortCircuit != nil {
 		return shortCircuit, lookup.Resp, nil
 	}

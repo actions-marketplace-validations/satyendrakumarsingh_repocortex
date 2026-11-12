@@ -662,6 +662,22 @@ func (r *Registry) IdentifierMentions(ctx context.Context, runID int64, name str
 // identifier, skipping comment-only lines.
 func identifierLines(text, name string) []int {
 	var out []int
+	for _, l := range identifierLinesText(text, name) {
+		out = append(out, l.n)
+	}
+	return out
+}
+
+// numberedLine is one line of text with its 1-based number.
+type numberedLine struct {
+	n    int
+	text string
+}
+
+// identifierLinesText is identifierLines with the text of each line, for a
+// caller that needs to look at the line (UnrecordedMentions reads past imports).
+func identifierLinesText(text, name string) []numberedLine {
+	var out []numberedLine
 	line := 0
 	for len(text) > 0 && len(out) < mentionLineCap {
 		line++
@@ -675,7 +691,7 @@ func identifierLines(text, name string) []int {
 			continue
 		}
 		if countIdentifier(cur, name) > 0 {
-			out = append(out, line)
+			out = append(out, numberedLine{n: line, text: cur})
 		}
 	}
 	return out
