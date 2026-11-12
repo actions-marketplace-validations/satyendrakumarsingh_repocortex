@@ -523,6 +523,10 @@ func (p *genericParser) Parse(ctx context.Context, path string, src []byte) (*Re
 	argCounts := by.extractCounts(by.argCountQuery, "args", tree, src)
 	paramCounts := by.extractCounts(by.paramCountQuery, "params", tree, src)
 
+	// Constructor delegation (`this(...)`, `super(...)`, `: base(...)`) has no
+	// name to tag and is built from the tree. See delegation.go.
+	delegations := by.constructorDelegations(tree, src)
+
 	// Each clause head's arity, for the languages that write a function as
 	// several clauses. See clausemerge.go.
 	clauseKeys := by.clauseArities(tree, src, tags)
@@ -673,6 +677,7 @@ func (p *genericParser) Parse(ctx context.Context, path string, src []byte) (*Re
 		}
 	}
 
+	res.References = append(res.References, delegations...)
 	res.Symbols = mergeClauses(dedupeSymbols(res.Symbols), clauseKeys)
 
 	// The status was decided by describeParse and is NOT revisited here.

@@ -100,6 +100,10 @@ func init() {
 (invocation_expression function: (generic_name (identifier) @name) arguments: (argument_list) @args)
 (invocation_expression function: (member_access_expression name: (generic_name (identifier) @name)) arguments: (argument_list) @args)
 (invocation_expression function: (conditional_access_expression (member_binding_expression name: (identifier) @name)) arguments: (argument_list) @args)
+(object_creation_expression type: (identifier) @name arguments: (argument_list) @args)
+(object_creation_expression type: (qualified_name (identifier) @name .) arguments: (argument_list) @args)
+(object_creation_expression type: (generic_name . (identifier) @name) arguments: (argument_list) @args)
+(object_creation_expression type: (qualified_name (generic_name . (identifier) @name) .) arguments: (argument_list) @args)
 `
 	arityDialects["c_sharp"] = arityDialect{
 		items:  map[string]bool{"parameter": true, "argument": true},
