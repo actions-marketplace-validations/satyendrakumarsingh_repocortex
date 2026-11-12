@@ -1,0 +1,38 @@
+# Haxe definitions. Rule:
+#  - class is class, interface is interface, enum and abstract are class (the type, not its constructors), typedef is type_alias;
+#  - a function or constructor (`new`) in a class or interface body is method; a function at the top level of a module is function;
+#  - a var in a class or interface body (static, final or not) is field;
+#  - enum constructors, typedef members, locals and function arguments are not definitions.
+# Each construct sits in a file of its own where the grammar needs it: this grammar reports an error for a
+# whole region around an enum, an abstract or an object-literal typedef, see KNOWN_GAPS.md.
+classes.hx	5	interface	Shape
+classes.hx	6	field	sides
+classes.hx	7	method	area
+classes.hx	8	method	name
+classes.hx	11	class	Base
+classes.hx	12	method	new
+classes.hx	15	method	describe
+classes.hx	20	class	Circle
+classes.hx	21	field	sides
+classes.hx	22	field	count
+classes.hx	23	field	radius
+classes.hx	24	field	PI
+classes.hx	25	field	label
+classes.hx	27	method	new
+classes.hx	33	method	area
+classes.hx	38	method	name
+classes.hx	42	method	describe
+classes.hx	46	method	create
+classes.hx	50	method	helper
+classes.hx	55	method	scale
+classes.hx	60	class	Hidden
+classes.hx	61	field	secret
+classes.hx	64	class	Sealed
+classes.hx	65	method	run
+classes.hx	70	function	topLevel
+types.hx	3	class	Color
+types.hx	9	type_alias	Alias
+types.hx	11	type_alias	Point
+types.hx	16	type_alias	Callback
+abstract.hx	3	class	Meters
+abstract.hx	6	class	Seconds
