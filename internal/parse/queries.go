@@ -481,12 +481,40 @@ var inheritanceQueries = map[string]string{
 	// its own trait under one of these names loses that supertrait edge, which is
 	// the cheaper error.
 	//
-	// `impl Trait for Type` declares IMPLEMENTS from Type to Trait, but the
-	// reference would sit on the impl block, which is no symbol: the resolver
+	// `impl Trait for Type` declares IMPLEMENTS from Type to Trait. The
+	// reference sits on the impl block, which is no symbol, and the resolver
 	// attributes a reference to the innermost symbol on its line, so the edge
-	// would have no source. That is why no pattern for it is here; see the note
-	// in docs/accuracy.md.
+	// would have no source. The pattern therefore also captures the type named
+	// by `type:` as @implementer; the parser carries it on the reference
+	// (Receiver, with model.ReceiverImplementer) and the resolver uses it as the
+	// edge's source. The trait and the type each take any of four spellings:
+	// `T`, `T<A>`, `path::T` and `path::T<A>`, captured by their last segment.
+	//
+	// Not captured, and why:
+	//   - `impl Type { }` has no `trait:` field; it is not inheritance.
+	//   - `impl<T: Bound> Trait for T` is blanket: the type is one of the impl's
+	//     own type parameters, so there is no single type. The parser drops it
+	//     (isImplTypeParameter), because a query cannot compare two nodes.
+	//   - `impl Trait for &T`, `[T]`, `(A, B)` and `fn(..)` write no type name.
+	//   - The standard-library traits, by the same list and for the same reason
+	//     as the supertraits above: `impl Display for Foo` is nearly always the
+	//     prelude's trait, and the name alone would bind it to a repository
+	//     struct of that name.
 	"rust": `
+((impl_item
+  trait: [
+    (type_identifier) @name @reference.implementation
+    (generic_type type: (type_identifier) @name @reference.implementation)
+    (scoped_type_identifier name: (type_identifier) @name @reference.implementation)
+    (generic_type type: (scoped_type_identifier name: (type_identifier) @name @reference.implementation))
+  ]
+  type: [
+    (type_identifier) @implementer
+    (generic_type type: (type_identifier) @implementer)
+    (scoped_type_identifier name: (type_identifier) @implementer)
+    (generic_type type: (scoped_type_identifier name: (type_identifier) @implementer))
+  ]) @impl
+  (#not-match? @name "^(Debug|Display|Clone|Copy|Send|Sync|Sized|Unpin|Default|Eq|PartialEq|Ord|PartialOrd|Hash|Iterator|IntoIterator|DoubleEndedIterator|ExactSizeIterator|From|Into|TryFrom|TryInto|AsRef|AsMut|Borrow|ToString|ToOwned|Drop|Fn|FnMut|FnOnce|Deref|DerefMut|Any|Error|Read|Write|BufRead|Seek|UnwindSafe|RefUnwindSafe|Future|Extend|FromStr)$"))
 (trait_item (trait_bounds (type_identifier) @name @reference.extends (#not-match? @name "^(Debug|Display|Clone|Copy|Send|Sync|Sized|Unpin|Default|Eq|PartialEq|Ord|PartialOrd|Hash|Iterator|IntoIterator|DoubleEndedIterator|ExactSizeIterator|From|Into|TryFrom|TryInto|AsRef|AsMut|Borrow|ToString|ToOwned|Drop|Fn|FnMut|FnOnce|Deref|DerefMut|Any|Error|Read|Write|BufRead|Seek|UnwindSafe|RefUnwindSafe|Future|Extend|FromStr)$")))
 (trait_item (trait_bounds (generic_type type: (type_identifier) @name @reference.extends (#not-match? @name "^(Debug|Display|Clone|Copy|Send|Sync|Sized|Unpin|Default|Eq|PartialEq|Ord|PartialOrd|Hash|Iterator|IntoIterator|DoubleEndedIterator|ExactSizeIterator|From|Into|TryFrom|TryInto|AsRef|AsMut|Borrow|ToString|ToOwned|Drop|Fn|FnMut|FnOnce|Deref|DerefMut|Any|Error|Read|Write|BufRead|Seek|UnwindSafe|RefUnwindSafe|Future|Extend|FromStr)$"))))
 (trait_item (trait_bounds (scoped_type_identifier name: (type_identifier) @name @reference.extends (#not-match? @name "^(Debug|Display|Clone|Copy|Send|Sync|Sized|Unpin|Default|Eq|PartialEq|Ord|PartialOrd|Hash|Iterator|IntoIterator|DoubleEndedIterator|ExactSizeIterator|From|Into|TryFrom|TryInto|AsRef|AsMut|Borrow|ToString|ToOwned|Drop|Fn|FnMut|FnOnce|Deref|DerefMut|Any|Error|Read|Write|BufRead|Seek|UnwindSafe|RefUnwindSafe|Future|Extend|FromStr)$"))))

@@ -469,7 +469,7 @@ func (p *genericParser) Parse(ctx context.Context, path string, src []byte) (*Re
 		return res, nil //nolint:nilerr // deliberate: recorded on the result, see above
 	}
 
-	tags, err := by.tagTree(tree, src)
+	tags, implementers, err := by.tagTree(tree, src)
 	if err != nil {
 		res.Status = StatusFailed
 		res.Reason = model.ParseReasonUnspecified
@@ -614,6 +614,9 @@ func (p *genericParser) Parse(ctx context.Context, path string, src []byte) (*Re
 				// `class Foo extends Bar` sharing a line with a `Bar(...)` call
 				// must not inherit that call's argument count.
 				r.ArgCount = argCounts[site]
+			}
+			if t, ok := implementers[tag.NameRange.StartByte]; ok && isSupertypeRef(tag.Kind) {
+				r.Receiver, r.ReceiverKind = t, model.ReceiverImplementer
 			}
 			res.References = append(res.References, r)
 		}
@@ -889,10 +892,14 @@ func (p *genericParser) parseOnce(ctx context.Context, src []byte) (tree *ts.Tre
 // Behind a panic barrier for the same reason parsing is: the tree was built
 // from a file this project did not write, and a query walking a malformed tree
 // must cost that file's result, never the indexing run.
-func (p *genericParser) tagTree(tree *ts.Tree, src []byte) (tags []ts.Tag, err error) {
+//
+// implementers maps the start byte of a supertype reference's name to the type
+// that declares it, for the one construct whose declaring type is not a symbol
+// on the reference's line: Rust's `impl Trait for Type`. See implementer.go.
+func (p *genericParser) tagTree(tree *ts.Tree, src []byte) (tags []ts.Tag, implementers map[uint32]string, err error) {
 	defer func() {
 		if r := recover(); r != nil {
-			tags, err = nil, fmt.Errorf("tags query panicked: %v", r)
+			tags, implementers, err = nil, nil, fmt.Errorf("tags query panicked: %v", r)
 		}
 	}()
 
@@ -900,8 +907,14 @@ func (p *genericParser) tagTree(tree *ts.Tree, src []byte) (tags []ts.Tag, err e
 	tags = make([]ts.Tag, 0, len(matches))
 	for _, m := range matches {
 		var tag ts.Tag
+		var implementer string
+		var impl *ts.Node
 		for _, c := range m.Captures {
 			switch {
+			case c.Name == "implementer":
+				implementer = c.Node.Text(src)
+			case c.Name == "impl":
+				impl = c.Node
 			case c.Name == "name":
 				tag.Name = cleanName(p.entry.Name, c.Node.Text(src))
 				tag.NameRange = c.Node.Range()
@@ -921,9 +934,19 @@ func (p *genericParser) tagTree(tree *ts.Tree, src []byte) (tags []ts.Tag, err e
 			}
 			tag.NameRange = tag.Range
 		}
+		if implementer != "" {
+			if isImplTypeParameter(p.lang, impl, implementer, src) {
+				// `impl<T: Bound> Trait for T` names no single type.
+				continue
+			}
+			if implementers == nil {
+				implementers = map[uint32]string{}
+			}
+			implementers[tag.NameRange.StartByte] = implementer
+		}
 		tags = append(tags, tag)
 	}
-	return tags, nil
+	return tags, implementers, nil
 }
 
 // describeParse sets the result's status from what the parser reported.

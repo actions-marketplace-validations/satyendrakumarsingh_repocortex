@@ -401,6 +401,10 @@ const (
 	// ReceiverExpr is a call on an expression with no name: `g().f()`,
 	// `a[i].f()`. The reference's receiver holds OpaqueReceiver.
 	ReceiverExpr = "expr"
+	// ReceiverImplementer marks a supertype reference whose declaring type is
+	// not a symbol on its line: Rust's `impl Trait for Type`. The reference's
+	// receiver holds the type's name, and the reference is no call.
+	ReceiverImplementer = "implementer"
 )
 
 // OpaqueReceiver is the receiver text recorded with ReceiverExpr. Not a valid

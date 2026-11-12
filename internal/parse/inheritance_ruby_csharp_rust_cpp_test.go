@@ -1,6 +1,7 @@
 package parse
 
 import (
+	"fmt"
 	"sort"
 	"strings"
 	"testing"
@@ -76,6 +77,29 @@ pub trait Mine: Named + std::fmt::Display + io::Read {}`,
 			want: []string{"EXTENDS:Named", "EXTENDS:Base", "EXTENDS:Named"},
 		},
 		{
+			// `impl Trait for Type` is IMPLEMENTS from Type to Trait, read by
+			// the trait's last segment, with the type in any of its four
+			// spellings. Inherent impls, blanket impls, impls for a type that
+			// names no type (a reference, a slice) and the standard library's
+			// traits give nothing.
+			name: "rust_impl_trait_for_type",
+			file: "impls.rs",
+			src: `impl Sink for S {}
+impl<T> Sink for W<T> {}
+impl Sink for path::P {}
+impl a::b::Sink for Q {}
+impl<T> a::Sink<T> for path::R<T> where T: Bound {}
+impl S {}
+impl<T: Bound> Sink for T {}
+impl<'a, T> Sink for &'a mut T {}
+impl Sink for [u8] {}
+impl Debug for S {}
+impl fmt::Display for S {}`,
+			want: []string{
+				"IMPLEMENTS:Sink", "IMPLEMENTS:Sink", "IMPLEMENTS:Sink", "IMPLEMENTS:Sink", "IMPLEMENTS:Sink",
+			},
+		},
+		{
 			// Every base is EXTENDS, with or without an access specifier or
 			// virtual; qualified and template bases are read by their last
 			// segment.
@@ -147,6 +171,30 @@ class Fwd;`},
 				t.Errorf("file declares no inheritance but produced %v", got)
 			}
 		})
+	}
+}
+
+// TestRustImplCarriesItsType: the reference for `impl Trait for Type` records
+// Type, by its last segment, as the receiver with the implementer shape; a
+// supertrait reference records none. The resolver starts the edge there.
+func TestRustImplCarriesItsType(t *testing.T) {
+	res := parse(t, "impls.rs", `pub trait Shape: Named {}
+impl Sink for S {}
+impl<T> a::Sink<T> for path::R<T> {}
+impl<T: Bound> Sink for T {}`)
+	var got []string
+	for _, r := range res.References {
+		got = append(got, fmt.Sprintf("%s|%s|%s|%s", r.Kind, r.Name, r.Receiver, r.ReceiverKind))
+	}
+	want := []string{
+		"reference.extends|Named||",
+		"reference.implementation|Sink|S|implementer",
+		"reference.implementation|Sink|R|implementer",
+	}
+	sort.Strings(got)
+	sort.Strings(want)
+	if strings.Join(got, "\n") != strings.Join(want, "\n") {
+		t.Errorf("references\n got: %q\nwant: %q", got, want)
 	}
 }
 

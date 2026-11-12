@@ -369,6 +369,10 @@ func (r *Resolver) ResolveFile(
 	edges := make([]model.Edge, 0, len(fr.Refs))
 	outcomes := make([]registry.RefOutcome, 0, len(fr.Refs))
 
+	// implementer is the type a supertype reference was declared for, when the
+	// parser recorded one (Rust's `impl Trait for Type`); set per reference.
+	implementer := ""
+
 	// bind records a decided reference: the outcome always, and an edge when
 	// the call site sits inside a symbol that can be named as its source.
 	bind := func(ref registry.Reference, best candidate) {
@@ -390,6 +394,11 @@ func (r *Resolver) ResolveFile(
 		// recorded, but there is no meaningful source to hang an edge on and
 		// inventing one would corrupt caller queries.
 		src, ok := enclosing(fr.Symbols, ref.Line)
+		if implementer != "" {
+			// `impl Trait for Type`: the edge starts at Type, which is not
+			// what encloses the line.
+			src, ok = implementerSource(spec, fr, implementer, symbols)
+		}
 		if !ok {
 			return
 		}
@@ -434,6 +443,14 @@ func (r *Resolver) ResolveFile(
 
 	for _, ref := range fr.Refs {
 		stats.References++
+
+		// The type an impl block is written for rides in the receiver, which
+		// no tier below should read for a relation that has none.
+		implementer = ""
+		if ref.ReceiverKind == model.ReceiverImplementer {
+			implementer = ref.Receiver
+			ref.Receiver, ref.ReceiverKind = "", ""
+		}
 
 		// Every indexed symbol of this name is a candidate, and the tiers below
 		// weigh all of them. Nothing is excluded up here — see "Why candidates
@@ -607,6 +624,36 @@ func (r *Resolver) ResolveFile(
 	return edges, outcomes, nil
 }
 
+// implementerSource is the symbol an `impl Trait for Type` edge starts at: the
+// type named Type, found in the impl's own file first, then as the single type
+// of that name the repository holds, or the single one in the same directory.
+// Two types of the name elsewhere leave the edge without a source, which is the
+// cheaper error: the trait reference is still recorded as resolved.
+func implementerSource(spec LanguageSpec, fr registry.FileRefs, name string, symbols map[string][]registry.SymbolIndexEntry) (int64, bool) {
+	for _, s := range fr.Symbols {
+		if s.Name == name {
+			return s.ID, true
+		}
+	}
+	var all, near []registry.SymbolIndexEntry
+	for _, c := range symbols[name] {
+		if !isTypeKind(c.Kind) || !spec.canBind(c, model.EdgeImplements) {
+			continue
+		}
+		all = append(all, c)
+		if path.Dir(c.FilePath) == path.Dir(fr.Path) {
+			near = append(near, c)
+		}
+	}
+	switch {
+	case len(all) == 1:
+		return all[0].ID, true
+	case len(near) == 1:
+		return near[0].ID, true
+	}
+	return 0, false
+}
+
 // languageOfFile is the language a file was indexed as, or failing that what
 // its extension says. The index always records one; a FileRefs built by hand
 // may not, and a file of no language at all could bind to nothing.
@@ -650,6 +697,10 @@ func (r *Resolver) AppendNames(dst []string, seen map[string]struct{}, fr regist
 	spec := r.specs.For(languageOfFile(fr))
 	for _, ref := range fr.Refs {
 		add(ref.Name)
+		if ref.ReceiverKind == model.ReceiverImplementer {
+			add(ref.Receiver)
+			continue
+		}
 		if spec.QualifiedMembers {
 			if spelledAsClass(ref.Receiver) {
 				add(ref.Receiver)
