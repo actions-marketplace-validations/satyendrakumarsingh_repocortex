@@ -24,6 +24,17 @@ swallow the ones after it.
 - An index named with a schema (`CREATE INDEX shop.ix ON t (c)`) is read as an
   index called `shop`; the grammar does not take the dotted name.
 
+- **A `DO $$ ... $$` block** (Postgres anonymous code block): the grammar
+  reads `DO` as an error and the body between the dollar quotes as one opaque
+  `content` token, never as statements (tree: `(ERROR (ERROR) (content)
+  (content))`). A `CREATE FUNCTION` written inside the block, as in the
+  pgmq `after-create.sql` of supabase/postgres, is therefore not extracted, and
+  a file that is only such a block yields no symbol. The body is text, so no
+  query can reach it. A statement after the block is read normally. The same
+  holds for the body of any other dollar-quoted string, including the body of
+  a function (the SQL inside `CREATE FUNCTION ... AS $$ ... $$` is not
+  parsed, which is why nothing declared inside it is a definition).
+
 ## Statements lost because of an earlier statement
 
 - A MySQL table with an inline index clause, `KEY k (col)` or `UNIQUE KEY`,
