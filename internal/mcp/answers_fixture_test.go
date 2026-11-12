@@ -38,8 +38,11 @@ type symDef struct {
 
 type refDef struct {
 	path, name, qualifier string
-	line                  int
-	outcome               registry.Resolution
+	// kind is what the call was made on, a model.Receiver* constant; empty
+	// for a reference that records none.
+	kind    string
+	line    int
+	outcome registry.Resolution
 	// target is "path:name@line" of the definition a resolved reference is
 	// bound to; empty for an unbound one.
 	target string
@@ -89,7 +92,13 @@ func (b *indexBuilder) edge(src, dst string, kind model.EdgeKind, conf model.Con
 // bound reference AND the edge it produces, which is what the resolver writes
 // for a call inside an extracted function.
 func (b *indexBuilder) call(caller, callee, calleeName, qualifier, evFile string, evLine int, conf model.Confidence) {
-	b.ref(evFile, calleeName, qualifier, evLine, registry.ResolutionResolved, callee)
+	b.callOn(caller, callee, calleeName, "", qualifier, evFile, evLine, conf)
+}
+
+// callOn is call for a call that records what it was made on.
+func (b *indexBuilder) callOn(caller, callee, calleeName, kind, qualifier, evFile string, evLine int, conf model.Confidence) {
+	b.refs = append(b.refs, refDef{path: evFile, name: calleeName, qualifier: qualifier, kind: kind, line: evLine,
+		outcome: registry.ResolutionResolved, target: callee})
 	b.edge(caller, callee, model.EdgeCalls, conf, evFile, evLine)
 }
 
@@ -128,7 +137,7 @@ func (b *indexBuilder) seed(ctx context.Context, reg *registry.Registry, runID i
 	}
 	for _, r := range b.refs {
 		if err := w.AddReference(ctx, fileIDs[r.path], registry.Reference{
-			Name: r.name, Kind: "reference.call", Receiver: r.qualifier, Line: r.line,
+			Name: r.name, Kind: "reference.call", Receiver: r.qualifier, ReceiverKind: r.kind, Line: r.line,
 		}); err != nil {
 			panic(err)
 		}

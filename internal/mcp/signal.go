@@ -39,8 +39,9 @@ const (
 	ReliabilityIncomplete ReliabilityLevel = "incomplete"
 
 	// ReliabilityUnverified: the index holds evidence that some ROWS are bound
-	// to the wrong definition. The call sites are written with qualifiers that
-	// cannot all name it, and the binding did not check them.
+	// to the wrong definition. A call is recorded as made on something that
+	// cannot reach the definition (a Go function called through a value), so
+	// the binding that produced the row is wrong.
 	ReliabilityUnverified ReliabilityLevel = "unverified"
 
 	// ReliabilityLow: most of what could have been bound in the symbol's
@@ -173,9 +174,9 @@ type coverage struct {
 	// index records none at all for the symbol's language.
 	NoHierarchy bool
 
-	// Misbound is non-empty when the call sites bound to the symbol are
-	// written with qualifiers that cannot all name it, and holds the sentence.
-	// See qualifierConflict.
+	// Misbound is non-empty when some call sites bound to the symbol were made
+	// on something that cannot reach it, and holds the sentence. See
+	// boundSiteSet.conflict.
 	Misbound string
 
 	// Known is false when the index holds no resolution outcomes to judge — no
@@ -397,8 +398,8 @@ func (c coverage) caveat(subject string) []string {
 		var out []string
 		if c.Misbound != "" {
 			out = append(out, "SOME ROWS ARE PROBABLY NOT CALLS TO THIS DEFINITION — "+c.Misbound+
-				" find_callers says on each row how the call is written; discard the ones qualified by "+
-				"something else, and whatever was reached only through them.")
+				" The rows say how each call is written; discard the ones made on a value, an instance or "+
+				"an expression, and whatever was reached only through them.")
 		}
 		if s := c.Binding.UnlistedSentence(); s != "" {
 			out = append(out, "INCOMPLETE FOR THIS SYMBOL — "+s+". Any of them may be a use of this "+

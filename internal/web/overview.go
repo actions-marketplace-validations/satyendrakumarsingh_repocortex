@@ -435,8 +435,8 @@ func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 //
 // A clause rather than a separate sentence because it belongs to the number it
 // qualifies: "bound to a definition" covers two claims of very different
-// strength — a typechecker's answer, and name matching plus an import
-// heuristic — and a reader deciding whether to trust an empty view needs them
+// strength — a typechecker's answer, and the resolver's own rules (imports,
+// scope and the receiver's type) — and a reader deciding whether to trust an empty view needs them
 // distinguished at the point the rate is stated, not further down.
 func compilerShare(stats registry.ResolutionStats) string {
 	if stats.ByCompiler == 0 {

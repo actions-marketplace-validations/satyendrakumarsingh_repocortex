@@ -163,7 +163,7 @@ Before changing a symbol, find out what depends on it. Separates DIRECT callers 
 | `hub_degree_limit` | integer | no | Stop the walk from expanding THROUGH any symbol with more than this many edges. Default 0 (off), which is what every result you have seen so far used. Set it (50 is a reasonable start) when a result is enormous because the walk crossed a logger, a util or a base class; pruned symbols are still listed, only their neighbours are not explored, and the response says how many were cut. |
 | `limit` | integer | no | Most rows to return. Default 50, maximum 200. |
 | `line` | integer | no | Line the definition starts on, to choose between several in one file (overloads). |
-| `min_confidence` | string | no | Lowest confidence to follow: exact, high, medium or low. Default medium, so name-only (low) relationships are left out and counted; pass 'low' to walk them too, or 'high' when the result will gate an automated change. |
+| `min_confidence` | string | no | Lowest confidence to follow: exact, high, medium or low. Default medium, so low relationships (a hint that the name exists, not a defended binding) are left out and counted; pass 'low' to walk them too, or 'high' when the result will gate an automated change. |
 | `offset` | integer | no | Rows to skip. The answer names the next offset when more rows exist. |
 | `path` | string | no | File or directory of the definition, to choose between symbols that share the name. |
 
@@ -484,7 +484,7 @@ The first line under `SYSTEM METADATA` is the summary. It is written to be safe 
 |---|---|---|
 | `UNKNOWN` | Nothing can be concluded. The symbol's language yields no references in this index, or none has been resolved | Do not use the answer. Search for the name |
 | `UNRELIABLE` | Most references in the symbol's language are unbound, so the rows are a minority of the evidence | Treat the rows as leads |
-| `UNVERIFIED` | Some rows are probably bound to the wrong definition: the calls are written with qualifiers that cannot all name it | Read how each row's call is written |
+| `UNVERIFIED` | Some rows are probably bound to the wrong definition: the index records a call made on something that cannot reach it, such as a Go function called through a value | Read how each row's call is written; discard the ones made on a value, an instance or an expression |
 | `INCOMPLETE` | The rows are sound and the list is known to be short: rows were cut, or references spelled like the symbol were left unbound | Use the rows, conclude nothing from what is absent, read on with `offset` |
 | `AMBIGUOUS` | The name matched several definitions and nothing was analysed | Pass `path` and `line` from one of the listed rows |
 
@@ -580,7 +580,7 @@ The table is `exportedFlagTrusted` in `internal/capability/exported.go`. `TestEx
 
 **How often a low-confidence relationship is right.** It varies by language and by project. `analyze_impact` leaves `low` relationships out by default and counts what it left out, but quotes no precision figure. [Accuracy](../accuracy.md) says how precision is measured, and `repocortex accuracy` measures it on your repository.
 
-**That a row is a call to the definition.** A call is bound by the name it calls. Each caller row says how the call is written when it carries a qualifier (`written as errors.New`), so a row qualified by another package or object can be discarded.
+**That a row is a call to the definition.** A qualified call is bound through what its qualifier names: an imported package, a module, a type. A call on a value whose type nothing states is bound on the member name alone, and only when one type declares a member of that name. The index records which it was (`symbol_references.receiver_kind`). Each caller row says how the call is written when it carries a qualifier (`written as errors.New`), and a note counts the calls made on a value or an expression, which are the rows most likely to be a call to something else.
 
 ## Names
 

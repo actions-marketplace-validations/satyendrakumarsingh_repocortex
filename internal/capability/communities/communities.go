@@ -89,7 +89,7 @@ const (
 // DefaultMinConfidence leaves low-confidence relationships out of the graph.
 //
 // The same floor impact analysis uses, and for a sharper reason here. A low
-// binding is a match on the name alone, and a partition is unusually easy for
+// binding is mostly a match on the name alone, and a partition is unusually easy for
 // one to wreck: on this repository every test's t.Fatalf was bound, low, to a
 // Fatalf method one test file happens to define, which made that file the
 // centre of a community holding half the repository. One wrong edge misleads a

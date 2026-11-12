@@ -45,7 +45,7 @@ type impactArgs struct {
 	Path   string `json:"path,omitempty" jsonschema:"File or directory of the definition, to choose between symbols that share the name."`
 	lineArg
 
-	MinConfidence string `json:"min_confidence,omitempty" jsonschema:"Lowest confidence to follow: exact, high, medium or low. Default medium, so name-only (low) relationships are left out and counted; pass 'low' to walk them too, or 'high' when the result will gate an automated change."`
+	MinConfidence string `json:"min_confidence,omitempty" jsonschema:"Lowest confidence to follow: exact, high, medium or low. Default medium, so low relationships (a hint that the name exists, not a defended binding) are left out and counted; pass 'low' to walk them too, or 'high' when the result will gate an automated change."`
 
 	hubDegreeLimitArg
 	pageArg

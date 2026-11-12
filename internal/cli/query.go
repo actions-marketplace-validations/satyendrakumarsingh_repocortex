@@ -249,7 +249,7 @@ func emptyCaveat(ctx stdctx.Context, s *session) string {
 // not enough to justify "outside".
 //
 // The compiler-settled count is named when there is one, because "bound by a
-// typechecker" and "bound by name matching plus an import heuristic" are
+// typechecker" and "bound by the resolver's own rules" are
 // different claims to somebody deciding whether to trust an empty result.
 func bindingCaveat(rs registry.ResolutionStats) string {
 	var by string

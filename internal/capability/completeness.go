@@ -166,7 +166,7 @@ func NewCompleteness(stats registry.ResolutionStats, indexedSymbols int, truncat
 		by := ""
 		if stats.ByCompiler > 0 {
 			by = fmt.Sprintf(" %d of those were settled by an imported compiler index rather "+
-				"than by name matching.", stats.ByCompiler)
+				"than by the resolver's own rules.", stats.ByCompiler)
 		}
 		c.Caveats = append(c.Caveats, fmt.Sprintf(
 			"Reference resolution for this index run: %d of %d references that name something this "+

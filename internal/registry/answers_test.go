@@ -57,14 +57,19 @@ func (f *answersFixture) sym(path, lang, name, kind string, start, end, params i
 }
 
 func (f *answersFixture) ref(path, lang, name, qualifier string, line int, outcome Resolution, target int64) {
+	f.refOn(path, lang, name, "", qualifier, line, outcome, target)
+}
+
+// refOn is ref for a reference that records what it was made on.
+func (f *answersFixture) refOn(path, lang, name, kind, qualifier string, line int, outcome Resolution, target int64) {
 	var bound any
 	if target != 0 {
 		bound = target
 	}
-	f.exec(`INSERT INTO symbol_references (index_run_id, file_id, name, kind, receiver, start_line,
-	                                       resolution, resolved_symbol_id)
-	        VALUES (?,?,?,'reference.call',?,?,?,?)`,
-		f.run, f.file(path, lang), name, qualifier, line, string(outcome), bound)
+	f.exec(`INSERT INTO symbol_references (index_run_id, file_id, name, kind, receiver, receiver_kind,
+	                                       start_line, resolution, resolved_symbol_id)
+	        VALUES (?,?,?,'reference.call',?,?,?,?,?)`,
+		f.run, f.file(path, lang), name, qualifier, kind, line, string(outcome), bound)
 }
 
 func (f *answersFixture) edge(src, dst int64, kind, conf, evFile string, evLine int) {
@@ -357,14 +362,14 @@ func TestEdgePageIsStableAndCountsTheTotal(t *testing.T) {
 	}
 }
 
-func TestBoundSitesReportTheQualifierEachCallWasWrittenWith(t *testing.T) {
+func TestBoundSitesReportTheQualifierAndKindEachCallWasMadeWith(t *testing.T) {
 	r, f := newAnswersFixture(t)
 	ctx := context.Background()
 
 	target := f.sym("gin.go", "go", "New", "function", 10, 20, 0)
-	f.ref("gin.go", "go", "New", "", 30, ResolutionResolved, target)
-	f.ref("gin.go", "go", "New", "errors", 40, ResolutionResolved, target)
-	f.ref("a.go", "go", "New", "template", 5, ResolutionResolved, target)
+	f.refOn("gin.go", "go", "New", model.ReceiverBare, "", 30, ResolutionResolved, target)
+	f.refOn("gin.go", "go", "New", model.ReceiverName, "errors", 40, ResolutionResolved, target)
+	f.refOn("a.go", "go", "New", model.ReceiverValue, "template", 5, ResolutionResolved, target)
 	f.ref("a.go", "go", "New", "errors", 9, ResolutionAmbiguous, 0) // not bound: not a site
 
 	sites, err := r.BoundSites(ctx, f.run, target, 10)
@@ -372,9 +377,9 @@ func TestBoundSitesReportTheQualifierEachCallWasWrittenWith(t *testing.T) {
 		t.Fatal(err)
 	}
 	want := []BoundSite{
-		{Path: "a.go", Line: 5, Qualifier: "template"},
-		{Path: "gin.go", Line: 30, Qualifier: ""},
-		{Path: "gin.go", Line: 40, Qualifier: "errors"},
+		{Path: "a.go", Line: 5, Qualifier: "template", ReceiverKind: model.ReceiverValue},
+		{Path: "gin.go", Line: 30, Qualifier: "", ReceiverKind: model.ReceiverBare},
+		{Path: "gin.go", Line: 40, Qualifier: "errors", ReceiverKind: model.ReceiverName},
 	}
 	if len(sites) != len(want) {
 		t.Fatalf("sites = %+v, want %+v", sites, want)

@@ -1968,8 +1968,11 @@ time=… level=INFO msg="serving MCP on stdio" project=payment-platform profile=
   verdict is never stronger than the coverage it rests on; see
   [reading an answer](../reference/mcp-tools.md#reading-an-answer).
 - A caller row says how its call is written when the call carries a qualifier.
-  The binding matched the name `updateStatus`; the row shows the text in front
-  of it so a reader can check it.
+  A qualified call is bound through what the qualifier names (an imported
+  package, a module or a type); the row shows the text in front of the name and
+  the rule that bound it, so a reader can check it. A call on a value whose type
+  the source does not state is bound on the member name alone, and a note
+  counts those.
 - The text is split into labelled sections. `SYSTEM METADATA` is RepoCortex's
   own report. `INFERRED` holds results it derived from the graph.
   `SOURCE EVIDENCE` holds verbatim repository content and comes with a note to
