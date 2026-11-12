@@ -145,6 +145,11 @@ type Resolver struct {
 	// deferred holds references awaiting ancestry, in reference order. See
 	// inherited.go for why they cannot be settled during the main loop.
 	deferred []deferredRef
+
+	// supertypes remembers each type's direct supertypes for the length of one
+	// ResolveDeferred, so a chunk does not ask again what an earlier one
+	// learned. Nil outside a drain. See ancestryClosure.
+	supertypes map[string][]string
 }
 
 // New builds a Resolver over a preloaded symbol index.
@@ -306,18 +311,68 @@ func (r *Resolver) ResolveFile(
 
 	// Index this file's imports once; every reference in the file consults them.
 	imports := buildImportSet(spec, fr.Imports)
+	if spec.QualifiedMembers {
+		imports.base = pathSegments(path.Dir(fr.Path))
+	}
 
 	// Ask for this file's names in ONE request, before resolving any of them.
 	// Per-reference lookups would be a query per reference, which is the design
 	// the preloaded index existed to avoid; per-file keeps that property while
 	// bounding what is resident to the names one file mentions.
-	symbols, err := r.candidates.Candidates(ctx, distinctNames(fr.Refs))
+	symbols, err := r.candidates.Candidates(ctx, r.AppendNames(nil, nil, fr))
 	if err != nil {
 		return nil, nil, fmt.Errorf("candidates for %s: %w", fr.Path, err)
 	}
 
 	edges := make([]model.Edge, 0, len(fr.Refs))
 	outcomes := make([]registry.RefOutcome, 0, len(fr.Refs))
+
+	// bind records a decided reference: the outcome always, and an edge when
+	// the call site sits inside a symbol that can be named as its source.
+	bind := func(ref registry.Reference, best candidate) {
+		stats.Resolved++
+		if stats.ByConfidence == nil {
+			stats.ByConfidence = map[model.Confidence]int64{}
+		}
+		stats.ByConfidence[best.confidence]++
+
+		outcomes = append(outcomes, registry.RefOutcome{
+			RefID:      ref.ID,
+			SymbolID:   best.entry.ID,
+			Resolution: registry.ResolutionResolved,
+		})
+
+		// Attribute the call site to the symbol containing it. A reference
+		// outside any indexed symbol (a package-level initialiser, a
+		// top-level statement) yields no edge: the resolution is still
+		// recorded, but there is no meaningful source to hang an edge on and
+		// inventing one would corrupt caller queries.
+		src, ok := enclosing(fr.Symbols, ref.Line)
+		if !ok {
+			return
+		}
+		edges = append(edges, model.Edge{
+			SrcID:      src,
+			DstID:      best.entry.ID,
+			Kind:       edgeKindFor(ref.Kind),
+			Confidence: best.confidence,
+			Evidence: model.Evidence{
+				FilePath: fr.Path,
+				Range: model.Range{
+					Start: model.Position{Line: ref.Line, Col: ref.Col},
+					End:   model.Position{Line: ref.Line, Col: ref.Col},
+				},
+				Source: model.SourceSourceCode,
+				Detail: best.reason,
+			},
+		})
+		stats.Edges++
+	}
+	ambiguous := func(ref registry.Reference) {
+		stats.Ambiguous++
+		outcomes = append(outcomes, registry.RefOutcome{
+			RefID: ref.ID, Resolution: registry.ResolutionAmbiguous})
+	}
 
 	for _, ref := range fr.Refs {
 		stats.References++
@@ -358,8 +413,25 @@ func (r *Resolver) ResolveFile(
 			cands = kept
 		}
 
-		switch {
-		case len(cands) == 0:
+		// A call through a local value — a parameter, a loop variable — names no
+		// definition, and the parser said so. It is a call site, and it is
+		// bound to nothing.
+		if strings.HasSuffix(ref.Kind, indirectCallSuffix) {
+			stats.Unresolved++
+			outcomes = append(outcomes, registry.RefOutcome{
+				RefID: ref.ID, Resolution: registry.ResolutionUnresolved})
+			continue
+		}
+
+		// The second exclusion, of the same kind: candidates the language's
+		// SCOPING makes unreachable from this call. See reachable in static.go.
+		scope := ""
+		if spec.QualifiedMembers {
+			scope = enclosingScope(fr, ref.Line)
+			cands = reachableFrom(fr, ref, scope, cands)
+		}
+
+		if len(cands) == 0 {
 			// The name resolves to nothing indexed. Usually a standard-library
 			// or third-party call — real, but outside this repository. Recording
 			// it as unresolved keeps the gap visible instead of pretending the
@@ -368,95 +440,174 @@ func (r *Resolver) ResolveFile(
 			outcomes = append(outcomes, registry.RefOutcome{
 				RefID: ref.ID, Resolution: registry.ResolutionUnresolved})
 			continue
-
-		case len(cands) > spec.MaxCandidates:
-			// Too many to weigh — UNLESS the receiver settles it.
-			//
-			// This cap used to run before pick(), so an over-subscribed name
-			// was abandoned without the receiver tier ever seeing it. On a
-			// 2,681-file Java service that discarded 643 references to
-			// `build`, which has 250 definitions and is almost always called
-			// as `someBuilder.build()` — the one piece of evidence that
-			// identifies it exactly.
-			//
-			// Narrowing first is not a weaker test than the cap, it is a
-			// stronger one: a receiver that leaves a single candidate has
-			// constrained the type as well as the name, which is precisely
-			// what the cap exists to admit it cannot do on names alone.
-			// A8 — count the drop before attempting the rescue, so the two
-			// counters bracket what narrowByReceiver saved.
-			stats.CapExceeded++
-			narrowed := narrowByReceiver(spec, ref, cands)
-			if len(narrowed) == 0 || len(narrowed) > spec.MaxCandidates {
-				stats.CapDropped++
-				// A21 — the receiver failed to name an owner among hundreds of
-				// candidates, which is exactly what an inherited method looks
-				// like from here. Park it; the outcome recorded now stands
-				// unless ResolveDeferred later finds the definition on an
-				// ancestor. See inherited.go.
-				r.deferInherited(spec, fr, ref, stats)
-				stats.Ambiguous++
-				outcomes = append(outcomes, registry.RefOutcome{
-					RefID: ref.ID, Resolution: registry.ResolutionAmbiguous})
-				continue
-			}
-			cands = narrowed
 		}
 
-		best, ok := r.pick(spec, fr, imports, ref, cands)
-		if !ok || !best.confidence.AtLeast(r.opts.MinConfidence) {
+		// A receiver whose class the source STATES is asked about that class
+		// before any tier weighs the name: what the class declares is the
+		// answer, and nothing a tier could find outranks it.
+		sr, static := r.staticReceiverOf(spec, fr, imports, ref, scope, symbols)
+		if static && !sr.super {
+			if owned, ok := pickOwned(sr, cands); ok {
+				if owned.confidence.AtLeast(r.opts.MinConfidence) {
+					bind(ref, owned)
+				} else {
+					ambiguous(ref)
+				}
+				continue
+			}
+		}
+		if static {
+			// The class is known and does not declare the method, so it is
+			// inherited or it is not this class's at all. Its ancestors can say
+			// which, but only once every file's inheritance has been bound — so
+			// the reference is parked, carrying what the name alone would have
+			// answered, and settled by ResolveDeferred.
+			fallback, has := r.fallbackByName(spec, fr, imports, ref, sr, cands, stats)
+			if r.deferStatic(spec, fr, ref, sr, fallback, has, stats) {
+				ambiguous(ref)
+				continue
+			}
+			if has {
+				bind(ref, fallback)
+			} else {
+				ambiguous(ref)
+			}
+			continue
+		}
+
+		best, ok := r.pickCapped(spec, fr, imports, ref, cands, stats)
+		if !ok {
 			// A21 — nothing here could bind it. If it has a receiver, the
 			// ancestry chain may name the type that owns it; park it for the
 			// second pass. Bound references are never parked, so this cannot
 			// change an answer pass one already gave.
 			r.deferInherited(spec, fr, ref, stats)
-			stats.Ambiguous++
-			outcomes = append(outcomes, registry.RefOutcome{
-				RefID: ref.ID, Resolution: registry.ResolutionAmbiguous})
+			ambiguous(ref)
 			continue
 		}
-
-		stats.Resolved++
-		if stats.ByConfidence == nil {
-			stats.ByConfidence = map[model.Confidence]int64{}
-		}
-		stats.ByConfidence[best.confidence]++
-
-		outcomes = append(outcomes, registry.RefOutcome{
-			RefID:      ref.ID,
-			SymbolID:   best.entry.ID,
-			Resolution: registry.ResolutionResolved,
-		})
-
-		// Attribute the call site to the symbol containing it. A reference
-		// outside any indexed symbol (a package-level initialiser, a
-		// top-level statement) yields no edge: the resolution is still
-		// recorded, but there is no meaningful source to hang an edge on and
-		// inventing one would corrupt caller queries.
-		src, ok := enclosing(fr.Symbols, ref.Line)
-		if !ok {
-			continue
-		}
-
-		edges = append(edges, model.Edge{
-			SrcID:      src,
-			DstID:      best.entry.ID,
-			Kind:       edgeKindFor(ref.Kind),
-			Confidence: best.confidence,
-			Evidence: model.Evidence{
-				FilePath: fr.Path,
-				Range: model.Range{
-					Start: model.Position{Line: ref.Line, Col: ref.Col},
-					End:   model.Position{Line: ref.Line, Col: ref.Col},
-				},
-				Source: model.SourceSourceCode,
-				Detail: best.reason,
-			},
-		})
-		stats.Edges++
+		bind(ref, best)
 	}
 
 	return edges, outcomes, nil
+}
+
+// AppendNames appends the names resolving a file will ask candidates for, in
+// first-appearance order, skipping any already in seen.
+//
+// Exported because the pipeline warms its candidate cache a page of files at a
+// time, and must ask for exactly what ResolveFile is about to ask for: a name
+// this returns that the warm-up missed costs a round trip per file, which is
+// the per-file query the page-sized warm-up exists to remove.
+//
+// The names are every reference's own name and, where the language's qualified
+// names state ownership, every receiver that is spelled as a class — it is
+// looked up to learn whether it IS one. That lookup is why this is per
+// language: in Go a receiver is `s` or `c`, and fetching candidates for those
+// would read rows nothing consults.
+func (r *Resolver) AppendNames(dst []string, seen map[string]struct{}, fr registry.FileRefs) []string {
+	if seen == nil {
+		seen = make(map[string]struct{}, len(fr.Refs))
+	}
+	if dst == nil {
+		dst = make([]string, 0, len(fr.Refs))
+	}
+	add := func(name string) {
+		if name == "" {
+			return
+		}
+		if _, dup := seen[name]; dup {
+			return
+		}
+		seen[name] = struct{}{}
+		dst = append(dst, name)
+	}
+	spec := r.specs.For(fr.Language)
+	for _, ref := range fr.Refs {
+		add(ref.Name)
+		if spec.QualifiedMembers && spelledAsClass(ref.Receiver) {
+			add(ref.Receiver)
+		}
+	}
+	return dst
+}
+
+// pickCapped is pick behind the candidate cap: the answer the tiers give for
+// one reference, or false when they give none.
+func (r *Resolver) pickCapped(
+	spec LanguageSpec,
+	fr registry.FileRefs,
+	imports importSet,
+	ref registry.Reference,
+	cands []registry.SymbolIndexEntry,
+	stats *Stats,
+) (candidate, bool) {
+	if len(cands) > spec.MaxCandidates {
+		// Too many to weigh — UNLESS the receiver settles it.
+		//
+		// This cap used to run before pick(), so an over-subscribed name
+		// was abandoned without the receiver tier ever seeing it. On a
+		// 2,681-file Java service that discarded 643 references to
+		// `build`, which has 250 definitions and is almost always called
+		// as `someBuilder.build()` — the one piece of evidence that
+		// identifies it exactly.
+		//
+		// Narrowing first is not a weaker test than the cap, it is a
+		// stronger one: a receiver that leaves a single candidate has
+		// constrained the type as well as the name, which is precisely
+		// what the cap exists to admit it cannot do on names alone.
+		// A8 — count the drop before attempting the rescue, so the two
+		// counters bracket what narrowByReceiver saved.
+		stats.CapExceeded++
+		narrowed := narrowByReceiver(spec, ref, cands)
+		if len(narrowed) == 0 || len(narrowed) > spec.MaxCandidates {
+			stats.CapDropped++
+			return candidate{}, false
+		}
+		cands = narrowed
+	}
+
+	best, ok := r.pick(spec, fr, imports, ref, cands)
+	if !ok || !best.confidence.AtLeast(r.opts.MinConfidence) {
+		return candidate{}, false
+	}
+	return best, true
+}
+
+// fallbackByName is what the name alone answers for a call whose receiver's
+// class is KNOWN and does not declare the method.
+//
+// None of the receiver tiers apply — the receiver is a class, not a module —
+// so this is pickByName behind the candidate cap, reported as the name-only
+// binding it is. A call on `super()` gets no fallback at all: the only
+// definition of the name in the file is, more often than not, the very method
+// the call is written in. While this was being built that fallback existed,
+// and measured against a compiler index on django it was right 0 times in 54.
+func (r *Resolver) fallbackByName(
+	spec LanguageSpec,
+	fr registry.FileRefs,
+	imports importSet,
+	ref registry.Reference,
+	sr staticReceiver,
+	cands []registry.SymbolIndexEntry,
+	stats *Stats,
+) (candidate, bool) {
+	if sr.super {
+		return candidate{}, false
+	}
+	if len(cands) > spec.MaxCandidates {
+		stats.CapExceeded++
+		stats.CapDropped++
+		return candidate{}, false
+	}
+	c, ok := r.pickByName(spec, fr, imports, ref, cands)
+	if !ok {
+		return candidate{}, false
+	}
+	c = nameOnly(c, sr.class+" does not declare it and its ancestors did not settle it")
+	if !c.confidence.AtLeast(r.opts.MinConfidence) {
+		return candidate{}, false
+	}
+	return c, true
 }
 
 // pick chooses the best candidate and the confidence that choice earns.
@@ -470,6 +621,12 @@ func (r *Resolver) pick(
 	ref registry.Reference,
 	cands []registry.SymbolIndexEntry,
 ) (candidate, bool) {
+	// Where qualified names state ownership, the evidence available is of a
+	// different kind and so is the order it is consulted in. See static.go.
+	if spec.QualifiedMembers {
+		return r.pickQualified(spec, fr, imports, ref, cands)
+	}
+
 	// Tier 1 — same file. Nothing beats a definition in the very file that
 	// references it: no import resolution, no visibility question, no shadowing
 	// from another package.
@@ -714,7 +871,28 @@ type importSet struct {
 	// byLocalName indexes the imports that declared an explicit local name, for
 	// lookup only — never iterated.
 	byLocalName map[string]int
+
+	// members maps a name imported FROM a module — `Account` in
+	// `from shop.models import Account` — to the imports that brought it in, as
+	// indexes into imports. Keyed by the name exactly as written: it is an
+	// identifier, and identifiers that differ in case are different names.
+	// Looked up, never iterated.
+	members map[string][]int
+
+	// base is the referencing file's directory as segments, which is what a
+	// relative import is relative TO. Set by ResolveFile; empty in a set built
+	// without a file, where a relative import then anchors at the root.
+	base []string
 }
+
+// memberAliasPrefix marks an import row whose alias names a member imported
+// from the path rather than a local name for the path. internal/parse writes
+// it; see memberAliasPrefix there.
+const memberAliasPrefix = "."
+
+// opaqueReceiver is the receiver internal/parse records for a call on an
+// expression it cannot name. See parse.OpaqueReceiver.
+const opaqueReceiver = "?"
 
 // importEntry is one declared import, prepared for matching.
 type importEntry struct {
@@ -725,6 +903,25 @@ type importEntry struct {
 	// "repo/x.go" — and splitting both into segments is what makes them
 	// comparable at all.
 	segments []string
+
+	// relative is how many leading dots the path was written with: 0 for an
+	// absolute import, 1 for `from .mod`, 2 for `from ..mod`. The unanchored
+	// import tier ignores it, as it always did; the rules that know the
+	// referencing file use it to anchor the path. See importSet.locate.
+	relative int
+}
+
+// leadingDots counts the dots a relative import path begins with. A path that
+// continues with a slash is a JavaScript-style `./x`, which is not this.
+func leadingDots(p string) int {
+	n := 0
+	for n < len(p) && p[n] == '.' {
+		n++
+	}
+	if n < len(p) && p[n] == '/' {
+		return 0
+	}
+	return n
 }
 
 func buildImportSet(spec LanguageSpec, imports []registry.Import) importSet {
@@ -732,14 +929,51 @@ func buildImportSet(spec LanguageSpec, imports []registry.Import) importSet {
 		spec:    spec,
 		imports: make([]importEntry, 0, len(imports)),
 	}
+	// byPath finds the entry a member row belongs to. Member rows repeat their
+	// module's path once per imported name, and adding each as an entry of its
+	// own would make every covers() scan as long as the file's import LIST
+	// rather than its set of modules.
+	var byPath map[string]int
 	for _, imp := range imports {
+		member, isMember := strings.CutPrefix(imp.Alias, memberAliasPrefix)
 		p := strings.Trim(imp.Path, "./")
+		if isMember {
+			// A member of a bare relative import — `from . import sibling` — has
+			// no path segments at all: the module is the package itself.
+			if member == "" || (p == "" && leadingDots(imp.Path) == 0) {
+				continue
+			}
+			i, known := byPath[imp.Path]
+			if !known {
+				if byPath == nil {
+					byPath = make(map[string]int, len(imports))
+				}
+				i = len(s.imports)
+				byPath[imp.Path] = i
+				s.imports = append(s.imports, importEntry{
+					segments: pathSegments(p), relative: leadingDots(imp.Path)})
+			}
+			if s.members == nil {
+				s.members = make(map[string][]int, len(imports))
+			}
+			s.members[member] = append(s.members[member], i)
+			continue
+		}
 		if p == "" {
 			continue
 		}
-		e := importEntry{alias: imp.Alias, segments: pathSegments(p)}
+		e := importEntry{alias: imp.Alias, segments: pathSegments(p), relative: leadingDots(imp.Path)}
 		if len(e.segments) == 0 {
 			continue
+		}
+		if e.alias == "" {
+			if _, dup := byPath[imp.Path]; dup {
+				continue
+			}
+			if byPath == nil {
+				byPath = make(map[string]int, len(imports))
+			}
+			byPath[imp.Path] = len(s.imports)
 		}
 		if e.alias != "" {
 			if s.byLocalName == nil {
@@ -788,10 +1022,22 @@ func fileSegments(spec LanguageSpec, filePath string) []string {
 		return dir
 	}
 	base := fileBaseName(filePath)
-	if base == "" {
+	if base == "" || (spec.PackageInitStem != "" && base == spec.PackageInitStem) {
+		// `shop/models/__init__.py` is the module `shop.models`: the directory
+		// names it and the stem names nothing. See LanguageSpec.PackageInitStem.
 		return dir
 	}
 	return append(dir, strings.ToLower(base))
+}
+
+// moduleStem is the name a module-qualified call writes for a file: the file's
+// own stem, or its directory's where the file is a package's init module.
+func moduleStem(spec LanguageSpec, filePath string) string {
+	base := fileBaseName(filePath)
+	if spec.PackageInitStem != "" && base == spec.PackageInitStem {
+		return path.Base(path.Dir(filePath))
+	}
+	return base
 }
 
 // covers reports how well a file matches something the referencing file
@@ -967,6 +1213,10 @@ func (r *Resolver) pickSameDir(
 	fr registry.FileRefs,
 	cands []registry.SymbolIndexEntry,
 ) (candidate, bool) {
+	if !spec.PackageIsDirectory && !spec.ProximityIsEvidence {
+		// Measured to be noise for this language; see the field.
+		return candidate{}, false
+	}
 	dir := path.Dir(fr.Path)
 	var sameDir []registry.SymbolIndexEntry
 	for _, c := range cands {
@@ -1093,6 +1343,16 @@ func receiverMatches(spec LanguageSpec, receiver string, c registry.SymbolIndexE
 		return false
 	}
 	r := strings.TrimPrefix(receiver, "*")
+	if spec.QualifiedMembers {
+		// The qualified name says what a candidate is, so nothing is inferred
+		// from the receiver's spelling. A class MEMBER is reached through its
+		// class, and ResolveFile identifies that class exactly before any tier
+		// runs; a receiver that got this far could not be identified, and a
+		// class of the same name declaring the method somewhere is not evidence
+		// that it is this one. What is left is a module-level definition
+		// reached through its MODULE, which is the file-name channel.
+		return isModuleLevel(c) && strings.EqualFold(moduleStem(spec, c.FilePath), r)
+	}
 	if ownsQualifiedName(spec, c, r) {
 		return true
 	}
@@ -1235,21 +1495,4 @@ func edgeKindFor(refKind string) model.EdgeKind {
 	default:
 		return model.EdgeReferences
 	}
-}
-
-// distinctNames returns the names a file's references mention, deduplicated.
-//
-// Order is the order of first appearance, not sorted: the caller uses it only
-// to build an IN (...) list, and sorting would cost a pass for nothing.
-func distinctNames(refs []registry.Reference) []string {
-	seen := make(map[string]struct{}, len(refs))
-	out := make([]string, 0, len(refs))
-	for _, ref := range refs {
-		if _, dup := seen[ref.Name]; dup {
-			continue
-		}
-		seen[ref.Name] = struct{}{}
-		out = append(out, ref.Name)
-	}
-	return out
 }

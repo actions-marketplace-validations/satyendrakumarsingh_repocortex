@@ -223,6 +223,318 @@ which is the tier the number is for. It is recorded here because a tier moving
 30pp is exactly the kind of thing that looks like a defect six months later if
 nobody wrote down why it happened.
 
+## Python: the receiver's class, read from the source
+
+Until this change a Python method call was resolved by its NAME. `self.save()`
+bound when the file happened to contain exactly one `save`; `account.save()`
+bound to that same `save` whatever `account` was; and a class imported from the
+package that re-exports it — which is how a library's public names are imported
+— was found only by the last-resort tier that asks whether a name is unique in
+the repository. The parser knew none of the three things that would have
+settled those: which class a definition belongs to, what class a receiver is,
+and which name an import brought in.
+
+`internal/parse/pyscope.go` now states them, and
+`internal/resolve/infer/static.go` uses them.
+
+**What the parser states.**
+
+- A definition's qualified name follows Python's own `__qualname__`:
+  `shop/models/account.py:Account.save`, and `build.<locals>.Item.render` for
+  anything defined inside a function. Two classes' `save` are two names.
+- A receiver is replaced by a class where the source says what it is, and
+  nowhere else: a parameter annotated `account: Account` (also `Optional[...]`,
+  `X | None`, the quoted and dotted forms), or a variable the function assigns
+  exactly once from `Ledger(...)`. A second assignment, a loop target, a `with
+  ... as`, an unpacking or a `global` anywhere in the function withdraws it.
+  Nothing reads a function's return type, an attribute's type or a module-level
+  variable's.
+- A call on an expression with no name — `self.repo.save()`, `make().run()` —
+  is recorded as made on `?`, so that an empty receiver means the source wrote a
+  bare name. `super().save()` is recorded as made on `super`.
+- A call through a local value — a parameter, a loop variable — is marked, and
+  is bound to nothing.
+- `from shop.models import Account` records that `Account` came from
+  `shop.models`, and a relative import keeps its dots.
+
+**What the resolver does with them.**
+
+- `self.x()`, `cls.x()`, `Account.x()` and a receiver the parser replaced with a
+  class are asked about THAT class first, ahead of the same-file tier: the
+  method the class declares, and failing that the nearest one an ancestor
+  declares.
+- A bare call cannot name a method, and a definition local to a function is
+  visible only inside it. Those candidates are removed, and among what is left
+  the innermost definition wins.
+- A name imported by name resolves through the import that named it: to the
+  module if the module defines it, and otherwise to the one definition of that
+  name beneath the package — a re-export. `models.CharField(...)` after
+  `from django.db import models`, and `httpx.Client()` after `import httpx`,
+  resolve the same way.
+- `shop/models/__init__.py` is the module `shop.models`.
+
+**What was taken out of `high`.** A method called on an object whose class
+nothing states — `target.save()`, `self.repo.save()` — used to bind to the only
+`save` in the file, or the only one in an imported module, and be reported at
+`high`. Those bindings are still made. They are reported one level down, as
+what they are: a binding on a name. The same-directory tier is off for Python
+entirely. The measurement behind both is under "What the old tiers were worth".
+
+### Measured against hand-written ground truth
+
+`fixtures/pycalls` is a small package in which every interesting call site
+states, in a comment, the definition it reaches, or that it is dynamic and
+nothing may claim it at `high`: 57 call sites with a known target and 13
+dynamic ones. It covers the shapes a compiler index cannot adjudicate — the
+target of a call through a parameter is a local value, which SCIP does not
+record — and it is a regression gate (`TestPythonCallGroundTruth`).
+
+| | `high`: right | `high`: wrong | all tiers: right | wrong | no edge | dynamic calls claimed at `high` |
+|---|---:|---:|---:|---:|---:|---:|
+| before | 26 | **9** | 36 | 9 | 12 | **4 of 13** |
+| after | **55** | **0** | 55 | 1 | 1 | **0 of 13** |
+
+The one wrong edge left is `service.charge(...)` where `service` is what a
+function returned: the receiver's class is unknown, the name-only tier picks the
+one `charge` in an imported module, and that is the subclass's override. It is
+reported at `medium`. The one miss is `Tree.Node().walk()`, a call on the
+result of a call.
+
+### Measured against a compiler index
+
+Four repositories, each a `--depth 1` clone of a pinned commit, each indexed
+once with `scip-python` 0.6.6 and that one index used for both arms. Figures are
+`repocortex accuracy` output, unedited: call sites the parser recorded a call on
+and the compiler resolved to exactly one definition.
+
+| repository | call sites | arm | `high` sites | right | wrong | `high` precision | `high` recall | all-tier precision | all-tier recall | no edge |
+|---|---:|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| scrapy `c7eacdbb` (480 `.py`) | 9,999 | before | 5,230 | 5,017 | 213 | 95.9% | 50.2% | 93.1% | 63.9% | 3,132 |
+| | | **after** | 6,732 | 6,709 | 23 | **99.7%** | **67.1%** | 96.2% | 72.6% | 2,446 |
+| requests `v2.32.3` (36) | 352 | before | 293 | 283 | 10 | 96.6% | 80.4% | 95.0% | 80.4% | 54 |
+| | | **after** | 300 | 295 | 5 | **98.3%** | **83.8%** | 96.4% | 83.8% | 46 |
+| httpx `0.28.1` (60) | 1,826 | before | 405 | 376 | 29 | 92.8% | 20.6% | 54.1% | 31.7% | 755 |
+| | | **after** | 1,293 | 928 | 365 | 71.8% | 50.8% | 67.0% | 51.6% | 420 |
+| django `5.1.4` (2,788) | 44,787 | before | 17,996 | 15,443 | 2,553 | 85.8% | 34.5% | 78.7% | 40.6% | 21,667 |
+| | | **after** | 30,359 | 27,579 | 2,780 | 90.8% | 61.6% | 86.3% | 63.0% | 12,084 |
+
+Two rows in that table do not say what they appear to. On httpx `high`
+precision FELL, from 92.8% to 71.8%, and on django it reached only 90.8%. Both
+are the compiler index being wrong, and the next section is the evidence for
+saying so rather than a reason to look away from the number.
+
+One row says something about the baseline: on django, before this change,
+`high` measured **85.8%** — under the 86.8% floor this document publishes for
+the tier.
+
+### The compiler index is wrong about wildcard re-exports
+
+`httpx/__init__.py` is twelve lines of `from ._models import *`. A test that
+writes `httpx.Cookies()` reaches the class `Cookies` in `httpx/_models.py`.
+`scip-python` 0.6.6 records that occurrence as a reference to
+`` `httpx._models`/Request# `` — a different class in the same module — and does
+the same for every name that arrives through a wildcard import: every
+`models.CharField(...)`, `models.IntegerField(...)` and `models.BooleanField(...)`
+in django's tests is attributed to `DateTimeField`. Read from the SCIP file
+directly, not from RepoCortex's import of it:
+
+```
+tests/models/test_cookies.py:24   cookies = httpx.Cookies()
+  [23 14 19]  scip-python python … httpx/__init__:
+  [23 20 27]  scip-python python … `httpx._models`/Request#
+```
+
+So an edge that names the right class is scored wrong, and the better the
+resolver gets at these calls the lower its measured precision goes. The
+baseline's precision on httpx was high because it bound almost none of them at
+`high`; it bound them at `low`, where 424 of 618 were scored wrong for the same
+reason.
+
+This was checked with something that depends on neither tool. For every call
+site where an edge and the compiler index disagree and the call is a bare name
+or is qualified by a name the file imported, the import chain is followed with
+Python's own `ast` module — `from … import *` and `__all__` included — and the
+site is counted right only if the chain ends exactly where the edge points. A
+second, smaller class is corrected the same way: where an edge names a function
+defined inside the function the call is written in, and the compiler index names
+a same-named function defined inside a DIFFERENT function, Python's scoping
+makes the compiler's answer impossible. Nothing else is touched. Both
+corrections are applied to both arms, whatever tier and reason an edge carries.
+
+| repository | arm | verdicts corrected | `high` right | wrong | `high` precision | `high` recall | all-tier precision | all-tier recall |
+|---|---|---:|---:|---:|---:|---:|---:|---:|
+| scrapy | before | 0 | 5,017 | 213 | 95.9% | 50.2% | 93.1% | 63.9% |
+| | **after** | 17 | 6,726 | 6 | **99.9%** | **67.3%** | 96.4% | 72.8% |
+| requests | before | 0 | 283 | 10 | 96.6% | 80.4% | 95.0% | 80.4% |
+| | **after** | 0 | 295 | 5 | **98.3%** | **83.8%** | 96.4% | 83.8% |
+| httpx | before | 358 | 376 | 29 | 92.8% | 20.6% | 87.5% | 51.3% |
+| | **after** | 365 | 1,293 | 0 | **100.0%** | **70.8%** | 93.0% | 71.6% |
+| django | before | 842 | 15,573 | 2,423 | 86.5% | 34.8% | 82.4% | 42.5% |
+| | **after** | 2,725 | 30,299 | 60 | **99.8%** | **67.7%** | 94.7% | 69.1% |
+
+Read the first table as the measurement and the second as what it means. The
+first is what the tool prints; the second is what remains after 3,107 verdicts
+the index got wrong are set right by a method anyone can re-run. Neither is
+offered without the other.
+
+A third artefact is left in both tables because it cuts both ways and cannot be
+corrected, only counted. A call site is adjudicated per LINE, so a line holding
+two calls is scored against whichever one the compiler resolved. On requests all
+5 `high` sites still scored wrong are of that kind — the compiler's one target
+on the line has a different name from the call that was bound — and on scrapy 3
+of the remaining 6 are.
+
+### What each rule is worth
+
+Edge by edge rather than site by site, over the four repositories together,
+after the two corrections above. The last column is the same figure as the
+compiler index scores it.
+
+| tier | why the edge was made | django | scrapy | httpx | requests | all four | agreed | as indexed |
+|---|---|---:|---:|---:|---:|---:|---:|---:|
+| `high` | imported by name from the module that defines it | 5,584 of 5,584 | 2,318 of 2,320 | 134 of 134 | 135 of 138 | 8,171 of 8,176 | 99.9% | 99.8% |
+| `high` | inherited: declared on an ancestor of the receiver's class | 6,650 of 6,714 | 799 of 805 | 49 of 49 | 7 of 7 | 7,505 of 7,575 | 99.1% | 99.1% |
+| `high` | imported by name from a package that re-exports it | 5,252 of 5,273 | 789 of 789 | — | — | 6,041 of 6,062 | 99.7% | 99.5% |
+| `high` | declared on the enclosing class (`self`, `cls`) | 4,544 of 4,545 | 1,345 of 1,348 | 88 of 88 | 67 of 67 | 6,044 of 6,048 | 99.9% | 99.9% |
+| `high` | qualified by an imported package that re-exports it | 4,122 of 4,122 | 8 of 8 | 576 of 576 | 0 of 6 | 4,706 of 4,712 | 99.9% | 36.2% |
+| `high` | defined in the same file (a bare name) | 2,727 of 2,729 | 911 of 911 | 187 of 187 | 80 of 80 | 3,905 of 3,907 | 99.9% | 97.6% |
+| `high` | declared on the receiver's class (annotation, constructor, or the class written out) | 978 of 978 | 518 of 518 | 259 of 259 | 5 of 5 | 1,760 of 1,760 | 100.0% | 100.0% |
+| `high` | qualified by an imported module that defines it | 366 of 367 | 15 of 17 | — | 1 of 1 | 382 of 385 | 99.2% | 99.2% |
+| `high` | defined in the enclosing scope, nearest of several | 84 of 84 | 23 of 24 | — | — | 107 of 108 | 99.1% | 98.1% |
+| `high` | receiver spells a module's file name | 0 of 3 | — | — | — | 0 of 3 | 0.0% | 0.0% |
+| `medium` | one match in an imported module; receiver's class unknown | 420 of 1,204 | 397 of 483 | 6 of 13 | 0 of 2 | 823 of 1,702 | 48.4% | 48.4% |
+| `medium` | one match in the same file; receiver's class unknown | 49 of 207 | 37 of 118 | 4 of 17 | 0 of 6 | 90 of 348 | 25.9% | 25.9% |
+| `medium` | the class does not declare it, its ancestors did not settle it; one match by name | 89 of 109 | 10 of 11 | — | — | 99 of 120 | 82.5% | 82.5% |
+| `medium` | one match in an imported module; a bare name the file never imported | 28 of 46 | — | — | 0 of 2 | 28 of 48 | 58.3% | 58.3% |
+| `low` | several matches among imports; receiver's class unknown | 8 of 1,227 | 110 of 237 | 4 of 24 | 0 of 1 | 122 of 1,489 | 8.2% | 8.2% |
+| `low` | unique name in the repository, no import evidence | 64 of 100 | 0 of 12 | 0 of 66 | — | 64 of 178 | 36.0% | 33.1% |
+| `low` | the class does not declare it, its ancestors did not settle it; several matches by name | 0 of 4 | — | — | — | 0 of 4 | 0.0% | 0.0% |
+
+Over all four, `high` is 38,621 of 38,736 edges, **99.7%** — 91.7% as indexed.
+`medium` is 46.9% and `low` 11.1%, which is what those two labels say they are.
+
+The six `high` edges on requests the correction could not reach are
+`requests.get(...)` and `requests.Request(...)` in a `src/`-layout repository:
+the lines are among the "different name" artefacts above, and the `ast` walk
+does not look under `src/`. They are left as the index scores them.
+
+### What the old tiers were worth
+
+The relabelling was decided by this table. It was taken on an intermediate
+build, before the labels moved, on scrapy and django, and counts edges for a
+method called on an object whose class nothing states:
+
+| what bound it, at `high` | scrapy | django |
+|---|---:|---:|
+| the only definition of the name in the file | 37 of 113 (33%) | 48 of 168 (29%) |
+| the only one in an imported module | 393 of 479 (82%) | 394 of 1,057 (37%) |
+| several among the imports (then `medium`) | 110 of 235 (47%) | 7 of 1,098 (1%) |
+
+None of the three clears 86.8%, and on django the first two were most of the
+reason `high` measured 85.8%. They are `medium` and `low` now, and the final
+table above is the same population after the move.
+
+The same-directory tier, which reports `medium` where a language requires an
+import, was right **1 time in 213** on Python across scrapy, requests and httpx:
+a Python name a file neither defines nor imports cannot denote a neighbour's
+definition. It is off for Python (`LanguageSpec.ProximityIsEvidence`), and a
+reference only it could bind is recorded ambiguous.
+
+A call on `super()` whose class has no indexed ancestor declaring the method
+used to fall back to the only definition of the name in the file — which is,
+more often than not, the method the call is written in. Measured on django
+before that fallback was removed: right 0 times in 54.
+
+### Arity for Python: measured, and removed
+
+A Python arity query was built for the same run: a method's `self` taken off the
+count, and a signature with a default, a splat or a bare `*` refused outright,
+as a call passing a splat is. One binary with it and one without, same trees,
+same indexes.
+
+| repository | `high` | `medium` | `low` right, with arity | `low` right, without |
+|---|---|---|---:|---:|
+| scrapy | identical | identical | 109 | 110 |
+| django | identical | identical | 66 | 67 |
+| requests, httpx | identical | identical | identical | identical |
+
+It chose between candidates 56 times, all in the lowest tier, and was right
+once; without it two more call sites were right. That is the TypeScript result
+again (see "A4 on TypeScript" below) for the same reason — arity only ranks
+candidates a tier has already accepted, and in Python those are the name-only
+bindings for an unknown receiver — and it got the same decision. The query, its
+dialect and the method bookkeeping were deleted.
+
+### The tier
+
+`repocortex languages` now lists Python as `typed`. The tier is derived, not
+listed (`internal/parse/tiers.go`), and until now the derivation had one route:
+import, receiver and arity queries. Python has no arity query, for the reason
+just given, so the derivation gained a second route — a scope analysis that
+states the receiver's class — and the tier's description changed from "receiver
+and arity discrimination" to "receiver discrimination by arity or class".
+
+That is a change to what the word means, made on these numbers:
+
+| | `high` precision | `high` recall |
+|---|---:|---:|
+| Python, four repositories, as indexed | 71.8 – 99.7% | 50.8 – 83.8% |
+| Python, four repositories, corrected | 98.3 – 100.0% | 67.3 – 83.8% |
+| Go (own source) | 98.6% | 60.4% |
+| TypeScript | 99.5% | 66.4% |
+| Java (spring-petclinic-rest) | 100.0% | 32.7% |
+
+If the correction is not accepted the as-indexed row is the one to read, and on
+it Python clears the 86.8% floor on three repositories of four and not on httpx.
+The promotion rests on the corrected row, and on the correction being checkable.
+
+### Cost
+
+django, 2,788 Python files, `index --full` then `resolve`, the two binaries
+alternated within each of three rounds on one machine:
+
+| phase | binary | wall clock, three rounds | CPU, three rounds |
+|---|---|---:|---:|
+| `index --full` | before | 30.4 – 34.6 s | 73.8 – 88.2 s |
+| | after | 24.2 – 35.9 s | 63.4 – 85.7 s |
+| `resolve` | before | 6.8 – 8.9 s | 7.6 – 9.7 s |
+| | after | 8.5 – 11.5 s | 9.2 – 12.4 s |
+
+The machine was doing other work throughout, which is why the wall clock ranges
+overlap and the CPU column is the one to compare. Indexing is unchanged within
+that noise: 6,817 files discovered, 2,340 indexed, 41,688 symbols in both arms.
+`resolve` costs about a quarter more CPU — round by round 9.7 to 12.4 s, 7.6 to
+9.7 s and 7.7 to 9.2 s — and most of it is the hierarchy lookups for parked
+references and the SQLite writes for edges it did not use to find. On scrapy
+(480 files) neither phase moved outside the noise.
+
+Resolution writes 32% more edges on that tree (57,015 to 75,129) and 24% fewer
+reference rows are stored (253,125 to 192,001: the object of `row.save()` is no
+longer recorded as a call to `row` when `row` is a local value). Two costs were
+found by profiling and removed before these figures were taken: the scoping
+filter re-derived a reference's kind once per candidate, and the hierarchy pass
+asked the registry for the same class's supertypes once per chunk of parked
+references rather than once per run.
+
+### What this does not do
+
+- **A receiver whose class is only inferable.** `crawler = get_crawler()`,
+  `self.settings.getbool(...)`, a pytest fixture: 1,088 of scrapy's 2,446
+  remaining misses are a method on such a receiver. Reading return annotations
+  and attribute types would reach some of them; neither is done.
+- **Method resolution order.** Two bases that both declare a method leave the
+  call ambiguous, because the hierarchy is stored by name and unordered. Python
+  would take the leftmost.
+- **A class identified by name alone.** The hierarchy is keyed by class NAME.
+  A receiver's own class is pinned to one definition; its ancestors are not, so
+  two unrelated classes called `Base` share their ancestry.
+- **Aliased members.** `from m import a as b` is not followed.
+- **The denominator.** About 1,200 of scrapy's remaining misses are lines where
+  the compiler's one target has a different name from every call the parser
+  recorded there — `isinstance(x, Response)` resolves `Response`, and
+  `isinstance` is a builtin. No call resolver can produce that edge. They count
+  as misses for both arms, as they did before.
+
 ## Measured on a polyglot repository that is not ours
 
 Every figure above this section was measured on Go, on corpora chosen for
@@ -387,7 +699,7 @@ Restricted to call sites the compiler resolved to exactly one definition:
 
 | | `high` precision | `high` recall | F1 | adjudicated sites | produced no edge |
 |---|---:|---:|---:|---:|---:|
-| **Python** | 94.2% | 56.3% | 70.4% | 3,277 | **1,306 (39.9%)** |
+| **Python** (before the scope analysis) | 94.2% | 56.3% | 70.4% | 3,277 | **1,306 (39.9%)** |
 | **TypeScript** | 99.5% | 66.4% | 79.6% | 2,330 | **749 (32.1%)** |
 | Go (own source) | 98.6% | 60.4% | 75.0% | 8,315 | 2,855 (34.3%) |
 | Java (spring-petclinic-rest) | 100.0% | 32.7% | 49.2% | 251 | **169 (67.3%)** |
@@ -395,6 +707,13 @@ Restricted to call sites the compiler resolved to exactly one definition:
 **TypeScript is the most precise tier measured anywhere in this project** —
 99.5%, eight wrong edges in 1,554. Python is the least at 94.2%, and both clear
 the 86.8% floor.
+
+The Python row was taken on a private service that cannot be re-measured, and
+it predates the scope analysis. What Python measures now, on four public
+repositories, is in "Python: the receiver's class, read from the source" above:
+`high` precision 98.3–100.0% and recall 67.3–83.8% once the compiler index's
+errors on wildcard re-exports are corrected, and 71.8–99.7% and 50.8–83.8% as
+the index scores it.
 
 **The recall gap is consistent across Go, Python and TypeScript**: between a third and
 two fifths of known call sites produce no edge at all. That number is the same
@@ -940,6 +1259,7 @@ The numbers above came from:
 | RepoCortex | commit at the time of writing, `CGO_ENABLED=0` |
 | Ground truth | `scip-go` 0.2.7, `scip-typescript` 0.3.14, `scip-python` 0.6.6, `scip-java` `HEAD-20260402-1456` (pinned image digest `a05564b9…`, docker runner) |
 | Corpora | `--depth 1` clones: prometheus, nest, scrapy, requests, spring-petclinic-rest (`4cd8e1b`) |
+| Python scope analysis | `--depth 1` clones of scrapy `c7eacdbb30a4563bbbe04ed02781768f4e19eabb`, requests `v2.32.3` (`0e322af8`), httpx `0.28.1` (`26d48e06`), django `5.1.4` (`2d4add11`); `scip-python index --project-name repocortex-repository --project-version 0.0.0`, as `repocortex indexers` runs it; `index --full --accuracy fast`, `resolve --no-scip`, `scip import`, `accuracy` |
 
 `scip-go` on prometheus takes about eight minutes and produces a 57 MB index.
 On RepoCortex's own source it takes nineteen seconds and produces 7 MB.

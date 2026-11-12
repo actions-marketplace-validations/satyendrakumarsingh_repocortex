@@ -21,13 +21,19 @@ type EnclosingSymbol struct {
 	Name      string
 	StartLine int
 	EndLine   int
+
+	// FQN is the symbol's qualified name. Carried because, where a language's
+	// qualified names state the owning class, the symbol a call is written in
+	// says which class `self` is — and that is the one receiver whose class
+	// needs no inference at all.
+	FQN string
 }
 
 // FileSymbols returns a file's symbols ordered by position, for enclosure
 // lookups during resolution.
 func (r *Registry) FileSymbols(ctx context.Context, fileID int64) ([]EnclosingSymbol, error) {
 	rows, err := r.db.QueryContext(ctx, `
-		SELECT id, name, start_line, end_line
+		SELECT id, name, start_line, end_line, fqn
 		  FROM symbols
 		 WHERE file_id = ?
 		 ORDER BY start_line, end_line DESC`, fileID)
@@ -39,7 +45,7 @@ func (r *Registry) FileSymbols(ctx context.Context, fileID int64) ([]EnclosingSy
 	var out []EnclosingSymbol
 	for rows.Next() {
 		var s EnclosingSymbol
-		if err := rows.Scan(&s.ID, &s.Name, &s.StartLine, &s.EndLine); err != nil {
+		if err := rows.Scan(&s.ID, &s.Name, &s.StartLine, &s.EndLine, &s.FQN); err != nil {
 			return nil, err
 		}
 		out = append(out, s)

@@ -8,9 +8,44 @@ func TestTierForGoIsTyped(t *testing.T) {
 	}
 }
 
-func TestTierForPythonIsAtLeastResolved(t *testing.T) {
-	if got := TierFor("python"); got < TierResolved {
-		t.Fatalf("python: want at least TierResolved, got %v", got)
+// TestTierForPythonIsTyped pins the one language that reaches the typed tier
+// without an arity query, and why it does.
+//
+// Python discriminates by the receiver's CLASS — read from the source by the
+// scope analysis in pyscope.go — which is a second way to earn the tier, not
+// an exception to it. The promotion was made on a measurement against
+// scip-python over four repositories, recorded in docs/accuracy.md; a Python
+// arity query was measured in the same run, decided nothing, and was removed.
+func TestTierForPythonIsTyped(t *testing.T) {
+	if got := TierFor("python"); got != TierTyped {
+		t.Fatalf("python: want TierTyped, got %v", got)
+	}
+	if !HasScopeAnalysis("python") {
+		t.Fatal("python is typed without a scope analysis to earn it")
+	}
+	if _, hasArity := arityDialectFor("python"); hasArity {
+		t.Error("python carries an arity dialect; docs/accuracy.md records it as measured and removed")
+	}
+}
+
+// TestTypedTierIsEarnedByDiscrimination: every typed language has one of the
+// two things that tell candidates of one name apart, and no other language has
+// both the queries and one of them. A language cannot be typed by being listed.
+func TestTypedTierIsEarnedByDiscrimination(t *testing.T) {
+	for lang, tier := range Tiers() {
+		_, hasArity := arityDialectFor(lang)
+		earned := ImportQuery(lang) != "" && ReceiverQuery(lang) != "" &&
+			(hasArity || HasScopeAnalysis(lang))
+		if (tier == TierTyped) != earned {
+			t.Errorf("%s: tier %v, but imports+receiver+(arity or scope analysis) = %v", lang, tier, earned)
+		}
+	}
+	// The scope analysis is not a label: it is absent wherever the parser has
+	// no walk to back it.
+	for _, lang := range []string{"go", "java", "typescript", "ruby", "not-a-language"} {
+		if HasScopeAnalysis(lang) {
+			t.Errorf("%s: reports a scope analysis it does not have", lang)
+		}
 	}
 }
 

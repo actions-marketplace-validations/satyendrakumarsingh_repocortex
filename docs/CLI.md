@@ -249,21 +249,23 @@ repocortex dev (commit none, built unknown, darwin/amd64)
 **Answers:** which languages does this binary actually resolve, and to what
 depth? No flags beyond `--verbose`, which lists the parsed-tier grammars too.
 
-The tiers are computed from the query set at run time, not read from a list,
-so this output cannot disagree with what the binary does. A language is `typed`
-when it has definition, import, receiver and arity queries; `resolved` when it
-has definitions and imports; `parsed` when only a grammar ships for it.
+The tiers are computed from what the parser can do at run time, not read from a
+list, so this output cannot disagree with what the binary does. A language is
+`typed` when it has definition, import and receiver queries and something that
+tells candidates of one name apart — an arity query (Go, Java, TypeScript) or a
+scope analysis that states the receiver's class (Python); `resolved` when it has
+definitions and imports; `parsed` when only a grammar ships for it.
 
 ```
 $ repocortex languages
 TIER      COUNT  WHAT YOU GET
-typed     1      definitions, imports, receiver and arity discrimination — references can reach 'high'
-resolved  11     definitions and imports — references bind across files
-parsed    194    definitions and search only — no cross-file references claimed
-total     206
+typed     4      definitions, imports, receiver discrimination by arity or class — references can reach 'high'
+resolved  10     definitions and imports — references bind across files
+parsed    192    definitions and search only — no cross-file references claimed
+total     206    
 
-typed:    [go]
-resolved: [c_sharp java javascript kotlin php python ruby rust scala tsx typescript]
+typed:    [go java python typescript]
+resolved: [c c_sharp cpp javascript kotlin php ruby rust scala tsx]
 ```
 
 Read the tiers as a coverage statement before trusting an empty relationship
