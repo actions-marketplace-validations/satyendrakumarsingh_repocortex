@@ -40,6 +40,12 @@ var importBindingLanguages = map[string]bool{
 // as Import rows to merge with the import query's. Nil for a language it does
 // not read and for a tree it cannot walk.
 func (p *genericParser) importedBindings(tree *ts.Tree, src []byte) (out []Import) {
+	if tree != nil && p.entry.Name == "php" {
+		return p.phpUses(tree, src)
+	}
+	if tree != nil && p.entry.Name == "scala" {
+		return p.scalaImports(tree, src)
+	}
 	if tree == nil || !importBindingLanguages[p.entry.Name] {
 		return nil
 	}

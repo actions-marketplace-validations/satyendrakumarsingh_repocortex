@@ -304,6 +304,7 @@ func TestInheritanceQueriesCompileForEveryLanguage(t *testing.T) {
 	probe := map[string]string{
 		"go": "x.go", "java": "X.java", "typescript": "x.ts",
 		"tsx": "x.tsx", "javascript": "x.js", "python": "x.py",
+		"php": "x.php", "kotlin": "x.kt", "scala": "x.scala",
 	}
 	for _, lang := range InheritanceLanguages() {
 		file, ok := probe[lang]
