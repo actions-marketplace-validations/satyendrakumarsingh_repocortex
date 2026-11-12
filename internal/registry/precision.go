@@ -91,7 +91,7 @@ func (r *Registry) ResolutionPrecision(ctx context.Context, runID int64) (Precis
 		query string
 	}{
 		{&rep.HeuristicEdges, `SELECT COUNT(*) FROM edges e
-		   WHERE e.index_run_id = ? AND e.kind = 'CALLS'
+		   WHERE e.index_run_id = ? AND e.kind IN ('CALLS', 'INSTANTIATES')
 		     AND ` + resolverSource + ` = 'source_code'`},
 		{&rep.CompilerEdges, `SELECT COUNT(*) FROM edges
 		   WHERE index_run_id = ? AND source = 'compiler'`},
@@ -117,14 +117,20 @@ func (r *Registry) ResolutionPrecision(ctx context.Context, runID int64) (Precis
 		    HAVING COUNT(DISTINCT dst_id) = 1),
 		heuristic AS (
 		    SELECT e.dst_id, `+resolverConfidence+` AS confidence,
-		           e.evidence_file AS f, e.evidence_line AS l
+		           e.evidence_file AS f, e.evidence_line AS l, hs.name AS name
 		      FROM edges e
-		     WHERE e.index_run_id = ? AND e.kind = 'CALLS'
+		      JOIN symbols hs ON hs.id = e.dst_id
+		     WHERE e.index_run_id = ? AND e.kind IN ('CALLS', 'INSTANTIATES')
 		       AND `+resolverSource+` = 'source_code'),
 		judged AS (
+		    -- An edge is judged only against a compiler fact about the SAME
+		    -- NAME. A line's one fact may be about the receiver of a call, and
+		    -- an edge to the callee is neither confirmed nor refuted by it.
+		    -- See accuracyCTE in accuracy.go.
 		    SELECT h.confidence, (h.dst_id = u.dst) AS agrees
 		      FROM heuristic h
-		      JOIN unambiguous u ON u.f = h.f AND u.l = h.l)
+		      JOIN unambiguous u ON u.f = h.f AND u.l = h.l
+		      JOIN symbols us ON us.id = u.dst AND us.name = h.name)
 		SELECT confidence, COUNT(*), SUM(agrees)
 		  FROM judged
 		 GROUP BY confidence

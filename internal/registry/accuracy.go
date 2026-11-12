@@ -147,7 +147,28 @@ const resolverResolution = `(CASE WHEN r.prior_resolution <> '' THEN r.prior_res
 // that cannot be indexed belongs nowhere near the inside of a loop.
 //
 //   - truth: the intersection. Each row is a call whose correct target is known.
-//   - heur: the resolver's CALLS edges, same predicate as the precision query.
+//     THE COMPILER'S ONE TARGET MUST BE NAMED LIKE A CALL ON THAT LINE. For
+//     `bp.route("/")` the compiler often resolves only `bp` — `route` lives in
+//     a library it has no source for — and a line whose single fact is about
+//     the RECEIVER says nothing about what the call reaches. This used to be
+//     invisible, because the parser also emitted the receiver as a "call" to
+//     `bp`, the resolver bound that row to the variable, and the line was
+//     scored as a call site answered correctly. Measured on flask: 59 of the
+//     351 call sites scored right at `high` were exactly that — the receiver
+//     bound to itself — and scoring them is what made dropping those rows look
+//     like a 6-point regression. A fact adjudicates a call only when it is
+//     about the callee; the same restriction is applied to the edges compared
+//     with it, so a correct edge to `as_view` is not marked wrong because the
+//     line's only compiler fact is about `Index`. That comparison is a
+//     primary-key lookup inside the join condition, NOT a join inside heur:
+//     joining symbols there makes SQLite materialise heur and scan it once
+//     per call site, which is the nested loop the plan test exists to refuse.
+//   - heur: the resolver's answers at call sites, same predicate as the
+//     precision query: its CALLS edges and its INSTANTIATES edges. A
+//     constructor call is a call site, and since constructor calls were given
+//     a kind of their own the answer to one is an INSTANTIATES edge to the
+//     type. Counting CALLS alone scored every such site as a miss — and, on a
+//     line holding a constructor call and a wrong second edge, as wrong.
 //     READ THROUGH resolverSource/resolverConfidence, never off the live
 //     columns — reading `source = 'source_code'` here is what made this report
 //     invert after an import, from 51.2% recall to 0.5%.
@@ -164,18 +185,20 @@ WITH unambiguous AS (
      GROUP BY evidence_file, evidence_line
     HAVING COUNT(DISTINCT dst_id) = 1),
 truth AS (
-    SELECT u.f, u.l, COALESCE(NULLIF(fl.language, ''), 'unknown') AS lang, u.dst
+    SELECT u.f, u.l, COALESCE(NULLIF(fl.language, ''), 'unknown') AS lang, u.dst,
+           ts.name AS name
       FROM unambiguous u
       JOIN files fl ON fl.path = u.f AND fl.index_run_id = ?
+      JOIN symbols ts ON ts.id = u.dst
      WHERE EXISTS (SELECT 1 FROM symbol_references r
                     WHERE r.file_id = fl.id AND r.start_line = u.l
                       AND r.index_run_id = ? AND r.kind LIKE '%call%'
-                      AND r.start_line > 0)),
+                      AND r.start_line > 0 AND r.name = ts.name)),
 heur AS (
     SELECT e.evidence_file AS f, e.evidence_line AS l, e.dst_id,
            ` + resolverConfidence + ` AS confidence
       FROM edges e
-     WHERE e.index_run_id = ? AND e.kind = 'CALLS'
+     WHERE e.index_run_id = ? AND e.kind IN ('CALLS', 'INSTANTIATES')
        AND ` + resolverSource + ` = 'source_code'),
 scored AS (
     SELECT t.f AS f, t.l AS l, t.lang AS lang,
@@ -190,6 +213,7 @@ scored AS (
                                   ELSE 4 END) ELSE NULL END) AS hit_rank
       FROM truth t
       LEFT JOIN heur h ON h.f = t.f AND h.l = t.l
+                      AND (SELECT hs.name FROM symbols hs WHERE hs.id = h.dst_id) = t.name
      GROUP BY t.f, t.l, t.lang)
 `
 
@@ -286,7 +310,7 @@ func (r *Registry) accuracyCoverage(ctx context.Context, runID int64) (AccuracyC
 		query string
 	}{
 		{&cov.HeuristicEdges, `SELECT COUNT(*) FROM edges e
-		   WHERE e.index_run_id = ? AND e.kind = 'CALLS'
+		   WHERE e.index_run_id = ? AND e.kind IN ('CALLS', 'INSTANTIATES')
 		     AND ` + resolverSource + ` = 'source_code'`},
 		{&cov.CompilerFacts, `SELECT COUNT(*) FROM edges
 		   WHERE index_run_id = ? AND source = 'compiler'`},
@@ -340,7 +364,7 @@ func (r *Registry) accuracyLanguages(ctx context.Context, runID int64) ([]Langua
 			func(l *LanguageCoverage, a, _ int64) { l.CallSites = a }},
 		{`SELECT COALESCE(NULLIF(f.language, ''), 'unknown') AS lang,
 		         SUM(CASE WHEN ` + resolverSource + ` = 'source_code'
-		                   AND e.kind = 'CALLS' THEN 1 ELSE 0 END),
+		                   AND e.kind IN ('CALLS', 'INSTANTIATES') THEN 1 ELSE 0 END),
 		         SUM(CASE WHEN e.source = 'compiler' THEN 1 ELSE 0 END)
 		    FROM edges e
 		    JOIN symbols s ON s.id = e.src_id

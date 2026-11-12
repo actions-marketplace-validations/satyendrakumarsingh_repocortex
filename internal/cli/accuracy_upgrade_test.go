@@ -77,17 +77,16 @@ func promoteCorrectCalls(t *testing.T, root string) registry.UpgradeStats {
 	// — and if accuracyMisses reads the live column it will then report that
 	// the resolver succeeded, silently deleting the only miss the fixture has.
 	//
-	// The seed names every reference 'callee' while the compiler's target is
-	// the symbol 'B', so the name-keyed join needs them lined up first. Then
-	// the REAL marking runs, rather than a hand-written UPDATE, so this test
-	// moves whenever that code does. No accuracy query reads a reference's
-	// name, which is what makes the rename safe — and if one ever starts, this
-	// test fails, which is the correct outcome.
-	if _, err := db.ExecContext(ctx, `
-		UPDATE symbol_references SET name = 'B'
-		 WHERE index_run_id = 1 AND kind LIKE '%call%' AND start_line = 110`); err != nil {
-		t.Fatal(err)
-	}
+	// The seed names every reference `callee`, and the compiler's target B is
+	// a definition of `callee`, so the name-keyed join inside the real marking
+	// finds line 110 as written. The REAL marking runs, rather than a
+	// hand-written UPDATE, so this test moves whenever that code does.
+	//
+	// This used to rename the reference at line 110 to match a symbol called
+	// `B`, with a note that no accuracy query read a reference's name and that
+	// the test would fail if one ever started to. One did: a compiler fact now
+	// adjudicates a call only when it names the callee (accuracyCTE), which is
+	// why the fixture's two definitions share the name their callers use.
 	marked, err := reg.MarkCompilerResolutions(ctx, 1)
 	if err != nil {
 		t.Fatal(err)

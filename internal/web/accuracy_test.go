@@ -373,12 +373,15 @@ func adjudicableServer(t *testing.T) *Server {
 		   VALUES(1,1,'pkg/a.go','go','h1')`,
 		`INSERT INTO files(id, index_run_id, path, language, content_hash)
 		   VALUES(2,1,'web/app.ts','typescript','h2')`,
+		// Symbols 2 and 3 are two definitions of ONE name, `callee`, the name
+		// every call reference below carries: a compiler fact adjudicates a
+		// call only when it names the callee (registry's accuracyCTE).
 		`INSERT INTO symbols(id, index_run_id, file_id, kind, name, fqn, confidence, source)
 		   VALUES(1,1,1,'function','Caller','pkg.Caller','high','source_code')`,
 		`INSERT INTO symbols(id, index_run_id, file_id, kind, name, fqn, confidence, source)
-		   VALUES(2,1,1,'function','B','pkg.B','high','source_code')`,
+		   VALUES(2,1,1,'function','callee','pkg.B','high','source_code')`,
 		`INSERT INTO symbols(id, index_run_id, file_id, kind, name, fqn, confidence, source)
-		   VALUES(3,1,1,'function','C','pkg.C','high','source_code')`,
+		   VALUES(3,1,1,'function','callee','pkg.C','high','source_code')`,
 		`INSERT INTO symbols(id, index_run_id, file_id, kind, name, fqn, confidence, source)
 		   VALUES(4,1,2,'function','tsCaller','web.tsCaller','high','source_code')`,
 		`INSERT INTO symbols(id, index_run_id, file_id, kind, name, fqn, confidence, source)

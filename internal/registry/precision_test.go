@@ -17,7 +17,11 @@ func precisionContent(withCompiler bool) ([]fileSpec, []edgeSpec) {
 			{fqn: "a.go#A", name: "A", line: 1, kind: model.KindFunction},
 			{fqn: "a.go#B", name: "B", line: 50, kind: model.KindFunction},
 			{fqn: "a.go#C", name: "C", line: 60, kind: model.KindFunction},
-			{fqn: "a.go#D", name: "D", line: 70, kind: model.KindFunction},
+			// A second definition of the name C. A resolver edge is judged only
+			// against a compiler fact about the same name, so the disagreement
+			// on line 20 has to be the right name bound to the wrong
+			// definition — which is the only disagreement a resolver produces.
+			{fqn: "a.go#D", name: "C", line: 70, kind: model.KindFunction},
 		},
 	}}
 

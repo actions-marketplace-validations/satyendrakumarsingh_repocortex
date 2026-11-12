@@ -575,7 +575,7 @@ func languageCoverage(ctx context.Context, db *sql.DB, runID int64) ([]precision
 	// adjudicated would be worse than no column.
 	edges, err := db.QueryContext(ctx, `
 		SELECT COALESCE(NULLIF(f.language, ''), 'unknown') AS lang,
-		       SUM(CASE WHEN e.source = 'source_code' AND e.kind = 'CALLS' THEN 1 ELSE 0 END),
+		       SUM(CASE WHEN e.source = 'source_code' AND e.kind IN ('CALLS', 'INSTANTIATES') THEN 1 ELSE 0 END),
 		       SUM(CASE WHEN e.source = 'compiler' THEN 1 ELSE 0 END)
 		  FROM edges e
 		  JOIN symbols s ON s.id = e.src_id
