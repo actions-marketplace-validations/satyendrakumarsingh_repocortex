@@ -159,7 +159,7 @@ func (b *pureGoBackend) parserFor(lang string) (*genericParser, error) {
 	if entry == nil {
 		return nil, fmt.Errorf("purego backend has no grammar for %q", lang)
 	}
-	p := newGenericParser(*entry)
+	p := newGenericParser(*entry, defaultParserConfig)
 	if p.initErr != nil {
 		return nil, p.initErr
 	}

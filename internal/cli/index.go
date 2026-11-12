@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"time"
 
@@ -104,6 +105,11 @@ type incrementalReport struct {
 	Symbols    int64  `json:"symbols_written"`
 	Digest     string `json:"registry_digest,omitempty"`
 	DurationMS int64  `json:"duration_ms"`
+
+	// Parse describes every file now in the index, not only the ones this
+	// pass touched: what a reader wants after an update is the state of the
+	// index, and a file skipped for its size last week is still skipped.
+	Parse registry.ParseSummary `json:"parse"`
 }
 
 // tryIncremental updates the committed revision in place.
@@ -154,6 +160,9 @@ func tryIncremental(cmd *cobra.Command, g *Global, showDigest, rehash bool) (boo
 		Symbols:    stats.Symbols,
 		DurationMS: time.Since(start).Milliseconds(),
 	}
+	if report.Parse, err = reg.ParseSummary(ctx, current.ID); err != nil {
+		return false, err
+	}
 	if showDigest {
 		digest, err := reg.RegistryDigest(ctx, current.ID)
 		if err != nil {
@@ -170,6 +179,10 @@ func tryIncremental(cmd *cobra.Command, g *Global, showDigest, rehash bool) (boo
 	if changed == 0 {
 		_, _ = fmt.Fprintf(out, "%s is up to date (%d files, revision %d, %dms)\n",
 			report.Project, report.Unchanged, report.IndexRun, report.DurationMS)
+		// Said even when nothing changed. A file left out for its size is left
+		// out on every run, and a command that reports "up to date" over it
+		// without naming it is how it stayed unnoticed.
+		writeIndexGaps(out, report.Parse)
 	} else {
 		_, _ = fmt.Fprintf(out, "Updated %s (revision %d)\n", report.Project, report.IndexRun)
 		_, _ = fmt.Fprintf(out, "  Added:     %d\n", report.Added)
@@ -177,6 +190,7 @@ func tryIncremental(cmd *cobra.Command, g *Global, showDigest, rehash bool) (boo
 		_, _ = fmt.Fprintf(out, "  Deleted:   %d\n", report.Deleted)
 		_, _ = fmt.Fprintf(out, "  Unchanged: %d\n", report.Unchanged)
 		_, _ = fmt.Fprintf(out, "  Symbols:   %d written\n", report.Symbols)
+		writeParseSummary(out, report.Parse, "  ", len("Parse failures:"))
 		if report.Digest != "" {
 			_, _ = fmt.Fprintf(out, "  Digest:    %s\n", report.Digest)
 		}
@@ -200,6 +214,32 @@ type indexReport struct {
 	Digest        string `json:"registry_digest,omitempty"`
 	DurationMS    int64  `json:"duration_ms"`
 	AccuracyMode  string `json:"accuracy_mode"`
+
+	// Parse says what happened to every file: how many parsed cleanly, with
+	// syntax errors, or incompletely; how many are searchable text only; and
+	// which were left out for their size, by name.
+	Parse registry.ParseSummary `json:"parse"`
+	// MaxFileBytes is the size limit this run applied.
+	MaxFileBytes int64 `json:"max_file_bytes"`
+}
+
+// writeIndexGaps prints only the rows of a summary that name something missing
+// from the index. Used where the full breakdown would be noise.
+func writeIndexGaps(out io.Writer, s registry.ParseSummary) {
+	gaps := registry.ParseSummary{
+		Incomplete: s.Incomplete, IncompleteFiles: s.IncompleteFiles,
+		Failed: s.Failed, FailedFiles: s.FailedFiles,
+		TooLarge: s.TooLarge, LargestTooLarge: s.LargestTooLarge,
+	}
+	for _, l := range parseSummaryLines(gaps) {
+		if l.Label == "Parsed" {
+			continue
+		}
+		_, _ = fmt.Fprintf(out, "  %s: %s\n", l.Label, l.Value)
+		for _, d := range l.Detail {
+			_, _ = fmt.Fprintf(out, "      %s\n", d)
+		}
+	}
 }
 
 func runIndex(cmd *cobra.Command, g *Global, workers int, showDigest bool, accuracyOverride string) error {
@@ -344,20 +384,25 @@ func runIndex(cmd *cobra.Command, g *Global, workers int, showDigest bool, accur
 	}
 
 	report := indexReport{
-		Project:       cfg.ProjectName,
-		IndexRun:      run.ID,
-		GitRevision:   gitRev,
-		Files:         stats.FilesDiscovered,
-		Indexed:       stats.FilesIndexed,
-		Skipped:       stats.FilesSkipped,
-		ParseFailures: counts.ParseFailed,
-		PartialParses: counts.ParsePartial,
-		Symbols:       counts.Symbols,
-		References:    stats.References,
-		Imports:       stats.Imports,
-		DurationMS:    time.Since(start).Milliseconds(),
-		AccuracyMode:  accuracy,
+		Project:      cfg.ProjectName,
+		IndexRun:     run.ID,
+		GitRevision:  gitRev,
+		Files:        stats.FilesDiscovered,
+		Indexed:      stats.FilesIndexed,
+		Skipped:      stats.FilesSkipped,
+		Symbols:      counts.Symbols,
+		References:   stats.References,
+		Imports:      stats.Imports,
+		DurationMS:   time.Since(start).Milliseconds(),
+		AccuracyMode: accuracy,
+		MaxFileBytes: walker.MaxFileSize(),
 	}
+	if report.Parse, err = reg.ParseSummary(ctx, run.ID); err != nil {
+		return fmt.Errorf("summarise index run: %w", err)
+	}
+	// The same two figures `status` prints, from the same rows.
+	report.ParseFailures = report.Parse.Abandoned()
+	report.PartialParses = report.Parse.SyntaxErrors + report.Parse.Incomplete + report.Parse.LegacyPartial
 	if showDigest {
 		digest, err := reg.RegistryDigest(ctx, run.ID)
 		if err != nil {
@@ -387,12 +432,10 @@ func renderIndexReport(cmd *cobra.Command, g *Global, r indexReport) error {
 	_, _ = fmt.Fprintf(out, "  Symbols:       %d\n", r.Symbols)
 	_, _ = fmt.Fprintf(out, "  References:    %d (unresolved until M2)\n", r.References)
 	_, _ = fmt.Fprintf(out, "  Imports:       %d\n", r.Imports)
-	if r.PartialParses > 0 {
-		_, _ = fmt.Fprintf(out, "  Partial parses: %d  (symbols may be incomplete in these files)\n", r.PartialParses)
-	}
-	if r.ParseFailures > 0 {
-		_, _ = fmt.Fprintf(out, "  Parse failures: %d\n", r.ParseFailures)
-	}
+	// What happened to each file, from the index itself. "Skipped" above is
+	// every file no syntax tree was built for; these rows say which of them
+	// are still searchable, which were too large, and name the largest.
+	writeParseSummary(out, r.Parse, "  ", len("Parse failures:"))
 	if r.Digest != "" {
 		_, _ = fmt.Fprintf(out, "  Digest:        %s\n", r.Digest)
 	}

@@ -106,12 +106,17 @@ func (f SinkFunc) WriteFile(ctx context.Context, facts FileFacts) error { return
 // Stats summarises a run. Every number is counted, never estimated.
 type Stats struct {
 	FilesDiscovered int64
-	FilesIndexed    int64
-	FilesSkipped    int64
-	ParseFailures   int64
-	Symbols         int64
-	References      int64
-	Imports         int64
+	// FilesIndexed counts files a syntax tree was built for: read cleanly,
+	// read with syntax errors, or stopped early. FilesSkipped counts files no
+	// tree was attempted for, which includes the text-only files (searchable,
+	// no symbols) and the files over the size limit. The breakdown of both is
+	// read back from the index: registry.ParseSummary.
+	FilesIndexed  int64
+	FilesSkipped  int64
+	ParseFailures int64
+	Symbols       int64
+	References    int64
+	Imports       int64
 
 	// Reconciliation proves the run covered everything it discovered, which is
 	// a separate guarantee from the registry's atomic swap proving it was
@@ -242,7 +247,9 @@ func NewRunner(walker *fs.Walker, opts Options) *Runner {
 		onProg:  opts.OnProgress,
 	}
 	if r.parsers == nil {
-		r.parsers = parse.NewRegistry()
+		// The walker's limit, so discovery and parsing agree on what "too
+		// large" means.
+		r.parsers = parse.NewRegistry(parse.WithMaxSourceBytes(int(walker.MaxFileSize())))
 	}
 	if r.workers <= 0 {
 		r.workers = defaultWorkers()
@@ -502,6 +509,12 @@ func (r *Runner) processFile(ctx context.Context, d fs.Discovered) (FileFacts, o
 	if d.Skipped {
 		facts.File.ParseStatus = string(parse.StatusSkipped)
 		facts.File.ParseError = d.SkipReason
+		if d.SkipReason == fs.SkipTooLarge {
+			// Named with its size and the limit, in the words the parser uses
+			// for the same refusal, so a reader of the index can tell how far
+			// over the file is and which setting would admit it.
+			facts.File.ParseError = parse.TooLargeError(d.SizeBytes, r.walker.MaxFileSize())
+		}
 		// A manifest the walk refused is the case the infra report must not
 		// swallow: it reads as "no manifests here" and it is not. Recorded as
 		// a problem so the index can say a deployment file exists and was not
@@ -549,7 +562,7 @@ func (r *Runner) processFile(ctx context.Context, d fs.Discovered) (FileFacts, o
 	// Reserve memory before reading. Acquiring after the read would let every
 	// worker buffer a large file simultaneously, which is the spike the budget
 	// exists to prevent.
-	weight, err := r.budget.acquire(ctx, d.SizeBytes)
+	weight, err := r.budget.acquire(ctx, admissionWeight(d.SizeBytes))
 	if err != nil {
 		facts.File.ParseStatus = string(parse.StatusFailed)
 		facts.File.ParseError = err.Error()
@@ -600,7 +613,36 @@ func (r *Runner) processFile(ctx context.Context, d fs.Discovered) (FileFacts, o
 		return facts, outcomeFailed
 	}
 	if res.Status == parse.StatusSkipped {
+		// Includes the text-only case: the file's text is kept on facts and
+		// the sink indexes it for search (see model.TextIndexed), but no tree
+		// was built, so it is not counted as parsed.
 		return facts, outcomeSkipped
 	}
 	return facts, outcomeIndexed
+}
+
+// largeFileBytes is the size above which a file is admitted as if it were
+// several, so that large files are parsed a few at a time.
+const largeFileBytes = 512 << 10
+
+// largeFileWeight is how many times its own size a large file reserves.
+const largeFileWeight = 8
+
+// admissionWeight is what a file of size bytes reserves from the in-flight
+// budget while it is read and parsed.
+//
+// A parse costs memory in proportion to its source: about 150 bytes of process
+// memory per source byte with gotreesitter v0.57.0, so 300 MB for a file at the
+// 2 MiB default limit (the measurements are beside parse.DefaultMaxSourceBytes).
+// Weighing a file by its plain size would let every worker hold one of those at
+// once. Above largeFileBytes a file therefore reserves eight times its size:
+// against the default 32 MiB budget that admits two 2 MiB files together and
+// one 4 MiB file alone, while any number of ordinary files still run side by
+// side. The cost is that a repository made of very large files parses them
+// nearly one at a time, which is the intent.
+func admissionWeight(size int64) int64 {
+	if size > largeFileBytes {
+		return size * largeFileWeight
+	}
+	return size
 }

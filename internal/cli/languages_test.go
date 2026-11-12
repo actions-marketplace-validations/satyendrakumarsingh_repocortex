@@ -22,8 +22,8 @@ func TestLanguagesSeparatesGrammarsThatExtractNothing(t *testing.T) {
 	if rep.WithDefinitions != len(rep.Typed)+len(rep.Resolved)+len(rep.Parsed) {
 		t.Errorf("with_definitions = %d, but the three tiers hold %d", rep.WithDefinitions, len(rep.Typed)+len(rep.Resolved)+len(rep.Parsed))
 	}
-	if rep.Total != rep.WithDefinitions+len(rep.GrammarOnly) {
-		t.Errorf("total = %d, want %d with definitions plus %d grammar-only", rep.Total, rep.WithDefinitions, len(rep.GrammarOnly))
+	if rep.Total != rep.WithDefinitions+len(rep.TextOnly) {
+		t.Errorf("total = %d, want %d with definitions plus %d text-only", rep.Total, rep.WithDefinitions, len(rep.TextOnly))
 	}
 	for _, group := range [][]string{rep.Typed, rep.Resolved, rep.Parsed} {
 		for _, l := range group {
@@ -32,20 +32,20 @@ func TestLanguagesSeparatesGrammarsThatExtractNothing(t *testing.T) {
 			}
 		}
 	}
-	for _, l := range rep.GrammarOnly {
+	for _, l := range rep.TextOnly {
 		if parse.ExtractsDefinitions(l) {
-			t.Errorf("%s is listed as grammar-only but definitions are extracted for it", l)
+			t.Errorf("%s is listed as text-only but definitions are extracted for it", l)
 		}
 	}
 }
 
-func TestLanguagesTextNamesTheGrammarOnlyGroup(t *testing.T) {
+func TestLanguagesTextNamesTheTextOnlyGroup(t *testing.T) {
 	out, err := run(t, t.TempDir(), "languages")
 	if err != nil {
 		t.Fatalf("languages: %v\n%s", err, out)
 	}
 	flat := strings.Join(strings.Fields(out), " ")
-	for _, want := range []string{"with definitions", "grammar only", "files are skipped"} {
+	for _, want := range []string{"with definitions", "text only", "full-text search only"} {
 		if !strings.Contains(flat, want) {
 			t.Errorf("output lacks %q:\n%s", want, out)
 		}

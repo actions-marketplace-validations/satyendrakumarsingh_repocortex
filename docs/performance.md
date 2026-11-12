@@ -808,24 +808,155 @@ ordinary code; low enough that a directory of generated files cannot exhaust the
 machine. Throughput on ordinary code is unchanged, because ordinary files are
 small.
 
-### The parse cap
+### The size limit
 
-`parse.MaxSourceBytes` is **256 KiB** (`internal/parse/generic.go:50`). It was
-lowered from 2 MiB because tree-sitter's node arenas scale super-linearly with
-input, and that cost is internal to the library — it cannot be bounded from
-outside, only avoided. A quarter-megabyte source file is a generated parser
-table, a minified bundle, or embedded data, none of which yield symbols worth the
-arena.
+There is one size limit, **2 MiB** (`config.DefaultMaxFileBytes`): a file over it
+is not read, parsed or text-indexed. A repository changes it with
+`index.max_file_bytes` in `.repocortex.yml`, between 1 KiB and 8 MiB.
 
-The cap-sweep measurements that chose 256 KiB were taken on a 2,110-file corpus
-that is not in this repository. **Those figures have been removed rather than
-repeated.** Raising the constant is a source change, and anyone making it should
-re-measure on their own corpus rather than trust a number from a tree they cannot
-see.
+Until 2026-11-12 there were two limits: discovery read files up to 2 MiB and the
+parser refused anything over 256 KiB, without naming what it refused. That
+dropped hand-written files at the centre of real programs. In redis nine files
+were over 256 KiB, among them `src/server.c` (371 KB), `src/server.h`,
+`src/module.c` (693 KB), `src/redis-cli.c`, `src/t_stream.c`, `src/t_hash.c` and
+`src/cluster_legacy.c`.
 
-Skipped files are still recorded in the `files` table with `parse_status =
-'skipped'` and a reason, so the gap is visible in `repocortex status` and in the
-index rather than looking like the file never existed.
+The 256 KiB figure was chosen when a megabyte of source cost several hundred
+megabytes of parser arena. Measured again with gotreesitter v0.57.0, one file
+per process, on the machine described at the top of this document
+(`/usr/bin/time -l`, peak resident memory of the whole process):
+
+| File | Size | Parse time | Peak RSS |
+|---|---|---|---|
+| redis `src/module.c` | 693 KB | 0.33 s | not measured alone; 131 MB allocated |
+| five redis C sources concatenated | 1,647 KB | 0.89 s | 170 MB |
+| `src/module.c` three times over | 2,080 KB | 0.87 s | 298 MB |
+| a 316 KB C# test file six times over | 1,897 KB | 4.20 s | 269 MB |
+| Newtonsoft.Json `large.json` | 6,902 KB | 1.52 s | 357 MB |
+
+So a file at the limit costs about 300 MB while it is parsed, roughly 150 bytes
+of process memory per source byte. To keep that from being paid once per worker,
+a file over 512 KiB reserves eight times its size from the in-flight budget
+(`pipeline.admissionWeight`): against the default 32 MiB that admits two 2 MiB
+files together and one 4 MiB file alone, while ordinary files still run side by
+side.
+
+The concatenated files are synthetic. No repository with many real 1 to 2 MiB
+sources was measured, and a grammar that allocates more per byte than C or C#
+would cost more than the table shows.
+
+A file over the limit is recorded in the `files` table with `parse_status =
+'skipped'` and `parse_error = 'too_large: N bytes, over the L byte limit
+(index.max_file_bytes)'`. `repocortex index` and `repocortex status` count such
+files and name the ten largest.
+
+### The parse budget
+
+A parse is bounded by work, not by time. gotreesitter counts its own iterations,
+nodes, stack depth and arena bytes against limits derived from the length of the
+source (30 iterations and 52 nodes per byte, with floors of 10,000 and 300,000;
+512 MiB of arena or 512 bytes per source byte, whichever is larger) and stops
+itself when one is reached. The parser returns the tree it had built, the
+definitions in it are indexed, and the file is recorded as `partial` with
+`budget_exceeded:` and the byte and line it stopped at. Because the limits count
+work, the same file gets the same verdict at any load. Ordinary source is
+nowhere near them: of eight large redis files probed, the closest was
+`src/crc16_slottable.h` at 82,000 iterations against a limit of 3.4 million.
+
+A wall-clock ceiling of 60 s (`parse.DefaultParseCeiling`) remains as a last
+resort, for an input that stays inside every work limit and still does not
+finish. It is polled by the parser, so a parse it stops does stop. A file it
+stops is recorded the same way, and its text says the limit was the clock,
+because that verdict can differ between machines. The slowest file measured
+takes 4.2 s.
+
+Until 2026-11-12 the limit was five seconds of wall-clock time, enforced by
+returning from the call and leaving the parse running. Two consequences were
+measured: the files that failed depended on the load (six, then eight of redis's
+C files; 40, then 39 of Newtonsoft.Json's), and the abandoned parses kept their
+cores and their memory.
+
+**What is still unbounded.** The work limits do not count time spent inside one
+parser step, which is where gotreesitter v0.50.1 spent eight seconds on a 1.6 KB
+file; only the clock catches a case like that, and the clock is the part that
+depends on the machine. The clock and the cancellation flag are polled by the
+parser between steps and nothing preempts it, so a step that runs long delays
+the stop. In the cases measured the delay was small: a parse given a 1 ms
+ceiling returned after 75 ms on an 800 KB file, and v0.50.1 given a 1 s timeout
+on its quadratic case returned after 1.05 s. And the queries that run over the
+finished tree have a per-pattern work budget inside the library but no clock.
+Both are bounded in practice by the size limit.
+
+### Two error-recovery routes
+
+gotreesitter recovers from input a grammar does not accept in one of two ways: a
+port of the C runtime's cost-based recovery, which is the default for the
+grammars certified for it, and the older resynchronising recovery. They fail on
+different files:
+
+| gotreesitter | `MODULE_LICENSE` then a 256-entry table (1.6 KB C) | redis `src/bitops.c` (115 KB) | Newtonsoft.Json `JsonSchemaGenerator.cs` (21.7 KB) |
+|---|---|---|---|
+| v0.50.1 | 7.7 s | 1.9 s, read to the end | not finished when a 30 s timeout stopped it |
+| v0.52.0 to v0.55.1 | 0.05 s | 1.1 to 1.3 s, read to the end | not finished when a 20 s timeout stopped it |
+| v0.56.0, v0.57.0 | 0.04 to 0.05 s | stops at byte 1,870 with `invariant_violation` | 0.36 to 0.45 s |
+
+No release reads all three. This build uses v0.57.0, and when the default route
+stops before the end of a file for any reason but the clock, it parses the file
+again by the other route and keeps the attempt that read further. The second
+route is selected by loading a second copy of the grammar with its
+`CRecoveryCostCompetitionEnabledByDefault` field cleared, so nothing global is
+changed and the two routes cannot affect each other. On redis the default route
+stops early on 11 of 1,025 C files and the second route reads all 11 to the end.
+A second attempt costs one more parse of that file and a second copy of that
+language's parse tables in memory.
+
+### redis and Newtonsoft.Json, before and after
+
+Shallow clones of redis (`b83c9c1`, 1,958 files discovered) and
+JamesNK/Newtonsoft.Json (`52fa3ae`, 1,176 files), cold `repocortex index` under
+`/usr/bin/time -l`, arm64 binaries, default four workers. "Before" is commit
+`3b4b9fb`: gotreesitter v0.50.1, the five-second clock and the 256 KiB parse
+cap. The machine was shared and its one-minute load average was 13 to 20
+throughout, so read the wall times as a comparison on one machine in one
+quarter of an hour, not as figures for either build. Each build was run twice,
+alternating.
+
+| redis | Before | After |
+|---|---|---|
+| Wall time | 27.6 s, 27.9 s | 19.7 s, 17.1 s |
+| User CPU | 110 s, 116 s | 27.1 s, 26.8 s |
+| Peak RSS | 3.12 GB, 3.35 GB | 0.73 GB, 0.76 GB |
+| Files parsed | 1,008 | 1,025 |
+| Parse failures | 8, all `parse exceeded 5s` (6 in a run at a load of 7) | 0 |
+| Skipped for size | 9, not named | 0 |
+| Searchable as text only | 0 of 834 files in languages with no definition query | 834 |
+| Parsed with syntax errors | not recorded | 408, each with a count and a line |
+| Symbols, as `index` reports them | 11,609 | 15,287 |
+| Symbols, as `status` counts them | 25,279 | 28,843 |
+
+| Newtonsoft.Json | Before | After |
+|---|---|---|
+| Wall time | 115.0 s (120.9 s at a load of 7) | 6.5 s, 6.4 s |
+| User CPU | 679 s | 16.1 s, 16.4 s |
+| Peak RSS | 2.87 GB | 0.63 GB, 0.61 GB |
+| Files parsed | 916 | 956 |
+| Parse failures | 39, all `parse exceeded 5s` (40 in the other run) | 0 |
+| Skipped for size | 2: a 316 KB test file over the parse cap, and `large.json` | 1: `large.json` (6.6 MiB), named |
+| Symbols, as `index` reports them | 6,634 | 10,221 |
+| Symbols, as `status` counts them | 6,947 | 10,534 |
+
+The two "after" runs of each repository recorded the same counts, and
+`repocortex index --full --digest` printed the same registry digest twice on
+Newtonsoft.Json and with one worker and with eight on redis. The two "before"
+runs of each did not agree on which files failed.
+
+Where the time went: with only the library upgraded, redis indexed in 8.5 s at
+the same load. The other nine to eleven seconds are the 834 text-only files now
+written to the full-text index (5.9 MB of JSON and Tcl among them) and the nine
+large C files now parsed. That is the price of being able to find a name in them.
+
+The Linux kernel, where the quadratic parse and the abandoned parses were first
+measured, has not been indexed with this build.
 
 ## Two more allocation controls
 
@@ -995,10 +1126,10 @@ concurrent readers on a single connection, which wants small ones. No benchmark
 in the tree sweeps this value, so this document states the trade and not a
 number.
 
-Two other constants a reader may be looking for, both verified in the tree rather
-than measured: `parse.DefaultParseTimeout = 5 s`
-(`internal/parse/generic.go:23`) and `watch.DefaultMaxWatchDirs = 8192`
-(`internal/watch/watch.go:62`).
+Two other constants a reader may be looking for: `parse.DefaultParseCeiling =
+60 s`, the wall-clock safety net described under [the parse
+budget](#the-parse-budget), and `watch.DefaultMaxWatchDirs = 8192`
+(`internal/watch/watch.go:62`), verified in the tree rather than measured.
 
 ## Tuning for a large monorepo
 
@@ -1016,11 +1147,11 @@ Watch peak RSS. The knee moves with average file size: a repository of small fil
 tolerates more workers than one full of large generated ones. `--workers` only
 applies to the full-index path; see the caveats below.
 
-**Raise `MaxSourceBytes` only if you must index generated code.** It is a
-compile-time constant in `internal/parse/generic.go`, not a flag, precisely
-because raising it is a decision with a memory price rather than a preference.
-Before raising it, check what you would actually gain — `repocortex status` reports
-skipped files, and the `files` table records the reason per path.
+**Raise `index.max_file_bytes` only for source you want indexed.** It is set per
+repository in `.repocortex.yml`, up to 8 MiB, and it has a memory price: about
+150 bytes of process memory per source byte while the file is parsed. Before
+raising it, check what you would gain: `repocortex status` names the largest
+files over the limit, and the `files` table records the size of every one.
 
 **Exclude generated trees instead.** Almost always the better answer. Repository
 excludes are additive to the defaults:
@@ -1033,8 +1164,10 @@ index:
     - "**/vendor/**"
 ```
 
-An excluded file is never read, never hashed and never parsed. A file skipped by
-`MaxSourceBytes` has already been read and hashed.
+An excluded file is never read, never hashed, never parsed and not reported. A
+file over the size limit is not read either, but it is recorded and named, so
+excluding a generated tree is also what keeps the size report about files that
+matter.
 
 **Use `repocortex watch` rather than repeated full indexes.** On the 5,000-file
 corpus a full index is 20–35 s while an incremental pass over an unchanged tree is
@@ -1053,10 +1186,10 @@ reparse of what actually changed.
   error: --accuracy "nonsense": want fast, auto or exact     # exit 1
   ```
 
-- `fs.DefaultMaxFileSize` (2 MiB, `internal/acquire/fs/walk.go:47`) and
-  `parse.MaxSourceBytes` (256 KiB) are different limits. The first is a
-  discovery-time ceiling on what gets hashed at all; the second is a parse-time
-  ceiling. A 1 MiB source file is hashed and recorded but not parsed.
+- `fs.DefaultMaxFileSize` and `parse.DefaultMaxSourceBytes` are the same number,
+  2 MiB, taken from `config.DefaultMaxFileBytes`. They were different limits
+  (2 MiB and 256 KiB) until 2026-11-12, so a 1 MiB source file was hashed and
+  recorded but not parsed. It is now parsed.
 - The discovery walker still defaults to `runtime.NumCPU()` workers
   (`fs.WithWorkers`). Walking is I/O-bound and allocates little, so it was not
   part of the memory work.

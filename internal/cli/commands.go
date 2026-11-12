@@ -197,19 +197,27 @@ All figures are read from the registry. Nothing is estimated.`,
 				       (SELECT count(*) FROM symbols WHERE index_run_id = r.id),
 				       (SELECT count(*) FROM edges   WHERE index_run_id = r.id),
 				       (SELECT count(*) FROM files   WHERE index_run_id = r.id
-				                                       AND parse_status = 'failed'),
-				       (SELECT count(*) FROM files   WHERE index_run_id = r.id
-				                                       AND parse_status = 'partial'),
-				       (SELECT count(*) FROM files   WHERE index_run_id = r.id
 				                                       AND detected_by = 'extension_ambiguous'),
 				       COALESCE(r.finished_unix, 0), r.accuracy_mode
 				FROM index_runs r WHERE r.id = ?`, runID)
 			var finished int64
 			if err := row.Scan(&st.IndexStatus, &st.GitRevision, &st.Files, &st.Symbols,
-				&st.Edges, &st.ParseFailures, &st.PartialParses, &st.AmbiguousLanguages,
-				&finished, &st.AccuracyMode); err != nil {
+				&st.Edges, &st.AmbiguousLanguages, &finished, &st.AccuracyMode); err != nil {
 				return err
 			}
+			// The per-file breakdown, read live for the same reason the counts
+			// above are: an incremental update changes it and nothing rewrites
+			// the run row's snapshot.
+			summary, err := parseSummaryFor(ctx, db, runID)
+			if err != nil {
+				return err
+			}
+			st.Parse = &summary
+			// The same number the run row and the portal carry: files whose
+			// indexing was abandoned. A gate that reads this field and wants
+			// zero is asking the right question.
+			st.ParseFailures = summary.Abandoned()
+			st.PartialParses = summary.SyntaxErrors + summary.Incomplete + summary.LegacyPartial
 			st.IndexRun = runID
 			if finished > 0 {
 				st.LastIndexed = time.Unix(finished, 0).Format(time.RFC3339)
@@ -233,12 +241,18 @@ type statusReport struct {
 	Symbols        int64  `json:"symbols"`
 	Edges          int64  `json:"relationships"`
 	ParseFailures  int64  `json:"parse_failures"`
-	// PartialParses is files the parser recovered from but did not fully
-	// understand. Reported separately because it is the usual reason an index
-	// is DEGRADED, and counting only outright failures left `status` printing
-	// "parse_failures: 0" beside "index_status: degraded" — a zero that meant
-	// "not the number you are looking for" rather than "none".
+	// ParseFailures (above) is files whose indexing was abandoned: the parse
+	// failed, or was stopped before the end of the file. It is what makes an
+	// index DEGRADED.
+	//
+	// PartialParses is files with parse_status partial: read with syntax
+	// errors, or stopped before the end. The second kind is in both counts;
+	// Parse breaks the figures down.
 	PartialParses int64 `json:"partial_parses"`
+	// Parse is what happened to every file in the index: clean, syntax
+	// errors, incomplete, failed, text only, too large (with the largest
+	// named), and skipped for other reasons. Nil when nothing is indexed.
+	Parse *registry.ParseSummary `json:"parse,omitempty"`
 	// AmbiguousLanguages is files whose language is a guess: the extension is
 	// shared by several languages and nothing in the content settled which.
 	// Such a file is parsed with the extension's default grammar, so when it
@@ -269,12 +283,13 @@ func renderStatus(cmd *cobra.Command, g *Global, st statusReport, hint string) e
 		_, _ = fmt.Fprintf(w, "Files:\t%d\n", st.Files)
 		_, _ = fmt.Fprintf(w, "Symbols:\t%d\n", st.Symbols)
 		_, _ = fmt.Fprintf(w, "Relationships:\t%d\n", st.Edges)
-		if st.PartialParses > 0 {
-			_, _ = fmt.Fprintf(w, "Partial parses:\t%d  (symbols may be incomplete in these files)\n",
-				st.PartialParses)
-		}
-		if st.ParseFailures > 0 {
-			_, _ = fmt.Fprintf(w, "Parse failures:\t%d\n", st.ParseFailures)
+		if st.Parse != nil {
+			for _, l := range parseSummaryLines(*st.Parse) {
+				_, _ = fmt.Fprintf(w, "%s:\t%s\n", l.Label, l.Value)
+				for _, d := range l.Detail {
+					_, _ = fmt.Fprintf(w, "\t  %s\n", d)
+				}
+			}
 		}
 		if st.AmbiguousLanguages > 0 {
 			_, _ = fmt.Fprintf(w, "Ambiguous languages:\t%d  (language guessed from the extension; see index.language_overrides)\n",
@@ -396,6 +411,7 @@ see docs/accuracy.md for what the numbers do and do not mean.`,
 				checks = append(checks, check{Name: "index", Status: "warn", Detail: "absent — run 'repocortex init'"})
 			} else {
 				checks = append(checks, check{Name: "index", Status: "ok", Detail: dbPath})
+				checks = append(checks, parseChecks(cmd, dbPath)...)
 				if verifyIndex {
 					checks = append(checks, verifyGraph(cmd, dbPath)...)
 				}
@@ -414,6 +430,66 @@ see docs/accuracy.md for what the numbers do and do not mean.`,
 	cmd.Flags().BoolVar(&precision, "resolution-precision", false,
 		"measure the heuristic resolver against imported compiler facts")
 	return cmd
+}
+
+// parseChecks reports, as doctor checks, the files the index does not fully
+// hold: abandoned parses, files over the size limit, and rows written under an
+// older meaning of the parse status.
+//
+// A check that is "ok" is still printed with its numbers. An index nobody has
+// looked at is the usual one, and "syntax errors: 121 files" beside an ok is
+// the line that sends a reader to look.
+func parseChecks(cmd *cobra.Command, dbPath string) []check {
+	ctx := cmd.Context()
+	db, err := store.Open(ctx, store.Options{Path: dbPath, ReadOnly: true})
+	if err != nil {
+		return nil
+	}
+	defer func() { _ = db.Close() }()
+
+	var runID int64
+	if err := db.QueryRowContext(ctx, `SELECT id FROM index_runs WHERE committed = 1`).Scan(&runID); err != nil {
+		return nil
+	}
+	s, err := parseSummaryFor(ctx, db, runID)
+	if err != nil {
+		return []check{{Name: "parse status", Status: "warn", Detail: err.Error()}}
+	}
+
+	parsed := check{
+		Name: "parse status", Status: "ok",
+		Detail: fmt.Sprintf("%d files: %d clean, %d with syntax errors, %d incomplete, %d failed, %d text only",
+			s.Files, s.Clean, s.SyntaxErrors, s.Incomplete, s.Failed, s.TextOnly),
+	}
+	if s.Abandoned() > 0 {
+		parsed.Status = "warn"
+		parsed.Impact = "definitions in these files, and every edge through them, are missing from answers"
+		parsed.Remedy = "read the reason beside each file; a file stopped on a limit can be excluded or split"
+		parsed.Examples = append(noteLines(s.FailedFiles, s.Failed, true),
+			noteLines(s.IncompleteFiles, s.Incomplete, true)...)
+	}
+	out := []check{parsed}
+
+	if s.TooLarge > 0 {
+		out = append(out, check{
+			Name: "size limit", Status: "warn",
+			Detail: fmt.Sprintf("%d %s over the size limit %s not in the index",
+				s.TooLarge, files(s.TooLarge), isAre(s.TooLarge)),
+			Impact:   "nothing in these files can be found, by name or by text",
+			Remedy:   "raise index.max_file_bytes in " + config.RepoConfigName + ", or leave generated files out",
+			Examples: noteLines(s.LargestTooLarge, s.TooLarge, false),
+		})
+	}
+	if s.LegacyPartial > 0 {
+		out = append(out, check{
+			Name: "parse status age", Status: "warn",
+			Detail: fmt.Sprintf("%d %s carry a status written by an older version, where \"partial\" meant "+
+				"\"no definitions found\" and syntax errors were not recorded",
+				s.LegacyPartial, files(s.LegacyPartial)),
+			Remedy: "run 'repocortex index --full' to rewrite them",
+		})
+	}
+	return out
 }
 
 // ------------------------------------------------- resolution precision

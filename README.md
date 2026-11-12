@@ -444,7 +444,7 @@ flowchart LR
 | typed (4) | Go, Java, Python, TypeScript | Definitions, imports and receiver matching; references can reach `high` |
 | resolved (10) | C, C#, C++, JavaScript, Kotlin, PHP, Ruby, Rust, Scala, TSX | Definitions and imports. Calls are bound for seven of them; **Kotlin, PHP and Scala extract no calls yet** |
 | parsed (72) | Apex, Bash, Clojure, Dart, Elixir, Erlang, OCaml, Solidity, Swift, Zig and 62 more | Definitions and search only. Quality varies: of the 72, a hand check rated 10 good, 25 usable, 15 poor and 22 broken |
-| grammar only (120) | Perl, Haskell, Pascal, YAML, JSON, HTML and 114 more | The grammar is bundled and nothing is extracted yet: files are skipped |
+| text only (120) | Perl, Haskell, Pascal, YAML, JSON, HTML and 114 more | The grammar is bundled but has no definition query yet: files are searchable by text and yield no symbols |
 
 Run `repocortex languages` for your build. A compiler index raises any of these to `exact`.
 

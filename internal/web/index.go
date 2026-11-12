@@ -316,7 +316,11 @@ func (s *Server) buildStructural(ctx context.Context, runID int64) (*structuralI
 	for _, f := range files {
 		idx.files[f.ID] = fileInfo{
 			Path: f.Path, Language: f.Language,
-			PartialParse: f.ParseStatus == "partial",
+			// True for a file read with syntax errors and for one whose
+			// parse was cut short: in both, symbols may be missing. Not for
+			// a row an older build wrote as partial, which only ever meant
+			// "nothing was extracted".
+			PartialParse: f.ParseStatus == model.ParseStatusPartial && f.ParseReason() != model.ParseReasonLegacy,
 		}
 		if f.Language != "" {
 			idx.fileLangs[f.Language]++

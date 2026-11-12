@@ -135,6 +135,18 @@ type RepoConfig struct {
 		// timeout: the same reach a repository already has by committing a
 		// file with a misleading extension.
 		LanguageOverrides LanguageOverrides `yaml:"language_overrides"`
+
+		// MaxFileBytes is the largest file that is read, parsed and
+		// text-indexed. Larger files are recorded as skipped, with their size,
+		// and named by `repocortex index` and `repocortex status`.
+		//
+		// SAFE IN UNTRUSTED CONFIG ONLY BECAUSE IT IS BOUNDED. Parsing costs
+		// memory in proportion to the source, so an unbounded value here would
+		// let a cloned repository choose how much memory `repocortex index`
+		// uses. Validate rejects anything outside
+		// MinMaxFileBytes..HardMaxFileBytes, and the pipeline admits large
+		// files a few at a time whatever the limit is.
+		MaxFileBytes int64 `yaml:"max_file_bytes"`
 	} `yaml:"index"`
 
 	Languages []string `yaml:"languages"`
@@ -283,6 +295,10 @@ type Config struct {
 	// name no grammar exists for.
 	LanguageOverrides []LanguageOverride
 
+	// MaxFileBytes is the size limit for indexing: index.max_file_bytes, or
+	// DefaultMaxFileBytes.
+	MaxFileBytes int64
+
 	MaxFiles      int
 	MaxSymbols    int
 	MaxLines      int
@@ -315,6 +331,26 @@ type Config struct {
 	UserConfigPresent          bool
 }
 
+// DefaultMaxFileBytes is the size limit when a repository sets none: 2 MiB.
+//
+// It was effectively 256 KiB (the parser refused anything larger while
+// discovery admitted 2 MiB), which dropped hand-written files at the centre of
+// real programs: seven of redis's core sources are between 256 KiB and 700 KiB.
+// The measurements behind the new figure are beside
+// parse.DefaultMaxSourceBytes.
+const DefaultMaxFileBytes int64 = 2 << 20
+
+// MinMaxFileBytes and HardMaxFileBytes bound index.max_file_bytes.
+//
+// The floor exists so a typo (a limit of 10, meaning megabytes) is an error and
+// not an index of nothing. The ceiling is the security control: .repocortex.yml
+// arrives with the repository, and a file at 8 MiB costs on the order of a
+// gigabyte to parse. To index something larger, split it or exclude it.
+const (
+	MinMaxFileBytes  int64 = 1 << 10
+	HardMaxFileBytes int64 = 8 << 20
+)
+
 // Defaults returns a Config with safe defaults applied.
 //
 // The defaults are deliberately conservative: heuristics rather than executing
@@ -328,6 +364,7 @@ func Defaults() Config {
 			"**/*.min.js", "**/*.lock", "**/testdata/**",
 		},
 		Capabilities:    []string{"code"},
+		MaxFileBytes:    DefaultMaxFileBytes,
 		MaxFiles:        20,
 		MaxSymbols:      100,
 		MaxLines:        5000,
@@ -503,6 +540,12 @@ func applyRepo(cfg *Config, rc RepoConfig) {
 		// repo cannot un-exclude .git or node_modules.
 		cfg.Exclude = append(cfg.Exclude, rc.Index.Exclude...)
 	}
+	if rc.Index.MaxFileBytes != 0 {
+		// Taken as written, including a nonsensical value: Validate rejects
+		// what is out of range, so a bad limit is an error the user sees and
+		// not a setting that silently did nothing.
+		cfg.MaxFileBytes = rc.Index.MaxFileBytes
+	}
 	if len(rc.Languages) > 0 {
 		cfg.Languages = rc.Languages
 	}
@@ -561,6 +604,13 @@ func (c Config) Validate() error {
 	}
 	if c.MaxFiles < 1 {
 		return fmt.Errorf("context.max_files %d: must be >= 1", c.MaxFiles)
+	}
+	// Zero is "not set" for a Config built by hand (tests, embedders); Load
+	// always fills the default in.
+	if c.MaxFileBytes != 0 && (c.MaxFileBytes < MinMaxFileBytes || c.MaxFileBytes > HardMaxFileBytes) {
+		return fmt.Errorf("index.max_file_bytes %d: want %d..%d (parsing costs memory in proportion to file size, "+
+			"so the limit is bounded; exclude or split a larger file)",
+			c.MaxFileBytes, MinMaxFileBytes, HardMaxFileBytes)
 	}
 	return nil
 }

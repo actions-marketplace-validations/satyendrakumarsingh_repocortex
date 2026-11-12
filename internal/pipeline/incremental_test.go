@@ -29,7 +29,18 @@ const harnessBuild = "test-build"
 
 func newHarness(t testing.TB, files map[string]string) *harness {
 	t.Helper()
+	return newHarnessWithConfig(t, files, nil)
+}
+
+// newHarnessWithConfig is newHarness over a configuration the caller adjusts,
+// for the settings a repository can make: the size limit, the exclusions.
+func newHarnessWithConfig(t testing.TB, files map[string]string, adjust func(*config.Config)) *harness {
+	t.Helper()
 	ctx := context.Background()
+	cfg := config.Defaults()
+	if adjust != nil {
+		adjust(&cfg)
+	}
 
 	root := t.TempDir()
 	writeTree(t, root, files)
@@ -57,7 +68,7 @@ func newHarness(t testing.TB, files map[string]string) *harness {
 	if err != nil {
 		t.Fatal(err)
 	}
-	walker, err := fs.NewWalker(root, config.Defaults())
+	walker, err := fs.NewWalker(root, cfg)
 	if err != nil {
 		t.Fatal(err)
 	}

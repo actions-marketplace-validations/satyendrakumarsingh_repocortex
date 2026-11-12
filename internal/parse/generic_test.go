@@ -329,8 +329,8 @@ func TestParseTimeoutIsBounded(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected run-level error: %v", err)
 	}
-	if elapsed > DefaultParseTimeout+2*time.Second {
-		t.Errorf("parse took %s, exceeding the %s timeout guard", elapsed, DefaultParseTimeout)
+	if elapsed > DefaultParseCeiling+2*time.Second {
+		t.Errorf("parse took %s, exceeding the %s ceiling", elapsed, DefaultParseCeiling)
 	}
 	t.Logf("pathological input handled in %s", elapsed)
 }

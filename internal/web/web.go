@@ -676,8 +676,9 @@ func healthFor(run *model.IndexRun, ageSeconds int64) IndexHealth {
 		h.Reasons = append(h.Reasons, HealthReason{
 			Code:  "parse_failures",
 			Count: run.ParseFailures,
-			Detail: fmt.Sprintf("%d file(s) failed to parse. Nothing was extracted from them, so every "+
-				"edge that ran through one is missing rather than absent.", run.ParseFailures),
+			Detail: fmt.Sprintf("%d file(s) failed to parse or were stopped before their end. What the "+
+				"parser did not read was not extracted, so every edge that ran through it is missing "+
+				"rather than absent.", run.ParseFailures),
 			Remedy: "repocortex doctor",
 		})
 	}

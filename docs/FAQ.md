@@ -396,37 +396,46 @@ command works. "A partial index beats none, but it must not claim to be
 complete" is the rule in `registry`, and the status is how it declines to claim
 it.
 
-On this repository's own working tree:
+`DEGRADED` means the parse of at least one file failed outright or was stopped
+before the end of the file, and `status` names those files with the reason. It
+does not mean a file had syntax errors, declared nothing, or was skipped.
+
+It used to mean less than that. Until 2026-11-12 a file was `partial` whenever no
+symbol or reference was recorded for it, and any `partial` file degraded the
+run. This repository's own tree was `DEGRADED` because of thirteen `doc.go`
+files holding a package comment and nothing else. On the same tree now:
 
 ```
 $ repocortex status
-Index:           DEGRADED
-Files:           476
-Symbols:         6726
-Relationships:   37911
-Partial parses:  13  (symbols may be incomplete in these files)
+Index:          READY
+Files:          723
+Symbols:        11220
+Relationships:  24950
+Parsed:         708 (702 clean, 6 with syntax errors)
+Syntax errors:  6 files read to the end with errors the parser recovered from; definitions inside the unreadable regions may be missing
+Text only:      9 files searchable by text, no definitions (no definition query for the language): yaml 3, html 2, vimdoc 2, dockerfile 1, gomod 1
+Skipped:        6 files not indexed: no_grammar 6
 ```
 
-Thirteen of 476. They are the `doc.go` files — a Go file carrying a package
-comment and nothing else yields no tags — which is exactly the kind of harmless
-gap the status is *not* trying to dramatise. Do not read `DEGRADED` as "the
-index is broken"; read it as "ask the `files` table which 13".
+The six files with syntax errors are SQL migrations the SQL grammar does not
+fully accept. They are indexed; the status says so and does not call it a
+failure.
 
 The index records the disposition of every file, per path, so a gap is visible
 rather than looking like the file never existed:
 
 ```
 $ sqlite3 .repocortex/index.db "select parse_status, count(*) from files group by parse_status;"
-ok|409
-partial|13
-skipped|54
+ok|702
+partial|6
+skipped|15
 ```
 
-Skipped files carry their reason in `parse_error` — no grammar for that file
-type, over the 256 KiB parse ceiling, binary, or excluded. Note that `status`
-also prints a separate `parse_failures` count in `--json`, which is 0 here: a
-partial parse and a failed parse are different facts and are counted
-separately.
+Every row that is not `ok` carries its reason at the start of `parse_error`:
+`syntax_errors:`, `budget_exceeded:`, `text_only:`, `too_large:`, `binary` and so
+on. [CLI.md](CLI.md#status) has the table. `status --json` carries the same
+breakdown under `parse`, beside `parse_failures` (files whose parse failed or
+was stopped early) and `partial_parses` (files with `parse_status = 'partial'`).
 
 ## What does it deliberately not do?
 

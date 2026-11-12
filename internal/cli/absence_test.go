@@ -45,11 +45,20 @@ type Store struct{}
 
 func (s *Store) Persist(id string) error { return nil }
 `)
+	// The receiver's type comes from outside the repository, so nothing here
+	// declares a third Persist for the call to bind to.
+	//
+	// It used to be a local `interface{ Persist(string) error }`. That made
+	// the fixture depend on a parser gap: gotreesitter v0.50.1 did not report
+	// a method declared on one line inside an interface, so the call had two
+	// candidates and stayed ambiguous. v0.57.0 reports it, the call binds to
+	// the interface method in its own file, and nothing was left unbound to
+	// diagnose.
 	write("use/u.go", `package use
 
-type any1 interface{ Persist(string) error }
+import "example.com/external/storage"
 
-func Run(s any1) error { return s.Persist("x") }
+func Run(s storage.Writer) error { return s.Persist("x") }
 `)
 
 	for _, step := range []string{"init", "index", "resolve"} {

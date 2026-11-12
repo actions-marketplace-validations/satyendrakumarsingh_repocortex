@@ -279,7 +279,7 @@ func (r *Registry) CommitRun(ctx context.Context, runID int64, opts ...CommitOpt
 		}
 	}
 
-	// A run with parse failures is still worth publishing — a partial index
+	// A run with abandoned files is still worth publishing — a partial index
 	// beats none — but it must not claim to be complete. Spec §37.
 	newStatus := model.StatusReady
 	if counts.ParseFailures > 0 {
@@ -447,16 +447,16 @@ type Counts struct {
 	Files   int64
 	Symbols int64
 	Edges   int64
-
-	// ParseFailures is every file the parser did not fully understand: the
-	// ones it gave up on and the ones it recovered from. It is what
-	// index_runs.parse_failures stores and what makes a run "degraded".
-	// ParseFailed and ParsePartial are its two parts, and they are what a
-	// person is shown, because "48 parse failures" for 43 files with no
-	// symbols and 5 with most of theirs reads as 48 files lost.
+	// ParseFailures is the files whose indexing was abandoned: a parse that
+	// failed outright, or one stopped before the end of the file
+	// (model.ParseAbandoned). It is what makes a run degraded.
+	//
+	// It used to count every file with status partial, when partial meant "no
+	// symbol or reference was recorded". A package comment or a file of
+	// constants then made a healthy repository degraded. A file the parser
+	// read to the end is not abandoned work, whether it reported syntax errors
+	// or declared nothing; those are counted and shown by ParseSummary.
 	ParseFailures int64
-	ParseFailed   int64
-	ParsePartial  int64
 }
 
 func countRun(ctx context.Context, q queryer, runID int64) (Counts, error) {
@@ -465,14 +465,12 @@ func countRun(ctx context.Context, q queryer, runID int64) (Counts, error) {
 		SELECT (SELECT count(*) FROM files   WHERE index_run_id = ?),
 		       (SELECT count(*) FROM symbols WHERE index_run_id = ?),
 		       (SELECT count(*) FROM edges   WHERE index_run_id = ?),
-		       (SELECT count(*) FROM files   WHERE index_run_id = ? AND parse_status = 'failed'),
-		       (SELECT count(*) FROM files   WHERE index_run_id = ? AND parse_status = 'partial')`,
-		runID, runID, runID, runID, runID).
-		Scan(&c.Files, &c.Symbols, &c.Edges, &c.ParseFailed, &c.ParsePartial)
+		       (SELECT count(*) FROM files   WHERE index_run_id = ? AND `+model.SQLParseAbandoned("")+`)`,
+		runID, runID, runID, runID).
+		Scan(&c.Files, &c.Symbols, &c.Edges, &c.ParseFailures)
 	if err != nil {
 		return c, fmt.Errorf("registry: count run %d: %w", runID, err)
 	}
-	c.ParseFailures = c.ParseFailed + c.ParsePartial
 	return c, nil
 }
 

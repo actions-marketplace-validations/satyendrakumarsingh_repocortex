@@ -17,21 +17,21 @@ func TestExtractsDefinitionsMatchesTheParser(t *testing.T) {
 			}
 			continue
 		}
-		built := newGenericParser(e).initErr == nil
+		built := newGenericParser(e, defaultParserConfig).initErr == nil
 		if got := ExtractsDefinitions(e.Name); got != built {
 			t.Errorf("%s: ExtractsDefinitions = %v, but a parser can be built = %v", e.Name, got, built)
 		}
 	}
 }
 
-func TestGrammarOnlyLanguagesAreNotExtractable(t *testing.T) {
-	only := GrammarOnlyLanguages()
+func TestTextOnlyLanguagesAreNotExtractable(t *testing.T) {
+	only := TextOnlyLanguages()
 	if len(only) == 0 {
 		t.Skip("every bundled grammar has a definition query")
 	}
 	for _, l := range only {
 		if ExtractsDefinitions(l) {
-			t.Errorf("%s is listed as grammar-only and as extractable", l)
+			t.Errorf("%s is listed as text-only and as extractable", l)
 		}
 	}
 	// A language people index every day must never be in this list unnoticed.

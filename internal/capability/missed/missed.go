@@ -3,10 +3,12 @@ package missed
 import (
 	"context"
 	"fmt"
+	"sort"
 
 	"github.com/satyendrakumarsingh/repocortex/internal/capability"
 	"github.com/satyendrakumarsingh/repocortex/internal/capability/tests"
 	"github.com/satyendrakumarsingh/repocortex/internal/registry"
+	"github.com/satyendrakumarsingh/repocortex/pkg/model"
 )
 
 // BlindspotKind classifies the category of hidden or unresolved debt.
@@ -51,6 +53,64 @@ type Report struct {
 	ByKind          map[BlindspotKind]int   `json:"by_kind"`
 	Blindspots      []Blindspot             `json:"blindspots"`
 	Completeness    capability.Completeness `json:"completeness"`
+}
+
+// unparsedBlindspots turns the files a run could not fully read into findings,
+// worst first, at most limit of them.
+func unparsedBlindspots(files []model.File, limit int) []Blindspot {
+	type ranked struct {
+		rank int
+		b    Blindspot
+	}
+	var found []ranked
+	for _, f := range files {
+		reason := f.ParseReason()
+		b := Blindspot{Kind: BlindspotUnparsedFile, Target: f.Path, Path: f.Path}
+		switch {
+		case f.ParseStatus == model.ParseStatusFailed:
+			b.Severity = "high"
+			b.Description = "Nothing was extracted from this file: " + orUnknown(f.ParseError)
+			b.Remediation = "Read the recorded error. Definitions in this file and every edge through it are missing from answers."
+			found = append(found, ranked{0, b})
+		case f.ParseIncomplete():
+			b.Severity = "high"
+			b.Description = "The parse of this file was stopped before its end: " + orUnknown(f.ParseError)
+			b.Remediation = "Definitions after the stop are missing. A file stopped on a limit can be split, or excluded if it is generated."
+			found = append(found, ranked{1, b})
+		case reason == model.ParseReasonTooLarge:
+			b.Severity = "medium"
+			b.Description = "This file is over the size limit and is not in the index: " + orUnknown(f.ParseError)
+			b.Remediation = "Raise index.max_file_bytes in .repocortex.yml to include it, or leave it out if it is generated."
+			found = append(found, ranked{2, b})
+		case reason == model.ParseReasonSyntaxErrors:
+			b.Severity = "low"
+			b.Description = "The parser read this file to the end and reported " + orUnknown(f.ParseError)
+			b.Remediation = "Usually a construct the grammar does not model (a macro, a preprocessor branch). " +
+				"Check the reported line if a definition near it cannot be found."
+			found = append(found, ranked{3, b})
+		}
+	}
+	sort.SliceStable(found, func(i, j int) bool {
+		if found[i].rank != found[j].rank {
+			return found[i].rank < found[j].rank
+		}
+		return found[i].b.Path < found[j].b.Path
+	})
+	if limit > 0 && len(found) > limit {
+		found = found[:limit]
+	}
+	out := make([]Blindspot, 0, len(found))
+	for _, r := range found {
+		out = append(out, r.b)
+	}
+	return out
+}
+
+func orUnknown(s string) string {
+	if s == "" {
+		return "no reason was recorded"
+	}
+	return s
 }
 
 // Detector discovers code intelligence gaps and untracked dependencies.
@@ -181,30 +241,19 @@ func (d *Detector) Detect(ctx context.Context, runID int64, opts Options) (*Repo
 		}
 	}
 
-	// 5. Unparsed / Errored Files
-	if len(files) > 0 {
-		count := 0
-		for _, f := range files {
-			if count >= opts.MaxItemsPerKind {
-				break
-			}
-			// Only a file that was attempted and did not parse completely is a
-			// blindspot. "skipped" is a deliberate decision: no grammar claims
-			// the file (go.mod, LICENSE, Dockerfile), or discovery refused it
-			// (binary, oversized, symlink). Reporting those as parse failures
-			// made every such file a high-severity finding.
-			if f.ParseStatus == "partial" || f.ParseStatus == "failed" {
-				add(Blindspot{
-					Kind:        BlindspotUnparsedFile,
-					Severity:    "high",
-					Target:      f.Path,
-					Path:        f.Path,
-					Description: fmt.Sprintf("File failed complete parsing with status %q", f.ParseStatus),
-					Remediation: "Check file syntax or language grammar parser configuration.",
-				})
-				count++
-			}
-		}
+	// 5. Files the index does not fully hold
+	//
+	// Worst first, so the per-kind cap drops the least serious findings and
+	// never the most: a file nothing was extracted from, then a file whose
+	// parse was cut short, then a file over the size limit, then a file the
+	// parser read to the end with syntax errors.
+	//
+	// The other skips are deliberate decisions and are not blindspots: no
+	// grammar claims the file (go.mod, LICENSE), discovery refused it (binary,
+	// symlink), or its grammar has no definition query and it is indexed as
+	// text. Reporting those made every such file a high-severity finding.
+	for _, b := range unparsedBlindspots(files, opts.MaxItemsPerKind) {
+		add(b)
 	}
 
 	// 6. Untested Critical Symbols

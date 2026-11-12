@@ -1,9 +1,10 @@
-# Go: every top-level declaration, and each method. Struct fields and
-# interface method specifications are not listed.
+# Go: every top-level declaration, each method, and each method an interface
+# declares. Struct fields are not listed.
 sample.go	7	constant	Limit
 sample.go	9	variable	counter
 sample.go	12	variable	ErrEmpty
 sample.go	15	interface	Shape
+sample.go	16	method	Area
 sample.go	20	class	Rect
 sample.go	25	class	ID
 sample.go	27	type_alias	Alias

@@ -210,16 +210,23 @@ not.
 
 | Reason | Meaning |
 |---|---|
-| `too_large` | Over the discovery ceiling (2 MiB), or grew past it during hashing |
+| `too_large` | Over the size limit (2 MiB, or `index.max_file_bytes`), or grew past it during hashing. Stored with the size and the limit |
 | `binary` | A NUL byte in the first 8000 bytes — git's own heuristic |
 | `symlink` | Symlinks are never followed, even when they stay inside the root |
 | `symlink_escapes_root` | The link resolved outside the repository. See [security.md](security.md) |
 | `irregular` | Socket, device or FIFO. Opening a FIFO would block the indexer forever |
 | `unreadable` | Permission denied, broken link, or an unreadable directory |
 
-Additionally, a file whose language has no tags query is recorded as skipped with
-`no tags query available for "markdown"`, and a file over `parse.MaxSourceBytes`
-(256 KiB) with `source is N bytes, over the 262144 limit`.
+Additionally, a file whose language has no definition query is recorded as
+skipped with `text_only: no definition query for "markdown"; …`. Its text is
+indexed for `search`; it has no symbols. 120 of the 206 grammars are in this
+group.
+
+`repocortex index` and `repocortex status` print the totals: how many files
+parsed cleanly, with syntax errors or incompletely, how many are text only, how
+many were over the size limit (naming the ten largest), and how many were
+skipped for each other reason. See [CLI.md](CLI.md#status) for what each
+`parse_status` value means.
 
 ### How a file's language is decided
 
@@ -656,7 +663,7 @@ typed             4      definitions, imports, receiver discrimination by arity 
 resolved          10     definitions and imports — references bind across files
 parsed            72     definitions and search only — no cross-file references claimed
 with definitions  86     
-grammar only      120    grammar bundled, nothing extracted: files are skipped
+text only         120    no definition query: full-text search only, no symbols
 ```
 
 The tiers are computed from what the parser can do at run time, so this output cannot
@@ -2081,14 +2088,20 @@ device`.
 
 ### Oversized files are skipped
 
-Two different limits, and they mean different things:
+There is one limit: **2 MiB**. A file over it is never read; it is recorded with
+`too_large: N bytes, over the 2097152 byte limit (index.max_file_bytes)`, and
+`repocortex index` and `repocortex status` name the largest such files.
 
-- `fs.DefaultMaxFileSize` = **2 MiB**. Discovery ceiling. The file is never
-  hashed and never read; it is recorded with `skip_reason = too_large`.
-- `parse.MaxSourceBytes` = **256 KiB**. Parse ceiling. The file *is* hashed and
-  recorded, but not parsed: `source is N bytes, over the 262144 limit`.
+Set a different limit for a repository in `.repocortex.yml`, between 1 KiB and
+8 MiB:
 
-Both are compile-time constants, not flags. If you are losing symbols you care
+```yaml
+index:
+  max_file_bytes: 4194304
+```
+
+Until 2026-11-12 the parser had a second, lower limit of 256 KiB that it applied
+without naming the files, which left out sources such as redis's `server.c`. If you are losing symbols you care
 about, the right fix is almost always to exclude the generated tree rather than
 raise the cap — see
 [performance.md](performance.md#tuning-for-a-large-monorepo) for the memory cost
@@ -2139,7 +2152,13 @@ each one looks for. Either way the fix is one line of
 
 The run still succeeds. A single unparseable file must not cost the entire index,
 so the file is recorded with `parse_status = 'failed'` and its error text, the
-run is published as `degraded` rather than `ready`, and `repocortex status` reports
-the failure count. Query the `files` table for the reason per path.
+run is published as `degraded` rather than `ready`, and `repocortex status` names
+the file. A file whose parse was stopped before its end is recorded as `partial`
+with `budget_exceeded:` or `stopped_early:`, keeps the definitions that were
+read, and degrades the run in the same way.
+
+A file the parser read to the end with syntax errors is also `partial`, with
+`syntax_errors:` and the count and first line, and does **not** degrade the run:
+nothing in it was abandoned. Query the `files` table for the reason per path.
 
 ---

@@ -19,23 +19,24 @@ type languageReport struct {
 	Resolved []string `json:"resolved"`
 	// Parsed is the definitions-only tier: a definition query exists.
 	Parsed []string `json:"parsed"`
-	// GrammarOnly lists grammars the binary carries and extracts nothing from.
-	// They were counted under Parsed until it was checked what a file in one
-	// of them yields, which is nothing.
-	GrammarOnly []string `json:"grammar_only"`
+	// TextOnly lists grammars the binary carries with no definition query.
+	// Files in them are indexed for full-text search and yield no symbols; the
+	// index records them as skipped with reason text_only. They were counted
+	// under Parsed until it was checked what a file in one of them yields.
+	TextOnly []string `json:"text_only"`
 	// WithDefinitions is how many languages can produce a definition at all.
 	WithDefinitions int `json:"with_definitions"`
 	// Total is every grammar in the binary, extractable or not.
 	Total int `json:"total"`
 }
 
-const grammarOnlyDescription = "grammar bundled, nothing extracted: files are skipped"
+const textOnlyDescription = "no definition query: full-text search only, no symbols"
 
 func buildLanguageReport() languageReport {
 	rep := languageReport{
-		Typed:       parse.LanguagesInTier(parse.TierTyped),
-		Resolved:    parse.LanguagesInTier(parse.TierResolved),
-		GrammarOnly: parse.GrammarOnlyLanguages(),
+		Typed:    parse.LanguagesInTier(parse.TierTyped),
+		Resolved: parse.LanguagesInTier(parse.TierResolved),
+		TextOnly: parse.TextOnlyLanguages(),
 	}
 	for _, l := range parse.LanguagesInTier(parse.TierParsed) {
 		if parse.ExtractsDefinitions(l) {
@@ -43,7 +44,7 @@ func buildLanguageReport() languageReport {
 		}
 	}
 	rep.WithDefinitions = len(rep.Typed) + len(rep.Resolved) + len(rep.Parsed)
-	rep.Total = rep.WithDefinitions + len(rep.GrammarOnly)
+	rep.Total = rep.WithDefinitions + len(rep.TextOnly)
 	return rep
 }
 
@@ -59,8 +60,9 @@ func newLanguagesCmd(g *Global) *cobra.Command {
   resolved      definitions and imports. References bind across files.
   parsed        definitions and full-text search only. No cross-file
                 relationship is claimed for these.
-  grammar only  the grammar is bundled but there is no definition query, so
-                nothing is extracted and files in these languages are skipped.
+  text only     the grammar is bundled but there is no definition query, so
+                files in these languages are indexed for full-text search and
+                yield no symbols.
 
 A tier says what the parser is built to do, not how well it does it. How much
 of a language's definitions and calls are actually found was measured by hand
@@ -81,7 +83,7 @@ list, so this output always matches what the binary can actually do.`,
 			fmt.Fprintf(w, "resolved\t%d\t%s\n", len(rep.Resolved), parse.TierResolved.Description())
 			fmt.Fprintf(w, "parsed\t%d\t%s\n", len(rep.Parsed), parse.TierParsed.Description())
 			fmt.Fprintf(w, "with definitions\t%d\t\n", rep.WithDefinitions)
-			fmt.Fprintf(w, "grammar only\t%d\t%s\n", len(rep.GrammarOnly), grammarOnlyDescription)
+			fmt.Fprintf(w, "text only\t%d\t%s\n", len(rep.TextOnly), textOnlyDescription)
 			fmt.Fprintf(w, "total\t%d\t\n", rep.Total)
 			if err := w.Flush(); err != nil {
 				return err
@@ -91,14 +93,14 @@ list, so this output always matches what the binary can actually do.`,
 			fmt.Fprintf(cmd.OutOrStdout(), "resolved: %v\n", rep.Resolved)
 			if verbose {
 				fmt.Fprintf(cmd.OutOrStdout(), "parsed:   %v\n", rep.Parsed)
-				fmt.Fprintf(cmd.OutOrStdout(), "grammar only: %v\n", rep.GrammarOnly)
+				fmt.Fprintf(cmd.OutOrStdout(), "text only: %v\n", rep.TextOnly)
 			} else {
-				fmt.Fprintf(cmd.OutOrStdout(), "\n(%d parsed-tier and %d grammar-only languages not listed; pass --verbose)\n",
-					len(rep.Parsed), len(rep.GrammarOnly))
+				fmt.Fprintf(cmd.OutOrStdout(), "\n(%d parsed-tier and %d text-only languages not listed; pass --verbose)\n",
+					len(rep.Parsed), len(rep.TextOnly))
 			}
 			return nil
 		},
 	}
-	cmd.Flags().BoolVar(&verbose, "verbose", false, "list the parsed-tier and grammar-only languages too")
+	cmd.Flags().BoolVar(&verbose, "verbose", false, "list the parsed-tier and text-only languages too")
 	return cmd
 }

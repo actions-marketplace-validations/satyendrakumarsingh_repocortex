@@ -109,6 +109,7 @@ $ repocortex --json status
   "relationships": 37,
   "parse_failures": 0,
   "partial_parses": 0,
+  "parse": { "files": 18, "clean": …, "syntax_errors": …, "incomplete": …, "failed": …, "text_only": …, "too_large": …, … },
   …
 }
 ```
@@ -239,7 +240,12 @@ payment-platform is up to date (18 files, revision 4, 86ms)
 - `Revision` is the index run number. `Git` is the commit it describes.
 - `Files: 11 indexed, 7 skipped` – skipped files here are YAML, Dockerfiles, the
   POM and Markdown. They are not parsed for code symbols, but their config keys,
-  dependencies and deployment units are still recorded.
+  dependencies and deployment units are still recorded, and their text is
+  indexed for `search`.
+- The rows after `Imports` (`Parsed`, `Syntax errors`, `Incomplete`, `Parse
+  failures`, `Text only`, `Too large`, `Skipped`) say what happened to every
+  file. A row that would say zero is not printed. `Too large` names the largest
+  files left out for their size; see [CLI.md](../CLI.md#index).
 - `Symbols` counts definitions extracted in this run. `status` reports a larger
   number because it also counts tables, config keys, endpoints and units.
 - `References … (unresolved until M2)` means references are stored but not yet
@@ -1879,13 +1885,13 @@ typed             4      definitions, imports, receiver discrimination by arity 
 resolved          10     definitions and imports — references bind across files
 parsed            72     definitions and search only — no cross-file references claimed
 with definitions  86     
-grammar only      120    grammar bundled, nothing extracted: files are skipped
+text only         120    no definition query: full-text search only, no symbols
 total             206    
 
 typed:    [go java python typescript]
 resolved: [c c_sharp cpp javascript kotlin php ruby rust scala tsx]
 
-(72 parsed-tier and 120 grammar-only languages not listed; pass --verbose)
+(72 parsed-tier and 120 text-only languages not listed; pass --verbose)
 ```
 
 **How to read it:**

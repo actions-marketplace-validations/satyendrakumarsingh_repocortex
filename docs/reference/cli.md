@@ -175,12 +175,56 @@ in place.
 
 ```
 $ repocortex index --full --digest
-  Files:         422 indexed, 54 skipped (476 discovered)
-  Symbols:       6259
-  References:    29506 (unresolved until M2)
-  Imports:       2063
-  Digest:        74f82dd64551014cbaad1be87228d2ac720c7ac0ca49ccfd856eb0bfe4a5d54b
-  Duration:      7346ms
+  Files:         708 indexed, 15 skipped (723 discovered)
+  Symbols:       10832
+  References:    60185 (unresolved until M2)
+  Imports:       3829
+  Parsed:         708 (702 clean, 6 with syntax errors)
+  Syntax errors:  6 files read to the end with errors the parser recovered from; definitions inside the unreadable regions may be missing
+  Text only:      9 files searchable by text, no definitions (no definition query for the language): yaml 3, html 2, vimdoc 2, dockerfile 1, gomod 1
+  Skipped:        6 files not indexed: no_grammar 6
+  Digest:        747fbf7969c177e83eeb413fa7f568e843936546d22db05c7b888354d39cb52e
+  Duration:      10895ms
+```
+
+The rows after `Imports` say what happened to every file, and they are read from
+the index, so `status` and `doctor` print the same ones. A row that would say
+zero is left out.
+
+| Row | Meaning |
+|---|---|
+| `Parsed` | files a syntax tree was built for: read cleanly, read with syntax errors, or stopped early |
+| `Syntax errors` | the parser reached the end of the file and reported error or missing nodes. The file is indexed; a definition inside a region the parser could not read may be absent |
+| `Incomplete` | the parse was stopped before the end of the file. What was read is indexed, the rest is missing, and each file is named with the byte and line it stopped at and the limit that stopped it |
+| `Parse failures` | nothing was extracted. Each file is named with its error |
+| `Text only` | the language's grammar has no definition query, so no symbols exist for it. The file's text is indexed, so `search` finds a name that appears in it |
+| `Too large` | over the size limit: not parsed, not searchable. The largest ten are named with their sizes |
+| `Skipped` | everything else that was not indexed, by reason: `no_grammar`, `binary`, `symlink` and so on |
+
+Only `Incomplete` and `Parse failures` make the index `DEGRADED`. A file that
+parses cleanly and declares nothing (a package comment, a header of constants) is
+`clean` and is not a problem.
+
+**The size limit.** A file over 2 MiB (2,097,152 bytes) is not read. Set a
+different limit for a repository in `.repocortex.yml`:
+
+```yaml
+index:
+  max_file_bytes: 4194304     # 1024 to 8388608
+  exclude:
+    - "**/generated/**"       # generated and vendored trees are better left out
+```
+
+A value outside the range is an error, not a silent default. The limit is
+bounded because parsing costs memory in proportion to file size (about 150 bytes
+of process memory per source byte) and `.repocortex.yml` arrives with the
+repository. An unchanged tree still names what is left out:
+
+```
+$ repocortex index
+nj is up to date (1176 files, revision 3, 993ms)
+  Too large: 1 file over the size limit, not parsed and not searchable (raise index.max_file_bytes in .repocortex.yml to include them)
+      Src/Newtonsoft.Json.Tests/large.json (6.6 MiB)
 ```
 
 `Symbols`, and the `Partial parses` and `Parse failures` lines printed when there
@@ -328,19 +372,56 @@ read from the registry; nothing is estimated. No flags beyond the global ones.
 
 ```
 $ repocortex status
-Project:        payfix2
+Project:        nj
 Index:          READY
-Schema:         v8
-Revision:       f7fd7cc51ad9fd4fde96ba72b24d4f60f6d5b2a5
-Files:          10
-Symbols:        54
-Relationships:  26
-Last indexed:   2026-08-18T03:23:11+05:30
-Index size:     268.0 KiB
+Schema:         v13
+Revision:       52fa3aef1f2cadcd3a3f874251eddc98d3efbbaa
+Files:          1176
+Symbols:        10534
+Relationships:  0
+Parsed:         956 (895 clean, 61 with syntax errors)
+Syntax errors:  61 files read to the end with errors the parser recovered from; definitions inside the unreadable regions may be missing
+Text only:      45 files searchable by text, no definitions (no definition query for the language): json 24, xml 11, markdown 5, vimdoc 3, yaml 2
+Too large:      1 file over the size limit, not parsed and not searchable (raise index.max_file_bytes in .repocortex.yml to include them)
+                  Src/Newtonsoft.Json.Tests/large.json (6.6 MiB)
+Skipped:        174 files not indexed: no_grammar 165, binary 9
+Last indexed:   2026-11-12T20:19:35+05:30
+Index size:     22.0 MiB
 Accuracy mode:  auto
 MCP profile:    minimal
 Capabilities:   code
 ```
+
+The rows from `Parsed` to `Skipped` are the ones [`index`](#index) prints, read
+live from the `files` table. `--json` carries them under `parse`, with
+`largest_too_large`, `incomplete_files` and `failed_files` as lists of paths
+with sizes; `parse_failures` is the files whose indexing was abandoned (failed plus
+incomplete, the number that makes an index degraded) and `partial_parses` is the
+files with `parse_status = 'partial'` (syntax errors plus incomplete).
+
+`Index: DEGRADED` means at least one file's parse failed or was stopped early.
+Syntax errors, text-only files and files over the size limit do not degrade an
+index: nothing was abandoned in them.
+
+**What `parse_status` means.** It describes what the parser did with the file,
+not what was extracted from it. Whenever it is not `ok`, `parse_error` starts
+with a reason token:
+
+| `parse_status` | `parse_error` starts with | Meaning |
+|---|---|---|
+| `ok` | (empty) | read to the end, no syntax error |
+| `partial` | `syntax_errors:` | read to the end; the text gives the number of error nodes and missing tokens and the line of the first |
+| `partial` | `budget_exceeded:` | stopped on a parse limit; the text gives the byte and line and names the limit |
+| `partial` | `stopped_early:` | the parser gave up before the end for a reason of its own |
+| `failed` | (the error) | no usable syntax tree |
+| `skipped` | `text_only:` | no definition query for the language; text indexed for search |
+| `skipped` | `too_large:` | over the size limit; the text gives the size and the limit |
+| `skipped` | `no grammar …`, `binary`, `symlink`, `empty`, … | not indexed |
+
+An index written by an older version used `partial` for "no symbol or reference
+was recorded" and never gave it a reason. Such a row is shown as `recorded by an
+older version`; it says nothing about the parse. `repocortex index` with a new
+version re-parses every file and rewrites them.
 
 ### `doctor`
 
@@ -362,11 +443,28 @@ $ repocortex doctor --verify-index
 [ok  ]  go runtime                go1.25.13 darwin/amd64
 [ok  ]  sqlite                    3.53.3
 [ok  ]  fts5                      ENABLE_FTS5 present
+[ok  ]  parse status              723 files: 702 clean, 6 with syntax errors, 0 incomplete, 0 failed, 9 text only
 [ok  ]  dangling edges            none
 [ok  ]  orphaned symbols          none
 [ok  ]  unproven exact edges      none
 ...
 ```
+
+On a repository with a file over the size limit:
+
+```
+[ok  ]  parse status  1176 files: 895 clean, 61 with syntax errors, 0 incomplete, 0 failed, 45 text only
+[warn]  size limit    1 file over the size limit is not in the index
+                        at Src/Newtonsoft.Json.Tests/large.json (6.6 MiB)
+                        means: nothing in these files can be found, by name or by text
+                        do:    raise index.max_file_bytes in .repocortex.yml, or leave generated files out
+```
+
+`parse status` is always printed when an index exists. It becomes a warning when
+a parse failed or was stopped early, and then lists those files with the reason
+stored for each. Two more checks appear only when they have something to say:
+`size limit`, naming the largest files left out for their size, and `parse status
+age`, when rows written by an older version are still in the index.
 
 ### `version`
 
@@ -393,7 +491,8 @@ tells candidates of one name apart — an arity query (Go, Java, TypeScript) or 
 scope analysis that states the receiver's class (Python); `resolved` when it has
 definitions and imports; `parsed` when it has a definition query and nothing more. A grammar that is
 bundled without a definition query is not in a tier at all: it is listed as
-`grammar only`, and files in that language are skipped. How much each language
+`text only`: files in that language are indexed for full-text search and yield
+no symbols. How much each language
 actually yields was checked by hand; see
 [verification](../verification/2026-11-12/README.md).
 
@@ -404,7 +503,7 @@ typed             4      definitions, imports, receiver discrimination by arity 
 resolved          10     definitions and imports — references bind across files
 parsed            72     definitions and search only — no cross-file references claimed
 with definitions  86     
-grammar only      120    grammar bundled, nothing extracted: files are skipped
+text only         120    no definition query: full-text search only, no symbols
 total             206    
 
 typed:    [go java python typescript]
@@ -414,6 +513,11 @@ resolved: [c c_sharp cpp javascript kotlin php ruby rust scala tsx]
 Read the tiers as a coverage statement before trusting an empty relationship
 result: a `parsed`-tier language will never produce a caller, and the absence is
 a property of the tier, not of the code.
+
+A file in a `text only` language (Perl, Haskell, YAML, Markdown, Makefiles and
+the rest) is found by `search` and never by `symbol`; the index records it as
+skipped with reason `text_only`. `--verbose` and `--json` (`text_only`) list
+those languages.
 
 ### `hooks install`, `hooks status`, `hooks uninstall`
 

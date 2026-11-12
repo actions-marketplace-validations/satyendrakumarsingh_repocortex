@@ -120,7 +120,11 @@ func TestDetectorFindsBlindspotsPositive(t *testing.T) {
 	}
 
 	// 1. Add file with partial parse status
-	f := model.File{Path: "src/broken.go", Language: "go", ContentHash: "hash1", ParseStatus: "partial"}
+	f := model.File{
+		Path: "src/broken.go", Language: "go", ContentHash: "hash1", ParseStatus: model.ParseStatusPartial,
+		ParseError: model.FormatParseError(model.ParseReasonBudgetExceeded,
+			"parser stopped at byte 10 of 900 (line 2) on its iteration limit (30 of 30); definitions after that point are missing"),
+	}
 	fileID, err := w.AddFile(ctx, &f)
 	if err != nil {
 		t.Fatal(err)

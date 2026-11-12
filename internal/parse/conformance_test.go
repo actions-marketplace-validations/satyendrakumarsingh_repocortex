@@ -79,7 +79,7 @@ func parserForLanguage(language string) (Parser, error) {
 	if entry == nil {
 		return nil, fmt.Errorf("no grammar named %q", language)
 	}
-	p := newGenericParser(*entry)
+	p := newGenericParser(*entry, defaultParserConfig)
 	if p.initErr != nil {
 		return nil, p.initErr
 	}

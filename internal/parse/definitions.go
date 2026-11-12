@@ -12,7 +12,7 @@ import (
 //
 // A bundled grammar is not the same thing. Most of the grammars the backend
 // carries have no definition query, and a file in one of those languages is
-// skipped. TierFor reports TierParsed for them as well, because a tier says
+// indexed for full-text search only (reason text_only). TierFor reports TierParsed for them as well, because a tier says
 // how far resolution goes once definitions exist, not whether extraction
 // starts. Anything that describes language support to a person has to ask
 // this question too; a count of grammars answers a different one.
@@ -27,9 +27,10 @@ func ExtractsDefinitions(language string) bool {
 	return definitionQueryText(*entry) != ""
 }
 
-// GrammarOnlyLanguages returns the languages whose grammar is bundled but for
-// which nothing is extracted, sorted.
-func GrammarOnlyLanguages() []string {
+// TextOnlyLanguages returns the languages whose grammar is bundled but which
+// have no definition query, sorted. Their files are searchable by text and
+// yield no symbols.
+func TextOnlyLanguages() []string {
 	var out []string
 	for _, l := range PureGoBackend().Languages() {
 		if !ExtractsDefinitions(l) {
