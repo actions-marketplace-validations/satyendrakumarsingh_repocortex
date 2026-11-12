@@ -178,23 +178,39 @@ func (r *Resolver) applyOf(c call, obj registry.SymbolIndexEntry, rule string) d
 // its qualified name. A qualified call that finds no such member binds to
 // nothing: `bytes` of some other type is not what `os.read.bytes` reaches.
 func (r *Resolver) callInObject(c call, segs []string) (decision, bool) {
-	if !c.spec.Calls.ObjectsAreCallable || len(segs) < 2 {
+	if !c.spec.Calls.ObjectsAreCallable || len(segs) < 1 {
 		return decision{}, false
 	}
 	head := segs[0]
 	if _, found, known := r.typeNamed(c, head); found || known {
 		return decision{}, false
 	}
-	if !r.layout.Known() || !r.layout.HasDirNamed(head) {
-		return decision{}, false
-	}
+	// The chain starts at a package (`os.read.bytes`: os is a directory) or at
+	// an object of the same file or package directory (`read.bytes` written
+	// beside `object read`).
 	owner := strings.Join(segs[1:], ".")
+	where := func(s registry.SymbolIndexEntry) bool { return hasPathSegment(s.FilePath, head) }
+	if !r.layout.Known() || !r.layout.HasDirNamed(head) || len(segs) < 2 {
+		var objects []registry.SymbolIndexEntry
+		for _, s := range c.symbols[head] {
+			if isObjectKind(s.Kind) && isModuleLevel(s) && (s.FileID == c.fr.FileID || path.Dir(s.FilePath) == path.Dir(c.fr.Path)) {
+				objects = append(objects, s)
+			}
+		}
+		if len(objects) == 0 {
+			return decision{}, false
+		}
+		owner = strings.Join(segs, ".")
+		where = func(s registry.SymbolIndexEntry) bool {
+			return s.FileID == objects[0].FileID
+		}
+	}
 	var members []registry.SymbolIndexEntry
 	for _, s := range c.symbols[c.ref.Name] {
 		if s.Language != "" && s.Language != c.spec.Name {
 			continue
 		}
-		if !hasPathSegment(s.FilePath, head) {
+		if !where(s) {
 			continue
 		}
 		if qual, ok := qualOf(s); ok && qual == owner+"."+c.ref.Name &&

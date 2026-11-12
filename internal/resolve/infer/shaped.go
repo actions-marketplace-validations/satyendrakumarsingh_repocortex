@@ -1134,6 +1134,9 @@ func (r *Resolver) callOnTypeOrValue(c call, name string, stats *Stats) decision
 	if d, ok := r.callInPackage(c, name); ok {
 		return d
 	}
+	if d, ok := r.callInObject(c, []string{name}); ok {
+		return d
+	}
 	t, found, known := r.typeNamed(c, name)
 	if found {
 		if d, ok := c.bindMember(t, ruleNamedType); ok {
@@ -1511,7 +1514,11 @@ func (r *Resolver) memberByName(c call, limit model.Confidence, stats *Stats) de
 			delegating = true
 			continue
 		}
-		if _, isMember := memberOwner(s); isMember {
+		// A method written in an object literal is a member of some object, and
+		// the index does not say which: it still means the name is declared by
+		// more than one thing, and `ctx.onerror(err)` is not the one class's
+		// `onerror` when a context object has its own.
+		if _, isMember := memberOwner(s); isMember || c.spec.isObjectMember(s) {
 			members = append(members, s)
 		}
 	}

@@ -210,6 +210,7 @@ func buildCoreMembers() map[string]map[string]struct{} {
 		once never atLeastOnce atLeast exactly willReturn willReturnCallback
 		willReturnSelf willReturnMap willReturnOnConsecutiveCalls willThrowException
 		returnValue returnCallback withConsecutive onlyMethods disableOriginalConstructor
+		with expects method will
 		getMock`)
 	coreMembers["swift"] = words(`
 		append insert remove removeAll contains count isEmpty first last map filter reduce

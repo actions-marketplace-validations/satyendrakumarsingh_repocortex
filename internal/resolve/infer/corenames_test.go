@@ -12,7 +12,9 @@ func TestCoreMembersOfPHPAndKotlin(t *testing.T) {
 		{"php", "getBody", true},       // PSR-7
 		{"php", "getHeaderLine", true}, // PSR-7
 		{"php", "fail", true},          // PHPUnit
-		{"php", "assertSame", true},    // PHPUnit, by prefix
+		{"php", "with", true},          // PHPUnit mock builder: $mock->expects(...)->method(...)->with(...)
+		{"php", "expects", true},
+		{"php", "assertSame", true}, // PHPUnit, by prefix
 		{"php", "assertStringContainsString", true},
 		{"php", "expectException", true}, // PHPUnit, by prefix
 		{"php", "markTestSkipped", true},
