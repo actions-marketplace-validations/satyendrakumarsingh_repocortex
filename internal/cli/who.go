@@ -382,6 +382,8 @@ func (h *gitHistory) Commits(ctx stdctx.Context, limit int) ([]ownership.Commit,
 			When:        c.When,
 			Subject:     c.Subject,
 			Paths:       paths,
+
+			ShallowBoundary: c.ShallowBoundary,
 		})
 	}
 	h.storeCommits(head, limit, out)

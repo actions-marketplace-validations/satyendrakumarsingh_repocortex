@@ -62,6 +62,7 @@ func (a knowledgeHistory) Commits(ctx context.Context, limit int) ([]knowledge.C
 	for _, c := range cs {
 		out = append(out, knowledge.Commit{
 			SHA: c.SHA, Author: c.AuthorName, AuthorEmail: c.AuthorEmail, When: c.When, Paths: c.Paths,
+			ShallowBoundary: c.ShallowBoundary,
 		})
 	}
 	return out, nil

@@ -270,3 +270,39 @@ func paths(rep *Report) []string {
 	}
 	return out
 }
+
+// Fewer commits than the window means "the whole history" only on a full
+// clone. A walk that ended at a shallow clone's boundary says how many commits
+// the clone holds and never that the history fits.
+func TestAShallowCloneIsNotDescribedAsTheWholeHistory(t *testing.T) {
+	s := fakeStructure{"a.go": file("a.go", 10)}
+
+	full := rank(t, &fakeHistory{commits: []Commit{commit(3, "a.go"), commit(2, "a.go"), commit(1, "a.go")}}, s, Options{})
+	if full.ShallowClone || !strings.Contains(strings.Join(full.Notes, "\n"), "whole history (3 commits) fits inside the window") {
+		t.Errorf("full clone: shallow %v, notes %q", full.ShallowClone, full.Notes)
+	}
+
+	boundary := commit(1)
+	boundary.ShallowBoundary = true
+	cut := rank(t, &fakeHistory{commits: []Commit{commit(3, "a.go"), commit(2, "a.go"), boundary}}, s, Options{})
+	notes := strings.Join(cut.Notes, "\n")
+	if !cut.ShallowClone || cut.WindowFull {
+		t.Errorf("shallow %v, window full %v; want true and false", cut.ShallowClone, cut.WindowFull)
+	}
+	if !strings.Contains(notes, "Shallow clone: 3 commit(s) available") || !strings.Contains(notes, "fetch --unshallow") {
+		t.Errorf("the clone depth is not stated: %q", notes)
+	}
+	if strings.Contains(notes, "whole history") {
+		t.Errorf("a shallow clone was described as the whole history: %q", notes)
+	}
+	if len(cut.Hotspots) != 1 || cut.Hotspots[0].Commits != 2 {
+		t.Errorf("hotspots = %+v, want a.go with the 2 commits whose changes are known", cut.Hotspots)
+	}
+
+	// `git clone --depth 1`: one commit, and what it changed is unknown.
+	only := rank(t, &fakeHistory{commits: []Commit{boundary}}, s, Options{})
+	if notes := strings.Join(only.Notes, "\n"); len(only.Hotspots) != 0 ||
+		!strings.Contains(notes, "Shallow clone: 1 commit(s) available") {
+		t.Errorf("depth 1: hotspots %+v, notes %q", only.Hotspots, notes)
+	}
+}

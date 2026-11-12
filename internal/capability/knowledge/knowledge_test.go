@@ -370,28 +370,39 @@ func TestOverallDoesNotDependOnGrouping(t *testing.T) {
 	}
 }
 
-// A walk that runs into a shallow clone's boundary is an answer saying what
-// to do, not a failure. Any other failure, and a cancelled call, still fail.
-func TestAShallowCloneThatCannotBeWalkedIsExplained(t *testing.T) {
-	boom := errors.New("object not found")
-	rep, err := Analyze(context.Background(), &fakeHistory{err: boom}, fakeIndex{"a.go"}, 1, Options{ShallowClone: true})
-	if err != nil {
-		t.Fatalf("a shallow clone must be explained, not failed: %v", err)
-	}
+// A walk that ends at a shallow clone's boundary says so itself, whether or
+// not the caller knew the repository was shallow, and is never described as
+// every commit reachable from HEAD.
+func TestAWalkThatEndsAtAShallowBoundaryIsNotTheWholeHistory(t *testing.T) {
+	commits := repeat(6, 0, "Robin Vega", "svc/a.go")
+	// Oldest last is not required: the marker is read wherever it sits.
+	commits[0].ShallowBoundary = true
+
+	rep := analyze(t, commits, fakeIndex{"svc/a.go"}, Options{})
 	text := flat(rep)
-	for _, want := range []string{"No history was read", "shallow clone", "object not found", "fetch --unshallow"} {
+	if !rep.ShallowClone || rep.WindowFull {
+		t.Errorf("shallow %v, window full %v; want true and false", rep.ShallowClone, rep.WindowFull)
+	}
+	for _, want := range []string{"Shallow clone: 6 commit(s) available", "fetch --unshallow"} {
 		if !strings.Contains(text, want) {
 			t.Errorf("missing %q:\n%s", want, text)
 		}
 	}
-	if rep.CommitsRead != 0 || len(rep.Areas) != 0 || !rep.ShallowClone {
-		t.Errorf("rep = %+v", rep)
+	if strings.Contains(text, "All 6 commit(s) reachable") {
+		t.Errorf("a shallow clone was described as the whole history:\n%s", text)
 	}
+}
 
-	ctx, cancel := context.WithCancel(context.Background())
-	cancel()
-	if _, err := Analyze(ctx, &fakeHistory{err: context.Canceled}, fakeIndex{}, 1, Options{ShallowClone: true}); err == nil {
-		t.Error("a cancelled call must not be explained away as a shallow clone")
+// The reader stops at the boundary and returns what is there, so a failure to
+// read history is a failure, in a shallow clone as anywhere else. This package
+// used to turn it into an answer because the reader failed on every shallow
+// clone; keeping that would now hide a damaged repository behind advice to
+// fetch more history.
+func TestAHistoryFailureIsAFailureEvenInAShallowClone(t *testing.T) {
+	boom := errors.New("object not found")
+	if _, err := Analyze(context.Background(), &fakeHistory{err: boom}, fakeIndex{"a.go"}, 1,
+		Options{ShallowClone: true}); !errors.Is(err, boom) {
+		t.Errorf("err = %v, want the history failure", err)
 	}
 }
 

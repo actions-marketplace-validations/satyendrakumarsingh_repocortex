@@ -29,6 +29,13 @@ type Commit struct {
 	When        int64    `json:"when"`    // author time, Unix seconds
 	Subject     string   `json:"subject"` // first line of the message
 	Paths       []string `json:"paths"`   // repo-relative, index path space
+
+	// ShallowBoundary marks a commit at the edge of a shallow clone: a parent
+	// of it was never fetched, so the history ends here because of how the
+	// repository was cloned and not because the project began here. An
+	// adapter must carry it across, since a commit list shows no other sign:
+	// a shallow clone's oldest commit looks exactly like a first commit.
+	ShallowBoundary bool `json:"shallow_boundary,omitempty"`
 }
 
 // History is the read surface this package needs: recent commits with the paths

@@ -1805,6 +1805,15 @@ repocortex hotspots --path internal/ --commits 1000
 
 Needs a git repository. Agent tool: `list_hotspots`.
 
+On a shallow clone (`git clone --depth N`, which is what most CI checkouts are)
+the ranking is drawn from the commits the clone holds and says so: "Shallow
+clone: N commit(s) available". The oldest of those commits counts as read but
+contributes no files, because its parent was never fetched and what it changed
+cannot be computed. "The repository's whole history fits inside the window" is
+printed only for a full clone. `bus-factor` and `owners` state the same thing in
+the same words, and `impact --base` with a revision older than the clone depth
+fails with the reason and the fix (`git fetch --unshallow`).
+
 ### `bus-factor`
 
 Lists the directories whose recent commits come from the fewest people, most
@@ -1862,8 +1871,9 @@ What to keep in mind when reading it:
 - The output says how many commits were read and the dates they span. A shallow
   clone and a squash-merge workflow both distort the figures: the first has no
   history before its depth, the second records a whole branch as one commit
-  under one name. On a shallow clone whose history cannot be walked, the command
-  says so and measures nothing.
+  under one name. On a shallow clone the command reads the commits the clone
+  holds, says "Shallow clone: N commit(s) available", and never describes them
+  as every commit reachable from HEAD.
 - Directories with fewer than `--min-commits` commits are not measured and are
   counted in the output. They are unmeasured, not low risk. So are directories
   the index does not hold: never indexed, or deleted or renamed since. Renames

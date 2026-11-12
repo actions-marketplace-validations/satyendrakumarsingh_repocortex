@@ -137,7 +137,9 @@ func (a hotspotHistory) Commits(ctx context.Context, limit int) ([]hotspots.Comm
 	}
 	out := make([]hotspots.Commit, 0, len(cs))
 	for _, c := range cs {
-		out = append(out, hotspots.Commit{SHA: c.SHA, When: c.When, Paths: c.Paths})
+		out = append(out, hotspots.Commit{
+			SHA: c.SHA, When: c.When, Paths: c.Paths, ShallowBoundary: c.ShallowBoundary,
+		})
 	}
 	return out, nil
 }

@@ -666,6 +666,28 @@ proceeds. RepoCortex indexes extracted tarballs and vendored trees.
 
 **Fix.** Nothing required for indexing — the revision is recorded as empty.
 
+### `Shallow clone: N commit(s) available`
+
+**Cause.** The repository was cloned with `--depth`, which is the default for
+most CI checkouts. `hotspots`, `bus-factor`, `owners` and their agent tools read
+the commits the clone holds and stop at its boundary. The oldest commit is
+counted but contributes no changed files, because the parent it would be
+compared with was never fetched. Everyone and everything older than the depth is
+absent, and the output says so instead of "the whole history was read".
+
+**Fix.** `git fetch --unshallow`, or in GitHub Actions `fetch-depth: 0` on
+`actions/checkout`. Nothing is needed if the recent commits are all you meant to
+rank.
+
+### `git: this is a shallow clone and the commit needed is older than the history that was fetched`
+
+**Cause.** A revision such as `HEAD~20` or a base branch passed to
+`impact --base` / `analyze_change` names a commit beyond a shallow clone's
+depth.
+
+**Fix.** `git fetch --unshallow`, or fetch with a `--depth` that reaches the
+base revision.
+
 ### `level=WARN msg="working tree has uncommitted changes; the index describes files on disk, not the commit"`
 
 **Cause.** Informational. The index run is stamped with the HEAD SHA, but the

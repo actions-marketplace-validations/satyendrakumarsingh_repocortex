@@ -535,3 +535,31 @@ func fingerprint(r Report) string {
 	b.WriteString(strings.Join(r.Caveats, "\n"))
 	return b.String()
 }
+
+// TestAShallowCloneIsNotAnExhaustedWindow. A walk that returns fewer commits
+// than it asked for has read the whole history only on a full clone. At a
+// shallow clone's boundary the same shape means the opposite, and "nobody is
+// missing because of the window" would be said about a history that is missing
+// almost everybody.
+func TestAShallowCloneIsNotAnExhaustedWindow(t *testing.T) {
+	t.Parallel()
+	h := history()
+	oldest := 0
+	for i := range h.commits {
+		if h.commits[i].When < h.commits[oldest].When {
+			oldest = i
+		}
+	}
+	h.commits[oldest].ShallowBoundary = true
+
+	rep := analyze(t, h, blastRadius())
+	if !rep.Window.Shallow || rep.Window.Exhausted {
+		t.Fatalf("window = %+v, want shallow and not exhausted", rep.Window)
+	}
+	if hasCaveatContaining(rep, "nobody is missing because of the window") {
+		t.Error("a shallow clone was described as the whole history")
+	}
+	if !hasCaveatContaining(rep, "Shallow clone:") || !hasCaveatContaining(rep, "git fetch --unshallow") {
+		t.Errorf("the clone depth is not stated: %q", rep.Caveats)
+	}
+}

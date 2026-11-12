@@ -75,6 +75,9 @@ type Commit struct {
 	AuthorEmail string
 	When        int64 // author time, Unix seconds
 	Paths       []string
+	// ShallowBoundary marks a commit at the edge of a shallow clone; see
+	// ownership.Commit.ShallowBoundary.
+	ShallowBoundary bool
 }
 
 // History is the bounded commit source. An implementation that cannot honour
@@ -108,8 +111,11 @@ type Options struct {
 	Depth int
 	// PerFile measures each file instead of each directory.
 	PerFile bool
-	// ShallowClone says the repository was cloned with truncated history. The
-	// caller knows this; a commit list cannot show it.
+	// ShallowClone says the repository was cloned with truncated history,
+	// whether or not this walk reached the point where it was cut. A walk that
+	// does reach it says so itself (Commit.ShallowBoundary), so this is only
+	// needed for the other case: a window smaller than the clone depth, whose
+	// figures still leave out everyone older than the depth.
 	ShallowClone bool
 }
 
@@ -274,23 +280,19 @@ func Analyze(ctx context.Context, hist History, idx Index, runID int64, opts Opt
 		Caveats:      caveats(unit),
 	}
 
+	// The reader stops at a shallow clone's boundary and returns what is
+	// there, so a failure here is a failure and needs no special case.
 	commits, err := hist.Commits(ctx, window)
 	if err != nil {
-		// A walk that runs into a shallow clone's boundary fails on the first
-		// commit whose parent was never fetched. That is a state of the
-		// checkout the reader can do nothing about, and the user can: so it
-		// is an answer saying what to do, not a failure. A cancelled call is
-		// still a cancelled call.
-		if opts.ShallowClone && ctx.Err() == nil {
-			rep.Notes = append(rep.Notes, fmt.Sprintf("No history was read, so nothing was measured. This is "+
-				"a shallow clone, and the walk stopped where its history was cut off (%v). Fetch the full "+
-				"history (git fetch --unshallow), or read fewer commits than the depth it was cloned at. "+
-				"Figures from a shallow clone leave out everyone whose work is older than that depth.", err))
-			return rep, nil
-		}
 		return nil, fmt.Errorf("knowledge: read history: %w", err)
 	}
 	rep.CommitsRead, rep.WindowFull = len(commits), len(commits) >= window
+	for i := range commits {
+		if commits[i].ShallowBoundary {
+			rep.ShallowClone = true
+			break
+		}
+	}
 	if len(commits) == 0 {
 		rep.Notes = append(rep.Notes, "No commit history could be read, so nothing can be measured. "+
 			"Knowledge distribution needs a git repository with at least one commit.")
@@ -573,10 +575,14 @@ func notes(rep *Report, opts Options, touched int) []string {
 
 	switch {
 	case rep.ShallowClone:
+		available := ""
+		if !rep.WindowFull {
+			available = fmt.Sprintf(" Shallow clone: %d commit(s) available.", rep.CommitsRead)
+		}
 		out = append(out, fmt.Sprintf("This is a shallow clone: history was cut off when it was cloned, so "+
 			"the %d commit(s) read (%s to %s) are not the repository's whole history even where no more could "+
-			"be read. Fetch the full history (git fetch --unshallow) before relying on these figures.",
-			rep.CommitsRead, day(rep.OldestCommit), day(rep.NewestCommit)))
+			"be read.%s Fetch the full history (git fetch --unshallow) before relying on these figures.",
+			rep.CommitsRead, day(rep.OldestCommit), day(rep.NewestCommit), available))
 	case rep.WindowFull:
 		out = append(out, fmt.Sprintf("Only the newest %d commit(s) were read (%s to %s), which is the limit "+
 			"asked for. Any earlier history was not read, so anyone whose work is all in it is absent. Read "+

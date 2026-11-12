@@ -101,6 +101,15 @@ var (
 	// up", not "it isn't there", and callers may reasonably treat it as unknown
 	// rather than as absent.
 	ErrScanLimit = errors.New("git: history scan limit reached without a match")
+
+	// ErrShallowHistory reports that an answer needs a commit this shallow
+	// clone never fetched. FileLastModified returns it when the walk reached
+	// the clone's boundary without finding a change to the path, and revision
+	// resolution wraps it when a revision such as HEAD~20 names a commit older
+	// than the boundary. The message carries the remedy because it reaches
+	// the user unchanged.
+	ErrShallowHistory = errors.New("git: this is a shallow clone and the commit needed is older than " +
+		"the history that was fetched (run `git fetch --unshallow`, or fetch with a larger --depth)")
 )
 
 // MaxHistoryScan bounds path-scoped history searches. Without it,

@@ -2503,6 +2503,7 @@ OwnershipResponse.window.exhausted
 OwnershipResponse.window.newest_unix
 OwnershipResponse.window.oldest_unix
 OwnershipResponse.window.requested
+OwnershipResponse.window.shallow
 Plan.affected_tests
 Plan.completeness
 Plan.completeness.ambiguous_references

@@ -249,7 +249,8 @@ What the answer always states:
 - how many directories the history touched that the index does not hold;
 - that it counts who changed the code, not who understands it;
 - that a shallow clone or a squash-merge workflow distorts the figures. On a
-  shallow clone it says so in a note of its own.
+  shallow clone it says so in a note of its own, with how many commits the
+  clone holds. `list_hotspots` and `find_owners` say the same.
 
 People are the author names git recorded, exactly as spelled. Names are never
 merged: when two names committed from one address the answer names both and

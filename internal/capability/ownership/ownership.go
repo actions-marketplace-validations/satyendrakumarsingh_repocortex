@@ -245,10 +245,16 @@ type Window struct {
 	NewestUnix  int64 `json:"newest_unix,omitempty"`
 	OldestUnix  int64 `json:"oldest_unix,omitempty"`
 
-	// Exhausted is true when the walk returned fewer commits than it asked for,
-	// which means it reached the beginning of history and the window is not
-	// hiding anything.
+	// Exhausted is true when the walk returned fewer commits than it asked for
+	// and did not end at a shallow clone's boundary, which means it reached
+	// the beginning of history and the window is not hiding anything.
 	Exhausted bool `json:"exhausted"`
+
+	// Shallow is true when the walk ended at a shallow clone's boundary
+	// (`git clone --depth`): CommitsRead is all this clone holds, and older
+	// history exists upstream that was never fetched. Never set together with
+	// Exhausted.
+	Shallow bool `json:"shallow"`
 }
 
 // Untouched is the part of the blast radius no commit in the window touched.
@@ -419,7 +425,17 @@ func normalizeCommits(in []Commit) []Commit {
 }
 
 func windowOf(commits []Commit, requested int) Window {
-	w := Window{Requested: requested, CommitsRead: len(commits), Exhausted: len(commits) < requested}
+	w := Window{Requested: requested, CommitsRead: len(commits)}
+	for i := range commits {
+		if commits[i].ShallowBoundary {
+			w.Shallow = true
+			break
+		}
+	}
+	// Fewer commits than asked for used to be read as "the whole history". In
+	// a shallow clone it is the clone depth, and saying "nobody is missing"
+	// there is exactly wrong: everybody older than the depth is.
+	w.Exhausted = len(commits) < requested && !w.Shallow
 	if len(commits) > 0 {
 		w.NewestUnix = commits[0].When
 		w.OldestUnix = commits[len(commits)-1].When
@@ -640,6 +656,14 @@ func (r Report) caveats() []string {
 	case r.Window.CommitsRead == 0:
 		out = append(out, "No commit history was read at all, so no name here rests on anything. "+
 			"Either this is not a git repository, or it has no commits yet.")
+	case r.Window.Shallow:
+		out = append(out, fmt.Sprintf(
+			"Shallow clone: %s available. History older than the depth this repository was cloned at "+
+				"was never fetched, so anyone whose work on this code is older than that is absent from "+
+				"this report, and absent reads exactly like never having touched it. What the oldest "+
+				"commit changed is unknown too, since its parent is missing. "+
+				"`git fetch --unshallow` brings in the rest.",
+			plural(r.Window.CommitsRead, "commit", "commits")))
 	case r.Window.Exhausted:
 		out = append(out, fmt.Sprintf(
 			"The whole history was read (%s from HEAD), so nobody is missing because of the window.",
