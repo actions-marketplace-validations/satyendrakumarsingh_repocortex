@@ -129,7 +129,8 @@ namespace A.B {
 }
 
 // tremor: `import { Calendar as CalendarPrimitive }` then `<CalendarPrimitive />`.
-func TestRenamedImportIsUsedUnderTheExportedName(t *testing.T) {
+// The use keeps the name it is written with; the import row names the export.
+func TestRenamedImportKeepsItsNameAndNamesTheExport(t *testing.T) {
 	res := parse(t, "d.tsx", `import { Calendar as CalendarPrimitive, Other, type T as U } from "./cal"
 import { z as zed } from "./z"
 export const Picker = () => <CalendarPrimitive mode="x" />
@@ -142,8 +143,8 @@ class K extends CalendarPrimitive {}
 	}
 	sort.Strings(rows)
 	wantList(t, "imports", rows, []string{
-		"./cal ", "./cal .Calendar", "./cal .CalendarPrimitive", "./cal .Other", "./cal .T", "./cal .U",
-		"./z ", "./z .z", "./z .zed",
+		"./cal ", "./cal .CalendarPrimitive=Calendar", "./cal .Other", "./cal .U=T",
+		"./z ", "./z .zed=z",
 	})
 	var calls []string
 	for _, r := range res.References {
@@ -151,11 +152,11 @@ class K extends CalendarPrimitive {}
 	}
 	sort.Strings(calls)
 	wantList(t, "references", calls, []string{
-		"reference.call Calendar/",
+		"reference.call CalendarPrimitive/",
 		"reference.call Other/",
 		"reference.call Other/",
 		"reference.call Root/CalendarPrimitive",
-		"reference.call z/",
-		"reference.extends Calendar/",
+		"reference.call zed/",
+		"reference.extends CalendarPrimitive/",
 	})
 }

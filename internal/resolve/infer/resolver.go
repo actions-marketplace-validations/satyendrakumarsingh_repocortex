@@ -524,6 +524,22 @@ func (r *Resolver) ResolveFile(
 		// tried, and what they cost.
 		cands := symbols[ref.Name]
 
+		// A use of a name the file imported under another name is bound through
+		// that import and by no other rule. See renamed.go.
+		if d, handled := r.viaRenamedImport(spec, fr, imports, ref, symbols); handled {
+			switch {
+			case d.verdict == verdictBound && d.best.confidence.AtLeast(r.opts.MinConfidence):
+				bind(ref, d.best)
+			case d.verdict == verdictExternal:
+				unresolved(ref, true)
+			case d.verdict == verdictUnresolved:
+				unresolved(ref, false)
+			default:
+				ambiguous(ref)
+			}
+			return
+		}
+
 		// The ONE exclusion made before the tiers, and it is not a heuristic
 		// about likelihood — it is a fact about what a reference can denote. A
 		// Vue component cannot call a Python function: the two share no
@@ -876,6 +892,18 @@ func (r *Resolver) AppendNames(dst []string, seen map[string]struct{}, fr regist
 		switch ref.ReceiverKind {
 		case model.ReceiverName, model.ReceiverType, model.ReceiverScope, model.ReceiverPath:
 			add(lastSegment(ref.Receiver))
+		}
+	}
+	// A use of a renamed import is bound to the definition of the name the
+	// module exports it by (renamed.go), which no reference spells.
+	for _, imp := range fr.Imports {
+		if local, exported, ok := renamedAlias(imp.Alias); ok {
+			for _, ref := range fr.Refs {
+				if ref.Name == local {
+					add(exported)
+					break
+				}
+			}
 		}
 	}
 	return dst
@@ -1243,6 +1271,12 @@ type importSet struct {
 	// Looked up, never iterated.
 	members map[string][]int
 
+	// renamed maps the local name of a member imported under another name —
+	// `CalendarPrimitive` in `import { Calendar as CalendarPrimitive } from
+	// './cal'` — to the name the module exports it by and the import it came
+	// in by. A name is here only when the file renamed it. See viaRenamedImport.
+	renamed map[string]renamedImport
+
 	// layout is the run's directory index, where there is one. An absolute
 	// import cannot name a module from inside a package directory, and only
 	// the layout knows which directories are packages.
@@ -1252,6 +1286,16 @@ type importSet struct {
 	// relative import is relative TO. Set by ResolveFile; empty in a set built
 	// without a file, where a relative import then anchors at the root.
 	base []string
+}
+
+// renameSeparator joins the local name and the exported name in a member
+// import's alias: ".local=exported". internal/parse writes it.
+const renameSeparator = "="
+
+// renamedImport is what a renamed member import says about its local name.
+type renamedImport struct {
+	exported string // the name the module exports it by
+	entry    int    // index into importSet.imports of the import that brought it
 }
 
 // memberAliasPrefix marks an import row whose alias names a member imported
@@ -1311,6 +1355,11 @@ func buildImportSet(spec LanguageSpec, imports []registry.Import) importSet {
 	var byPath map[string]int
 	for _, imp := range imports {
 		member, isMember := strings.CutPrefix(imp.Alias, memberAliasPrefix)
+		exported := ""
+		if isMember {
+			// ".local=exported": the member was imported under another name.
+			member, exported, _ = strings.Cut(member, renameSeparator)
+		}
 		p := strings.Trim(imp.Path, "./")
 		if isMember {
 			// A member of a bare relative import — `from . import sibling` — has
@@ -1332,6 +1381,14 @@ func buildImportSet(spec LanguageSpec, imports []registry.Import) importSet {
 				s.members = make(map[string][]int, len(imports))
 			}
 			s.members[member] = append(s.members[member], i)
+			if exported != "" && exported != member {
+				if s.renamed == nil {
+					s.renamed = map[string]renamedImport{}
+				}
+				if _, dup := s.renamed[member]; !dup {
+					s.renamed[member] = renamedImport{exported: exported, entry: i}
+				}
+			}
 			continue
 		}
 		if p == "" {

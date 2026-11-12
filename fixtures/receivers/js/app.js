@@ -18,7 +18,7 @@ function runApp(unknown) { // def js.app.runApp
   bag.cjsGamma(); // call cjsGamma -> js.bag.gamma
   bag.cjsDelta(); // call cjsDelta -> js.bag.delta
   fs.readFileSync('x'); // call readFileSync -> external
-  renamedBeta(); // call renamedBeta -> none
+  renamedBeta(); // call renamedBeta=cjsBeta -> js.bag.beta
   var shape = new CjsShape('x'); // call CjsShape -> new js.shape.CjsShape
   shape.describe(); // call describe -> js.shape.describe
   new CjsOther(); // call CjsOther -> new js.oshape.CjsOther
