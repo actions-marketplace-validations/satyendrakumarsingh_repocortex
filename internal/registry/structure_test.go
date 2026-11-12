@@ -401,3 +401,40 @@ func names(us []UnreferencedSymbol) []string {
 	}
 	return out
 }
+
+// TestUnreferencedSymbolsUnderReturnsTheSameRows: the prefix form exists so a
+// caller that wants one directory does not pay for the probes of every row
+// outside it. The rows, their order and the signals of the rows inside the
+// prefix must be exactly what the plain form returns, because a caller that
+// counts what it examined counts the same thing either way.
+func TestUnreferencedSymbolsUnderReturnsTheSameRows(t *testing.T) {
+	r, runID, _ := structureFixture(t)
+	ctx := context.Background()
+
+	all, err := r.UnreferencedSymbols(ctx, runID, 0, 100)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, prefix := range []string{"a/", "b/", "a/a.go", "nothing/"} {
+		under, err := r.UnreferencedSymbolsUnder(ctx, runID, 0, 100, prefix)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(under) != len(all) {
+			t.Fatalf("prefix %q: %d rows, the plain form returns %d", prefix, len(under), len(all))
+		}
+		for i := range all {
+			a, u := all[i], under[i]
+			if a.ID != u.ID {
+				t.Fatalf("prefix %q: row %d is %d, want %d", prefix, i, u.ID, a.ID)
+			}
+			if strings.HasPrefix(a.FilePath, prefix) {
+				if a != u {
+					t.Errorf("prefix %q: a row inside the prefix differs:\n under %+v\n plain %+v", prefix, u, a)
+				}
+			} else if u.NameUnbound || u.Overrides || u.ConsumesEvent {
+				t.Errorf("prefix %q: %s is outside it and still carries a signal: %+v", prefix, u.Name, u)
+			}
+		}
+	}
+}

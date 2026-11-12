@@ -415,6 +415,11 @@ func Refresh(
 		if err := reg.RefreshRunHealth(ctx, runID); err != nil {
 			return stats, err
 		}
+		// And the binding figures every relationship answer opens with, which
+		// the pass above changed. See registry.RefreshRunStats.
+		if err := reg.RefreshRunStats(ctx, runID); err != nil {
+			return stats, err
+		}
 	}
 	// The pass succeeded, so this run's contents are now this build's work.
 	// Skipping this would turn the build-crossing rule into a permanent

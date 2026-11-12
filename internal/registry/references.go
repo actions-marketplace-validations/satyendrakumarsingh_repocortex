@@ -619,6 +619,18 @@ func (s ResolutionStats) BindingRate() float64 {
 
 // ResolutionStats reads outcome counts for a run.
 func (r *Registry) ResolutionStats(ctx context.Context, runID int64) (ResolutionStats, error) {
+	// Stored when `resolve` finished, if nothing has changed since; see
+	// runstats.go. The live query below is what an older index gets.
+	if s, ok, err := r.storedResolutionStats(ctx, runID); err != nil {
+		return ResolutionStats{}, err
+	} else if ok {
+		return s, nil
+	}
+	return r.computeResolutionStats(ctx, runID)
+}
+
+// computeResolutionStats is ResolutionStats read from the reference table.
+func (r *Registry) computeResolutionStats(ctx context.Context, runID int64) (ResolutionStats, error) {
 	var s ResolutionStats
 	if err := r.db.QueryRowContext(ctx,
 		`SELECT COUNT(*) FROM symbol_references

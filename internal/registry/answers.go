@@ -321,6 +321,20 @@ func (l LanguageBinding) ExtractsReferences() bool { return l.Total > 0 || l.Rel
 // edge, so a caller that needs this per request should memoise it by run id,
 // as it does ResolutionStats: a committed run never changes.
 func (r *Registry) LanguageBindings(ctx context.Context, runID int64) (map[string]LanguageBinding, error) {
+	// The figures depend on the index revision and on nothing the caller asked,
+	// so `resolve` stores them when it finishes (runstats.go). An index written
+	// by an older build, or changed since it was last summarised, has no valid
+	// stored copy and is computed here as it always was.
+	if out, ok, err := r.storedLanguageBindings(ctx, runID); err != nil {
+		return nil, err
+	} else if ok {
+		return out, nil
+	}
+	return r.computeLanguageBindings(ctx, runID)
+}
+
+// computeLanguageBindings is LanguageBindings read from the tables themselves.
+func (r *Registry) computeLanguageBindings(ctx context.Context, runID int64) (map[string]LanguageBinding, error) {
 	out := map[string]LanguageBinding{}
 	get := func(lang string) LanguageBinding {
 		l := out[lang]

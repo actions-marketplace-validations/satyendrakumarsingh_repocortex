@@ -246,6 +246,12 @@ type Source interface {
 
 var _ Source = (*registry.Registry)(nil)
 
+// prefixSource is a Source that can skip the per-definition work for rows
+// outside a path prefix. The registry is one; a test slice need not be.
+type prefixSource interface {
+	UnreferencedSymbolsUnder(ctx context.Context, runID, afterID int64, limit int, prefix string) ([]registry.UnreferencedSymbol, error)
+}
+
 // Options bounds and filters a scan.
 type Options struct {
 	// Limit is the most candidates to return. Zero means DefaultLimit.
@@ -353,7 +359,15 @@ func Find(ctx context.Context, deps capability.Deps, src Source, runID int64, op
 	truncated := false
 scan:
 	for {
-		page, err := src.UnreferencedSymbols(ctx, runID, after, pageSize)
+		var page []registry.UnreferencedSymbol
+		var err error
+		if ps, ok := src.(prefixSource); ok && opts.PathPrefix != "" {
+			// The rows outside the prefix are discarded below, so their probes
+			// are not worked out. The rows and their order are unchanged.
+			page, err = ps.UnreferencedSymbolsUnder(ctx, runID, after, pageSize, opts.PathPrefix)
+		} else {
+			page, err = src.UnreferencedSymbols(ctx, runID, after, pageSize)
+		}
 		if err != nil {
 			return nil, fmt.Errorf("deadcode: %w", err)
 		}
