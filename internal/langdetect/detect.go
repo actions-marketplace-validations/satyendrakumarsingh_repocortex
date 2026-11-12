@@ -356,11 +356,37 @@ func (d *Detector) override(rel string) (string, bool) {
 
 // libraryName is the grammar library's answer for a file name, extended by
 // the few extensions it has no entry for.
+//
+// The library does not fold case consistently: `legacy.C` is found and
+// `solver.F90` is not, so preprocessed Fortran was skipped as a file of no
+// known type. An extension that fails as written is tried again in lower
+// case. The two extensions whose upper-case form means something else by
+// convention are settled first.
 func libraryName(base string) string {
+	ext := path.Ext(base)
+	if g, ok := upperCaseExtensions[ext]; ok {
+		return g
+	}
 	if e := grammars.DetectLanguage(base); e != nil {
 		return e.Name
 	}
-	return extraExtensions[strings.ToLower(path.Ext(base))]
+	lower := strings.ToLower(ext)
+	if g, ok := extraExtensions[lower]; ok {
+		return g
+	}
+	if lower != ext {
+		if e := grammars.DetectLanguage("x" + lower); e != nil {
+			return e.Name
+		}
+	}
+	return ""
+}
+
+// upperCaseExtensions are the extensions that name a different language in
+// upper case than in lower: `.C` and `.H` are C++ where `.c` and `.h` are C.
+var upperCaseExtensions = map[string]string{
+	".C": "cpp",
+	".H": "cpp",
 }
 
 // extraExtensions maps extensions the library does not know to a grammar.
