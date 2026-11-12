@@ -63,6 +63,11 @@ repocortex-out/
 internal/web/e2e/node_modules/
 internal/web/e2e/test-results/
 
+# VS Code extension: installed dependencies, compiled output and packages
+editors/vscode/node_modules/
+editors/vscode/out/
+editors/vscode/*.vsix
+
 # Machine-local e2e fixtures: real repositories on one disk, never public
 internal/web/e2e/support/local-fixtures.mjs
 

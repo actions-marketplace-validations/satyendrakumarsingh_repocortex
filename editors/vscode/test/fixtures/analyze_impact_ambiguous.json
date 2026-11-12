@@ -1,0 +1,10 @@
+{
+  "is_error": true,
+  "result": {
+    "index_revision": 0,
+    "index_status": "",
+    "summary": ""
+  },
+  "text": "=== SYSTEM METADATA ===\nerror_code: internal\nimpact analysis: capability: \"New\" matches 15 symbols; re-ask with a fully-qualified name (internal/capability/ownership/ownership.go:New, internal/diffgraph/diff.go:New, internal/docs/derive.go:New, internal/edit/editor.go:New, internal/errs/errs.go:New, … and 10 more)\nhint: RepoCortex failed internally. The index is intact; fall back to search_code for this question and report the failure.\n",
+  "tool": "analyze_impact"
+}
