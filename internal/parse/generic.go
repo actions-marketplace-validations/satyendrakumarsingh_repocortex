@@ -503,6 +503,10 @@ func (p *genericParser) Parse(ctx context.Context, path string, src []byte) (*Re
 	argCounts := by.extractCounts(by.argCountQuery, "args", tree, src)
 	paramCounts := by.extractCounts(by.paramCountQuery, "params", tree, src)
 
+	// Each clause head's arity, for the languages that write a function as
+	// several clauses. See clausemerge.go.
+	clauseKeys := by.clauseArities(tree, tags)
+
 	// The verdict on the parse itself, also read from the tree.
 	p.describeParse(res, tree, stop, src)
 
@@ -622,7 +626,7 @@ func (p *genericParser) Parse(ctx context.Context, path string, src []byte) (*Re
 		}
 	}
 
-	res.Symbols = dedupeSymbols(res.Symbols)
+	res.Symbols = mergeClauses(dedupeSymbols(res.Symbols), clauseKeys)
 
 	// The status was decided by describeParse and is NOT revisited here.
 	// "Parsed cleanly and declared nothing" is a complete, correct reading of

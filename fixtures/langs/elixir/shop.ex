@@ -101,4 +101,11 @@ defmodule Shop.Helpers do
   def format(amount, currency \\ "EUR")
   def format(amount, "EUR"), do: "#{amount} EUR"
   def format(amount, _), do: "#{amount}"
+
+  # pack/1 and pack/2 are two functions; the pack/1 clause after unpack/1 is
+  # not adjacent to the first, so it is a second symbol.
+  def pack(item), do: item
+  def pack(item, qty), do: {item, qty}
+  def unpack(box), do: box
+  def pack(nil), do: nil
 end
