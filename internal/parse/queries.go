@@ -433,6 +433,35 @@ var inheritanceQueries = map[string]string{
 (primary_constructor_base_type (qualified_name (generic_name . (identifier) @name @reference.extends) .))
 `,
 
+	// C++ lists its bases after the colon, each optionally preceded by an access
+	// specifier and `virtual`:
+	//
+	//	class A : public B, private C   -> (base_class_clause (access_specifier) (type_identifier) ...)
+	//	struct S : B                    -> the same node under struct_specifier
+	//	class A : public Base<T>        -> (template_type (type_identifier) (template_argument_list))
+	//	class A : public ns::B          -> (qualified_identifier (namespace_identifier) (type_identifier))
+	//
+	// All of them are EXTENDS: C++ has no interface construct, and an abstract
+	// class used as one is a base class to the grammar. One clause serves class
+	// and struct, so no pattern names the parent.
+	//
+	// A qualified base is captured by its last segment, at up to three levels
+	// (`a::b::C`, which nests as qualified_identifier inside qualified_identifier),
+	// and only when the qualifier is a namespace: `Base<T>::type`, a member of a
+	// dependent type, names nothing a symbol could be bound to, and capturing its
+	// `type` would be a false edge. Out-of-line method definitions `A::m()` are a
+	// separate gap and not read here.
+	"cpp": `
+(base_class_clause (type_identifier) @name @reference.extends)
+(base_class_clause (template_type . (type_identifier) @name @reference.extends))
+(base_class_clause (qualified_identifier . (type_identifier) @name @reference.extends .))
+(base_class_clause (qualified_identifier . (namespace_identifier) (type_identifier) @name @reference.extends .))
+(base_class_clause (qualified_identifier . (namespace_identifier) (template_type . (type_identifier) @name @reference.extends) .))
+(base_class_clause (qualified_identifier . (namespace_identifier) (qualified_identifier . (namespace_identifier) (type_identifier) @name @reference.extends .) .))
+(base_class_clause (qualified_identifier . (namespace_identifier) (qualified_identifier . (namespace_identifier) (template_type . (type_identifier) @name @reference.extends) .) .))
+(base_class_clause (qualified_identifier . (namespace_identifier) (qualified_identifier . (namespace_identifier) (qualified_identifier . (namespace_identifier) (type_identifier) @name @reference.extends .) .) .))
+`,
+
 	// Rust has no classes; the hierarchy is traits.
 	//
 	//	trait A: B + C       -> (trait_item (trait_bounds (type_identifier) (type_identifier)))
