@@ -871,7 +871,15 @@ func (w *shWalker) classNameOf(n *ts.Node) (string, uint32, bool) {
 	if nameNode == nil {
 		return "", 0, false
 	}
-	name := normalizeType(w.text(nameNode))
+	var name string
+	if raw := w.text(nameNode); w.language == "kotlin" && strings.HasPrefix(raw, "`") {
+		// A name in backticks is whatever it spells, and is not a type
+		// expression for normalizeType to read; the symbol is named without
+		// them (see registerNameFix in lang_kotlin.go).
+		name = strings.Trim(raw, "`")
+	} else {
+		name = normalizeType(raw)
+	}
 	if i := strings.LastIndexAny(name, ".:"); i >= 0 {
 		name = name[i+1:]
 	}
