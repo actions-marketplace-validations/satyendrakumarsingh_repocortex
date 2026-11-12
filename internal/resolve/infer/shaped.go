@@ -1,6 +1,7 @@
 package infer
 
 import (
+	"fmt"
 	"path"
 	"strings"
 
@@ -104,6 +105,7 @@ const (
 	ruleExtension         = "the only function of this name; called as a method, so an extension function of the receiver's type"
 	ruleNamedAfterType    = "receiver is named after the type that declares it"
 	ruleOnlyMember        = "the only member of this name in the repository; the receiver's type is not known"
+	ruleOnlyType          = "the only type that declares a member of this name; the receiver's type is not known"
 	ruleOnlyFree          = "the only free function of this name in the repository; its namespace is not a file"
 )
 
@@ -402,40 +404,38 @@ func ownerQual(c registry.SymbolIndexEntry) string {
 }
 
 // oneDeclaration picks the declaration that stands for a group which is one
-// definition. chosen is false when the group holds several declarations and
-// nothing selected among them: the earliest is returned, and whether that is
-// THE definition (an overload signature and its implementation) or merely one
-// of several methods of the name (true overloads) is the caller's to say. ok
-// is false when the group is not one type's members at all.
-func oneDeclaration(ref registry.Reference, group []registry.SymbolIndexEntry) (first registry.SymbolIndexEntry, chosen, ok bool) {
+// definition. ok is false when the group is not one type's members at all.
+// Otherwise the choice says which declaration is named and whether the call
+// identifies it: where the language has overloads the argument count narrows
+// the group (overload.go), and where it does not the earliest declaration is
+// THE definition (an overload signature and its implementation) unless the
+// count selects another.
+func oneDeclaration(spec LanguageSpec, ref registry.Reference, group []registry.SymbolIndexEntry) (overloadChoice, bool) {
 	if len(group) == 0 {
-		return registry.SymbolIndexEntry{}, false, false
+		return overloadChoice{}, false
 	}
 	// Declarations of one name on one type in one directory are overloads, or
 	// a declaration and its definition. Which TYPE is not in doubt.
 	for _, c := range group[1:] {
 		if c.Name != group[0].Name || path.Dir(c.FilePath) != path.Dir(group[0].FilePath) {
-			return registry.SymbolIndexEntry{}, false, false
+			return overloadChoice{}, false
 		}
 		a, _ := memberOwner(c)
 		b, _ := memberOwner(group[0])
 		if a != b {
-			return registry.SymbolIndexEntry{}, false, false
+			return overloadChoice{}, false
 		}
 	}
 	if len(group) == 1 {
-		return group[0], true, true
+		return overloadChoice{first: group[0], chosen: true, declared: 1, allowed: 1}, true
+	}
+	if spec.Calls.Overloads {
+		return chooseOverload(ref, group), true
 	}
 	if c, picked := preferByArity(ref, group); picked {
-		return c, true, true
+		return overloadChoice{first: c, chosen: true, declared: len(group), allowed: 1}, true
 	}
-	first = group[0]
-	for _, c := range group[1:] {
-		if c.ID < first.ID {
-			first = c
-		}
-	}
-	return first, false, true
+	return overloadChoice{first: earliest(group), declared: len(group), allowed: len(group)}, true
 }
 
 // bindMember binds the call to the member of a type, if the type declares one.
@@ -444,20 +444,21 @@ func (c call) bindMember(t typeRef, rule string) (decision, bool) {
 	if len(group) == 0 {
 		return decision{}, false
 	}
-	first, chosen, ok := oneDeclaration(c.ref, group)
+	o, ok := oneDeclaration(c.spec, c.ref, group)
 	if !ok {
 		return ambiguousCall, true
 	}
+	first := o.first
 	confidence := model.ConfidenceHigh
 	reason := rule + " (" + t.name + ")"
 	switch {
-	case !chosen && c.spec.Calls.Overloads:
+	case o.overloaded():
 		// The type is right. Which of its methods of this name is a choice the
 		// argument count did not make, and the first declaration is the one
 		// called less than half the time: 49 right of 92 across Java, C# and
 		// C++.
 		confidence = model.ConfidenceLow
-		reason = rule + ", overloaded: the first declaration (" + t.name + ")"
+		reason = overloadedReason(rule, t.name, o)
 	case !t.strong:
 		confidence = c.spec.Calls.Measured.uniqueTypeName()
 		reason = rule + ", the only type of that name (" + t.name + ")"
@@ -539,18 +540,20 @@ func (r *Resolver) callBare(c call, stats *Stats) decision {
 				rule = ruleEnclosingScope
 			}
 			switch {
-			case len(near) > 1 && c.spec.Calls.Overloads && anyKnownArity(near):
+			case len(near) > 1 && c.spec.Calls.Overloads:
 				// Several declarations of one name where the language has
-				// overloads are several functions. The argument count may
-				// choose; nothing else here can. Where no declaration's
-				// parameter count is known at all — C++ — a prototype and its
-				// definition cannot be told from two overloads, and the
-				// same-file rule keeps the tier it measured there (25 of 25
-				// on leveldb).
-				if s, picked := preferByArity(c.ref, near); picked {
-					return bound(candidate{s, model.ConfidenceHigh, rule})
+				// overloads are several functions, or a prototype and its
+				// definition, and only the argument count can tell which. A
+				// count that leaves one is the callee. Anything else is a
+				// choice, and is recorded as one: where no declaration's count
+				// is known - C++ today - a prototype cannot be told from an
+				// overload either, and the first declaration was the callee
+				// 3 times in 30 on google/benchmark (FormatKV).
+				o := chooseOverload(c.ref, near)
+				if o.chosen {
+					return bound(candidate{o.first, model.ConfidenceHigh, rule})
 				}
-				return bound(candidate{first, model.ConfidenceLow, rule + ", overloaded: the first declaration"})
+				return bound(candidate{o.first, model.ConfidenceLow, overloadedReason(rule, "", o)})
 			case c.spec.Calls.DynamicSelf && c.within == first.ID:
 				// A helper that shares its name with the method it wraps:
 				// `def respond_to; app { respond_to(...) } end`. Inside the
@@ -651,17 +654,6 @@ func (r *Resolver) bareOnOtherType(c call, stats *Stats) decision {
 	return ambiguousCall
 }
 
-// anyKnownArity reports whether the parser determined a parameter count for
-// any of the candidates.
-func anyKnownArity(cs []registry.SymbolIndexEntry) bool {
-	for _, c := range cs {
-		if c.ParamCount.Known() {
-			return true
-		}
-	}
-	return false
-}
-
 // outerQual is the qualified name of what a nested type is nested in, or "".
 func outerQual(qual string) string {
 	i := strings.LastIndexByte(qual, '.')
@@ -704,11 +696,11 @@ func (r *Resolver) bareByName(c call, reach []registry.SymbolIndexEntry, stats *
 					imported = append(imported, s)
 				}
 			}
-			if first, chosen, ok := oneDeclaration(c.ref, imported); ok {
-				if !chosen && c.spec.Calls.Overloads {
-					return bound(candidate{first, model.ConfidenceMedium, ruleStaticImport + ", overloaded: the first declaration (" + owner + ")"})
+			if o, ok := oneDeclaration(c.spec, c.ref, imported); ok {
+				if o.overloaded() {
+					return bound(candidate{o.first, model.ConfidenceLow, overloadedReason(ruleStaticImport, owner, o)})
 				}
-				return bound(candidate{first, model.ConfidenceHigh, ruleStaticImport + " (" + owner + ")"})
+				return bound(candidate{o.first, model.ConfidenceHigh, ruleStaticImport + " (" + owner + ")"})
 			}
 		}
 	}
@@ -1012,8 +1004,8 @@ func ownedByImported(c call, m module, owner string) (decision, bool) {
 			owned = append(owned, s)
 		}
 	}
-	if first, chosen, ok := oneDeclaration(c.ref, owned); ok && chosen {
-		return bound(candidate{first, model.ConfidenceHigh, ruleImportedObject + " (" + owner + ")"}), true
+	if o, ok := oneDeclaration(c.spec, c.ref, owned); ok && o.chosen {
+		return bound(candidate{o.first, model.ConfidenceHigh, ruleImportedObject + " (" + owner + ")"}), true
 	}
 	return decision{}, false
 }
@@ -1460,12 +1452,18 @@ func (r *Resolver) memberByName(c call, limit model.Confidence, stats *Stats) de
 				named = append(named, s)
 			}
 		}
-		if first, _, ok := oneDeclaration(c.ref, named); ok {
-			return bound(candidate{first, weaker(c.spec.Calls.Measured.namedAfterType(), limit), ruleNamedAfterType})
+		if o, ok := oneDeclaration(c.spec, c.ref, named); ok {
+			tier := weaker(c.spec.Calls.Measured.namedAfterType(), limit)
+			reason := ruleNamedAfterType
+			if o.overloaded() {
+				tier, reason = weaker(tier, model.ConfidenceLow), overloadedReason(ruleNamedAfterType, hint, o)
+			}
+			return bound(candidate{o.first, tier, reason})
 		}
 	}
 
-	if first, _, ok := oneDeclaration(c.ref, members); ok {
+	if o, ok := oneDeclaration(c.spec, c.ref, members); ok {
+		first := o.first
 		if r.specs.IsGenericName(c.ref.Name) || c.spec.isCoreMember(c.ref.Name) {
 			// One `get` in a repository says nothing about what a `get(...)`
 			// meant; the others are in libraries that were never indexed. The
@@ -1473,7 +1471,18 @@ func (r *Resolver) memberByName(c call, limit model.Confidence, stats *Stats) de
 			// every string or collection. See corenames.go.
 			return ambiguousCall
 		}
-		return bound(candidate{first, weaker(c.spec.Calls.Measured.unknownReceiver(), limit), ruleOnlyMember})
+		if o.overloaded() {
+			// The type is the only one to declare the name, and it declares it
+			// several times. "The only member" would be a false statement.
+			owner, _ := memberOwner(first)
+			return bound(candidate{first, weaker(weaker(c.spec.Calls.Measured.unknownReceiver(), limit), model.ConfidenceLow),
+				overloadedReason(ruleOnlyType, owner, o)})
+		}
+		reason := ruleOnlyMember
+		if o.declared > 1 {
+			reason = ruleOnlyType + fmt.Sprintf(", declared %d times as one function; the first (%s) is its definition", o.declared, first.FQN)
+		}
+		return bound(candidate{first, weaker(c.spec.Calls.Measured.unknownReceiver(), limit), reason})
 	}
 	if len(members) > c.spec.MaxCandidates {
 		stats.CapExceeded++
