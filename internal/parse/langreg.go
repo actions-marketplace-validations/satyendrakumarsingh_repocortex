@@ -48,7 +48,6 @@ var (
 // understands (function, method, constructor, class, struct, enum, interface,
 // trait, type_alias, module, namespace, constant, variable, field).
 // References are @reference.KIND with the same @name.
-//
 func registerDefinitions(language, query string, replaceInferred bool) {
 	if _, dup := registeredDefinitions[language]; dup {
 		duplicateRegistrations = append(duplicateRegistrations, language)
