@@ -52,7 +52,7 @@ Real output, on a copy of this repository's own working tree:
 $ repocortex index
   Files:         422 indexed, 54 skipped (476 discovered)
   Symbols:       6259
-  References:    29506 (unresolved until M2)
+  References:    29506 (bound by `repocortex resolve`)
   Imports:       2063
   Duration:      10026ms
 

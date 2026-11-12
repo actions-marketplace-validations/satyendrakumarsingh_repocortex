@@ -44,7 +44,7 @@ Found while writing the [CLI output guide](guides/cli-output-guide.md) and the [
 |---|---|
 | `rename` | Definition sites stay `high` after a compiler import, so the default `--floor exact` refuses every rename; only `--floor high` applies. |
 | `index` | An incremental index does not start a new run, so `diff` between two commits can compare a run with itself. `--full` works around it. |
-| `index` / `resolve` | Output says "unresolved until M2" (an internal milestone name), and `resolve` after an incremental index reports "Edges: 0" for new edges only. |
+| `resolve` | After an incremental index it reports only what that pass wrote, and says so ("this pass found nothing new to bind" when it wrote none); the edge total beside it is the whole graph. |
 | `compile` / `verify` | The 12-entry scope can fill with configuration keys and push the changed class out, so `verify` reports the file as in neither scope. |
 | `references` | A type used as a field or constructor parameter is not found as a reference. |
 | `callees` / `missed` | Fields used as receivers are listed as calls; `missed` totals change with `--limit`. |

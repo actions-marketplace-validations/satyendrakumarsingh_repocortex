@@ -218,7 +218,7 @@ Indexed payment-platform
   Git:           eae0f8a662b9
   Files:         11 indexed, 7 skipped (18 discovered)
   Symbols:       49
-  References:    63 (unresolved until M2)
+  References:    63 (bound by `repocortex resolve`)
   Imports:       3
   Duration:      321ms
 
@@ -248,7 +248,7 @@ payment-platform is up to date (18 files, revision 4, 86ms)
   files left out for their size; see [CLI.md](../CLI.md#index).
 - `Symbols` counts definitions extracted in this run. `status` reports a larger
   number because it also counts tables, config keys, endpoints and units.
-- `References … (unresolved until M2)` means references are stored but not yet
+- `References … (bound by `repocortex resolve`)` means references are stored but not yet
   joined to definitions. Run [`repocortex resolve`](#repocortex-resolve) next.
 - Without `--full`, only changed files are re-parsed (`Added`, `Modified`,
   `Deleted`, `Unchanged`). The revision number does not go up.
