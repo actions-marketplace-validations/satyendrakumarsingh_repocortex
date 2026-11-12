@@ -2,7 +2,6 @@ package parse
 
 import (
 	"sort"
-	"strings"
 
 	"github.com/odvcencio/gotreesitter/grammars"
 )
@@ -26,17 +25,6 @@ func ExtractsDefinitions(language string) bool {
 		return false
 	}
 	return definitionQueryText(*entry) != ""
-}
-
-// definitionQueryText is the query a parser for this grammar would be built
-// from, before the inheritance patterns are appended. Empty means the parser
-// cannot be built and every file of the language is skipped.
-func definitionQueryText(entry grammars.LangEntry) string {
-	query := grammars.ResolveTagsQuery(entry)
-	if sup := Supplement(entry.Name); sup != "" {
-		query = query + "\n" + sup
-	}
-	return strings.TrimSpace(query)
 }
 
 // GrammarOnlyLanguages returns the languages whose grammar is bundled but for

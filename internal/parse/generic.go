@@ -202,11 +202,8 @@ func newGenericParser(entry grammars.LangEntry) *genericParser {
 	// Inferred query first, then RepoCortex's supplement. Additive by design:
 	// a future release that improves inference cannot regress us, and a
 	// duplicate capture is handled by de-duplication downstream.
-	query := grammars.ResolveTagsQuery(entry)
-	if sup := Supplement(entry.Name); sup != "" {
-		query = query + "\n" + sup
-	}
-	if strings.TrimSpace(query) == "" {
+	query := definitionQueryText(entry)
+	if query == "" {
 		p.initErr = fmt.Errorf("no tags query available for %q", entry.Name)
 		return p
 	}
