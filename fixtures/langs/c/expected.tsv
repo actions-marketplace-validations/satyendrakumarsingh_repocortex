@@ -20,3 +20,5 @@ macros.c	10	function	read_at
 macros.c	15	function	open_session
 macros.c	20	function	session_name
 macros.c	25	function	use_session
+conditional.c	7	function	checked_add
+conditional.c	25	function	sum_table

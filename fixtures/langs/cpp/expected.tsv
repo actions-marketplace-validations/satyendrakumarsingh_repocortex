@@ -38,3 +38,9 @@ tests.cc	32	class	Holder
 tests.cc	34	function	API_EXPORT
 tests.cc	35	function	Holder
 tests.cc	38	function	use
+conditional.cc	5	class	Table
+conditional.cc	7	function	Table
+conditional.cc	14	function	size
+conditional.cc	24	class	Cache
+conditional.cc	26	function	Get
+conditional.cc	36	function	Reset
