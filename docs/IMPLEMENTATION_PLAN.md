@@ -160,7 +160,7 @@ Better answers from the graph that already exists.
 
 | Item | Answers | Approach | Constraint to watch |
 |---|---|---|---|
-| Community detection as a tool | Graphify, GitNexus, code-review-graph, axon | Expose `internal/analyze/cluster` (already used by the portal) as `find_communities` | Deterministic labels; cluster ids stable across runs |
+| Community detection as a tool | Graphify, GitNexus, code-review-graph, axon | Expose `internal/analyze/cluster` (already used by the portal) as `list_communities` | Deterministic labels; cluster ids stable across runs |
 | API contract checks across repositories | GitNexus `shape_check`, Repowise, jCodeMunch | Join a client call in one index to a route in another in `repocortex system`; report a call with no matching route | Never claim a match across repositories above `high` |
 | Knowledge distribution | CodeScene, Repowise | Bus factor per directory from the history `repocortex owners` already reads | Report people only as the history spells them |
 | Unused code, deeper | Repowise, jCodeMunch | "Only reached from tests"; framework entry points from route and event edges. Not built: it needs a scan of every referenced symbol's callers, and wants its own budget and scale test | A new reason, never a promotion to `likely` |

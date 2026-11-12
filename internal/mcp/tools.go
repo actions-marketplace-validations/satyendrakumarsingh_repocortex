@@ -606,6 +606,18 @@ func toolDescriptions() map[string]string {
 			"call or import connects them, which is a dependency analyze_impact cannot see. The score " +
 			"is relative to this repository and this commit window; it orders the list and is not a " +
 			"quality measurement. Needs a git repository.",
+
+		"list_communities": "Group the repository's files into communities: sets of files whose calls and " +
+			"references run between each other more than they run outwards. Use it to see how an " +
+			"unfamiliar repository divides before reading it, or to find the files that belong with " +
+			"the one you are about to change. Each community comes with a label, a stable id, its " +
+			"size, how many relationships stay inside it against how many cross its boundary, and its " +
+			"most-referenced files; pass path to partition one part of a large repository. A community " +
+			"describes how the indexed code refers to itself today and is NOT a declared architecture. " +
+			"Only relationships the index bound are counted, so files that work together can be " +
+			"reported apart, or in no community at all, when what connects them is a reference the " +
+			"index could not bind; the response says how many those are. No communities found is not " +
+			"proof the files are unrelated.",
 	}
 }
 

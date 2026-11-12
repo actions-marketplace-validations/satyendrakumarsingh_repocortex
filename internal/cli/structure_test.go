@@ -726,6 +726,7 @@ func TestEveryAgentToolHasACommand(t *testing.T) {
 		"list_blindspots":         "blindspots",
 		"list_dead_code":          "dead-code",
 		"list_hotspots":           "hotspots",
+		"list_communities":        "communities",
 	}
 	root := NewRoot()
 	commands := map[string]bool{}
