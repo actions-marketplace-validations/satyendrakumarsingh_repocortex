@@ -1634,6 +1634,199 @@ And **`ORDER BY` is a correctness clause whenever a query feeds a first-wins
 rule**, not a formatting preference; the comment above the loop already said
 "first declaration wins" while the query left "first" undefined.
 
+## Inheritance for Ruby, C#, Rust and C++: measured, 12 November 2026
+
+Before this change these four languages recorded no `EXTENDS` or `IMPLEMENTS`
+edge at all. `find_implementations` answered "none declared", and a method
+inherited from a base class could not be bound when it was called on a subclass.
+Go, Java, TypeScript and Python already had it. This section is what the
+supertype queries for the other four capture, what that did on one public
+project each, and where it is wrong.
+
+The resolver note that said these languages needed "no resolver change" is true
+as far as it goes: `inherit()` parks `self`, `super` and typed calls for the
+ancestry pass, and with supertype references present they bind (a fixture in
+`fixtures/receivers` pins `self.m`, `this.m`, `base.m` and a bare inherited call
+in Ruby, C# and C++). Two things it does not say. The hierarchy is kept **by
+type name across the whole index, whatever the language**, so two types of one
+name make every call through either of them ambiguous (honest, not wrong; the
+Ruby fixture pins it). And C# `this.m()` and `base.m()` were not extracted as
+calls at all, because the call pattern wants an identifier on each side and
+`this` is a keyword token. That is fixed in the C# entry of `queries.go`.
+
+### What is captured
+
+| Language | Captured | Edge kind | Not captured |
+|---|---|---|---|
+| Ruby | `class A < B`, `class A < Mod::B` | `EXTENDS` | `class A < Struct.new(..)` and `Class.new(B)` (built at run time); `class Foo::Bar` has no class symbol, so its `<` has no source |
+| Ruby | `include M`, `prepend M`, `extend M` (constants, plain or `A::M`, several per call) | `IMPLEMENTS` | `include` on a receiver, or of a non-constant |
+| C# | `class A : B, IFoo`, generics `B<T>`, qualified `Ns.B` | `IMPLEMENTS` if the name reads `I` + capital + lower-case, else `EXTENDS` | an enum's underlying type; a base list with a `#if` inside it keeps the directive in the name and binds nothing |
+| C# | `struct S : IFoo` | `IMPLEMENTS` (a struct can only implement) | |
+| C# | `interface I : IBase` | `EXTENDS` | |
+| C# | `record R(..) : Base(..), IFoo` | `Base(..)` is `EXTENDS`; the rest as a class | |
+| Rust | `trait A: B + C`, `ns::B<T>` | `EXTENDS` | standard-library traits (`Debug`, `Send`, `Clone`, ...): see below; **`impl Trait for Type`**: see below |
+| C++ | `class A : public B, private C`, `struct S : B`, `Base<T>`, `ns::B`, up to three levels of qualifier | `EXTENDS` (C++ has no interface construct) | `Base<T>::type`, a member of a dependent type |
+
+Mixins are `IMPLEMENTS` for the reason Java's interfaces and Rust's traits are:
+the module contributes methods without being the parent. `extend M` also lands
+there although it adds *class-level* methods; this graph cannot tell the two
+apart, so a call that only an extended module defines can bind from an instance
+method too. The ancestry pass only runs for a call pass one refused, which
+bounds it.
+
+C# does not say in the syntax which entry of a base list is the class. The
+`I` + capital + lower-case convention decides it for classes and records. On
+Newtonsoft.Json 274 of 275 edges carry the label the target's kind implies (one
+class is recorded as `EXTENDS` an interface). Both kinds are consulted together
+when a call is bound through the ancestry, so the label changes the edge kind
+and not the answer.
+
+### What was measured
+
+Shallow clones of the default branch on 12 November 2026; `init`, `index`,
+`resolve`, binary built before and after.
+
+| Project | Supertype references | `EXTENDS` / `IMPLEMENTS` edges, before | after (`high` / `medium` / `low`) |
+|---|---|---|---|
+| sinatra (Ruby) | 138 (106 + 32) | 0 / 0 | 17 (13 / 0 / 4) and 17 (14 / 0 / 3) |
+| Newtonsoft.Json (C#) | 872 (724 + 148) | 0 / 0 | 206 (112 / 88 / 6) and 69 (45 / 20 / 4) |
+| ripgrep (Rust) | 0 (8 before the standard-library filter) | 0 / 0 | 0 / 0 |
+| leveldb (C++) | 75 | 0 / 0 | 24 (6 / 15 / 3) and 0 |
+
+Most references that do not become an edge name a type outside the repository
+(`Rack::Request`, `StandardError`, `IEnumerable`, `std::..`): sinatra 138
+references, 34 edges.
+
+Precision: edges drawn at random (seed 42, Python's `random.sample` over the
+edges ordered by id; all of them when there are fewer than 30), each judged by
+reading the declaration and the target.
+
+| Project | Judged | Right | Wrong | Note |
+|---|---|---|---|---|
+| sinatra | 30 of 34 | 29 | 1 | `class Request < Rack::Request` bound, at `low`, to `Sinatra::WebDAV::Request`: the qualifier is not carried, and `Rack::Request` is outside the repository. Two `extend` edges have a method (`Namespace.new`) as their source because the `extend` is inside a `Module.new do` block; the target is the declared module |
+| Newtonsoft.Json | 30 of 275 | 30 | 0 | |
+| ripgrep | 1 of 1 | 0 | 1 | `trait Flag: Debug` bound to a struct named `Debug` in the next file of the directory. This is why the standard-library traits are no longer captured; after the filter there is no Rust edge to judge |
+| leveldb | 24 of 24 | 10 | 8 | 6 more are right only as a **forward declaration** of the right type (`class Cache;`), which is the same type and not its definition. See below |
+
+Recall: the five largest non-test source files by line count, every declared
+supertype relationship whose target is defined in the repository, listed by hand
+from the source.
+
+| Project | Files | Listed | With the right edge |
+|---|---|---|---|
+| sinatra | `lib/sinatra/base.rb`, `sinatra-contrib/lib/sinatra/{reloader,namespace,cookies}.rb`, `lib/sinatra/show_exceptions.rb` | 9 | 9 |
+| Newtonsoft.Json | `Utilities/LinqBridge.cs`, `Linq/JToken.cs`, `Serialization/JsonSerializerInternalReader.cs`, `JsonTextReader.cs`, `Converters/XmlNodeConverter.cs` | 36 | 33 |
+| ripgrep | `crates/core/flags/defs.rs`, `crates/printer/src/standard.rs`, `crates/ignore/src/walk.rs`, `crates/globset/src/glob.rs`, `crates/ignore/src/dir.rs` | not counted: the relationship is `impl Trait for Type` | 0 |
+| leveldb | `db/db_impl.cc`, `db/version_set.cc`, `benchmarks/db_bench.cc`, `util/env_posix.cc`, `util/env_windows.cc` | 16 | 2 |
+
+The three C# misses: `XmlNodeConverter : JsonConverter` and `JsonTextReader :
+JsonReader` are ambiguous (`JsonConverter` and `JsonConverter<T>` share a name in
+one file, `JsonReader` is a partial class in two files), and `JToken`'s
+`IJsonLineInfo` carries a preprocessor directive in its name.
+
+### What the effect on call resolution was
+
+| Project | `CALLS` `high`, before to after | `medium` | `low` |
+|---|---|---|---|
+| sinatra | 1616 to 1620 | 10 to 10 | 671 to 668 |
+| Newtonsoft.Json | 7227 to 7306 | 2725 to 2731 | 4149 to 4143 |
+| ripgrep | 3134 to 3134 | 870 to 870 | 411 to 411 |
+| leveldb | 1442 to 1442 | 78 to 78 | 508 to 508 |
+
+sinatra: 1 new edge, 3 moved from `low` to `high`; all four right by reading
+(`Application.run!` to `Base.run!`, and three `ContentFor` calls to
+`EngineTracking.erb?` two levels up through `Capture`). Newtonsoft.Json: 79 new
+edges and 22 moved from `low` to `high`. Of the new, 47 come from the ancestry
+(all `high`) and 32 from the `this.` and `base.` calls that are now extracted
+at all (10 `high`, 6 `medium`, 16 `low`). A random 20 of the 79 (seed 42): 17
+right, 3 wrong. The three wrong are `low` edges from `this.PropertyChanging(..)`
+in a LINQ-to-SQL designer file, an event being invoked, bound to a method of that
+name in an unrelated test class. All 14 `high` and the `medium` one in the sample
+are right, and the 22 that moved were read as well (`IsErrorHandled`,
+`ClearErrorContext`, `GetTokenIndex` up one `JsonSerializerInternalBase` or
+`PathFilter`; right). No tier is demoted: `high` is 14 of 14 here and stays
+above its floor of 86.8%, and the wrong ones are at `low`.
+
+The `high` an inherited call earns comes from the Python measurement above
+(99.1% over 7,575 bindings). These four languages have a different cost to being
+wrong, and this is a sample of 14 on one of them, so it is a floor to keep
+watching, not a measurement of its own.
+
+ripgrep and leveldb did not move because their calls are not the kind inheritance
+helps: Rust has no edges (below), and leveldb's subclass calls are on `this->`
+into a base class that is not indexed (below).
+
+`implementations` before and after, first lines:
+
+```text
+sinatra   Error                  before: none declared
+                                 after:  extends BadRequest base.rb:277 high; extends NotFound base.rb:281 high
+sinatra   Capture                before: none declared
+                                 after:  implemented by ContentFor, HamlHelpers (high); implements EngineTracking (high)
+Newtonsoft IJsonLineInfo         before: none declared
+                                 after:  implements JsonTextReader (medium), JsonValidatingReader (medium), JTokenReader (low), TraceJsonReader (low)
+Newtonsoft DefaultContractResolver  before: none declared
+                                 after:  25 subclasses, e.g. LowercaseContractResolver, ShouldSerializeContractResolver (high)
+ripgrep   Flag, Sink             before: none declared;  after: none declared
+leveldb   Constructor            before: none declared
+                                 after:  extends BlockConstructor, TableConstructor, MemTableConstructor, DBConstructor (high)
+leveldb   Comparator             before: none declared
+                                 after:  4 "subclasses" (medium), all bound to the wrong Comparator, below
+```
+
+### Where it is wrong or missing
+
+**Rust `impl Trait for Type` is not recorded, and that is most of Rust's
+hierarchy** (ripgrep has 247 of them and three supertrait lists, all standard
+library). The reference would sit on the `impl` block, which is not a symbol,
+and the resolver gives an edge the innermost symbol on the reference's line as
+its source, so there is none. Doing it needs two changes outside the files this
+work was allowed to touch: the parser would carry the implementing type with
+the reference, and `bind()` in `resolver.go` would take that type, not the
+enclosing symbol, as the source. The methods in `impl Type { }` and `impl Trait
+for Type { }` are already owned by the type (`shape.go`), so `self.m()` in them
+binds; what is missing is only the type's link to the trait.
+
+**C++ precision is the weakest of the four.** The 8 wrong edges in leveldb all
+have one of three causes. `class LEVELDB_EXPORT Comparator { ... }`, the form of
+every public class in the library, does not parse as a class, so `Comparator`,
+`Iterator`, `Env`, `Cache` and the rest are not symbols, and the subclass binds
+to whatever else carries the name: a `struct Comparator` local to
+`skiplist_test.cc` (4 edges), a `class Handler` local to a function in
+`db_test.cc` (3, from `WriteBatch::Handler`, whose qualifier is not carried), and
+a `typedef Iterator* (*BlockFunction)(..)` that the grammar's own tags read as a
+declaration of `Iterator` (1, at `high`, "defined in the same file"). Forward
+declarations (`class Cache;`) are symbols too, and 6 edges end at one. The
+same-directory rule gives these a `medium` that the call rules would give `low`
+(`Neighbour` in `calltraits.go` is 6 of 12 for C++); it is applied in
+`pickSameDir`, which supertype references take and calls through `shaped.go` do
+not. The `medium` hierarchy edges in leveldb are 8 right of 15, below the
+tier's floor of 60%. Changing that tier is a change to `resolver.go`, which this
+work could not make, so the number is reported and the tier stays.
+
+Recall on leveldb is 2 of 16 for the same reason: the targets (`Env`,
+`SequentialFile`, `Iterator`, `Comparator`) are macro-exported classes that are
+not indexed.
+
+**Ruby** misses what the grammar does not call a call: a bare `breathe` (an
+identifier with no receiver or arguments) is not extracted, and neither is
+`super`, so a subclass reaching an inherited method that way gets no call edge.
+**C++** does not extract `Base::method()`, the explicit base call.
+
+### Tests
+
+`internal/parse/inheritance_ruby_csharp_rust_cpp_test.go` pins what each query
+captures, what it must not (plain files, `Struct.new` bases, enum underlying
+types, `where Self: B`, dependent-type bases), that one clause gives one
+reference per type, and the C# `this`/`base` calls.
+`TestInheritanceQueriesCompileForEveryLanguage` now checks that the
+inheritance query is still in the compiled tags query, where it used to accept
+any `@reference.` capture and so could not see the query being dropped.
+`fixtures/receivers` gains `rb/lib/zoo.rb`, `rb/vendor/animal.rb`, `cs/`,
+`cpp/zoo.cc`, `cpp/far/`, `rs/src/shapes.rs`, and the marker grammar gains
+`super X -> ID` (a hierarchy edge to that definition, and to nothing else) and
+`nosuper X`.
+
 ## Reproducing
 
 The numbers above came from:
