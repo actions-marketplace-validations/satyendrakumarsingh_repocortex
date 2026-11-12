@@ -25,7 +25,7 @@ Quick onboarding paths to get RepoCortex running in your project and connected t
 | [**Quickstart Guide**](getting-started/quickstart.md) | 60-second end-to-end guide: install, index, resolve, and verify |
 | [**Protocols**](guides/protocols.md) | Reach the same tools over MCP, plain HTTP with OpenAPI, or the shell; profiles and the audit log |
 | [**Agent Integration**](getting-started/agent-integration.md) | Wiring instructions for Cursor, Claude Code, Windsurf, Antigravity, Claude Desktop, and Zed |
-| [**Installation**](getting-started/installation.md) | Automated curl installer, Go install, and precompiled universal release binaries |
+| [**Installation**](getting-started/installation.md) | Automated curl installer, Go install, precompiled release binaries, container image, Scoop, winget and the MCP bundle |
 
 ---
 
@@ -69,6 +69,7 @@ Running RepoCortex in production pipelines and automated environments.
 | [**Troubleshooting Catalogue**](operations/troubleshooting.md) | Comprehensive error catalog keyed to literal error strings with remedies |
 | [**Scale Testing**](operations/scale-testing.md) | The size suite, its budgets, and measurements at 250,000 symbols |
 | [**Performance & Tuning**](operations/performance.md) | Memory-mapped I/O, SQLite pragmas, CSR memory footprints, and worker scaling |
+| [**Verifying a Release**](operations/verifying-a-release.md) | Sigstore signature, build provenance attestation and SBOM: the commands that check a download |
 | [**Security & Threat Model**](security.md) | Path containment, secret redaction, and local execution boundaries |
 
 ---
