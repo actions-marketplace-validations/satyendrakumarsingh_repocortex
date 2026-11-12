@@ -19,7 +19,7 @@ import (
 // selectors that choose between definitions sharing its name.
 type targetArgs struct {
 	Symbol string `json:"symbol" jsonschema:"The symbol you are about to change, e.g. 'updateStatus' or 'TransactionService'."`
-	Path   string `json:"path,omitempty" jsonschema:"File (or directory) the definition is in, to choose between several symbols that share the name. Matched exactly when it names a file."`
+	Path   string `json:"path,omitempty" jsonschema:"File or directory of the definition, to choose between symbols that share the name."`
 	lineArg
 
 	minConfidenceArg
@@ -42,7 +42,7 @@ type targetArgs struct {
 // is still parseMinConfidence's, via parseImpactFloor.
 type impactArgs struct {
 	Symbol string `json:"symbol" jsonschema:"The symbol you are about to change, e.g. 'updateStatus' or 'TransactionService'."`
-	Path   string `json:"path,omitempty" jsonschema:"File (or directory) the definition is in, to choose between several symbols that share the name. Matched exactly when it names a file."`
+	Path   string `json:"path,omitempty" jsonschema:"File or directory of the definition, to choose between symbols that share the name."`
 	lineArg
 
 	MinConfidence string `json:"min_confidence,omitempty" jsonschema:"Lowest confidence to follow: exact, high, medium or low. Default medium, so name-only (low) relationships are left out and counted; pass 'low' to walk them too, or 'high' when the result will gate an automated change."`

@@ -66,7 +66,7 @@ type symbolArgs struct {
 // name is shared.
 type symbolRefArgs struct {
 	Name string `json:"name" jsonschema:"Symbol name, e.g. 'updateStatus' or 'TransactionService'."`
-	Path string `json:"path,omitempty" jsonschema:"File (or directory) the definition is in, to choose between several symbols that share the name. Matched exactly when it names a file."`
+	Path string `json:"path,omitempty" jsonschema:"File or directory of the definition, to choose between symbols that share the name."`
 	lineArg
 
 	minConfidenceArg
@@ -75,8 +75,8 @@ type symbolRefArgs struct {
 // relationArgs is symbolRefArgs for a tool that lists the relationships of the
 // selected definition, and so can be paged.
 type relationArgs struct {
-	Name string `json:"name" jsonschema:"Symbol name whose relationships you want, e.g. 'updateStatus' or 'TransactionService'."`
-	Path string `json:"path,omitempty" jsonschema:"File (or directory) the definition is in, to choose between several symbols that share the name. Matched exactly when it names a file."`
+	Name string `json:"name" jsonschema:"Symbol name whose relationships you want."`
+	Path string `json:"path,omitempty" jsonschema:"File or directory of the definition, to choose between symbols that share the name."`
 	lineArg
 
 	minConfidenceArg
@@ -294,11 +294,10 @@ func toolDescriptions() map[string]string {
 			"guess at coverage — this tool states it.",
 
 		"search_code": "Full-text search across indexed source. Prefer this over your own grep: it " +
-			"searches the index and returns the paths of the matching files, best match first, " +
-			"which costs a fraction of the context. Use it when you know roughly what you are looking " +
-			"for but not where it lives, and to confirm any relationship result that came back empty, " +
-			"incomplete or low-confidence. Punctuation is fine: 'errors.New' and 'Utils::parse' search " +
-			"for those words side by side.",
+			"searches the index and returns the paths of the matching files, best match first, at a " +
+			"fraction of the context. Use it when you know roughly what you are looking for but not " +
+			"where it lives, and to confirm any relationship result that came back empty, incomplete " +
+			"or low-confidence.",
 
 		"find_symbol": "Locate a symbol's definition by name. Faster and more precise than searching " +
 			"when you already know the identifier. Every definition of the name is listed with its " +
@@ -309,18 +308,14 @@ func toolDescriptions() map[string]string {
 		"get_symbol": "Get a symbol's definition with a bounded source excerpt and its immediate " +
 			"relationships. Call this after find_symbol instead of reading the whole file. The excerpt " +
 			"is bounded and may be truncated; the response says so explicitly when it is, so check " +
-			"that flag rather than assuming you have the full body. Several definitions sharing the " +
-			"name are all shown; pass `path` and `line` for one.",
+			"that flag rather than assuming you have the full body.",
 
 		"find_references": "Find where a symbol is used. Every result carries a confidence tier: " +
 			"'exact' means a compiler proved the binding, 'high' and 'medium' and 'low' mean RepoCortex " +
 			"inferred it and may be wrong. Pass min_confidence='high' when a wrong result costs more " +
 			"than a missing one. CRITICAL: an EMPTY result is ambiguous — it may mean nothing " +
 			"references this symbol, or that RepoCortex could not resolve the references that exist. " +
-			"Never conclude a symbol is unused from an empty result; confirm with search_code. The " +
-			"first line says UNKNOWN, UNRELIABLE or INCOMPLETE when the answer is; a name shared by " +
-			"several definitions returns them to choose from (`path`, `line`), and `limit`/`offset` " +
-			"page a long list.",
+			"Never conclude a symbol is unused from an empty result; confirm with search_code.",
 
 		"find_callers": "Find the functions and methods that call a symbol — the callers, not merely " +
 			"the files mentioning it. Use before changing a signature or behaviour. Every result " +
@@ -329,9 +324,7 @@ func toolDescriptions() map[string]string {
 			"min_confidence='high' to see only bindings RepoCortex can defend. CRITICAL: an EMPTY " +
 			"result is ambiguous and unresolved calls are reported separately, so absence of callers " +
 			"here is NOT evidence the symbol is dead. Confirm with search_code before deleting " +
-			"anything. The first line says UNKNOWN, UNRELIABLE, UNVERIFIED or INCOMPLETE when the " +
-			"answer is; a name shared by several definitions returns them to choose from (`path`, " +
-			"`line`), and `limit`/`offset` page a long list.",
+			"anything.",
 
 		"plan_rename": "Plan a symbol rename. Returns the edit SITES — a file and a line each, with " +
 			"no column — split into 'apply' (confidence 'exact': a compiler proved the binding) and " +
@@ -355,19 +348,15 @@ func toolDescriptions() map[string]string {
 			"callers (a proven call edge) from INDIRECT reach and from dispatch rows the runtime MAY " +
 			"execute but no call site proves, and names what it CANNOT see — dynamic dispatch, " +
 			"unresolved references, traversal limits. The risk level is 'unknown', never 'low', when " +
-			"the callers could not be determined: the references to the name were left unbound, or " +
-			"the language's calls are not extracted. The first line says so. The result is a LOWER " +
+			"the callers could not be determined, and the first line says so. The result is a LOWER " +
 			"BOUND: treat an empty or short result as 'nothing found', never as proof that changing " +
-			"the symbol is safe. A name shared by several definitions returns them to choose from " +
-			"(`path`, `line`).",
+			"the symbol is safe.",
 
 		"find_tests": "Find the tests covering a symbol, and which signal found each one — a proven " +
 			"call edge is far stronger evidence than a matching filename, and the response names which " +
 			"you got. Use before changing behaviour, to know what to run. A symbol reported as " +
-			"untested is a positive finding, not silence, but it is bounded by what the index could " +
-			"resolve; when the calls to the symbol could not be bound the answer says whether it is " +
-			"tested is UNKNOWN, and means it. A name shared by several definitions returns them to " +
-			"choose from (`path`, `line`).",
+			"untested is a positive finding, not silence; when the calls to the symbol could not be " +
+			"bound the answer says UNKNOWN instead, and means it.",
 
 		"list_api_endpoints": "List the HTTP endpoints this service exposes, with the handler that " +
 			"serves each one and where it is declared. Routes are recognised from the framework's own " +
@@ -425,9 +414,7 @@ func toolDescriptions() map[string]string {
 		"plan_change": "Generate an ordered change plan for a symbol: the direct callers the index " +
 			"bound, a risk level, the test files found to cover it, and the steps in order. Use it " +
 			"before modifying or refactoring existing code. The callers are the ones RepoCortex could " +
-			"bind, not a guarantee of all of them: when they could not be determined the risk is " +
-			"'unknown' and the first line says the plan is incomplete, so search for the name before " +
-			"relying on it.",
+			"bind: when they could not be determined the risk is 'unknown' and the first line says so.",
 
 		"list_blindspots": "Audit the repository for code intelligence blindspots and hidden risks. " +
 			"Detects unresolved external and internal calls, untested critical functions with high fan-in, " +

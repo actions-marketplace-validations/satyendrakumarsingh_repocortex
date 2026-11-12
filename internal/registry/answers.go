@@ -43,6 +43,10 @@ type SymbolCandidate struct {
 	OwnerKind string
 }
 
+// codeKinds are the definition kinds that are code: something that can call
+// or be called, extend or be extended.
+const codeKinds = `'function','method','class','interface','type_alias'`
+
 // ownerKinds are the definition kinds that can own a member.
 const ownerKinds = `'class','interface','type_alias'`
 
@@ -270,8 +274,13 @@ func (r *Registry) NameBinding(ctx context.Context, runID, symbolID int64, name 
 // LanguageBinding is one language's share of a run: what was defined in it and
 // what resolution did with the references written in it.
 type LanguageBinding struct {
-	Language    string
-	Files       int64
+	Language string
+	Files    int64
+
+	// Definitions counts the CODE definitions in the language: functions,
+	// methods and types. A configuration key or a declared dependency is a
+	// symbol too, and counting those would make YAML a language "whose calls
+	// are not extracted".
 	Definitions int64
 
 	// Relationships counts the edges that START at a definition in this
@@ -340,7 +349,8 @@ func (r *Registry) LanguageBindings(ctx context.Context, runID int64) (map[strin
 	}
 	if err := scan(`SELECT f.language, '', COUNT(*) FROM symbols s
 	                  JOIN files f ON f.id = s.file_id
-	                 WHERE s.index_run_id = ? GROUP BY f.language ORDER BY f.language`,
+	                 WHERE s.index_run_id = ? AND s.kind IN (`+codeKinds+`)
+	                 GROUP BY f.language ORDER BY f.language`,
 		func(lang, _ string, n int64) {
 			l := get(lang)
 			l.Definitions = n

@@ -43,13 +43,13 @@ import (
 // under one qualified name, so the only thing that tells the third `fromJson`
 // from the fourth is where it starts.
 type lineArg struct {
-	Line int `json:"line,omitempty" jsonschema:"Line the definition starts on (or any line inside it). Pass it with path to choose between several definitions in one file, such as overloads. A previous answer prints it as path:line."`
+	Line int `json:"line,omitempty" jsonschema:"Line the definition starts on, to choose between several in one file (overloads)."`
 }
 
 // pageArg is the `limit` and `offset` every list tool offers.
 type pageArg struct {
-	Limit  int `json:"limit,omitempty" jsonschema:"Most rows to return. Default 50, maximum 200. The answer says how many rows exist in total."`
-	Offset int `json:"offset,omitempty" jsonschema:"Rows to skip, to read past the first page. Default 0. When more rows exist the answer names the offset to pass next."`
+	Limit  int `json:"limit,omitempty" jsonschema:"Most rows to return. Default 50, maximum 200."`
+	Offset int `json:"offset,omitempty" jsonschema:"Rows to skip. The answer names the next offset when more rows exist."`
 }
 
 // page validates the wire values and turns them into a Page with no total yet.

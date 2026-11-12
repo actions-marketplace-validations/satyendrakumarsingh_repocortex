@@ -110,6 +110,13 @@ The response:
 `text` is what an MCP client receives. `result` is the same answer as data. Send
 `Accept: text/plain` to get the text alone, ready to place in a model's context.
 
+The first line of `text` is `result.summary`, and it is written to be safe to
+act on by itself. When the index cannot stand behind the answer it opens with
+`UNKNOWN`, `UNRELIABLE`, `UNVERIFIED`, `INCOMPLETE` or `AMBIGUOUS` and the
+reason. The same judgement is in `result.reliability.level`, and
+`result.verdict.status` is computed from it, so the two cannot disagree. See
+[reading an answer](../reference/mcp-tools.md#reading-an-answer).
+
 ### What the status code means
 
 | Status | Meaning |
@@ -165,6 +172,19 @@ repocortex tool call list_dead_code path=internal/billing/ limit=10
 tool reports a failure and 0 otherwise, including when the answer is "nothing
 found".
 
+A name shared by several definitions is not a failure. The tool answers with
+`outcome: ambiguous_name` and one row per definition, each ending in the
+arguments that select it, and exits 0:
+
+```bash
+repocortex tool call analyze_impact symbol=fromJson
+repocortex tool call analyze_impact symbol=fromJson path=gson/src/main/java/com/google/gson/Gson.java line=850
+```
+
+`path` and `line` are accepted by every tool that takes `name` or `symbol`.
+The list tools take `limit` (default 50, at most 200) and `offset`; an answer
+that does not carry every row says how many exist and which offset reads on.
+
 For a person at a terminal, the task commands (`repocortex callers`, `repocortex
 dead-code`, `repocortex hotspots`) print tables instead. `repocortex tool` is for agents
 and for seeing exactly what an agent was shown.
@@ -177,9 +197,9 @@ on this build:
 
 | Profile | Tools | Schema per request |
 |---|---|---|
-| `minimal` (default for `serve`) | 7 | about 1,700 tokens |
-| `standard` | 18 | about 4,400 tokens |
-| `full` | 25 | about 6,400 tokens |
+| `minimal` (default for `serve`) | 7 | about 2,000 tokens |
+| `standard` | 18 | about 5,000 tokens |
+| `full` | 25 | about 7,300 tokens |
 
 Tokens are estimated as bytes divided by four. Set the profile in `.repocortex.yml`:
 
@@ -191,7 +211,7 @@ The REST endpoint follows the same profile, because an OpenAPI document handed
 to a model is a list of functions with the same cost.
 
 A client that also forwards each tool's output schema to its model pays a
-little more: about 7,700 tokens on `full`. Every tool advertises one compact
+little more: about 8,900 tokens on `full`. Every tool advertises one compact
 output schema; a full copy per tool used to make that figure about 21,500.
 `repocortex tool list --json` reports both as `schema_bytes` and `wire_bytes`.
 

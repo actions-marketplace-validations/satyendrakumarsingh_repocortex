@@ -29,7 +29,7 @@ import (
 
 type ownersArgs struct {
 	Symbol string `json:"symbol" jsonschema:"The symbol you are changing, e.g. 'updateStatus' or 'TransactionService'."`
-	Path   string `json:"path,omitempty" jsonschema:"File (or directory) the definition is in, to choose between several symbols that share the name. Matched exactly when it names a file."`
+	Path   string `json:"path,omitempty" jsonschema:"File or directory of the definition, to choose between symbols that share the name."`
 	lineArg
 	Limit int `json:"limit,omitempty" jsonschema:"Most people to list. Default 5."`
 }

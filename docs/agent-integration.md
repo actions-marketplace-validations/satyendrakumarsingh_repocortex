@@ -240,14 +240,24 @@ return nothing, and *nothing is the answer most easily mistaken for a fact*.
 ### Answers carry their own caveats
 
 RepoCortex does not hand an agent a tidy list built on evidence it does not have.
-A relationship answer on a poorly resolved index arrives with the verdict
-*before* the list:
+A relationship answer on a poorly resolved index says so on its **first line**,
+and again, with the counts, in the first note. This is `find_callers
+name=stringify` on expressjs/express:
 
 ```
-COVERAGE TOO LOW — caller lookup for Go is unreliable here: 31% of this index's
-16973 references are bound to a definition. Run 'repocortex resolve' to raise it.
-Do not present what follows as an answer to the question asked.
+UNRELIABLE — only 33% of the JavaScript references that name something this index defines are bound. 2 caller(s) of stringify (lib/response.js:1026) are recorded.
+note: COVERAGE TOO LOW — relationship lookup for JavaScript is unreliable here: 33% of the
+1043 JavaScript references that name something this index defines are bound to a definition
+(696 ambiguous; a further 10789 matched no definition here at all, out of 11832 JavaScript
+references in total). [...] Do not present what follows as an answer to the question asked.
+verdict: unreliable (high=2)
 ```
+
+The first word is one of `UNKNOWN`, `UNRELIABLE`, `UNVERIFIED`, `INCOMPLETE` or
+`AMBIGUOUS`, and the verdict is computed from the same judgement, so an answer
+cannot say "do not use this" and "act on these" at once. Coverage is judged for
+the language of the symbol asked about. The words and the verdict statuses are
+listed in the [tools reference](reference/mcp-tools.md#reading-an-answer).
 
 And a recoverable condition arrives as a **successful** call whose text says what
 to do next, never as a tool error:

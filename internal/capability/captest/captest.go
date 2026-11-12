@@ -102,6 +102,26 @@ type Refs struct {
 	Unresolved int
 	Pending    int
 	Ignored    int
+
+	// Named are references spelled like a particular symbol, for a test about
+	// what the index did with ONE name rather than with the run as a whole.
+	Named []NamedRef
+}
+
+// NamedRef is one reference with a chosen spelling and outcome.
+type NamedRef struct {
+	// Name is the identifier as written. Path is the file it is written in,
+	// which must be the path of some seeded symbol; empty means the synthetic
+	// refs.go. Line is where.
+	Name string
+	Path string
+	Line int
+
+	Resolution registry.Resolution
+
+	// Target is the symbol id a resolved reference is bound to. Zero for an
+	// unbound one.
+	Target int64
 }
 
 // Build creates a committed run holding syms and edges and returns Deps over
@@ -214,6 +234,7 @@ func seedRun(tb testing.TB, db *store.DB, syms []Sym, edges []Edge, refs Refs) i
 	})
 
 	seedRefs(tb, db, runID, fileID("refs.go"), refs)
+	seedNamedRefs(tb, db, runID, fileID, refs.Named)
 	return runID
 }
 
@@ -306,6 +327,39 @@ func seedRefs(tb testing.TB, db *store.DB, runID, fileID int64, refs Refs) {
 	})
 }
 
+func seedNamedRefs(tb testing.TB, db *store.DB, runID int64, fileID func(string) int64, named []NamedRef) {
+	tb.Helper()
+	if len(named) == 0 {
+		return
+	}
+	ctx := context.Background()
+	inTx(tb, db, func(tx *sql.Tx) error {
+		st, err := tx.PrepareContext(ctx, `
+			INSERT INTO symbol_references (index_run_id, file_id, name, kind, start_line,
+			                               resolution, resolved_symbol_id)
+			VALUES (?,?,?, 'reference.call', ?, ?, ?)`)
+		if err != nil {
+			return err
+		}
+		defer st.Close()
+		for _, r := range named {
+			p := r.Path
+			if p == "" {
+				p = "refs.go"
+			}
+			var target any
+			if r.Target != 0 {
+				target = r.Target
+			}
+			if _, err := st.ExecContext(ctx, runID, fileID(p), r.Name, r.Line,
+				string(r.Resolution), target); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+}
+
 func inTx(tb testing.TB, db *store.DB, fn func(*sql.Tx) error) {
 	tb.Helper()
 	tx, err := db.BeginTx(context.Background(), nil)
@@ -331,6 +385,10 @@ func langOf(p string) string {
 		return "typescript"
 	case ".java":
 		return "java"
+	case ".kt":
+		return "kotlin"
+	case ".php":
+		return "php"
 	default:
 		return "unknown"
 	}

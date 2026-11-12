@@ -147,8 +147,11 @@ func verdictFor(items []Item, rel *Reliability, truncated bool) *Verdict {
 			v.Signals = append(v.Signals, rel.Lead)
 		}
 		v.NextStep = "The rows shown are high confidence or better and can be used as they are. " +
-			"The LIST is known to be incomplete, so conclude nothing from what is absent: read the " +
-			"rest (offset), then run search_code for the name."
+			"The LIST is known to be incomplete, so conclude nothing from what is absent: "
+		if truncated {
+			v.NextStep += "read on with offset, then "
+		}
+		v.NextStep += "run search_code for the name."
 
 	case VerdictUnreliable:
 		if rel != nil && rel.Lead != "" {

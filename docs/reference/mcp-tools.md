@@ -35,29 +35,29 @@ The counts are what `repocortex tool list --profile <name>` prints.
 
 | Tool | Profile | Parameters | What it does |
 |---|---|---|---|
-| `get_task_context` | minimal (default) | `hub_degree_limit`, `max_files`, `min_confidence`, `task` (required) | CALL THIS FIRST when you are about to change code, before exploring the repository by hand. |
+| `get_task_context` | minimal (default) | `task` (required), `hub_degree_limit`, `max_files`, `min_confidence` | CALL THIS FIRST when you are about to change code, before exploring the repository by hand. |
 | `get_project_overview` | minimal (default) | none | Call this FIRST, before any other RepoCortex tool. |
-| `search_code` | minimal (default) | `limit`, `query` (required) | Full-text search across indexed source. |
-| `find_symbol` | minimal (default) | `kind`, `min_confidence`, `name` (required) | Locate a symbol's definition by name. |
-| `get_symbol` | minimal (default) | `line`, `min_confidence`, `name` (required), `path` | Get a symbol's definition with a bounded source excerpt and its immediate relationships. |
-| `find_references` | minimal (default) | `limit`, `line`, `min_confidence`, `name` (required), `offset`, `path` | Find where a symbol is used. |
-| `find_callers` | minimal (default) | `limit`, `line`, `min_confidence`, `name` (required), `offset`, `path` | Find the functions and methods that call a symbol — the callers, not merely the files mentioning it. |
-| `find_tests` | standard | `hub_degree_limit`, `limit`, `line`, `min_confidence`, `offset`, `path`, `symbol` (required) | Find the tests covering a symbol, and which signal found each one — a proven call edge is far stronger evidence than a matching filename, and the response names which you got. |
-| `analyze_impact` | standard | `hub_degree_limit`, `limit`, `line`, `min_confidence`, `offset`, `path`, `symbol` (required) | Before changing a symbol, find out what depends on it. |
+| `search_code` | minimal (default) | `query` (required), `limit` | Full-text search across indexed source. |
+| `find_symbol` | minimal (default) | `name` (required), `kind`, `min_confidence` | Locate a symbol's definition by name. |
+| `get_symbol` | minimal (default) | `name` (required), `line`, `min_confidence`, `path` | Get a symbol's definition with a bounded source excerpt and its immediate relationships. |
+| `find_references` | minimal (default) | `name` (required), `limit`, `line`, `min_confidence`, `offset`, `path` | Find where a symbol is used. |
+| `find_callers` | minimal (default) | `name` (required), `limit`, `line`, `min_confidence`, `offset`, `path` | Find the functions and methods that call a symbol — the callers, not merely the files mentioning it. |
+| `find_tests` | standard | `symbol` (required), `hub_degree_limit`, `limit`, `line`, `min_confidence`, `offset`, `path` | Find the tests covering a symbol, and which signal found each one — a proven call edge is far stronger evidence than a matching filename, and the response names which you got. |
+| `analyze_impact` | standard | `symbol` (required), `hub_degree_limit`, `limit`, `line`, `min_confidence`, `offset`, `path` | Before changing a symbol, find out what depends on it. |
 | `get_resolution_coverage` | standard | none | Ask this when a find_callers, find_references or analyze_impact result came back shorter than you expected, BEFORE concluding anything from it. |
-| `plan_rename` | standard | `limit`, `line`, `min_confidence`, `name` (required), `new_name` (required), `offset`, `path` | Plan a symbol rename. |
+| `plan_rename` | standard | `name` (required), `new_name` (required), `limit`, `line`, `min_confidence`, `offset`, `path` | Plan a symbol rename. |
 | `list_api_endpoints` | standard | `method` | List the HTTP endpoints this service exposes, with the handler that serves each one and where it is declared. |
 | `list_db_tables` | standard | `table` | Report which code reads and which code writes each database table, with per-table read/write counts. |
 | `get_config_key` | standard | `key` (required) | Look up one configuration key by name: where it is declared and how many places read it, joined into a single mismatch check. |
 | `get_file_outline` | standard | `path` (required) | Get a token-efficient structural outline of a source file by pruning implementation bodies while preserving all imports, types, interfaces, structs, function signatures, and docstrings. |
 | `minimize_diff` | standard | `diff` (required) | Compress unified git diffs into structured, token-efficient representations. |
-| `plan_change` | standard | `hub_degree_limit`, `limit`, `line`, `min_confidence`, `offset`, `path`, `symbol` (required) | Generate an ordered change plan for a symbol: the direct callers the index bound, a risk level, the test files found to cover it, and the steps in order. |
+| `plan_change` | standard | `symbol` (required), `hub_degree_limit`, `limit`, `line`, `min_confidence`, `offset`, `path` | Generate an ordered change plan for a symbol: the direct callers the index bound, a risk level, the test files found to cover it, and the steps in order. |
 | `list_blindspots` | standard | none | Audit the repository for code intelligence blindspots and hidden risks. |
 | `analyze_change` | full | `base` (required), `head`, `min_confidence` | Find out what a range of commits puts at risk: the symbols the change touched, everything those can reach, and the tests among them. |
-| `find_owners` | full | `limit`, `line`, `path`, `symbol` (required) | Find who has recent context on the code a change would touch: the people who have lately changed the symbols a change to this one can reach, ranked by how much of that code they have worked on. |
-| `find_callees` | full | `limit`, `line`, `min_confidence`, `name` (required), `offset`, `path` | List what a symbol calls: the definitions inside this repository that its body invokes, each with the file and line of the call and how the binding was established (exact, high, medium or low). |
-| `find_implementations` | full | `limit`, `line`, `min_confidence`, `name` (required), `offset`, `path` | List a type's hierarchy in both directions: what implements or extends it, and what it implements or extends itself. |
-| `trace_call_path` | full | `from` (required), `from_line`, `from_path`, `max_depth`, `to` (required), `to_line`, `to_path` | Find how one symbol reaches another: the shortest chains of calls and references from 'from' to 'to', hop by hop, each hop with its file, line and confidence. |
+| `find_owners` | full | `symbol` (required), `limit`, `line`, `path` | Find who has recent context on the code a change would touch: the people who have lately changed the symbols a change to this one can reach, ranked by how much of that code they have worked on. |
+| `find_callees` | full | `name` (required), `limit`, `line`, `min_confidence`, `offset`, `path` | List what a symbol calls: the definitions inside this repository that its body invokes, each with the file and line of the call and how the binding was established (exact, high, medium or low). |
+| `find_implementations` | full | `name` (required), `limit`, `line`, `min_confidence`, `offset`, `path` | List a type's hierarchy in both directions: what implements or extends it, and what it implements or extends itself. |
+| `trace_call_path` | full | `from` (required), `to` (required), `from_line`, `from_path`, `max_depth`, `to_line`, `to_path` | Find how one symbol reaches another: the shortest chains of calls and references from 'from' to 'to', hop by hop, each hop with its file, line and confidence. |
 | `list_dead_code` | full | `include_exported`, `limit`, `min_certainty`, `path` | List definitions that nothing in the index calls or references, graded by how far that can be trusted. |
 | `list_hotspots` | full | `commits`, `include_tests`, `limit`, `path` | Rank files by how often they change against how much code they hold, from recent git history, and list for each the files that are usually committed with it. |
 
@@ -69,10 +69,10 @@ CALL THIS FIRST when you are about to change code, before exploring the reposito
 
 | Parameter | Type | Required | Description |
 |---|---|---|---|
+| `task` | string | yes | Describe the change you are about to make, in plain English, as you would to a colleague. For example: 'Add idempotency to payment callback processing'. Full sentences work better than keywords — the task is parsed for intent, not matched literally. |
 | `hub_degree_limit` | integer | no | Stop the walk from expanding THROUGH any symbol with more than this many edges. Default 0 (off), which is what every result you have seen so far used. Set it (50 is a reasonable start) when a result is enormous because the walk crossed a logger, a util or a base class; pruned symbols are still listed, only their neighbours are not explored, and the response says how many were cut. |
 | `max_files` | integer | no | Cap on returned items (default 20). Raise only if the default answer is genuinely too narrow. |
 | `min_confidence` | string | no | Lowest confidence to return: exact, high, medium or low. Default low. Recommended: 'high' for safe automated code changes and blast radius analysis to filter out heuristic false positives. |
-| `task` | string | yes | Describe the change you are about to make, in plain English, as you would to a colleague. For example: 'Add idempotency to payment callback processing'. Full sentences work better than keywords — the task is parsed for intent, not matched literally. |
 
 ### `get_project_overview`
 
@@ -82,12 +82,12 @@ No parameters.
 
 ### `search_code`
 
-Full-text search across indexed source. Prefer this over your own grep: it searches the index and returns the paths of the matching files, best match first, which costs a fraction of the context. Use it when you know roughly what you are looking for but not where it lives, and to confirm any relationship result that came back empty, incomplete or low-confidence. Punctuation is fine: 'errors.New' and 'Utils::parse' search for those words side by side.
+Full-text search across indexed source. Prefer this over your own grep: it searches the index and returns the paths of the matching files, best match first, at a fraction of the context. Use it when you know roughly what you are looking for but not where it lives, and to confirm any relationship result that came back empty, incomplete or low-confidence.
 
 | Parameter | Type | Required | Description |
 |---|---|---|---|
+| `query` | string | yes | Search terms. Matches identifiers and code text; camelCase identifiers are searchable by their parts, so 'callback' finds handleCallback. Punctuation separates words: 'errors.New' finds those two side by side. |
 | `limit` | integer | no | Most files to return. Default 20, maximum 200. |
-| `query` | string | yes | Search terms. Matches identifiers and code text; camelCase identifiers are searchable by their parts, so 'callback' finds handleCallback. Punctuation is allowed: 'errors.New', 'Utils::parse' and '$this->handler' search for those words next to each other. |
 
 ### `find_symbol`
 
@@ -95,74 +95,74 @@ Locate a symbol's definition by name. Faster and more precise than searching whe
 
 | Parameter | Type | Required | Description |
 |---|---|---|---|
+| `name` | string | yes | Symbol name to find, e.g. 'TransactionService' or 'updateStatus'. Exact match on the name, not a substring. |
 | `kind` | string | no | Optional filter: class, interface, function, method, field, constant, type_alias. |
 | `min_confidence` | string | no | Lowest confidence to return: exact, high, medium or low. Default low. Recommended: 'high' for safe automated code changes and blast radius analysis to filter out heuristic false positives. |
-| `name` | string | yes | Symbol name to find, e.g. 'TransactionService' or 'updateStatus'. Exact match on the name, not a substring. |
 
 ### `get_symbol`
 
-Get a symbol's definition with a bounded source excerpt and its immediate relationships. Call this after find_symbol instead of reading the whole file. The excerpt is bounded and may be truncated; the response says so explicitly when it is, so check that flag rather than assuming you have the full body. Several definitions sharing the name are all shown; pass `path` and `line` for one.
+Get a symbol's definition with a bounded source excerpt and its immediate relationships. Call this after find_symbol instead of reading the whole file. The excerpt is bounded and may be truncated; the response says so explicitly when it is, so check that flag rather than assuming you have the full body.
 
 | Parameter | Type | Required | Description |
 |---|---|---|---|
-| `line` | integer | no | Line the definition starts on (or any line inside it). Pass it with path to choose between several definitions in one file, such as overloads. A previous answer prints it as path:line. |
-| `min_confidence` | string | no | Lowest confidence to return: exact, high, medium or low. Default low. Recommended: 'high' for safe automated code changes and blast radius analysis to filter out heuristic false positives. |
 | `name` | string | yes | Symbol name, e.g. 'updateStatus' or 'TransactionService'. |
-| `path` | string | no | File (or directory) the definition is in, to choose between several symbols that share the name. Matched exactly when it names a file. |
+| `line` | integer | no | Line the definition starts on, to choose between several in one file (overloads). |
+| `min_confidence` | string | no | Lowest confidence to return: exact, high, medium or low. Default low. Recommended: 'high' for safe automated code changes and blast radius analysis to filter out heuristic false positives. |
+| `path` | string | no | File or directory of the definition, to choose between symbols that share the name. |
 
 ### `find_references`
 
-Find where a symbol is used. Every result carries a confidence tier: 'exact' means a compiler proved the binding, 'high' and 'medium' and 'low' mean RepoCortex inferred it and may be wrong. Pass min_confidence='high' when a wrong result costs more than a missing one. CRITICAL: an EMPTY result is ambiguous — it may mean nothing references this symbol, or that RepoCortex could not resolve the references that exist. Never conclude a symbol is unused from an empty result; confirm with search_code. The first line says UNKNOWN, UNRELIABLE or INCOMPLETE when the answer is; a name shared by several definitions returns them to choose from (`path`, `line`), and `limit`/`offset` page a long list.
+Find where a symbol is used. Every result carries a confidence tier: 'exact' means a compiler proved the binding, 'high' and 'medium' and 'low' mean RepoCortex inferred it and may be wrong. Pass min_confidence='high' when a wrong result costs more than a missing one. CRITICAL: an EMPTY result is ambiguous — it may mean nothing references this symbol, or that RepoCortex could not resolve the references that exist. Never conclude a symbol is unused from an empty result; confirm with search_code.
 
 | Parameter | Type | Required | Description |
 |---|---|---|---|
-| `limit` | integer | no | Most rows to return. Default 50, maximum 200. The answer says how many rows exist in total. |
-| `line` | integer | no | Line the definition starts on (or any line inside it). Pass it with path to choose between several definitions in one file, such as overloads. A previous answer prints it as path:line. |
+| `name` | string | yes | Symbol name whose relationships you want. |
+| `limit` | integer | no | Most rows to return. Default 50, maximum 200. |
+| `line` | integer | no | Line the definition starts on, to choose between several in one file (overloads). |
 | `min_confidence` | string | no | Lowest confidence to return: exact, high, medium or low. Default low. Recommended: 'high' for safe automated code changes and blast radius analysis to filter out heuristic false positives. |
-| `name` | string | yes | Symbol name whose relationships you want, e.g. 'updateStatus' or 'TransactionService'. |
-| `offset` | integer | no | Rows to skip, to read past the first page. Default 0. When more rows exist the answer names the offset to pass next. |
-| `path` | string | no | File (or directory) the definition is in, to choose between several symbols that share the name. Matched exactly when it names a file. |
+| `offset` | integer | no | Rows to skip. The answer names the next offset when more rows exist. |
+| `path` | string | no | File or directory of the definition, to choose between symbols that share the name. |
 
 ### `find_callers`
 
-Find the functions and methods that call a symbol — the callers, not merely the files mentioning it. Use before changing a signature or behaviour. Every result carries a confidence tier, from 'exact' (a compiler proved the binding) down through 'high', 'medium' and 'low' (RepoCortex inferred it and may be wrong); pass min_confidence='high' to see only bindings RepoCortex can defend. CRITICAL: an EMPTY result is ambiguous and unresolved calls are reported separately, so absence of callers here is NOT evidence the symbol is dead. Confirm with search_code before deleting anything. The first line says UNKNOWN, UNRELIABLE, UNVERIFIED or INCOMPLETE when the answer is; a name shared by several definitions returns them to choose from (`path`, `line`), and `limit`/`offset` page a long list.
+Find the functions and methods that call a symbol — the callers, not merely the files mentioning it. Use before changing a signature or behaviour. Every result carries a confidence tier, from 'exact' (a compiler proved the binding) down through 'high', 'medium' and 'low' (RepoCortex inferred it and may be wrong); pass min_confidence='high' to see only bindings RepoCortex can defend. CRITICAL: an EMPTY result is ambiguous and unresolved calls are reported separately, so absence of callers here is NOT evidence the symbol is dead. Confirm with search_code before deleting anything.
 
 | Parameter | Type | Required | Description |
 |---|---|---|---|
-| `limit` | integer | no | Most rows to return. Default 50, maximum 200. The answer says how many rows exist in total. |
-| `line` | integer | no | Line the definition starts on (or any line inside it). Pass it with path to choose between several definitions in one file, such as overloads. A previous answer prints it as path:line. |
+| `name` | string | yes | Symbol name whose relationships you want. |
+| `limit` | integer | no | Most rows to return. Default 50, maximum 200. |
+| `line` | integer | no | Line the definition starts on, to choose between several in one file (overloads). |
 | `min_confidence` | string | no | Lowest confidence to return: exact, high, medium or low. Default low. Recommended: 'high' for safe automated code changes and blast radius analysis to filter out heuristic false positives. |
-| `name` | string | yes | Symbol name whose relationships you want, e.g. 'updateStatus' or 'TransactionService'. |
-| `offset` | integer | no | Rows to skip, to read past the first page. Default 0. When more rows exist the answer names the offset to pass next. |
-| `path` | string | no | File (or directory) the definition is in, to choose between several symbols that share the name. Matched exactly when it names a file. |
+| `offset` | integer | no | Rows to skip. The answer names the next offset when more rows exist. |
+| `path` | string | no | File or directory of the definition, to choose between symbols that share the name. |
 
 ### `find_tests`
 
-Find the tests covering a symbol, and which signal found each one — a proven call edge is far stronger evidence than a matching filename, and the response names which you got. Use before changing behaviour, to know what to run. A symbol reported as untested is a positive finding, not silence, but it is bounded by what the index could resolve; when the calls to the symbol could not be bound the answer says whether it is tested is UNKNOWN, and means it. A name shared by several definitions returns them to choose from (`path`, `line`).
+Find the tests covering a symbol, and which signal found each one — a proven call edge is far stronger evidence than a matching filename, and the response names which you got. Use before changing behaviour, to know what to run. A symbol reported as untested is a positive finding, not silence; when the calls to the symbol could not be bound the answer says UNKNOWN instead, and means it.
 
 | Parameter | Type | Required | Description |
 |---|---|---|---|
-| `hub_degree_limit` | integer | no | Stop the walk from expanding THROUGH any symbol with more than this many edges. Default 0 (off), which is what every result you have seen so far used. Set it (50 is a reasonable start) when a result is enormous because the walk crossed a logger, a util or a base class; pruned symbols are still listed, only their neighbours are not explored, and the response says how many were cut. |
-| `limit` | integer | no | Most rows to return. Default 50, maximum 200. The answer says how many rows exist in total. |
-| `line` | integer | no | Line the definition starts on (or any line inside it). Pass it with path to choose between several definitions in one file, such as overloads. A previous answer prints it as path:line. |
-| `min_confidence` | string | no | Lowest confidence to return: exact, high, medium or low. Default low. Recommended: 'high' for safe automated code changes and blast radius analysis to filter out heuristic false positives. |
-| `offset` | integer | no | Rows to skip, to read past the first page. Default 0. When more rows exist the answer names the offset to pass next. |
-| `path` | string | no | File (or directory) the definition is in, to choose between several symbols that share the name. Matched exactly when it names a file. |
 | `symbol` | string | yes | The symbol you are about to change, e.g. 'updateStatus' or 'TransactionService'. |
+| `hub_degree_limit` | integer | no | Stop the walk from expanding THROUGH any symbol with more than this many edges. Default 0 (off), which is what every result you have seen so far used. Set it (50 is a reasonable start) when a result is enormous because the walk crossed a logger, a util or a base class; pruned symbols are still listed, only their neighbours are not explored, and the response says how many were cut. |
+| `limit` | integer | no | Most rows to return. Default 50, maximum 200. |
+| `line` | integer | no | Line the definition starts on, to choose between several in one file (overloads). |
+| `min_confidence` | string | no | Lowest confidence to return: exact, high, medium or low. Default low. Recommended: 'high' for safe automated code changes and blast radius analysis to filter out heuristic false positives. |
+| `offset` | integer | no | Rows to skip. The answer names the next offset when more rows exist. |
+| `path` | string | no | File or directory of the definition, to choose between symbols that share the name. |
 
 ### `analyze_impact`
 
-Before changing a symbol, find out what depends on it. Separates DIRECT callers (a proven call edge) from INDIRECT reach and from dispatch rows the runtime MAY execute but no call site proves, and names what it CANNOT see — dynamic dispatch, unresolved references, traversal limits. The risk level is 'unknown', never 'low', when the callers could not be determined: the references to the name were left unbound, or the language's calls are not extracted. The first line says so. The result is a LOWER BOUND: treat an empty or short result as 'nothing found', never as proof that changing the symbol is safe. A name shared by several definitions returns them to choose from (`path`, `line`).
+Before changing a symbol, find out what depends on it. Separates DIRECT callers (a proven call edge) from INDIRECT reach and from dispatch rows the runtime MAY execute but no call site proves, and names what it CANNOT see — dynamic dispatch, unresolved references, traversal limits. The risk level is 'unknown', never 'low', when the callers could not be determined, and the first line says so. The result is a LOWER BOUND: treat an empty or short result as 'nothing found', never as proof that changing the symbol is safe.
 
 | Parameter | Type | Required | Description |
 |---|---|---|---|
-| `hub_degree_limit` | integer | no | Stop the walk from expanding THROUGH any symbol with more than this many edges. Default 0 (off), which is what every result you have seen so far used. Set it (50 is a reasonable start) when a result is enormous because the walk crossed a logger, a util or a base class; pruned symbols are still listed, only their neighbours are not explored, and the response says how many were cut. |
-| `limit` | integer | no | Most rows to return. Default 50, maximum 200. The answer says how many rows exist in total. |
-| `line` | integer | no | Line the definition starts on (or any line inside it). Pass it with path to choose between several definitions in one file, such as overloads. A previous answer prints it as path:line. |
-| `min_confidence` | string | no | Lowest confidence to follow: exact, high, medium or low. Default medium, so name-only (low) relationships are left out and counted; pass 'low' to walk them too, or 'high' when the result will gate an automated change. |
-| `offset` | integer | no | Rows to skip, to read past the first page. Default 0. When more rows exist the answer names the offset to pass next. |
-| `path` | string | no | File (or directory) the definition is in, to choose between several symbols that share the name. Matched exactly when it names a file. |
 | `symbol` | string | yes | The symbol you are about to change, e.g. 'updateStatus' or 'TransactionService'. |
+| `hub_degree_limit` | integer | no | Stop the walk from expanding THROUGH any symbol with more than this many edges. Default 0 (off), which is what every result you have seen so far used. Set it (50 is a reasonable start) when a result is enormous because the walk crossed a logger, a util or a base class; pruned symbols are still listed, only their neighbours are not explored, and the response says how many were cut. |
+| `limit` | integer | no | Most rows to return. Default 50, maximum 200. |
+| `line` | integer | no | Line the definition starts on, to choose between several in one file (overloads). |
+| `min_confidence` | string | no | Lowest confidence to follow: exact, high, medium or low. Default medium, so name-only (low) relationships are left out and counted; pass 'low' to walk them too, or 'high' when the result will gate an automated change. |
+| `offset` | integer | no | Rows to skip. The answer names the next offset when more rows exist. |
+| `path` | string | no | File or directory of the definition, to choose between symbols that share the name. |
 
 ### `get_resolution_coverage`
 
@@ -176,13 +176,13 @@ Plan a symbol rename. Returns the edit SITES — a file and a line each, with no
 
 | Parameter | Type | Required | Description |
 |---|---|---|---|
-| `limit` | integer | no | Most rows to return. Default 50, maximum 200. The answer says how many rows exist in total. |
-| `line` | integer | no | Line the definition starts on (or any line inside it). Pass it with path to choose between several definitions in one file, such as overloads. A previous answer prints it as path:line. |
-| `min_confidence` | string | no | Lowest confidence to return: exact, high, medium or low. Default low. Recommended: 'high' for safe automated code changes and blast radius analysis to filter out heuristic false positives. |
 | `name` | string | yes | Symbol to rename. |
 | `new_name` | string | yes | The replacement identifier. Used only to render the plan; nothing is written. |
-| `offset` | integer | no | Rows to skip, to read past the first page. Default 0. When more rows exist the answer names the offset to pass next. |
-| `path` | string | no | File (or directory) the definition is in, to choose between several symbols that share the name. Matched exactly when it names a file. |
+| `limit` | integer | no | Most rows to return. Default 50, maximum 200. |
+| `line` | integer | no | Line the definition starts on, to choose between several in one file (overloads). |
+| `min_confidence` | string | no | Lowest confidence to return: exact, high, medium or low. Default low. Recommended: 'high' for safe automated code changes and blast radius analysis to filter out heuristic false positives. |
+| `offset` | integer | no | Rows to skip. The answer names the next offset when more rows exist. |
+| `path` | string | no | File or directory of the definition, to choose between symbols that share the name. |
 
 ### `list_api_endpoints`
 
@@ -226,17 +226,17 @@ Compress unified git diffs into structured, token-efficient representations. Str
 
 ### `plan_change`
 
-Generate an ordered change plan for a symbol: the direct callers the index bound, a risk level, the test files found to cover it, and the steps in order. Use it before modifying or refactoring existing code. The callers are the ones RepoCortex could bind, not a guarantee of all of them: when they could not be determined the risk is 'unknown' and the first line says the plan is incomplete, so search for the name before relying on it.
+Generate an ordered change plan for a symbol: the direct callers the index bound, a risk level, the test files found to cover it, and the steps in order. Use it before modifying or refactoring existing code. The callers are the ones RepoCortex could bind: when they could not be determined the risk is 'unknown' and the first line says so.
 
 | Parameter | Type | Required | Description |
 |---|---|---|---|
-| `hub_degree_limit` | integer | no | Stop the walk from expanding THROUGH any symbol with more than this many edges. Default 0 (off), which is what every result you have seen so far used. Set it (50 is a reasonable start) when a result is enormous because the walk crossed a logger, a util or a base class; pruned symbols are still listed, only their neighbours are not explored, and the response says how many were cut. |
-| `limit` | integer | no | Most rows to return. Default 50, maximum 200. The answer says how many rows exist in total. |
-| `line` | integer | no | Line the definition starts on (or any line inside it). Pass it with path to choose between several definitions in one file, such as overloads. A previous answer prints it as path:line. |
-| `min_confidence` | string | no | Lowest confidence to return: exact, high, medium or low. Default low. Recommended: 'high' for safe automated code changes and blast radius analysis to filter out heuristic false positives. |
-| `offset` | integer | no | Rows to skip, to read past the first page. Default 0. When more rows exist the answer names the offset to pass next. |
-| `path` | string | no | File (or directory) the definition is in, to choose between several symbols that share the name. Matched exactly when it names a file. |
 | `symbol` | string | yes | The symbol you are about to change, e.g. 'updateStatus' or 'TransactionService'. |
+| `hub_degree_limit` | integer | no | Stop the walk from expanding THROUGH any symbol with more than this many edges. Default 0 (off), which is what every result you have seen so far used. Set it (50 is a reasonable start) when a result is enormous because the walk crossed a logger, a util or a base class; pruned symbols are still listed, only their neighbours are not explored, and the response says how many were cut. |
+| `limit` | integer | no | Most rows to return. Default 50, maximum 200. |
+| `line` | integer | no | Line the definition starts on, to choose between several in one file (overloads). |
+| `min_confidence` | string | no | Lowest confidence to return: exact, high, medium or low. Default low. Recommended: 'high' for safe automated code changes and blast radius analysis to filter out heuristic false positives. |
+| `offset` | integer | no | Rows to skip. The answer names the next offset when more rows exist. |
+| `path` | string | no | File or directory of the definition, to choose between symbols that share the name. |
 
 ### `list_blindspots`
 
@@ -260,10 +260,10 @@ Find who has recent context on the code a change would touch: the people who hav
 
 | Parameter | Type | Required | Description |
 |---|---|---|---|
-| `limit` | integer | no | Most people to list. Default 5. |
-| `line` | integer | no | Line the definition starts on (or any line inside it). Pass it with path to choose between several definitions in one file, such as overloads. A previous answer prints it as path:line. |
-| `path` | string | no | File (or directory) the definition is in, to choose between several symbols that share the name. Matched exactly when it names a file. |
 | `symbol` | string | yes | The symbol you are changing, e.g. 'updateStatus' or 'TransactionService'. |
+| `limit` | integer | no | Most people to list. Default 5. |
+| `line` | integer | no | Line the definition starts on, to choose between several in one file (overloads). |
+| `path` | string | no | File or directory of the definition, to choose between symbols that share the name. |
 
 ### `find_callees`
 
@@ -271,12 +271,12 @@ List what a symbol calls: the definitions inside this repository that its body i
 
 | Parameter | Type | Required | Description |
 |---|---|---|---|
-| `limit` | integer | no | Most rows to return. Default 50, maximum 200. The answer says how many rows exist in total. |
-| `line` | integer | no | Line the definition starts on (or any line inside it). Pass it with path to choose between several definitions in one file, such as overloads. A previous answer prints it as path:line. |
+| `name` | string | yes | Symbol name whose relationships you want. |
+| `limit` | integer | no | Most rows to return. Default 50, maximum 200. |
+| `line` | integer | no | Line the definition starts on, to choose between several in one file (overloads). |
 | `min_confidence` | string | no | Lowest confidence to return: exact, high, medium or low. Default low. Recommended: 'high' for safe automated code changes and blast radius analysis to filter out heuristic false positives. |
-| `name` | string | yes | Symbol name whose relationships you want, e.g. 'updateStatus' or 'TransactionService'. |
-| `offset` | integer | no | Rows to skip, to read past the first page. Default 0. When more rows exist the answer names the offset to pass next. |
-| `path` | string | no | File (or directory) the definition is in, to choose between several symbols that share the name. Matched exactly when it names a file. |
+| `offset` | integer | no | Rows to skip. The answer names the next offset when more rows exist. |
+| `path` | string | no | File or directory of the definition, to choose between symbols that share the name. |
 
 ### `find_implementations`
 
@@ -284,12 +284,12 @@ List a type's hierarchy in both directions: what implements or extends it, and w
 
 | Parameter | Type | Required | Description |
 |---|---|---|---|
-| `limit` | integer | no | Most rows to return. Default 50, maximum 200. The answer says how many rows exist in total. |
-| `line` | integer | no | Line the definition starts on (or any line inside it). Pass it with path to choose between several definitions in one file, such as overloads. A previous answer prints it as path:line. |
+| `name` | string | yes | Symbol name whose relationships you want. |
+| `limit` | integer | no | Most rows to return. Default 50, maximum 200. |
+| `line` | integer | no | Line the definition starts on, to choose between several in one file (overloads). |
 | `min_confidence` | string | no | Lowest confidence to return: exact, high, medium or low. Default low. Recommended: 'high' for safe automated code changes and blast radius analysis to filter out heuristic false positives. |
-| `name` | string | yes | Symbol name whose relationships you want, e.g. 'updateStatus' or 'TransactionService'. |
-| `offset` | integer | no | Rows to skip, to read past the first page. Default 0. When more rows exist the answer names the offset to pass next. |
-| `path` | string | no | File (or directory) the definition is in, to choose between several symbols that share the name. Matched exactly when it names a file. |
+| `offset` | integer | no | Rows to skip. The answer names the next offset when more rows exist. |
+| `path` | string | no | File or directory of the definition, to choose between symbols that share the name. |
 
 ### `trace_call_path`
 
@@ -298,12 +298,12 @@ Find how one symbol reaches another: the shortest chains of calls and references
 | Parameter | Type | Required | Description |
 |---|---|---|---|
 | `from` | string | yes | Symbol the path starts at, e.g. 'handleCallback'. |
-| `from_line` | integer | no | Line the 'from' definition starts on, when several in one file share the name. |
-| `from_path` | string | no | File (or directory) the 'from' definition is in, when several symbols share the name. |
-| `max_depth` | integer | no | Longest route to look for, in hops. Default 6. Raise it only if the answer was 'no route found' and you expect a long one. |
 | `to` | string | yes | Symbol the path should reach, e.g. 'saveTransaction'. |
-| `to_line` | integer | no | Line the 'to' definition starts on, when several in one file share the name. |
-| `to_path` | string | no | File (or directory) the 'to' definition is in, when several symbols share the name. |
+| `from_line` | integer | no | Line the 'from' definition starts on. |
+| `from_path` | string | no | File or directory of the 'from' definition, when several symbols share the name. |
+| `max_depth` | integer | no | Longest route to look for, in hops. Default 6. Raise it only if the answer was 'no route found' and you expect a long one. |
+| `to_line` | integer | no | Line the 'to' definition starts on. |
+| `to_path` | string | no | File or directory of the 'to' definition, when several symbols share the name. |
 
 ### `list_dead_code`
 

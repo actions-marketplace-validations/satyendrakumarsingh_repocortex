@@ -447,7 +447,7 @@ func joinWhy(parts ...string) string {
 type renameArgs struct {
 	Name    string `json:"name" jsonschema:"Symbol to rename."`
 	NewName string `json:"new_name" jsonschema:"The replacement identifier. Used only to render the plan; nothing is written."`
-	Path    string `json:"path,omitempty" jsonschema:"File (or directory) the definition is in, to choose between several symbols that share the name. Matched exactly when it names a file."`
+	Path    string `json:"path,omitempty" jsonschema:"File or directory of the definition, to choose between symbols that share the name."`
 	lineArg
 
 	// A floor here narrows the REVIEW half of the plan. The apply half is

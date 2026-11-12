@@ -106,9 +106,12 @@ function copyable(text) {
     } }, 'Copy'));
 }
 
-function symbolLink(name, path) {
-  const q = path ? `?path=${encodeURIComponent(path)}` : '';
-  return h('a', { class: 'name', href: `#/s/${encodeURIComponent(name)}${q}`, text: name });
+function symbolLink(name, path, line) {
+  const p = new URLSearchParams();
+  if (path) p.set('path', path);
+  if (line) p.set('line', String(line));
+  const q = p.toString();
+  return h('a', { class: 'name', href: `#/s/${encodeURIComponent(name)}${q ? '?' + q : ''}`, text: name });
 }
 
 /* A name is linked to its page when it looks like one symbol. "A -> B" (a hop
@@ -116,6 +119,9 @@ function symbolLink(name, path) {
 function nameCell(item) {
   const name = item.name || '(unnamed)';
   const linkable = /^[\w$.#:<>~-]+$/.test(name) && !['file', 'changes_with', 'hop'].includes(item.kind);
+  // A candidate row is one of several definitions sharing a name. Its link
+  // carries the path and line that select it, which the name alone cannot.
+  if (linkable && item.kind === 'candidate') return symbolLink(name, item.path, item.line);
   return linkable ? symbolLink(name) : h('span', { class: 'name', text: name });
 }
 
@@ -137,7 +143,7 @@ function itemsTable(items, { showWhy = true } = {}) {
 
 /* Notes that say what an answer cannot see come first: they change how far
    the rows above can be trusted, and everything else is detail. */
-const isLimit = (n) => /NOT VISIBLE|LOWER BOUND|COVERAGE|not proof|cannot see|unresolved|truncat/i.test(n);
+const isLimit = (n) => /NOT VISIBLE|LOWER BOUND|COVERAGE|INCOMPLETE FOR|PROBABLY NOT|not proof|cannot see|could not be determined|unresolved|truncat/i.test(n);
 
 function limitsNote(answer) {
   const notes = [...(answer.notes || [])];
@@ -335,7 +341,7 @@ const SYMBOL_TABS = [
   { id: 'types', label: 'Type hierarchy', tool: 'find_implementations', arg: 'name', lede: 'What it implements or extends, and what is built on it.' },
 ];
 
-function symbolView({ name, path, tab = 'callers', floor = '' }) {
+function symbolView({ name, path, line, tab = 'callers', floor = '' }) {
   remember(name);
   const header = h('div', null, h('p', { class: 'crumb busy', text: 'Looking it up' }));
   const verdict = h('p', { class: 'verdict' });
@@ -343,7 +349,8 @@ function symbolView({ name, path, tab = 'callers', floor = '' }) {
   const cache = new Map();
 
   call('find_symbol', { name }).then((a) => {
-    const def = (a.items || []).find((i) => !path || (i.path || '').includes(path)) || (a.items || [])[0];
+    const inPath = (a.items || []).filter((i) => !path || (i.path || '').includes(path));
+    const def = inPath.find((i) => !line || String(i.line) === String(line)) || inPath[0] || (a.items || [])[0];
     header.replaceChildren(
       h('p', { class: 'crumb', text: def ? `${def.path}${def.line ? ':' + def.line : ''}` : 'Not found in the index' }),
       h('div', { class: 'entity' }, h('h1', { text: name }), def && def.kind && h('span', { class: 'tag', text: def.kind }),
@@ -354,11 +361,16 @@ function symbolView({ name, path, tab = 'callers', floor = '' }) {
   // Every tab's answer is asked for at once. Each is a few milliseconds, and
   // it puts a count on each tab, so the reader sees the size of an answer
   // before choosing to read it. The promises are kept and reused by the tab.
-  const preload = (t) => {
-    const a = { [t.arg]: name };
-    if (path && t.arg === 'name') a.path = path;
-    return call(t.tool, a);
+  // Every one of these tools takes path and line, so the definition the page
+  // is about is the definition each tab asks about. A name shared by several
+  // definitions comes back as a list of them to choose from.
+  const selector = () => {
+    const a = {};
+    if (path) a.path = path;
+    if (line) a.line = Number(line);
+    return a;
   };
+  const preload = (t) => call(t.tool, { [t.arg]: name, ...selector() });
   for (const t of SYMBOL_TABS) cache.set(t.id, preload(t));
 
   // The one-sentence answer: the judgement from analyze_impact, and how many
@@ -368,9 +380,13 @@ function symbolView({ name, path, tab = 'callers', floor = '' }) {
     const m = /(\d+) direct, (\d+) indirect\. Risk (\w+)/.exec(reach.value.summary || '');
     if (!m) { if (!verdict.textContent) verdict.textContent = reach.value.summary || ''; return; }
     const [, direct, indirect, risk] = m;
+    // The tool's own first line when the index cannot stand behind the
+    // numbers: it says which, and a tidy sentence built from them would not.
+    const level = (reach.value.reliability || {}).level || 'good';
+    if (risk === 'unknown' || level !== 'good') { verdict.textContent = reach.value.summary || ''; return; }
     const parts = ['Used directly in ', h('b', { text: `${direct} place${direct === '1' ? '' : 's'}` }),
       '. A change can reach ', h('b', { text: `${Number(direct) + Number(indirect)} symbols` })];
-    const n = tests.status === 'fulfilled' ? (tests.value.items || []).length : 0;
+    const n = tests.status === 'fulfilled' ? ((tests.value.page || {}).total ?? (tests.value.items || []).length) : 0;
     if (n) parts.push(', and ', h('b', { text: `${n}${tests.value.truncated ? '+' : ''} test${n === 1 ? '' : 's'}` }), ' reach it');
     parts.push(`. Risk is ${risk}.`);
     verdict.replaceChildren(...parts);
@@ -385,7 +401,12 @@ function symbolView({ name, path, tab = 'callers', floor = '' }) {
   for (const t of SYMBOL_TABS) {
     cache.get(t.id).then((a) => {
       const slot = $(`#count-${t.id}`);
-      if (slot) slot.textContent = `${(a.items || []).length}${a.truncated ? '+' : ''}`;
+      if (!slot) return;
+      // The counted total when the tool gives one; a list of candidates is not
+      // a count of anything.
+      if (a.outcome === 'ambiguous_name') slot.textContent = '?';
+      else if (a.page && typeof a.page.total === 'number') slot.textContent = String(a.page.total);
+      else slot.textContent = `${(a.items || []).length}${a.truncated ? '+' : ''}`;
     }).catch(() => {});
   }
   // Arrow keys move between tabs, as the tab pattern expects.
@@ -399,6 +420,7 @@ function symbolView({ name, path, tab = 'callers', floor = '' }) {
   function go(change, focusTab) {
     const p = new URLSearchParams();
     if (path) p.set('path', path);
+    if (line) p.set('line', line);
     const next = { tab, floor, ...change };
     if (next.tab !== 'callers') p.set('tab', next.tab);
     if (next.floor) p.set('floor', next.floor);
@@ -408,8 +430,7 @@ function symbolView({ name, path, tab = 'callers', floor = '' }) {
   }
 
   const spec = SYMBOL_TABS.find((t) => t.id === tab) || SYMBOL_TABS[0];
-  const args = { [spec.arg]: name };
-  if (path && spec.arg === 'name') args.path = path;
+  const args = { [spec.arg]: name, ...selector() };
   if (spec.floor && floor) args.min_confidence = floor;
 
   const filter = spec.floor && h('div', { class: 'seg', role: 'group', 'aria-label': 'Which relationships to show' },

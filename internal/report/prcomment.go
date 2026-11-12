@@ -74,8 +74,14 @@ func impactSummary(r *impact.DiffReport) string {
 	if r == nil {
 		return "not run"
 	}
+	// An unknown level carries no score: the sum is over the callers that were
+	// bound, and for this change they could not be. See impact.Risk.Undetermined.
 	s := fmt.Sprintf("**%s** risk (score %d): %d symbols reached from %d changed symbols",
 		inline(r.Risk.Level), r.Risk.Score, r.TotalReached(), r.SeedsFound)
+	if r.Risk.Level == impact.LevelUnknown {
+		s = fmt.Sprintf("**unknown** risk (the callers of a changed symbol could not be determined): "+
+			"%d symbols reached from %d changed symbols", r.TotalReached(), r.SeedsFound)
+	}
 	if mix := blastConfidenceOf(r); mix.total > 0 {
 		s += "; " + mix.summary()
 	}

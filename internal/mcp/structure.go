@@ -31,10 +31,10 @@ import (
 type pathArgs struct {
 	From     string `json:"from" jsonschema:"Symbol the path starts at, e.g. 'handleCallback'."`
 	To       string `json:"to" jsonschema:"Symbol the path should reach, e.g. 'saveTransaction'."`
-	FromPath string `json:"from_path,omitempty" jsonschema:"File (or directory) the 'from' definition is in, when several symbols share the name."`
-	FromLine int    `json:"from_line,omitempty" jsonschema:"Line the 'from' definition starts on, when several in one file share the name."`
-	ToPath   string `json:"to_path,omitempty" jsonschema:"File (or directory) the 'to' definition is in, when several symbols share the name."`
-	ToLine   int    `json:"to_line,omitempty" jsonschema:"Line the 'to' definition starts on, when several in one file share the name."`
+	FromPath string `json:"from_path,omitempty" jsonschema:"File or directory of the 'from' definition, when several symbols share the name."`
+	FromLine int    `json:"from_line,omitempty" jsonschema:"Line the 'from' definition starts on."`
+	ToPath   string `json:"to_path,omitempty" jsonschema:"File or directory of the 'to' definition, when several symbols share the name."`
+	ToLine   int    `json:"to_line,omitempty" jsonschema:"Line the 'to' definition starts on."`
 	MaxDepth int    `json:"max_depth,omitempty" jsonschema:"Longest route to look for, in hops. Default 6. Raise it only if the answer was 'no route found' and you expect a long one."`
 }
 

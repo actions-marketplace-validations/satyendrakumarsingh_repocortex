@@ -10,7 +10,7 @@ import (
 )
 
 type searchArgs struct {
-	Query string `json:"query" jsonschema:"Search terms. Matches identifiers and code text; camelCase identifiers are searchable by their parts, so 'callback' finds handleCallback. Punctuation is allowed: 'errors.New', 'Utils::parse' and '$this->handler' search for those words next to each other."`
+	Query string `json:"query" jsonschema:"Search terms. Matches identifiers and code text; camelCase identifiers are searchable by their parts, so 'callback' finds handleCallback. Punctuation separates words: 'errors.New' finds those two side by side."`
 	Limit int    `json:"limit,omitempty" jsonschema:"Most files to return. Default 20, maximum 200."`
 }
 
