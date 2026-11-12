@@ -99,6 +99,7 @@ const (
 	ruleStatedType        = "declared on the receiver's stated type"
 	ruleNamedType         = "declared on the type the receiver names"
 	ruleConstructs        = "constructs the type the receiver names"
+	ruleExtension         = "the only function of this name; called as a method, so an extension function of the receiver's type"
 	ruleNamedAfterType    = "receiver is named after the type that declares it"
 	ruleOnlyMember        = "the only member of this name in the repository; the receiver's type is not known"
 	ruleOnlyFree          = "the only free function of this name in the repository; its namespace is not a file"
@@ -126,6 +127,21 @@ func (r *Resolver) resolveCall(c call, stats *Stats) decision {
 	c.scope = enclosingScope(c.fr, c.ref.Line)
 	c.class = enclosingClass(c.scope)
 	c.within, _ = enclosing(c.fr.Symbols, c.ref.Line)
+
+	if isConstruction(c.ref.Kind) {
+		return r.callNew(c, stats)
+	}
+	if !c.spec.Calls.CallConstructs && c.spec.Calls.NewConstructs {
+		// canBind let types through for the sake of `new`. A call without it
+		// still cannot denote one.
+		kept := c.cands[:0:0]
+		for _, s := range c.cands {
+			if !isConstructibleKind(s.Kind) {
+				kept = append(kept, s)
+			}
+		}
+		c.cands = kept
+	}
 
 	switch c.ref.ReceiverKind {
 	case model.ReceiverBare:
@@ -1002,6 +1018,85 @@ func (r *Resolver) callOnTypeOrValue(c call, name string, stats *Stats) decision
 	return r.memberByName(c, model.ConfidenceHigh, stats)
 }
 
+// constructedKind marks a reference the parser tagged on the type of a `new`
+// expression: `new Widget(3)` in Java, PHP and Scala. Its name is the type's,
+// never a method's, and it is bound to a class or to nothing.
+//
+// This cannot be said through CallTraits alone. A constructor is indexed as a
+// method named after its class, so a plain reference named `Widget` is
+// indistinguishable from a call to that method, and a language where a bare
+// call does not construct (Java, PHP) has to refuse the class as a candidate
+// for every OTHER reference of that name. The kind is the one thing that tells
+// the two apart.
+const constructedKind = ".new"
+
+func isConstruction(refKind string) bool { return strings.HasSuffix(refKind, constructedKind) }
+
+// callNew binds a `new T(...)` to the type T, as an instantiation.
+//
+// The qualifier, where the source wrote one, has to fit the type found: a
+// package for the directory the type is in (`new com.shop.Widget()`), or the
+// outer type of a nested one (`new Outer.Inner()`). A qualifier the parser
+// could not read (PHP's namespace separator) leaves the type unidentified
+// rather than guessed: a name that only one type in the repository bears is
+// not evidence about a name written with a namespace.
+func (r *Resolver) callNew(c call, stats *Stats) decision {
+	name := c.ref.Name
+	segs := receiverSegments(c.ref.Receiver)
+	if c.ref.ReceiverKind == model.ReceiverExpr {
+		return unresolvedCall
+	}
+	if len(segs) > 0 && c.spec.hasExternalRoot(segs) {
+		return externalCall
+	}
+	t, found, known := r.typeNamed(c, name)
+	if found {
+		if len(segs) > 0 && !newQualifierFits(segs, t) {
+			return unresolvedCall
+		}
+		if d, ok := r.constructs(c, t); ok {
+			return d
+		}
+		// An interface, an enum, an alias: named by a `new`, never built by it.
+		return unresolvedCall
+	}
+	if known {
+		return ambiguousCall
+	}
+	if r.importedFromOutside(c, name) || c.spec.isBuiltinType(name) {
+		return externalCall
+	}
+	return unresolvedCall
+}
+
+// newQualifierFits reports whether the qualifier written before a constructed
+// type is consistent with the type that was found by its last name.
+func newQualifierFits(segs []string, t typeRef) bool {
+	last := segs[len(segs)-1]
+	// A nested type: `Outer.Inner`. The type's own qualified name says what
+	// it is nested in.
+	if capitalised(last) {
+		return strings.HasSuffix(t.qual, last+"."+t.name)
+	}
+	// A package: the directories the type's file is in end with it.
+	var dir []string
+	for _, p := range strings.Split(path.Dir(t.filePath), "/") {
+		if p != "" && p != "." {
+			dir = append(dir, p)
+		}
+	}
+	if len(dir) < len(segs) {
+		return false
+	}
+	tail := dir[len(dir)-len(segs):]
+	for i, seg := range segs {
+		if !strings.EqualFold(tail[i], seg) {
+			return false
+		}
+	}
+	return true
+}
+
 // constructs binds `Type.new` to the type itself, as an instantiation.
 func (r *Resolver) constructs(c call, t typeRef) (decision, bool) {
 	for _, s := range c.symbols[t.name] {
@@ -1249,6 +1344,9 @@ func (r *Resolver) memberByName(c call, limit model.Confidence, stats *Stats) de
 		}
 	}
 	if len(members) == 0 {
+		if c.spec.Calls.ExtensionCalls {
+			return r.extensionFunction(c)
+		}
 		return unresolvedCall
 	}
 	if delegating {
@@ -1288,6 +1386,36 @@ func (r *Resolver) memberByName(c call, limit model.Confidence, stats *Stats) de
 		stats.CapDropped++
 	}
 	return ambiguousCall
+}
+
+// extensionFunction binds `x.f()` to a function that is not a member of any
+// type, in a language where such a function can be written to be called as if
+// it were one (Kotlin's `fun String.shout()`). It runs only when no type in
+// the repository declares a member of this name, so a method is never set
+// aside for it.
+//
+// The index does not record that a function is an extension, nor what type it
+// extends, so what is checked is that exactly one function of this name
+// exists that a call written like a method could reach at all, and the tier
+// is the one measured for the rule (CallTraits.Measured.Extension).
+func (r *Resolver) extensionFunction(c call) decision {
+	var free []registry.SymbolIndexEntry
+	for _, s := range c.cands {
+		if !isCallableKind(s.Kind) || s.ID == c.within {
+			continue
+		}
+		if _, isLocal := localScope(s); isLocal {
+			continue
+		}
+		if _, isMember := memberOwner(s); isMember {
+			continue
+		}
+		free = append(free, s)
+	}
+	if len(free) != 1 || r.specs.IsGenericName(c.ref.Name) || c.spec.isCoreMember(c.ref.Name) {
+		return unresolvedCall
+	}
+	return bound(candidate{free[0], c.spec.Calls.Measured.extension(), ruleExtension})
 }
 
 // namingHint is the receiver as a type's name might be spelled: the last
