@@ -24,9 +24,12 @@ commands below are how you produce a competing one.
 | Indexing is reproducible | `index --full --digest` | one sha256 over a run's content |
 | The graph is internally sound | `doctor --verify-index` | dangling edges, orphans, unproven `exact` claims |
 | Operations cost what we say | `index`, `resolve`, query commands | wall clock, printed by the tool itself |
+| Impact analysis predicts what a change touches | `scripts/bench/impactaccuracy` | precision, recall and F1 against a repository's own commit history |
 
-All five run against your repository, not ours. That is the point of shipping
-them as commands rather than as a table.
+The first five run against your repository, not ours. That is the point of
+shipping them as commands rather than as a table. The sixth is a harness in this
+repository that drives the binary through its command line; it is described in
+[section 6](#6-figures-other-tools-publish).
 
 ## Prerequisites
 
@@ -373,6 +376,283 @@ then tool calls and tokens.
    `.repocortex`; give the other arm the `find_callers` command.
 4. Record tokens, tool calls and wall time from the agent runtime, and score
    the answer line against the truth.
+
+---
+
+## 6. Figures other tools publish
+
+Three figures other code-graph tools publish and this project had not: how well
+impact analysis predicts a change, how long an update takes after two files
+change, and how long the Linux kernel takes to index. All three were measured on
+2026-11-12 at commit `6fadd51`, on an Apple M4 Pro with 14 cores and 24 GiB that
+other work was sharing. The harnesses are in `scripts/bench/`.
+
+The two timings are in
+[performance.md](performance.md#figures-other-tools-publish-measured-here), with
+the commands that produced them. The accuracy measurement is here, because its
+method needs more explaining than its result.
+
+### The binary that was measured
+
+```bash
+CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 go build -trimpath -o /tmp/bench/repocortex ./cmd/repocortex
+/tmp/bench/repocortex version     # repocortex dev (commit none, built unknown, darwin/arm64)
+```
+
+The Go toolchain on the measuring machine is `darwin/amd64` under Rosetta 2
+([pitfall 1](#pitfall-1-check-your-goarch-before-you-benchmark-anything)), so
+the binary was cross-compiled to the machine's own architecture. An amd64 build
+was not measured.
+
+### Impact-analysis accuracy
+
+**The question.** A commit changed a function. Did `analyze_impact`, asked about
+that function at the commit's parent, name the other files the commit went on to
+change?
+
+```bash
+git clone --depth 400 https://github.com/pallets/flask /tmp/bench/flask
+go run -tags bench ./scripts/bench/impactaccuracy \
+    -repo /tmp/bench/flask -bin /tmp/bench/repocortex -n 1000 -budget 20m
+```
+
+The harness is a Go program behind the `bench` build tag, so the default build,
+vet and lint do not compile it. It uses the standard library only and drives the
+binary through its command line, so it scores any build, including a released
+one. Give it a clone made for the purpose: it checks out revisions and deletes
+`.repocortex`. `-out results.jsonl` writes one line per commit examined.
+
+**Method.** For each non-merge commit, newest first:
+
+1. List the files it modified or deleted. A file it added did not exist at the
+   parent, so nothing indexed there could name it; added files are left out of
+   both sides.
+2. Check out the parent, delete `.repocortex`, and run `init`, `index` and
+   `resolve`. Every commit is scored against a fresh full index of its own
+   parent, which is why the run is slow and why N is small.
+3. Keep the changed files the index holds in a language RepoCortex binds
+   references for (the `typed` and `resolved` tiers of `repocortex languages`).
+   A commit with fewer than two is skipped, and so is one with more than 50.
+4. For each such file, the seed symbols are the innermost functions, methods,
+   types, fields, constants and variables whose lines overlap a hunk of the
+   diff.
+5. Call `analyze_impact` for each seed symbol by its fully-qualified name, once
+   per confidence floor (`min_confidence=high`, `medium`, `low`). The predicted
+   set is the files of the rows returned, minus the seed file.
+6. The truth is the other source files the commit changed.
+
+Counts are summed over commits and then divided (micro-averaged). Three
+aggregations are printed:
+
+| Aggregation | Seed |
+|---|---|
+| One seed per commit, any file | The file with the most changed lines |
+| One seed per commit, not a test file | The same rule over the files that are not tests |
+| Every changed file as a seed | Each file of the commit in turn, against the rest |
+
+The second exists because the first turned out to ask a question with an empty
+answer. A commit that fixes a function and extends its test usually changes more
+lines in the test, and nothing depends on a test. In gson the first rule chose a
+test file in 37 of 65 commits. A test file is recognised by its path (`tests/`,
+`*_test.go`, `test_*.py`, `*.spec.ts`, `*Test.java` and the like); the rule is in
+`isTestPath`.
+
+Every tally is printed beside a **baseline that needs no index**: predict the
+other source files in the seed's own directory. It is scored on the same commits
+against the same truth.
+
+**The known bias, in both directions.** Files that change together are not all
+dependents of one another, so a correct analysis is charged with "missing" files
+it had no reason to name: recall is understated. And a commit does not touch
+everything that depends on a change, so a real dependent that kept compiling is
+scored as a false positive: precision is understated too. The truth is partial
+on both sides. These figures compare one build with another on one history, and
+the tool with the baseline. They are not the probability that a reported file
+breaks.
+
+**Results.** One seed per commit, not a test file; every row the tool returned.
+`medium` is the floor `analyze_impact` applies when none is given.
+
+| Repository | Language | Commits | Floor | Predicted | Correct | Wrong | Missed | Precision | Recall | F1 |
+|---|---|---|---|---|---|---|---|---|---|---|
+| RepoCortex | Go | 14 | high | 73 | 8 | 65 | 42 | 11.0% | 16.0% | 0.130 |
+| | | | medium | 77 | 8 | 69 | 42 | 10.4% | 16.0% | 0.126 |
+| | | | low | 77 | 8 | 69 | 42 | 10.4% | 16.0% | 0.126 |
+| | | | same directory | 591 | 11 | 580 | 39 | 1.9% | 22.0% | 0.034 |
+| flask | Python | 74 | high | 198 | 31 | 167 | 216 | 15.7% | 12.6% | 0.139 |
+| | | | medium | 239 | 38 | 201 | 209 | 15.9% | 15.4% | 0.156 |
+| | | | low | 239 | 38 | 201 | 209 | 15.9% | 15.4% | 0.156 |
+| | | | same directory | 1,147 | 104 | 1,043 | 143 | 9.1% | 42.1% | 0.149 |
+| gson | Java | 57 | high | 342 | 30 | 312 | 194 | 8.8% | 13.4% | 0.106 |
+| | | | medium | 384 | 34 | 350 | 190 | 8.9% | 15.2% | 0.112 |
+| | | | low | 384 | 34 | 350 | 190 | 8.9% | 15.2% | 0.112 |
+| | | | same directory | 851 | 35 | 816 | 189 | 4.1% | 15.6% | 0.065 |
+| nest | TypeScript | 12 | high | 0 | 0 | 0 | 19 | — | 0.0% | 0.000 |
+| | | | medium | 4 | 0 | 4 | 19 | 0.0% | 0.0% | 0.000 |
+| | | | low | 5 | 0 | 5 | 19 | 0.0% | 0.0% | 0.000 |
+| | | | same directory | 69 | 0 | 69 | 19 | 0.0% | 0.0% | 0.000 |
+| zod | TypeScript | 10 | high | 3 | 1 | 2 | 19 | 33.3% | 5.0% | 0.087 |
+| | | | medium | 4 | 1 | 3 | 19 | 25.0% | 5.0% | 0.083 |
+| | | | low | 4 | 1 | 3 | 19 | 25.0% | 5.0% | 0.083 |
+| | | | same directory | 200 | 6 | 194 | 14 | 3.0% | 30.0% | 0.055 |
+
+The other two aggregations, at the default floor, with the baseline's F1 on the
+same seeds:
+
+| Repository | Aggregation | Seeds | Predicted | Correct | Wrong | Missed | Precision | Recall | F1 | Baseline F1 |
+|---|---|---|---|---|---|---|---|---|---|---|
+| RepoCortex | any file | 14 | 53 | 6 | 47 | 44 | 11.3% | 12.0% | 0.117 | 0.047 |
+| | every changed file | 56 | 185 | 18 | 167 | 374 | 9.7% | 4.6% | 0.062 | 0.053 |
+| flask | any file | 80 | 208 | 32 | 176 | 225 | 15.4% | 12.5% | 0.138 | 0.150 |
+| | every changed file | 301 | 621 | 161 | 460 | 1,976 | 25.9% | 7.5% | 0.117 | 0.264 |
+| gson | any file | 65 | 241 | 25 | 216 | 223 | 10.4% | 10.1% | 0.102 | 0.080 |
+| | every changed file | 300 | 634 | 55 | 579 | 3,506 | 8.7% | 1.5% | 0.026 | 0.167 |
+| nest | any file | 12 | 4 | 0 | 4 | 19 | 0.0% | 0.0% | 0.000 | 0.000 |
+| | every changed file | 16 | 4 | 0 | 4 | 29 | 0.0% | 0.0% | 0.000 | 0.000 |
+| zod | any file | 11 | 4 | 1 | 3 | 21 | 25.0% | 4.5% | 0.077 | 0.048 |
+| | every changed file | 15 | 5 | 1 | 4 | 30 | 20.0% | 3.2% | 0.056 | 0.065 |
+
+Direct callers only, against every row (direct, indirect and dispatch), for the
+non-test seed at the default floor:
+
+| Repository | Rows | Predicted | Correct | Precision | Recall | F1 |
+|---|---|---|---|---|---|---|
+| RepoCortex | direct | 14 | 4 | 28.6% | 8.0% | 0.125 |
+| | all | 77 | 8 | 10.4% | 16.0% | 0.126 |
+| flask | direct | 165 | 30 | 18.2% | 12.1% | 0.146 |
+| | all | 239 | 38 | 15.9% | 15.4% | 0.156 |
+| gson | direct | 216 | 32 | 14.8% | 14.3% | 0.145 |
+| | all | 384 | 34 | 8.9% | 15.2% | 0.112 |
+| nest | direct | 2 | 0 | 0.0% | 0.0% | 0.000 |
+| | all | 4 | 0 | 0.0% | 0.0% | 0.000 |
+| zod | direct | 2 | 1 | 50.0% | 5.0% | 0.091 |
+| | all | 4 | 1 | 25.0% | 5.0% | 0.083 |
+
+What each run covered:
+
+| | RepoCortex | flask | gson | nest | zod |
+|---|---|---|---|---|---|
+| Start revision | `6fadd51` | `49943b5` | `a961b0f` | `956af70` | `19c40d2` |
+| Clone | full history | `--depth 400` | `--depth 400` | `--depth 400` | `--depth 400` |
+| Files in the index at the start revision | 723 | 235 | 315 | 2,756 | 743 |
+| Symbols | 10,743 | 2,152 | 5,687 | 19,293 | 6,255 |
+| Relationships | 20,640 | 1,650 | 9,255 | 4,904 | 3,055 |
+| Budget | 20 min | 20 min | 20 min | 20 min | 40 min |
+| Stopped by | history exhausted | budget | budget | budget | budget |
+| Commits scanned | 40 | 393 | 209 | 31 | 17 |
+| Commits scored | 14 | 80 | 65 | 12 | 11 |
+| Skipped: fewer than two files modified or deleted | 19 | 164 | 65 | 4 | 4 |
+| Skipped: fewer than two changed source files | 5 | 147 | 78 | 14 | 2 |
+| Skipped: more than 50 changed source files | 1 | 0 | 0 | 0 | 0 |
+| Skipped: no indexed symbol on a changed line | 0 | 2 | 1 | 1 | 0 |
+| Skipped: no parent in the clone | 1 | 0 | 0 | 0 | 0 |
+| Commits with a non-test seed | 14 | 74 | 57 | 12 | 10 |
+| `analyze_impact` calls | 243 | 3,165 | 2,052 | 81 | 93 |
+| Answers that dropped rows at the 50-row cap | 21 | 75 | 90 | 0 | 0 |
+| Answers whose walk stopped at a limit | 86 | 465 | 203 | 7 | 8 |
+| Failed calls | 0 | 0 | 0 | 0 | 0 |
+| Non-test seeds with no file predicted (default floor) | 2 of 14 | 32 of 74 | 31 of 57 | 10 of 12 | 8 of 10 |
+| Seconds indexing parents, of the total | 255 of 403 | 405 of 1,201 | 602 of 1,202 | 1,143 of 1,356 | 1,346 of 2,679 |
+
+The machine was loaded throughout, and far more so once the kernel index
+recorded in performance.md started. The flask, gson and RepoCortex runs were
+almost over by then; the nest run overlapped it and the zod run was entirely
+inside it, which is why the two TypeScript runs scored so few commits. A fresh
+index of nest took 16 s early in the session and between 31 s and 249 s per
+commit during its run, and zod's took between 42 s and 260 s. zod was given
+40 minutes for that reason. The commit counts are what this machine could do on
+the day, not what the harness needs.
+
+**What the figures say.**
+
+- **F1 is between 0.000 and 0.156.** Where there are enough commits to say
+  anything (flask and gson), about one predicted file in six to one in eleven
+  was changed by the commit, and about one changed file in seven was predicted.
+  Read with the bias above, both are understated, and both are still low.
+- **Against the same-directory rule the result depends on the seed.** With a
+  non-test seed the tool has the higher F1 on four repositories and ties at zero
+  on nest, by a wide margin on RepoCortex and gson and by 0.156 to 0.149 on
+  flask. With any file as the seed it is behind on flask (0.138 to 0.150). With
+  every changed file as a seed it is ahead only on RepoCortex, and on flask and
+  gson the rule finds 5.6 and 17.8 times as many of the changed files (908
+  against 161, and 980 against 55). Much of a change set is a neighbourhood,
+  and a call graph is not a neighbourhood.
+- **Precision is where the tool is ahead.** On every repository with a correct
+  prediction, the tool's precision is 1.7 to 8 times the rule's for a non-test
+  seed. Its recall is lower on all of them: it names few files, and the rule
+  names many.
+- **The confidence floor barely moves the result.** `medium` and `low` give the
+  same counts on four of the five repositories and differ by one file on nest.
+  `high` removes between 1 and 42 predicted files. These indexes carry few
+  `low` edges, so the floor has little to remove.
+- **Indirect rows cost precision.** Direct callers alone are 1.1 to 2.8 times as
+  precise as the full answer on RepoCortex, flask and gson. They find fewer
+  files, and on gson the wider answer finds two more correct files for 166 more
+  wrong ones.
+- **The tool often has nothing to say.** 43% of the non-test seeds on
+  flask, 54% on gson, 8 of 10 on zod and 10 of 12 on nest predicted no file at
+  all. An empty answer costs recall and nothing else, so these F1 figures are
+  set more by how often the tool had no caller to report than by how often a
+  reported caller was wrong.
+- **TypeScript is the weakest of the four languages**, and the sample is the
+  smallest. nest scored no correct file in 12 commits, and neither did the
+  baseline: nest keeps each package's tests in a separate `test/` directory,
+  so the files next to a seed are rarely the ones its commit touched. zod
+  scored one correct file in 10 commits. `repocortex resolve` bound 20.5% of
+  nest's references that name something the index defines.
+- **N is small.** 10 to 14 commits is an anecdote. 57 to 74 is enough to see
+  the order of magnitude and not enough to rank two builds that differ by a
+  point.
+
+**Not comparable to the published figure.** code-review-graph publishes F1 0.693,
+precision 0.546 and recall 1.000 over 13 commits in 6 repositories. Its README,
+read on 2026-11-12, describes the truth as the changed files plus the files with
+call or import edges into them, taken from the same graph the predictor walks,
+and calls the recall of 1.0 a circular upper bound. That measures whether a
+blast radius agrees with the graph it was computed from. The measurement here
+asks whether it agrees with what a developer went on to change, which is a
+harder question with a noisier answer. Neither number says anything about the
+other, and the 0.1 here is not evidence that one tool is five times worse.
+
+**What the run found.** Not fixed; recorded for the next change to the resolver.
+
+| Finding | Measured |
+|---|---|
+| An overloaded method has no callers in the index | gson's `Gson.fromJson` has 11 overloads. All 792 references to `fromJson`, in 92 files, are recorded as `ambiguous` and bound to none of them. `analyze_impact` answers "0 direct, 0 indirect. Risk low (score 20)" for the library's main entry point. TypeScript overload signatures do the same: nest's `Reflector.getAllAndMerge` is declared three times, and all 12 references to it are `ambiguous` |
+| Overloads cannot be told apart by name | All 11 share the fully-qualified name `gson/src/main/java/com/google/gson/Gson.java:fromJson`. Asking about `fromJson` returns "matches 14 symbols; re-ask with a fully-qualified name" followed by the same name five times. 972 of gson's 3,561 methods share a fully-qualified name with another symbol |
+| An ambiguous name is reported as an internal failure | The same answer carries `error_code: internal` and "RepoCortex failed internally", for a request the caller can correct |
+| The documented default floor is wrong | `docs/reference/mcp-tools.md` and the tool's own schema say `min_confidence` defaults to `low` for `analyze_impact`. It defaults to `medium` |
+
+To reproduce the first row:
+
+```bash
+git clone --depth 1 https://github.com/google/gson && cd gson
+repocortex init && repocortex index && repocortex resolve
+repocortex tool call analyze_impact symbol=fromJson
+repocortex tool call analyze_impact symbol=gson/src/main/java/com/google/gson/Gson.java:fromJson
+repocortex query "SELECT resolution, COUNT(*) FROM symbol_references WHERE index_run_id = :run AND name = 'fromJson' GROUP BY resolution"
+```
+
+### Reproducing the two timings
+
+Both scripts print every run, average nothing, and need a clone they are allowed
+to modify.
+
+```bash
+# Incremental update: cold index, then three two-file edits, then the same under `watch`.
+git clone --depth 1 https://github.com/django/django /tmp/bench/django
+scripts/bench/incremental.sh /tmp/bench/repocortex /tmp/bench/django \
+    django/utils/text.py django/db/models/query.py
+
+# Cold index, one step at a time, with wall time and peak memory per step.
+git clone --depth 1 https://github.com/torvalds/linux /tmp/bench/linux
+scripts/bench/cold-index.sh /tmp/bench/repocortex /tmp/bench/linux
+```
+
+`cold-index.sh` stops a step that passes `BENCH_MAX_SECONDS` (default 7,200) or
+`BENCH_MAX_RSS_MB` (default none) and reports how far it got. Run it on an idle
+machine if you can: the figures in performance.md were taken on a shared one and
+say so.
 
 ## Pitfalls
 
