@@ -55,14 +55,20 @@ func init() {
 
 ; file-level variables with an initialiser (constants when const), and without one
 ; when the declaration starts with a storage class or a built-in type; a plain
-; a plain "Foo bar;" is not told apart from a function whose return-type macro the
-; grammar does not know
+; "Foo bar;" is not told apart from a function whose return-type macro the
+; grammar does not know. A storage class written as a macro (FOUNDATION_EXPORT,
+; UIKIT_EXTERN) is an extern declaration, which is not a definition; and a
+; declaration that begins with some other word (NS_ASSUME_NONNULL_BEGIN, read as
+; its type) is a macro the grammar glued to the next line, not a variable.
 (translation_unit (declaration (init_declarator . [(identifier) @name (pointer_declarator (identifier) @name) (pointer_declarator (pointer_declarator (identifier) @name))])) @definition.variable)
 (translation_unit (declaration (type_qualifier) @_q (init_declarator . [(identifier) @name (pointer_declarator (identifier) @name)])) @definition.constant
   (#match? @_q "^const$"))
 (translation_unit (declaration (init_declarator . (pointer_declarator (type_qualifier) @_q (identifier) @name))) @definition.constant
   (#match? @_q "^const$"))
-(translation_unit (declaration [(storage_class_specifier) (primitive_type) (sized_type_specifier)] [(identifier) @name (pointer_declarator (identifier) @name)] .) @definition.variable
+(translation_unit (declaration . [(storage_class_specifier) @_s (primitive_type) (sized_type_specifier)] [(identifier) @name (pointer_declarator (identifier) @name)] .) @definition.variable
+  (#not-match? @definition.variable "^extern\\b")
+  (#not-match? @_s "^[A-Z_][A-Z0-9_]*$"))
+(translation_unit (declaration . (type_qualifier) [(primitive_type) (sized_type_specifier)] [(identifier) @name (pointer_declarator (identifier) @name)] .) @definition.variable
   (#not-match? @definition.variable "^extern\\b"))
 `, true)
 }
