@@ -185,6 +185,18 @@ func (s *Server) selectSymbol(ctx context.Context, req *sdk.CallToolRequest, q s
 			return selection{}, sc, r
 		}
 	}
+	// Not a qualified name either: `Guard.AgainstNull`, `Guard::AgainstNull` and
+	// `Mailer#deliver` name a member by its owner. Tried last, so a definition
+	// whose own name contains a dot is still found by that name first.
+	qualified := false
+	if total == 0 {
+		all, total, err = s.deps.Registry.SymbolCandidatesQualified(ctx, runID, name, maxSelectRows)
+		if err != nil {
+			sc, r, _ := failFrom(err, "symbol lookup failed: %v", err)
+			return selection{}, sc, r
+		}
+		qualified = total > 0
+	}
 	if total == 0 {
 		sc, r, _ := s.missingSymbol(ctx, req, runID, status, name)
 		return selection{}, sc, r
@@ -204,7 +216,7 @@ func (s *Server) selectSymbol(ctx context.Context, req *sdk.CallToolRequest, q s
 	if wantPath != "" {
 		// The name is too common to have read every definition of it, so the
 		// path is applied where all of them are: in the store.
-		if total > len(all) {
+		if total > len(all) && !qualified {
 			in, _, ierr := s.deps.Registry.SymbolCandidatesIn(ctx, runID, name, wantPath, maxSelectRows)
 			if ierr != nil {
 				sc, r, _ := failFrom(ierr, "symbol lookup failed: %v", ierr)

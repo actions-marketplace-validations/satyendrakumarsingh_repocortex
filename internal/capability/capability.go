@@ -254,7 +254,7 @@ func ResolveTarget(ctx context.Context, deps Deps, runID int64, target string) (
 	}
 	sym, ok := idx.ByFQN(target)
 	if !ok {
-		return Target{}, fmt.Errorf("capability: %q: %w", target, ErrTargetNotFound)
+		return resolveQualified(ctx, deps, runID, target)
 	}
 
 	// Re-read by name to recover the fields the (deliberately narrow) symbol
@@ -288,6 +288,40 @@ func ResolveTarget(ctx context.Context, deps Deps, runID int64, target string) (
 		Query: target, SymbolID: sym.ID, Name: sym.Name, FQN: sym.FQN,
 		Kind: sym.Kind, FilePath: sym.FilePath, Exported: sym.Exported,
 	}, nil
+}
+
+// resolveQualified resolves a name written as an owner and a member
+// (`Guard.AgainstNull`, `Guard::AgainstNull`, `Mailer#deliver`): the definitions
+// of the member whose qualified name ends in the owner and the member.
+//
+// It is tried last, after the name and the FQN, so a name that is itself a
+// definition's spelling is never taken for an owner and a member.
+func resolveQualified(ctx context.Context, deps Deps, runID int64, target string) (Target, error) {
+	q, ok := registry.ParseQualified(target)
+	if !ok {
+		return Target{}, fmt.Errorf("capability: %q: %w", target, ErrTargetNotFound)
+	}
+	hits, err := deps.Registry.FindSymbolsByName(ctx, runID, q.Member(), "", maxTargetCandidates)
+	if err != nil {
+		return Target{}, fmt.Errorf("capability: resolve %q: %w", target, err)
+	}
+	for _, form := range q.Forms() {
+		var matches []Target
+		for _, h := range hits {
+			if registry.MatchesFQN(h.FQN, form) {
+				matches = append(matches, targetFromHit(target, h))
+			}
+		}
+		switch len(matches) {
+		case 0:
+			continue
+		case 1:
+			return matches[0], nil
+		default:
+			return Target{}, &AmbiguousTargetError{Query: target, Candidates: matches}
+		}
+	}
+	return Target{}, fmt.Errorf("capability: %q: %w", target, ErrTargetNotFound)
 }
 
 // TargetFromCandidate builds the Target for a definition the caller has already

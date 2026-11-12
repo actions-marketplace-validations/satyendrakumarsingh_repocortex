@@ -34,7 +34,14 @@ type symDef struct {
 	kind       model.EntityKind
 	start, end int
 	params     int // -1 for unknown
+	// owner is the type the member is declared in, which the real indexer puts
+	// in the qualified name (`path:Guard.AgainstNull`). Empty for a top-level
+	// definition.
+	owner string
 }
+
+// ownedBy returns s declared in owner.
+func (s symDef) ownedBy(owner string) symDef { s.owner = owner; return s }
 
 type refDef struct {
 	path, name, qualifier string
@@ -129,8 +136,12 @@ func (b *indexBuilder) seed(ctx context.Context, reg *registry.Registry, runID i
 			panic(err)
 		}
 		for _, s := range f.syms {
+			fqnName := s.name
+			if s.owner != "" {
+				fqnName = s.owner + "." + s.name
+			}
 			ms := model.Symbol{
-				FileID: id, Kind: s.kind, Name: s.name, FQN: model.DefaultFQN(f.path, s.name),
+				FileID: id, Kind: s.kind, Name: s.name, FQN: model.DefaultFQN(f.path, fqnName),
 				Range:      model.Range{Start: model.Position{Line: s.start}, End: model.Position{Line: s.end}},
 				Confidence: model.ConfidenceHigh, Source: model.SourceSourceCode,
 			}

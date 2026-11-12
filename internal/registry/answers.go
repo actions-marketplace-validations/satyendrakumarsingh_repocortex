@@ -109,15 +109,22 @@ func (r *Registry) SymbolCandidatesByFQN(ctx context.Context, runID int64, fqn s
 }
 
 func (r *Registry) symbolCandidates(ctx context.Context, runID int64, column, value, pathPart string, limit int) ([]SymbolCandidate, int, error) {
-	if limit <= 0 {
-		limit = 50
-	}
 	where := `s.index_run_id = ? AND ` + column + ` = ?`
 	args := []any{runID, value}
 	if pathPart != "" {
 		// instr, not LIKE: a path holds '_' and '%' as ordinary characters.
 		where += ` AND instr(f.path, ?) > 0`
 		args = append(args, pathPart)
+	}
+	return r.symbolCandidatesWhere(ctx, value, where, args, limit)
+}
+
+// symbolCandidatesWhere is the shared read: the rows matching where, their
+// count, and the same projection whichever way they were selected. value is
+// what the caller asked for, for the error messages.
+func (r *Registry) symbolCandidatesWhere(ctx context.Context, value, where string, args []any, limit int) ([]SymbolCandidate, int, error) {
+	if limit <= 0 {
+		limit = 50
 	}
 
 	var total int

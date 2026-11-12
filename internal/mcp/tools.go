@@ -733,6 +733,18 @@ func (s *Server) findSymbol(ctx context.Context, req *sdk.CallToolRequest, args 
 	if err != nil {
 		return failFrom(err, "symbol lookup failed: %v", err)
 	}
+	if len(syms) == 0 {
+		// An owner and a member: Guard.AgainstNull, Guard::AgainstNull, Mailer#deliver.
+		cands, _, qerr := s.deps.Registry.SymbolCandidatesQualified(ctx, runID, args.Name, s.limits.MaxItems)
+		if qerr != nil {
+			return failFrom(qerr, "symbol lookup failed: %v", qerr)
+		}
+		for _, c := range cands {
+			if args.Kind == "" || c.Kind == args.Kind {
+				syms = append(syms, c.SymbolHit)
+			}
+		}
+	}
 
 	// A definition carries a confidence tier of its own: a compiler-indexed
 	// declaration is 'exact', one recovered from a partial parse is not. So the
@@ -812,12 +824,20 @@ func (s *Server) getSymbol(ctx context.Context, req *sdk.CallToolRequest, args s
 			return failFrom(err, "symbol lookup failed: %v", err)
 		}
 	}
+	qualified := false
+	if total == 0 {
+		// An owner and a member: Guard.AgainstNull, Guard::AgainstNull, Mailer#deliver.
+		if all, total, err = s.deps.Registry.SymbolCandidatesQualified(ctx, runID, name, maxSelectRows); err != nil {
+			return failFrom(err, "symbol lookup failed: %v", err)
+		}
+		qualified = total > 0
+	}
 	if total == 0 {
 		return s.missingSymbol(ctx, req, runID, status, name)
 	}
 	cands := all
 	if want := cleanPathHint(args.Path); want != "" {
-		if total > len(all) {
+		if total > len(all) && !qualified {
 			if cands, _, err = s.deps.Registry.SymbolCandidatesIn(ctx, runID, name, want, maxSelectRows); err != nil {
 				return failFrom(err, "symbol lookup failed: %v", err)
 			}

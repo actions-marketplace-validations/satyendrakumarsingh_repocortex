@@ -277,6 +277,16 @@ func resolveTarget(ctx stdctx.Context, s *session, name, path string) (registry.
 		return registry.SymbolHit{}, nil, fmt.Errorf("symbol lookup: %w", err)
 	}
 	if len(syms) == 0 {
+		// An owner and a member: Guard.AgainstNull, Guard::AgainstNull, Mailer#deliver.
+		cands, _, qerr := s.reg.SymbolCandidatesQualified(ctx, s.runID, name, 50)
+		if qerr != nil {
+			return registry.SymbolHit{}, nil, fmt.Errorf("symbol lookup: %w", qerr)
+		}
+		for _, c := range cands {
+			syms = append(syms, c.SymbolHit)
+		}
+	}
+	if len(syms) == 0 {
 		return registry.SymbolHit{}, nil, fmt.Errorf(
 			"no symbol named %q in the index; names must match exactly — use 'repocortex search' for partial matches", name)
 	}
