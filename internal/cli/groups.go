@@ -63,6 +63,7 @@ func commandGroupOf() map[string]string {
 
 		// Before and after a change.
 		"impact": groupChange, "plan-change": groupChange, "rename": groupChange,
+		"move":   groupChange,
 		"owners": groupChange, "compile": groupChange, "verify": groupChange,
 		"diff": groupChange, "minimize-diff": groupChange,
 
