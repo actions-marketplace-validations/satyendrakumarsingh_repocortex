@@ -888,6 +888,7 @@ func kindsParam(r *http.Request, name string) []model.EdgeKind {
 var knownEdgeKinds = func() map[model.EdgeKind]struct{} {
 	all := []model.EdgeKind{
 		model.EdgeContains, model.EdgeImports, model.EdgeReferences, model.EdgeCalls,
+		model.EdgeInstantiates,
 		model.EdgeExtends, model.EdgeImplements, model.EdgeDependsOn, model.EdgeExposes,
 		model.EdgeReads, model.EdgeWrites, model.EdgePublishes, model.EdgeConsumes,
 		model.EdgeTestedBy, model.EdgeConfigures, model.EdgeTracesTo, model.EdgeViolates,

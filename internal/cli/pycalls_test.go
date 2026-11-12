@@ -153,13 +153,17 @@ func TestPythonCallGroundTruth(t *testing.T) {
 		confidence, file, detail string
 		line                     int
 	}
+	// A call site is answered by a CALLS edge, or — where what is called is a
+	// class, and the call constructs it — by an INSTANTIATES edge. The two
+	// kinds are checked against the target's own kind, so a constructor call
+	// filed under CALLS, or a function call under INSTANTIATES, fails here.
 	edgesAt := func(c pyCallSite) []edge {
 		rows, err := db.Query(`
-			SELECT e.confidence, f.path, s.start_line, COALESCE(e.detail, '')
+			SELECT e.confidence, f.path, s.start_line, COALESCE(e.detail, ''), e.kind, s.kind
 			  FROM edges e
 			  JOIN symbols s ON s.id = e.dst_id
 			  JOIN files f ON f.id = s.file_id
-			 WHERE e.kind = 'CALLS' AND e.source = 'source_code'
+			 WHERE e.kind IN ('CALLS', 'INSTANTIATES') AND e.source = 'source_code'
 			   AND e.evidence_file = ? AND e.evidence_line = ? AND s.name = ?
 			 ORDER BY e.id`, c.file, c.line, c.name)
 		if err != nil {
@@ -169,8 +173,13 @@ func TestPythonCallGroundTruth(t *testing.T) {
 		var out []edge
 		for rows.Next() {
 			var e edge
-			if err := rows.Scan(&e.confidence, &e.file, &e.line, &e.detail); err != nil {
+			var edgeKind, targetKind string
+			if err := rows.Scan(&e.confidence, &e.file, &e.line, &e.detail, &edgeKind, &targetKind); err != nil {
 				t.Fatal(err)
+			}
+			if (targetKind == "class") != (edgeKind == "INSTANTIATES") {
+				t.Errorf("%s:%d: %s edge to a %s named %s; a call to a class is an instantiation and nothing else is",
+					c.file, c.line, edgeKind, targetKind, c.name)
 			}
 			out = append(out, e)
 		}

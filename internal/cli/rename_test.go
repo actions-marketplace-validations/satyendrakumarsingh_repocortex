@@ -404,17 +404,35 @@ func fixtureCopyWith(t *testing.T, name string, edit func(dst string)) string {
 	return dst
 }
 
-// TestRenameReportsLeftoversAndNeverPassesWithThem: measured on the payment
-// fixture, the resolver binds the controller's call to updateStatus but not
-// the two calls in the tests. Applying leaves the project uncompilable while
-// verify — which never compiles — passes. The leftovers must be listed, and
-// the exit must be 3, never 0.
+// TestRenameReportsLeftoversAndNeverPassesWithThem: a call the resolver cannot
+// bind is an occurrence of the old name that a rename leaves behind. Applying
+// leaves the project uncompilable while verify — which never compiles —
+// passes. The leftovers must be listed, and the exit must be 3, never 0.
+//
+// The leftover used to be the two calls in the fixture's tests, which the
+// resolver did not bind. It binds them now — `service.updateStatus(...)` on an
+// undeclared `service`, to the one type that declares `updateStatus`, below
+// `high` — so they are sites the rename knows about, and it refuses to run
+// while a site is below its floor (TestRenameRefusesASiteBelowTheFloor). They
+// are removed from this copy. What stays unbindable is a call on a receiver
+// whose stated type the repository does not define, and the copy gains one:
+// the resolver will not bind `gateway.updateStatus` to TransactionService on
+// the strength of the name, and must not.
 func TestRenameReportsLeftoversAndNeverPassesWithThem(t *testing.T) {
-	root := fixtureCopy(t, "payment-platform")
-	want := []string{
-		"src/test/java/com/pay/controller/CallbackControllerTest.java:8",
-		"src/test/java/com/pay/service/TransactionServiceTest.java:7",
-	}
+	const legacy = "src/main/java/com/pay/legacy/LegacyCaller.java"
+	root := fixtureCopyWith(t, "payment-platform", func(dst string) {
+		removeFixtureTests(t, dst)
+		p := filepath.Join(dst, legacy)
+		if err := os.MkdirAll(filepath.Dir(p), 0o750); err != nil {
+			t.Fatal(err)
+		}
+		src := "package com.pay.legacy;\n\nclass LegacyCaller {\n" +
+			"    void run(Gateway gateway) { gateway.updateStatus(\"a\", \"b\"); }\n}\n"
+		if err := os.WriteFile(p, []byte(src), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	})
+	want := []string{legacy + ":4"}
 
 	out, err := run(t, root, "rename", "updateStatus", "applyStatus", "--floor", "high")
 	if code := exitCodeOf(err); code != 0 {
@@ -437,13 +455,52 @@ func TestRenameReportsLeftoversAndNeverPassesWithThem(t *testing.T) {
 	for _, l := range rep.Items {
 		got = append(got, fmt.Sprintf("%s:%d", l.Path, l.Line))
 	}
-	if fmt.Sprint(got) != fmt.Sprint(want) || rep.Total != 2 {
+	if fmt.Sprint(got) != fmt.Sprint(want) || rep.Total != 1 {
 		t.Errorf("leftovers = %v (total %d), want %v", got, rep.Total, want)
 	}
 
-	raw, err := os.ReadFile(filepath.Join(root, "src/test/java/com/pay/service/TransactionServiceTest.java"))
-	if err != nil || !strings.Contains(string(raw), "service.updateStatus(") {
-		t.Fatalf("premise: the unbound test call should be untouched (%v)", err)
+	raw, err := os.ReadFile(filepath.Join(root, legacy))
+	if err != nil || !strings.Contains(string(raw), "gateway.updateStatus(") {
+		t.Fatalf("premise: the unbound call should be untouched (%v)", err)
+	}
+}
+
+// removeFixtureTests deletes the payment fixture's two test classes from a
+// copy. Both call updateStatus on a receiver whose type nothing states.
+func removeFixtureTests(t *testing.T, root string) {
+	t.Helper()
+	for _, rel := range []string{
+		"src/test/java/com/pay/controller/CallbackControllerTest.java",
+		"src/test/java/com/pay/service/TransactionServiceTest.java",
+	} {
+		if err := os.Remove(filepath.Join(root, rel)); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
+// TestRenameRefusesASiteBelowTheFloor: the fixture's tests call
+// `service.updateStatus(...)` and `verify(transactionService).updateStatus(...)`
+// — one on an undeclared name, one on the result of a call. Neither receiver
+// has a stated type, so the resolver binds both to the only type that declares
+// `updateStatus` and says so, below `high`. A rename that edits only what it
+// can defend must stop there rather than rename the two sites it is sure of
+// and leave these behind unmentioned, which is what happened while they were
+// unbound.
+func TestRenameRefusesASiteBelowTheFloor(t *testing.T) {
+	root := fixtureCopy(t, "payment-platform")
+	out, err := run(t, root, "rename", "updateStatus", "applyStatus", "--floor", "high")
+	if code := exitCodeOf(err); code == 0 {
+		t.Fatalf("the rename was accepted with sites below the floor:\n%s", out)
+	}
+	for _, w := range []string{
+		"REFUSED",
+		"src/test/java/com/pay/controller/CallbackControllerTest.java:8",
+		"src/test/java/com/pay/service/TransactionServiceTest.java:7",
+	} {
+		if !strings.Contains(out, w) {
+			t.Errorf("the refusal does not mention %q:\n%s", w, out)
+		}
 	}
 }
 
@@ -452,6 +509,10 @@ func TestRenameReportsLeftoversAndNeverPassesWithThem(t *testing.T) {
 // call must still be found, and the apply must exit 3.
 func TestRenameLeftoversIncludeFilesTheIndexHoldsNoTextFor(t *testing.T) {
 	root := fixtureCopyWith(t, "payment-platform", func(dst string) {
+		// The fixture's own tests call updateStatus on receivers of unknown
+		// type, which bind below `high` and would stop the rename before the
+		// leftover scan this test is about.
+		removeFixtureTests(t, dst)
 		var b strings.Builder
 		b.WriteString("package com.pay.gen; class Big { void f(com.pay.service.TransactionService s){ s.updateStatus(\"a\",\"b\"); } }\n")
 		for b.Len() < 3<<20 {

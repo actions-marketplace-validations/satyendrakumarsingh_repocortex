@@ -357,7 +357,8 @@ var (
 	edgeKinds = map[string]model.EdgeKind{
 		string(model.EdgeContains): model.EdgeContains, string(model.EdgeImports): model.EdgeImports,
 		string(model.EdgeReferences): model.EdgeReferences, string(model.EdgeCalls): model.EdgeCalls,
-		string(model.EdgeExtends): model.EdgeExtends, string(model.EdgeImplements): model.EdgeImplements,
+		string(model.EdgeInstantiates): model.EdgeInstantiates,
+		string(model.EdgeExtends):      model.EdgeExtends, string(model.EdgeImplements): model.EdgeImplements,
 		string(model.EdgeDependsOn): model.EdgeDependsOn, string(model.EdgeExposes): model.EdgeExposes,
 		string(model.EdgeReads): model.EdgeReads, string(model.EdgeWrites): model.EdgeWrites,
 		string(model.EdgePublishes): model.EdgePublishes, string(model.EdgeConsumes): model.EdgeConsumes,

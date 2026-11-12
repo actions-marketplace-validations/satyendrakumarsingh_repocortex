@@ -649,7 +649,7 @@ func (s *Server) buildChains(
 		// The one hop that is a traversal, and it is internal/graph's.
 		res, err := s.deps.Caps.Graph.Traverse(ctx, graph.Query{
 			Roots:         []int64{f.handlerID},
-			Kinds:         []model.EdgeKind{model.EdgeCalls, model.EdgeReferences},
+			Kinds:         []model.EdgeKind{model.EdgeCalls, model.EdgeInstantiates, model.EdgeReferences},
 			MinConfidence: floor,
 			MaxDepth:      depth,
 			MaxNodes:      maxServicesPerChain * 4,

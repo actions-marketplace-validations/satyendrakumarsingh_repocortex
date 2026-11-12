@@ -83,6 +83,10 @@ SCIP indexes.`,
 			if err != nil {
 				return err
 			}
+			external, err := reg.ExternalReferences(ctx, run.ID)
+			if err != nil {
+				return err
+			}
 
 			// Table accesses bind in the same pass, for the same reason
 			// references do: the table a query names may be declared by a file
@@ -122,6 +126,11 @@ SCIP indexes.`,
 					"project": cfg.ProjectName, "index_run": run.ID,
 					"references": rs.Total, "resolved": rs.Resolved,
 					"ambiguous": rs.Ambiguous, "unresolved": rs.Unresolved,
+					// external is the part of unresolved that was shown to
+					// leave the repository; instantiations the part of
+					// resolved recorded as INSTANTIATES rather than CALLS.
+					"external":       external,
+					"instantiations": stats.Instantiations,
 					// A8 — how much of `ambiguous` is "too common to weigh"
 					// rather than "two candidates and no evidence". See
 					// infer.Stats.
@@ -210,6 +219,15 @@ SCIP indexes.`,
 			// "calls outside this repository" were calls to its own functions.
 			fmt.Fprintf(out, "  Unresolved:  %d  (no definition of that name is indexed: code outside this\n", rs.Unresolved)
 			fmt.Fprintf(out, "               repository, or code in it that the index did not extract)\n")
+			// The part the resolver can SHOW leaves the repository: a call
+			// qualified by the standard library, a declared dependency, or a
+			// type imported from one.
+			if external > 0 {
+				fmt.Fprintf(out, "    %d shown to leave this repository (a standard-library or dependency call)\n", external)
+			}
+			if stats.Instantiations > 0 {
+				fmt.Fprintf(out, "  Constructs:  %d of the resolved calls create a type (INSTANTIATES, not CALLS)\n", stats.Instantiations)
+			}
 			// Edge rows, from the table. Fewer than the resolved references
 			// because references between the same two definitions share one.
 			fmt.Fprintf(out, "  Edges:       %d", edgeTotal)

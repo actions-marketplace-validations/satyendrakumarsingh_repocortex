@@ -97,16 +97,6 @@ type genericParser struct {
 	// Tagger it does not need pooling. Nil when the language has no query.
 	importQuery *ts.Query
 
-	// receiverQuery captures the object a method is called on, which the tags
-	// query does not report. Nil when the language has none; the resolver then
-	// loses its receiver tier for that language rather than any correctness.
-	receiverQuery *ts.Query
-
-	// varTypeQuery maps a declared variable to its type, so a receiver can be
-	// reported as the TYPE it refers to rather than the identifier that names
-	// it. Nil when the language has none or is not explicitly typed.
-	varTypeQuery *ts.Query
-
 	// paramCountQuery and argCountQuery carry A4's two halves: how many
 	// parameters a definition declares, and how many arguments a call passes.
 	// Nil when the language has no query — the resolver then has no arity
@@ -362,19 +352,6 @@ func buildGenericParser(entry grammars.LangEntry, cfg parserConfig, lang *ts.Lan
 		}
 	}
 
-	// Same policy as imports: a receiver query that a grammar rejects costs
-	// the receiver tier for that language and nothing else.
-	if rq := ReceiverQuery(entry.Name); rq != "" {
-		if q, err := ts.NewQuery(rq, lang); err == nil {
-			p.receiverQuery = q
-		}
-	}
-	if vq := VarTypeQuery(entry.Name); vq != "" {
-		if q, err := ts.NewQuery(vq, lang); err == nil {
-			p.varTypeQuery = q
-		}
-	}
-
 	// A4 — arity. Compiled only when the language ALSO has counting rules: a
 	// query that captures a parameter list this package cannot count would
 	// produce an arity of zero for every declaration, which is a confident
@@ -510,25 +487,15 @@ func (p *genericParser) Parse(ctx context.Context, path string, src []byte) (*Re
 		res.Imports = mergeMemberImports(res.Imports, py.members)
 	}
 
-	// Before the tree is dropped below: this is the last consumer of it, and
-	// running after the drop is how the first version of this silently
-	// extracted nothing at all.
-	//
-	// Skipped where the scope walk already answered: it records every call's
-	// receiver, keyed more precisely than a line number allows.
-	var receivers map[callSite]string
+	// Every other language: what each call was made on and what each nested
+	// definition belongs to, read from the tag ranges and one walk of the
+	// tree. Before the tree is dropped below — this is the last consumer of
+	// it, and running after the drop is how the first receiver extraction
+	// silently extracted nothing at all. See shape.go.
+	var shapes *shapeFacts
 	if py == nil {
-		receivers = by.extractReceivers(tree, src)
-		// Rewrite each receiver from the variable that names it to the type it
-		// was declared as, where the file says so. `b.build()` becomes
-		// Builder.build().
-		if types := by.extractVarTypes(tree, src); len(types) > 0 {
-			for k, v := range receivers {
-				if t, ok := types[v]; ok {
-					receivers[k] = t
-				}
-			}
-		}
+		shapes = by.analyzeShapes(tree, src, tags)
+		res.Imports = mergeMemberImports(res.Imports, by.importedBindings(tree, src))
 	}
 
 	// A4 — arity, read from the same tree, for the same reason imports and
@@ -564,6 +531,12 @@ func (p *genericParser) Parse(ctx context.Context, path string, src []byte) (*Re
 				// two classes' `save` are two names. Module-level definitions
 				// are absent from the map and keep the default.
 				if q, ok := py.qualNames[callSite{line: sym.Range.Start.Line, name: sym.Name}]; ok {
+					sym.FQN = model.DefaultFQN(path, q)
+				}
+			} else if shapes != nil {
+				// The same for every other language: `Context.Set`,
+				// `outer.<locals>.inner`.
+				if q, ok := shapes.quals[tag.NameRange.StartByte]; ok {
 					sym.FQN = model.DefaultFQN(path, q)
 				}
 			}
@@ -608,15 +581,33 @@ func (p *genericParser) Parse(ctx context.Context, path string, src []byte) (*Re
 								objectDropped = make(map[pySite]bool, 4)
 							}
 							objectDropped[at] = true
+							res.Qualifiers++
 							continue
 						}
 					}
 					r.Receiver = py.receivers[at]
+					r.ReceiverKind = py.receiverKind(at)
 					if py.indirect[at] {
 						r.Kind += IndirectCallSuffix
 					}
-				} else if recv, ok := receivers[site]; ok {
-					r.Receiver = recv
+				} else if shapes != nil && isCallTag(tag.Kind) {
+					shape, ok := shapes.calls[tag.NameRange.StartByte]
+					switch {
+					case !ok:
+						// The walk did not reach it; the shape is unknown and
+						// is recorded as that.
+						r.Receiver, r.ReceiverKind = model.OpaqueReceiver, model.ReceiverExpr
+					case shape.notCall:
+						// The receiver or qualifier of a call, tagged as a
+						// call: `reader` in `reader.peek()`. Not a call.
+						res.Qualifiers++
+						continue
+					default:
+						r.Receiver, r.ReceiverKind = shape.receiver, shape.kind
+						if shape.indirect {
+							r.Kind += IndirectCallSuffix
+						}
+					}
 				}
 				// Matched the same way and excluded for the same reason: a
 				// supertype clause is not a call and has no argument list, so
@@ -1067,64 +1058,14 @@ func countSyntaxErrors(root *ts.Node) (errNodes, missing, firstLine int) {
 // two never agree, so position matching silently found nothing.
 //
 // Line plus name is what both agree on. Two calls to the SAME method on ONE
-// line with different receivers would be ambiguous, so those are dropped rather
-// than guessed: see extractReceivers.
+// line with different counts would be ambiguous, so those are dropped rather
+// than guessed: see extractCounts.
+//
+// Receivers are not matched this way any more. shape.go reads them from the
+// tag's own two ranges, which identify the call exactly.
 type callSite struct {
 	line int
 	name string
-}
-
-// extractReceivers maps a called method's position to the object it is called
-// on.
-//
-// Keyed by position rather than by name because a name repeats many times in
-// one file and only the position identifies the call site. Returns nil when the
-// language has no receiver query, which the caller treats as "no receivers"
-// rather than as an error.
-func (p *genericParser) extractReceivers(tree *ts.Tree, src []byte) map[callSite]string {
-	if p.receiverQuery == nil || tree == nil {
-		return nil
-	}
-	out := make(map[callSite]string, 64)
-	conflict := make(map[callSite]bool, 8)
-	defer func() {
-		// Query execution over a malformed tree is an untrusted-input path;
-		// contain it exactly as tagging and imports do.
-		_ = recover()
-	}()
-
-	for _, m := range p.receiverQuery.Execute(tree) {
-		var recv, name string
-		var line int
-		for _, c := range m.Captures {
-			switch c.Name {
-			case "receiver":
-				recv = c.Text(src)
-			case "name":
-				name = c.Text(src)
-				if n := c.Node; n != nil {
-					line = int(n.StartPoint().Row) + 1
-				}
-			}
-		}
-		if recv == "" || name == "" || line == 0 {
-			continue
-		}
-		k := callSite{line: line, name: name}
-		if prev, seen := out[k]; seen && prev != recv {
-			// The same method called on two different objects on one line.
-			// Which reference belongs to which cannot be told apart from a
-			// line number, and a wrong receiver is worse than none: it would
-			// narrow the candidate set to the wrong type with high confidence.
-			conflict[k] = true
-			continue
-		}
-		out[k] = recv
-	}
-	for k := range conflict {
-		delete(out, k)
-	}
-	return out
 }
 
 // extractCounts maps a call site or declaration to the size of its argument or
@@ -1271,37 +1212,6 @@ func namedFieldCount(group *ts.Node, lang *ts.Language) int {
 		return 1
 	}
 	return n
-}
-
-// extractVarTypes maps a variable name to its declared type, file-locally.
-//
-// Last declaration wins on a repeated name. That is a real limitation — a name
-// reused for two types in one file resolves to whichever came last — and it is
-// preferred to dropping both, because the common case by far is one name, one
-// type, and the receiver tier only claims high confidence when the type
-// narrows candidates to exactly one anyway.
-func (p *genericParser) extractVarTypes(tree *ts.Tree, src []byte) map[string]string {
-	if p.varTypeQuery == nil || tree == nil {
-		return nil
-	}
-	out := make(map[string]string, 32)
-	defer func() { _ = recover() }()
-
-	for _, m := range p.varTypeQuery.Execute(tree) {
-		var name, typ string
-		for _, c := range m.Captures {
-			switch c.Name {
-			case "var":
-				name = c.Text(src)
-			case "type":
-				typ = c.Text(src)
-			}
-		}
-		if name != "" && typ != "" {
-			out[name] = typ
-		}
-	}
-	return out
 }
 
 func (p *genericParser) extractImports(tree *ts.Tree, src []byte) []Import {

@@ -78,25 +78,40 @@ func TestReceiverResolvesToTheDeclaredType(t *testing.T) {
 	t.Error("no reference to build() at all")
 }
 
-// TestAmbiguousReceiversOnOneLineAreDropped pins the refusal to guess.
+// TestTwoReceiversOnOneLineAreToldApart replaces a test that pinned a refusal.
 //
-// Receivers are matched to references by line and name, because the tags query
-// reports every reference in `b.build()` at the start of the expression while a
-// receiver query captures the method at its own column — the two never agree on
-// a column. Two calls to the SAME method on ONE line cannot then be told apart,
-// and a wrong receiver is worse than none: it narrows to the wrong type
-// confidently.
-func TestAmbiguousReceiversOnOneLineAreDropped(t *testing.T) {
+// Receivers used to be matched to references by line and name, because the
+// receiver query captured the method at its own column while the tags query
+// reported the start of the expression, and the two never agreed on a column.
+// Two calls to the SAME method on ONE line could not then be told apart, so
+// both lost their receiver — TestAmbiguousReceiversOnOneLineAreDropped
+// required exactly that.
+//
+// shape.go reads the receiver from the tag's own two ranges, which identify
+// the call. Nothing is ambiguous any more, and each call keeps what it was
+// made on.
+func TestTwoReceiversOnOneLineAreToldApart(t *testing.T) {
 	src := []byte("class T {\n  void run() { a.send(); b.send(); }\n}\n")
 	p := NewRegistry().ForFile("T.java")
 	res, err := p.Parse(context.Background(), "T.java", src)
 	if err != nil {
 		t.Fatal(err)
 	}
+	var got []string
 	for _, ref := range res.References {
-		if ref.Name == "send" && ref.Receiver != "" {
-			t.Errorf("send() got receiver %q; two receivers share that line and "+
-				"neither can be attributed", ref.Receiver)
+		if ref.Name == "send" {
+			got = append(got, ref.Receiver)
 		}
+	}
+	if len(got) != 2 || got[0] != "a" || got[1] != "b" {
+		t.Errorf("send() receivers = %v, want [a b]: each call on the line has its own", got)
+	}
+	for _, ref := range res.References {
+		if ref.Name == "a" || ref.Name == "b" {
+			t.Errorf("the receiver %q is recorded as a call; it is what the call was made on", ref.Name)
+		}
+	}
+	if res.Qualifiers != 2 {
+		t.Errorf("Qualifiers = %d, want 2: the dropped receiver rows are counted, not lost", res.Qualifiers)
 	}
 }

@@ -412,7 +412,7 @@ func buildDataGraph(info map[int64]symInfo, edges []model.Edge) (fwd map[int64][
 // are absent.
 func traversableForData(k model.EdgeKind) bool {
 	switch k {
-	case model.EdgeExposes, model.EdgeCalls, model.EdgeReferences, model.EdgeReads, model.EdgeWrites:
+	case model.EdgeExposes, model.EdgeCalls, model.EdgeInstantiates, model.EdgeReferences, model.EdgeReads, model.EdgeWrites:
 		return true
 	}
 	return false

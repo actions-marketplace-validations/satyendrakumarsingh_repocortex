@@ -110,20 +110,26 @@ const (
 	EdgeImports    EdgeKind = "IMPORTS"
 	EdgeReferences EdgeKind = "REFERENCES"
 	EdgeCalls      EdgeKind = "CALLS"
-	EdgeExtends    EdgeKind = "EXTENDS"
-	EdgeImplements EdgeKind = "IMPLEMENTS"
-	EdgeDependsOn  EdgeKind = "DEPENDS_ON"
-	EdgeExposes    EdgeKind = "EXPOSES"
-	EdgeReads      EdgeKind = "READS"
-	EdgeWrites     EdgeKind = "WRITES"
-	EdgePublishes  EdgeKind = "PUBLISHES"
-	EdgeConsumes   EdgeKind = "CONSUMES"
-	EdgeTestedBy   EdgeKind = "TESTED_BY"
-	EdgeConfigures EdgeKind = "CONFIGURED_BY"
-	EdgeTracesTo   EdgeKind = "TRACES_TO"
-	EdgeViolates   EdgeKind = "VIOLATES"
-	EdgeOwnedBy    EdgeKind = "OWNED_BY"
-	EdgeChangedBy  EdgeKind = "CHANGED_BY"
+	// EdgeInstantiates is a constructor call recorded against the TYPE it
+	// constructs: `Account(...)`, `Type::new()`, `new X()`. Kept apart from
+	// EdgeCalls so that "what calls this function" is answered from edges that
+	// point at callables, and "what creates one of these" from edges that
+	// point at types.
+	EdgeInstantiates EdgeKind = "INSTANTIATES"
+	EdgeExtends      EdgeKind = "EXTENDS"
+	EdgeImplements   EdgeKind = "IMPLEMENTS"
+	EdgeDependsOn    EdgeKind = "DEPENDS_ON"
+	EdgeExposes      EdgeKind = "EXPOSES"
+	EdgeReads        EdgeKind = "READS"
+	EdgeWrites       EdgeKind = "WRITES"
+	EdgePublishes    EdgeKind = "PUBLISHES"
+	EdgeConsumes     EdgeKind = "CONSUMES"
+	EdgeTestedBy     EdgeKind = "TESTED_BY"
+	EdgeConfigures   EdgeKind = "CONFIGURED_BY"
+	EdgeTracesTo     EdgeKind = "TRACES_TO"
+	EdgeViolates     EdgeKind = "VIOLATES"
+	EdgeOwnedBy      EdgeKind = "OWNED_BY"
+	EdgeChangedBy    EdgeKind = "CHANGED_BY"
 )
 
 // Position is a 1-indexed line and 0-indexed byte column in a file.
@@ -364,3 +370,39 @@ func (r IndexRun) Complete() bool { return r.IndexState != IndexStatePartial }
 // Path-qualified rather than bare, because a bare name is not unique in a
 // repository and the registry digest depends on this being stable across runs.
 func DefaultFQN(path, name string) string { return path + ":" + name }
+
+// The shape of a call's receiver: what stands before the dot, if anything.
+//
+// internal/parse writes one of these beside every call reference and
+// internal/resolve/infer reads it; the vocabulary is closed and is the same one
+// migration 0015_receiver_kind documents for symbol_references.receiver_kind.
+// The empty string means the shape was not recorded.
+const (
+	// ReceiverBare is `f()`: the source wrote no receiver.
+	ReceiverBare = "bare"
+	// ReceiverName is `x.f()`: one identifier, as written.
+	ReceiverName = "name"
+	// ReceiverPath is `a.b.f()`: identifiers joined by the member operator.
+	ReceiverPath = "path"
+	// ReceiverScope is `a::f()` or `a::b::f()`: qualified through the
+	// language's scope operator, which names a module or a type, never a value.
+	ReceiverScope = "scope"
+	// ReceiverSelf is `self.f()` or `this.f()`: the enclosing instance or type.
+	ReceiverSelf = "self"
+	// ReceiverSuper is `super.f()`, `super().f()` or `base.f()`.
+	ReceiverSuper = "super"
+	// ReceiverType is `x.f()` where the source states x's type; the reference's
+	// receiver holds the type, not the variable.
+	ReceiverType = "type"
+	// ReceiverValue is `x.f()` where x is a variable or parameter the enclosing
+	// code declares without stating a type. It is a value, so it is never an
+	// import, a module or a type, whatever its name happens to match.
+	ReceiverValue = "value"
+	// ReceiverExpr is a call on an expression with no name: `g().f()`,
+	// `a[i].f()`. The reference's receiver holds OpaqueReceiver.
+	ReceiverExpr = "expr"
+)
+
+// OpaqueReceiver is the receiver text recorded with ReceiverExpr. Not a valid
+// identifier in any language, so it cannot collide with a real receiver.
+const OpaqueReceiver = "?"

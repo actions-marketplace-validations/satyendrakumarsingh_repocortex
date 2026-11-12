@@ -67,17 +67,23 @@ func seedAdjudication(t *testing.T, withCompiler bool) *Registry {
 		`INSERT INTO files(id, index_run_id, path, language, content_hash)
 		   VALUES(3,1,'README.md','markdown','h3')`,
 	}
+	// B and C are two definitions of ONE name, `callee`, which is what every
+	// call reference below is named. That is the only shape a wrong binding
+	// has: the resolver binds a reference to a candidate of the reference's
+	// own name, so "wrong" always means the right name on the wrong
+	// definition — and the adjudication compares a call only with a compiler
+	// fact about that name.
 	for _, spec := range []struct {
-		id, file int
-		name     string
+		id, file  int
+		name, fqn string
 	}{
-		{1, 1, "Caller"}, {2, 1, "B"}, {3, 1, "C"},
-		{4, 2, "tsCaller"}, {5, 2, "tsTarget"},
+		{1, 1, "Caller", "Caller"}, {2, 1, "callee", "B"}, {3, 1, "callee", "C"},
+		{4, 2, "tsCaller", "tsCaller"}, {5, 2, "tsTarget", "tsTarget"},
 	} {
 		stmts = append(stmts, fmt.Sprintf(
 			`INSERT INTO symbols(id, index_run_id, file_id, kind, name, fqn, confidence, source)
 			   VALUES(%d,1,%d,'function','%s','pkg.%s','high','source_code')`,
-			spec.id, spec.file, spec.name, spec.name))
+			spec.id, spec.file, spec.name, spec.fqn))
 	}
 
 	type ref struct {
@@ -290,6 +296,73 @@ func TestAccuracyAdjudicationNamesTheCauseOfEachMiss(t *testing.T) {
 	}
 	if m.Explanation == "" {
 		t.Error("the miss carries no explanation, so a reader cannot act on it")
+	}
+}
+
+// TestAccuracyAdjudicationIgnoresAFactAboutTheReceiver pins the restriction
+// that keeps a call from being scored against something it was never about.
+//
+// For `bp.route("/")` a compiler index often holds one fact on the line, and
+// it is about `bp`: `route` lives in a library the indexer had no source for.
+// That fact says nothing about what the call reaches. It used to be scored
+// anyway — the parser emitted the receiver as a "call" to `bp`, the resolver
+// bound it to the variable, and the line counted as a call site answered
+// correctly. On flask that was 59 of the 351 sites scored right at `high`.
+//
+// Line 300 is that shape: one call, to `callee`; one resolver edge, to a
+// definition of `callee`; and one compiler fact, about `Caller`. It must be
+// neither a call site answered wrongly nor one answered at all.
+func TestAccuracyAdjudicationIgnoresAFactAboutTheReceiver(t *testing.T) {
+	reg := seedAdjudication(t, true)
+	ctx := context.Background()
+
+	before, err := reg.AccuracyAdjudication(ctx, 1)
+	if err != nil {
+		t.Fatalf("adjudicate: %v", err)
+	}
+	for _, s := range []string{
+		`INSERT INTO symbol_references(index_run_id, file_id, name, kind, start_line, resolution)
+		   VALUES(1,1,'callee','reference.call',300,'resolved')`,
+		`INSERT INTO edges(index_run_id, src_id, dst_id, kind, confidence, evidence_file, evidence_line, source)
+		   VALUES(1,1,3,'CALLS','high','pkg/a.go',300,'source_code')`,
+		`INSERT INTO edges(index_run_id, src_id, dst_id, kind, confidence, evidence_file, evidence_line, source)
+		   VALUES(1,1,1,'REFERENCES','exact','pkg/a.go',300,'compiler')`,
+	} {
+		if _, err := reg.db.ExecContext(ctx, s); err != nil {
+			t.Fatalf("seed line 300: %v", err)
+		}
+	}
+	after, err := reg.AccuracyAdjudication(ctx, 1)
+	if err != nil {
+		t.Fatalf("adjudicate: %v", err)
+	}
+
+	sites := func(a Adjudication) (total, wrong int64) {
+		for _, o := range a.Outcomes {
+			total += o.Count
+			if !o.Correct && o.Tier != "" {
+				wrong += o.Count
+			}
+		}
+		return total, wrong
+	}
+	beforeTotal, beforeWrong := sites(before)
+	afterTotal, afterWrong := sites(after)
+	if afterTotal != beforeTotal || afterWrong != beforeWrong {
+		t.Errorf("a line whose one compiler fact is about another name was scored: "+
+			"%d site(s) and %d wrong before, %d and %d after",
+			beforeTotal, beforeWrong, afterTotal, afterWrong)
+	}
+
+	prec, err := reg.ResolutionPrecision(ctx, 1)
+	if err != nil {
+		t.Fatalf("precision: %v", err)
+	}
+	for _, row := range prec.Rows {
+		if row.Confidence == "high" && row.Judged != 6 {
+			t.Errorf("high judged %d edge(s), want the 6 on lines 101-106: the edge on "+
+				"line 300 names `callee` and the fact there names `Caller`", row.Judged)
+		}
 	}
 }
 

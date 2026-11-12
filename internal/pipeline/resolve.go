@@ -106,9 +106,19 @@ func Resolve(
 	// rescues over-subscribed names (e.g. build() with 250 definitions) by filtering
 	// candidates on receiver class/file identity. Truncating candidates to MaxCandidates+1
 	// at the SQL level starves narrowByReceiver and drops valid calls as ambiguous.
+	// What the run knows about the repository as a whole: its directories and
+	// its declared dependencies. Read once, so that a call qualified by a
+	// package outside the repository can be recorded as external without a
+	// query per reference.
+	paths, dependencies, err := reg.RunLayout(ctx, runID)
+	if err != nil {
+		return stats, fmt.Errorf("read layout: %w", err)
+	}
+
 	cands := registry.NewCandidateCache(reg, runID, opts.CandidateBudget, registry.DefaultPerNameLimit)
 	resolver := infer.NewStreaming(cands, infer.Options{
 		MinConfidence: opts.MinConfidence,
+		Layout:        infer.NewLayout(paths, dependencies),
 		// A21 — supply the Ancestry port and the deferred inherited-dispatch
 		// pass switches on. Without it the resolver parks nothing and
 		// ResolveDeferred is a no-op, which is how this pass sat inert.
@@ -148,7 +158,7 @@ func Resolve(
 		return nil
 	}
 
-	err := reg.EachFilePageWithRefs(ctx, runID, func(page []registry.FileRefs) error {
+	err = reg.EachFilePageWithRefs(ctx, runID, func(page []registry.FileRefs) error {
 		// Warm the cache for the whole page before resolving any of it.
 		//
 		// Resolution asks for candidates per file, which on its own costs one

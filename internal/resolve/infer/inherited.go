@@ -128,6 +128,12 @@ type deferredRef struct {
 	// bound to when the hierarchy has nothing to say.
 	fallback    candidate
 	hasFallback bool
+
+	// orUnresolved says what to record when neither the ancestors nor a
+	// fallback bind the reference: unresolved, where the rule that parked it
+	// had already established that nothing else could. Without it the
+	// reference keeps the ambiguous outcome it was parked with.
+	orUnresolved bool
 }
 
 // deferInherited parks a reference pass one refused, if ancestry could
@@ -329,7 +335,15 @@ func (r *Resolver) drainChunk(
 		}
 		if !ok || !best.confidence.AtLeast(r.opts.MinConfidence) {
 			// No ancestor defines it, or the binding is weaker than the caller
-			// accepts. Either way pass one's outcome stands untouched.
+			// accepts. Pass one's outcome stands — unless the rule that parked
+			// the reference had already established that nothing else could
+			// bind it, in which case it is unresolved rather than ambiguous.
+			if d.orUnresolved {
+				stats.Ambiguous--
+				stats.Unresolved++
+				*outcomes = append(*outcomes, registry.RefOutcome{
+					RefID: d.refID, Resolution: registry.ResolutionUnresolved})
+			}
 			continue
 		}
 

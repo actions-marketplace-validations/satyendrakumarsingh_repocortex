@@ -570,7 +570,7 @@ func (idx *structuralIndex) languageMix() []LanguageMix {
 // there". CONTAINS and IMPORTS are structural bookkeeping — every file contains
 // its symbols — so a blind spot in them says nothing about analysis quality.
 var impactKinds = []model.EdgeKind{
-	model.EdgeCalls, model.EdgeReferences, model.EdgeImplements, model.EdgeExtends,
+	model.EdgeCalls, model.EdgeInstantiates, model.EdgeReferences, model.EdgeImplements, model.EdgeExtends,
 	model.EdgeDependsOn, model.EdgeReads, model.EdgeWrites, model.EdgeExposes,
 	model.EdgeTestedBy,
 }

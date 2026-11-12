@@ -1,0 +1,1318 @@
+package infer
+
+import (
+	"path"
+	"strings"
+
+	"github.com/satyendrakumarsingh/repocortex/internal/registry"
+	"github.com/satyendrakumarsingh/repocortex/pkg/model"
+)
+
+// # Binding a call by what it was made on
+//
+// static.go binds a Python call by the class its receiver statically holds,
+// and refuses a candidate the language's scoping makes unreachable. This file
+// is those two ideas for every language whose parser records the shape of a
+// call (model.ReceiverBare and its siblings) and qualifies definitions by what
+// encloses them — which, since shape.go, is every language with references.
+//
+// One rule per shape. Each rule names the evidence it rests on in the reason
+// it attaches to an edge, so its precision can be measured on its own, and
+// each carries the tier that measurement earned (docs/accuracy.md):
+//
+//	bare      f()         a definition the name can reach lexically: the
+//	                      enclosing scope, the file, the package, an import
+//	                      that names it. In a language with an implicit `this`,
+//	                      a member of the enclosing type. Never a member of
+//	                      some other type.
+//	self      self.f()    a member of the enclosing type, then of its ancestors
+//	super     super.f()   a member of an ancestor, never the enclosing method
+//	type      x.f()       a member of the type the source states for x
+//	name      x.f()       x is an import: the package it names, or nothing
+//	                      here at all if that package is elsewhere. x is a
+//	                      type: its member. Otherwise a value of unknown type.
+//	scope     a::f()      the module or type the path names
+//	path      a.b.f()     the same, through a longer qualifier
+//	value     x.f()       a value whose type nothing states
+//	expr      g().f()     an expression with no name
+//
+// What no rule does is the thing the old tiers did for all of them: bind a
+// qualified call to a free function, or to the function it is written in,
+// because the name matched.
+//
+// # A member call on a receiver of unknown type
+//
+// `value`, `expr`, and every `name` or `path` that turned out to be neither an
+// import nor a type end in the same place: a method was called on something
+// whose type the source does not state. That is dynamic dispatch, and the only
+// evidence left is the name. If exactly one type in the repository declares a
+// member of that name, the call is bound to it at a tier below `high`; if
+// several do it is ambiguous; and a name too common for uniqueness to mean
+// anything is left alone. See memberByName.
+
+// verdict is what a rule concluded about one call.
+type verdict uint8
+
+const (
+	// verdictUnresolved: nothing the call could denote is in the index.
+	verdictUnresolved verdict = iota
+	// verdictBound: one definition, with the confidence its evidence earns.
+	verdictBound
+	// verdictAmbiguous: several definitions and nothing to choose by.
+	verdictAmbiguous
+	// verdictExternal: the qualifier names something outside the repository.
+	verdictExternal
+	// verdictDeferred: parked for the ancestry pass, which settles it.
+	verdictDeferred
+)
+
+type decision struct {
+	verdict verdict
+	best    candidate
+}
+
+func bound(c candidate) decision { return decision{verdict: verdictBound, best: c} }
+
+var (
+	unresolvedCall = decision{verdict: verdictUnresolved}
+	ambiguousCall  = decision{verdict: verdictAmbiguous}
+	externalCall   = decision{verdict: verdictExternal}
+	deferredCall   = decision{verdict: verdictDeferred}
+)
+
+// The reasons attached to edges. Each is one rule, and the text up to the
+// first parenthesis is stable so that precision can be grouped by rule.
+const (
+	ruleEnclosingScope    = "defined in the enclosing scope"
+	ruleSameFile          = "defined in the same file"
+	ruleSameFileSeveral   = "several definitions in the same file"
+	ruleSameFileOtherType = "the only method of this name in the file; which object receives the call is decided at run time"
+	ruleRequiredOtherType = "a method of this name in a required file; which object receives the call is decided at run time"
+	ruleEnclosingType     = "declared on the enclosing type"
+	ruleSamePackage       = "same package directory"
+	ruleImportedByName    = "imported by name from the module that defines it"
+	ruleReExported        = "imported by name from a package that re-exports it"
+	ruleStaticImport      = "statically imported from the class that declares it"
+	ruleQualifiedModule   = "qualified by an imported package that defines it"
+	ruleQualifiedPackage  = "qualified by an imported package that re-exports it"
+	ruleQualifiedFile     = "qualified by the module whose file defines it"
+	ruleStatedType        = "declared on the receiver's stated type"
+	ruleNamedType         = "declared on the type the receiver names"
+	ruleConstructs        = "constructs the type the receiver names"
+	ruleNamedAfterType    = "receiver is named after the type that declares it"
+	ruleOnlyMember        = "the only member of this name in the repository; the receiver's type is not known"
+	ruleOnlyFree          = "the only free function of this name in the repository; its namespace is not a file"
+)
+
+// call is one reference being resolved, with what every rule needs about it.
+type call struct {
+	spec    LanguageSpec
+	fr      registry.FileRefs
+	imports importSet
+	ref     registry.Reference
+	cands   []registry.SymbolIndexEntry
+	symbols map[string][]registry.SymbolIndexEntry
+
+	// scope is the qualified name of the definition the call is written in,
+	// class the qualified name of the type that definition belongs to, and
+	// within the id of that definition. Each is zero at file level.
+	scope  string
+	class  string
+	within int64
+}
+
+// resolveCall binds one call by its shape.
+func (r *Resolver) resolveCall(c call, stats *Stats) decision {
+	c.scope = enclosingScope(c.fr, c.ref.Line)
+	c.class = enclosingClass(c.scope)
+	c.within, _ = enclosing(c.fr.Symbols, c.ref.Line)
+
+	switch c.ref.ReceiverKind {
+	case model.ReceiverBare:
+		return r.callBare(c, stats)
+	case model.ReceiverSelf:
+		return r.callSelf(c, stats)
+	case model.ReceiverSuper:
+		return r.callSuper(c, stats)
+	case model.ReceiverType:
+		return r.callTyped(c, stats)
+	case model.ReceiverName:
+		return r.callNamed(c, stats)
+	case model.ReceiverScope:
+		return r.callScoped(c, stats)
+	case model.ReceiverPath:
+		return r.callPath(c, stats)
+	case model.ReceiverValue:
+		return r.memberByName(c, model.ConfidenceHigh, stats)
+	default:
+		// An expression with no name, or a shape nothing recorded.
+		return r.memberByName(c, model.ConfidenceLow, stats)
+	}
+}
+
+// --- types and their members -------------------------------------------------
+
+// typeRef is a type definition, identified.
+type typeRef struct {
+	name     string
+	fileID   int64
+	filePath string
+	qual     string
+
+	// strong is true when the identification rests on something the source
+	// states — the file defines it, the package does, an import names it — and
+	// false when all that is known is that one type in the repository has the
+	// name.
+	strong bool
+}
+
+// enclosingType is the type the call is written in.
+func (c call) enclosingType() (typeRef, bool) {
+	if c.class == "" {
+		return typeRef{}, false
+	}
+	return typeRef{
+		name: lastQualSegment(c.class), fileID: c.fr.FileID, filePath: c.fr.Path,
+		qual: c.class, strong: true,
+	}, true
+}
+
+// typeNamed identifies the type a name denotes from where the call is.
+//
+// The order is the order a language resolves a name in: something the file
+// defines and the call can see; something the file's package defines;
+// something an import names; and, failing all three, a name only one type in
+// the repository has. known reports whether ANY type of that name exists,
+// identified or not — a caller needs it to tell "defined nowhere here" from
+// "defined several times, and nothing chooses".
+func (r *Resolver) typeNamed(c call, name string) (t typeRef, found, known bool) {
+	var types []registry.SymbolIndexEntry
+	for _, s := range c.symbols[name] {
+		if isTypeKind(s.Kind) && c.spec.canBind(s, model.EdgeReferences) {
+			types = append(types, s)
+		}
+	}
+	if len(types) == 0 {
+		return typeRef{}, false, false
+	}
+	pick := func(group []registry.SymbolIndexEntry, strong bool) (typeRef, bool) {
+		if len(group) == 0 {
+			return typeRef{}, false
+		}
+		first := group[0]
+		for _, s := range group[1:] {
+			if s.ID < first.ID {
+				first = s
+			}
+		}
+		qual, _ := strings.CutPrefix(first.FQN, first.FilePath+":")
+		return typeRef{name: name, fileID: first.FileID, filePath: first.FilePath, qual: qual, strong: strong}, true
+	}
+
+	var local, sameDir []registry.SymbolIndexEntry
+	dir := path.Dir(c.fr.Path)
+	for _, s := range types {
+		switch {
+		case s.FileID == c.fr.FileID && visibleFrom(c.scope, s):
+			local = append(local, s)
+		case path.Dir(s.FilePath) == dir:
+			sameDir = append(sameDir, s)
+		}
+	}
+	if t, ok := pick(innermost(local), true); ok {
+		return t, true, true
+	}
+	if t, ok := pick(sameDir, true); ok {
+		return t, true, true
+	}
+	if c.spec.PackageIsDirectory && c.spec.Calls.Imports == ImportsNameClasses {
+		// A JVM package spans source roots: `src/main/java/com/pay` and
+		// `src/test/java/com/pay` are one package, and its classes see each
+		// other with no import. The package is the tail the two directories
+		// share past their source roots.
+		var samePackage []registry.SymbolIndexEntry
+		for _, s := range types {
+			if sharesPackageTail(dir, path.Dir(s.FilePath)) {
+				samePackage = append(samePackage, s)
+			}
+		}
+		if sameDirectory(samePackage) {
+			if t, ok := pick(samePackage, true); ok {
+				return t, true, true
+			}
+		}
+	}
+
+	switch c.spec.Calls.Imports {
+	case ImportsNameClasses:
+		if m, ok := r.classImport(c.imports, name); ok && m.contains != nil {
+			var imported []registry.SymbolIndexEntry
+			for _, s := range types {
+				if m.contains(s) {
+					imported = append(imported, s)
+				}
+			}
+			if t, ok := pick(imported, true); ok {
+				return t, true, true
+			}
+		}
+	case ImportsNameModules:
+		if m, _, ok := r.scriptQualifier(c.fr, c.imports, name); ok {
+			var imported []registry.SymbolIndexEntry
+			for _, s := range types {
+				if (m.contains != nil && m.contains(s)) || (m.beneath != nil && m.beneath(s)) {
+					imported = append(imported, s)
+				}
+			}
+			if sameDirectory(imported) {
+				if t, ok := pick(imported, true); ok {
+					return t, true, true
+				}
+			}
+		}
+	}
+
+	// One type of the name in the whole repository — or one directory's worth,
+	// which is one type declared in parts (a header and its source, a partial
+	// class).
+	if sameDirectory(types) {
+		t, _ := pick(types, false)
+		return t, true, true
+	}
+	return typeRef{}, false, true
+}
+
+// sourceRootMarkers are the directory names a JVM build puts between a
+// module and its packages: `src/main/java/…`, `src/test/kotlin/…`.
+var sourceRootMarkers = map[string]bool{"java": true, "kotlin": true, "scala": true, "groovy": true}
+
+// sharesPackageTail reports whether two directories are the same package
+// under different source roots: past a source-root marker, the rest of both
+// paths is identical.
+func sharesPackageTail(a, b string) bool {
+	tail := func(dir string) (string, bool) {
+		segs := strings.Split(dir, "/")
+		for i := len(segs) - 1; i >= 0; i-- {
+			if sourceRootMarkers[segs[i]] && i < len(segs)-1 {
+				return strings.Join(segs[i+1:], "/"), true
+			}
+		}
+		return "", false
+	}
+	ta, okA := tail(a)
+	tb, okB := tail(b)
+	return okA && okB && ta == tb
+}
+
+// sameDirectory reports whether every entry is defined in one directory.
+// False for none.
+func sameDirectory(cs []registry.SymbolIndexEntry) bool {
+	if len(cs) == 0 {
+		return false
+	}
+	dir := path.Dir(cs[0].FilePath)
+	for _, c := range cs[1:] {
+		if path.Dir(c.FilePath) != dir {
+			return false
+		}
+	}
+	return true
+}
+
+// membersOf returns the candidates a type declares, nearest first: in the
+// type's own file under its own qualified name; then, where the language lets
+// a type's members be declared elsewhere, in its directory; then anywhere. The
+// rank says which.
+func membersOf(spec LanguageSpec, t typeRef, cands []registry.SymbolIndexEntry) (group []registry.SymbolIndexEntry, rank int) {
+	want := t.filePath + ":" + t.qual + "."
+	var same, dirOnly, anywhere []registry.SymbolIndexEntry
+	dir := path.Dir(t.filePath)
+	for _, c := range cands {
+		if !isCallableKind(c.Kind) {
+			continue
+		}
+		if c.FileID == t.fileID && c.FQN == want+c.Name {
+			same = append(same, c)
+			continue
+		}
+		if !spec.Calls.OpenTypes {
+			continue
+		}
+		if ownerQual(c) == t.qual {
+			if path.Dir(c.FilePath) == dir {
+				dirOnly = append(dirOnly, c)
+			} else {
+				anywhere = append(anywhere, c)
+			}
+		}
+	}
+	switch {
+	case len(same) > 0:
+		return same, 0
+	case len(dirOnly) > 0:
+		return dirOnly, 1
+	default:
+		return anywhere, 2
+	}
+}
+
+// ownerQual is the qualified name of the type that declares a candidate:
+// `Rack.Protection.Base` for `path:Rack.Protection.Base.call`. "" for anything
+// that is not a member.
+//
+// The whole of it is compared, not its last segment. Sinatra::Base and
+// Rack::Protection::Base are both `Base`, and matching on that alone bound a
+// `new(nil)` written in one to the constructor of the other.
+func ownerQual(c registry.SymbolIndexEntry) string {
+	if _, isMember := memberOwner(c); !isMember {
+		return ""
+	}
+	qual, _ := qualOf(c)
+	return qual[:len(qual)-len(c.Name)-1]
+}
+
+// oneDeclaration picks the declaration that stands for a group which is one
+// definition. chosen is false when the group holds several declarations and
+// nothing selected among them: the earliest is returned, and whether that is
+// THE definition (an overload signature and its implementation) or merely one
+// of several methods of the name (true overloads) is the caller's to say. ok
+// is false when the group is not one type's members at all.
+func oneDeclaration(ref registry.Reference, group []registry.SymbolIndexEntry) (first registry.SymbolIndexEntry, chosen, ok bool) {
+	if len(group) == 0 {
+		return registry.SymbolIndexEntry{}, false, false
+	}
+	// Declarations of one name on one type in one directory are overloads, or
+	// a declaration and its definition. Which TYPE is not in doubt.
+	for _, c := range group[1:] {
+		if c.Name != group[0].Name || path.Dir(c.FilePath) != path.Dir(group[0].FilePath) {
+			return registry.SymbolIndexEntry{}, false, false
+		}
+		a, _ := memberOwner(c)
+		b, _ := memberOwner(group[0])
+		if a != b {
+			return registry.SymbolIndexEntry{}, false, false
+		}
+	}
+	if len(group) == 1 {
+		return group[0], true, true
+	}
+	if c, picked := preferByArity(ref, group); picked {
+		return c, true, true
+	}
+	first = group[0]
+	for _, c := range group[1:] {
+		if c.ID < first.ID {
+			first = c
+		}
+	}
+	return first, false, true
+}
+
+// bindMember binds the call to the member of a type, if the type declares one.
+func (c call) bindMember(t typeRef, rule string) (decision, bool) {
+	group, rank := membersOf(c.spec, t, c.cands)
+	if len(group) == 0 {
+		return decision{}, false
+	}
+	first, chosen, ok := oneDeclaration(c.ref, group)
+	if !ok {
+		return ambiguousCall, true
+	}
+	confidence := model.ConfidenceHigh
+	reason := rule + " (" + t.name + ")"
+	switch {
+	case !chosen && c.spec.Calls.Overloads:
+		// The type is right. Which of its methods of this name is a choice the
+		// argument count did not make, and the first declaration is the one
+		// called less than half the time: 49 right of 92 across Java, C# and
+		// C++.
+		confidence = model.ConfidenceLow
+		reason = rule + ", overloaded: the first declaration (" + t.name + ")"
+	case !t.strong:
+		confidence = c.spec.Calls.Measured.uniqueTypeName()
+		reason = rule + ", the only type of that name (" + t.name + ")"
+	case rank == 2:
+		// Declared on a type of this name somewhere else. One such type is
+		// evidence; it is not a statement — and in a language whose types are
+		// reopened anywhere and whose class and instance methods share a
+		// name, it measured as none (sinatra: 0 right of 2).
+		confidence = model.ConfidenceMedium
+		if c.spec.Calls.DynamicSelf {
+			confidence = model.ConfidenceLow
+		}
+		reason = rule + ", declared in another directory (" + t.name + ")"
+	}
+	return bound(candidate{first, confidence, reason}), true
+}
+
+// inherit parks a call for the ancestry pass: the type is known and does not
+// declare the member, so its ancestors are asked. fallback is what the call
+// binds to if they do not answer either.
+func (r *Resolver) inherit(c call, t typeRef, super bool, fallback decision, stats *Stats) decision {
+	sr := staticReceiver{
+		class: t.name, fileID: t.fileID, filePath: t.filePath, qual: t.qual,
+		how: "an ancestor", super: super,
+	}
+	// Nothing to inherit unless some type declares a member of this name. A
+	// call whose name the repository does not define at all is settled now.
+	declared := false
+	for _, s := range c.cands {
+		if _, isMember := memberOwner(s); isMember && isCallableKind(s.Kind) {
+			declared = true
+			break
+		}
+	}
+	if !declared || fallback.verdict == verdictExternal {
+		return fallback
+	}
+	has := fallback.verdict == verdictBound && fallback.best.confidence.AtLeast(r.opts.MinConfidence)
+	if r.deferStatic(c.spec, c.fr, c.ref, sr, fallback.best, has, stats) {
+		if fallback.verdict == verdictUnresolved {
+			// If the ancestors do not answer, the call is bound to nothing —
+			// which is unresolved, not a choice nobody could make.
+			r.deferred[len(r.deferred)-1].orUnresolved = true
+		}
+		return deferredCall
+	}
+	return fallback
+}
+
+// --- the rules ---------------------------------------------------------------
+
+// callBare binds `f()`.
+func (r *Resolver) callBare(c call, stats *Stats) decision {
+	// What a bare name can reach at all: a definition that is not a member of
+	// anything, and — in a file the call is in — one local to a function the
+	// call is inside.
+	var reach, local []registry.SymbolIndexEntry
+	for _, s := range c.cands {
+		if _, isLocal := localScope(s); isLocal {
+			if s.FileID == c.fr.FileID && visibleFrom(c.scope, s) {
+				local = append(local, s)
+			}
+			continue
+		}
+		if _, isMember := memberOwner(s); isMember {
+			continue
+		}
+		reach = append(reach, s)
+		if s.FileID == c.fr.FileID {
+			local = append(local, s)
+		}
+	}
+
+	// The enclosing scope, innermost first, then the file.
+	if near := innermost(local); len(near) > 0 {
+		if first, ok := firstDeclaration(near); ok {
+			rule := ruleSameFile
+			if _, isLocal := localScope(first); isLocal {
+				rule = ruleEnclosingScope
+			}
+			switch {
+			case len(near) > 1 && c.spec.Calls.Overloads && anyKnownArity(near):
+				// Several declarations of one name where the language has
+				// overloads are several functions. The argument count may
+				// choose; nothing else here can. Where no declaration's
+				// parameter count is known at all — C++ — a prototype and its
+				// definition cannot be told from two overloads, and the
+				// same-file rule keeps the tier it measured there (25 of 25
+				// on leveldb).
+				if s, picked := preferByArity(c.ref, near); picked {
+					return bound(candidate{s, model.ConfidenceHigh, rule})
+				}
+				return bound(candidate{first, model.ConfidenceLow, rule + ", overloaded: the first declaration"})
+			case c.spec.Calls.DynamicSelf && c.within == first.ID:
+				// A helper that shares its name with the method it wraps:
+				// `def respond_to; app { respond_to(...) } end`. Inside the
+				// block the name is sent to another object, far more often
+				// than the helper recurses.
+				return bound(candidate{first, model.ConfidenceLow, rule + ", the function the call is written in"})
+			}
+			return bound(candidate{first, model.ConfidenceHigh, rule})
+		}
+		// Several definitions of one name in one file: conditional
+		// compilation, or overloads. The file is right; which is a preference.
+		sortCandidates(near)
+		if s, ok := preferByArity(c.ref, near); ok {
+			return bound(candidate{s, model.ConfidenceMedium, ruleSameFileSeveral + " (argument count selects one)"})
+		}
+		return bound(candidate{near[0], model.ConfidenceMedium, ruleSameFileSeveral})
+	}
+
+	// A member of the enclosing type, where a bare name may be one, and of
+	// each type that one is nested in.
+	if c.spec.Calls.ImplicitSelf && c.class != "" {
+		for qual := c.class; qual != ""; qual = outerQual(qual) {
+			t := typeRef{name: lastQualSegment(qual), fileID: c.fr.FileID, filePath: c.fr.Path, qual: qual, strong: true}
+			if d, ok := c.bindMember(t, ruleEnclosingType); ok {
+				return d
+			}
+		}
+		// Not declared on it: inherited, statically imported, or a free
+		// function. Its ancestors are asked first, and what the name alone
+		// answers is what stands if they say nothing.
+		t, _ := c.enclosingType()
+		return r.inherit(c, t, false, r.bareBeyondType(c, reach, stats), stats)
+	}
+	if c.spec.Calls.DynamicSelf {
+		return r.bareBeyondType(c, reach, stats)
+	}
+	return r.bareByName(c, reach, stats)
+}
+
+// bareBeyondType is what a bare name answers where a bare name may be a
+// member and the enclosing type does not declare it: a free function first,
+// then — where the receiver of a bare call is decided at run time — a method
+// of some other type that the file's own evidence points at, then the one
+// member of that name in the repository.
+func (r *Resolver) bareBeyondType(c call, reach []registry.SymbolIndexEntry, stats *Stats) decision {
+	rest := r.bareByName(c, reach, stats)
+	if rest.verdict == verdictBound || rest.verdict == verdictExternal {
+		return rest
+	}
+	if c.spec.Calls.DynamicSelf {
+		if d := r.bareOnOtherType(c, stats); d.verdict == verdictBound {
+			return d
+		}
+	}
+	if viaName := r.memberByName(c, model.ConfidenceLow, stats); viaName.verdict == verdictBound {
+		return viaName
+	}
+	return rest
+}
+
+// bareOnOtherType weighs a bare name against methods of types the call is not
+// written in, by the evidence the file itself gives: one method of the name in
+// this file, or one in a file it requires.
+func (r *Resolver) bareOnOtherType(c call, stats *Stats) decision {
+	var methods, here []registry.SymbolIndexEntry
+	for _, s := range c.cands {
+		if s.ID == c.within || !isCallableKind(s.Kind) {
+			continue
+		}
+		methods = append(methods, s)
+		if s.FileID == c.fr.FileID {
+			here = append(here, s)
+		}
+	}
+	if len(methods) == 0 {
+		return unresolvedCall
+	}
+	// Both rules below read as guesses and measured as better than that on
+	// sinatra: 24 right of 25 each, which is the `high` floor with room. The
+	// file's own definitions and its `require` lines are evidence about what a
+	// block will be evaluated against, and in Ruby they are most of the
+	// evidence there is.
+	if len(here) == 1 {
+		return bound(candidate{here[0], model.ConfidenceHigh, ruleSameFileOtherType})
+	}
+	if len(methods) > c.spec.MaxCandidates {
+		return ambiguousCall
+	}
+	if best, ok := r.pickImported(c.imports, c.ref, methods); ok {
+		if best.confidence != model.ConfidenceHigh {
+			// Several required files each define one: a preference among
+			// them, and labelled as the least.
+			best.confidence = model.ConfidenceLow
+		}
+		best.reason = ruleRequiredOtherType
+		return bound(best)
+	}
+	return ambiguousCall
+}
+
+// anyKnownArity reports whether the parser determined a parameter count for
+// any of the candidates.
+func anyKnownArity(cs []registry.SymbolIndexEntry) bool {
+	for _, c := range cs {
+		if c.ParamCount.Known() {
+			return true
+		}
+	}
+	return false
+}
+
+// outerQual is the qualified name of what a nested type is nested in, or "".
+func outerQual(qual string) string {
+	i := strings.LastIndexByte(qual, '.')
+	if i < 0 {
+		return ""
+	}
+	outer := qual[:i]
+	if strings.HasSuffix(outer, "."+localsSegment) || outer == localsSegment {
+		return ""
+	}
+	return outer
+}
+
+// bareByName binds a bare name to something outside its own file: its
+// package, an import that names it, a module the file imports, a neighbour.
+func (r *Resolver) bareByName(c call, reach []registry.SymbolIndexEntry, stats *Stats) decision {
+	// A name the file imported by name comes from that import and from
+	// nowhere else, whatever the repository also defines.
+	switch c.spec.Calls.Imports {
+	case ImportsNameModules:
+		if m, member, ok := r.scriptQualifier(c.fr, c.imports, c.ref.Name); ok && member {
+			if m.where == presenceExternal {
+				return externalCall
+			}
+			if d, ok := bindInModule(c, m, reach, ruleImportedByName, ruleReExported); ok {
+				return d
+			}
+		}
+	case ImportsNameClasses:
+		if owner, m, ok := r.staticImport(c.imports, c.ref.Name); ok {
+			if m.where == presenceExternal {
+				return externalCall
+			}
+			var imported []registry.SymbolIndexEntry
+			for _, s := range c.cands {
+				if o, isMember := memberOwner(s); isMember && o == owner && m.contains(s) && isCallableKind(s.Kind) {
+					imported = append(imported, s)
+				}
+			}
+			if first, chosen, ok := oneDeclaration(c.ref, imported); ok {
+				if !chosen && c.spec.Calls.Overloads {
+					return bound(candidate{first, model.ConfidenceMedium, ruleStaticImport + ", overloaded: the first declaration (" + owner + ")"})
+				}
+				return bound(candidate{first, model.ConfidenceHigh, ruleStaticImport + " (" + owner + ")"})
+			}
+		}
+	}
+
+	if len(reach) == 0 {
+		return unresolvedCall
+	}
+	if c.spec.PackageIsDirectory {
+		dir := path.Dir(c.fr.Path)
+		var pkg []registry.SymbolIndexEntry
+		for _, s := range reach {
+			if path.Dir(s.FilePath) == dir {
+				pkg = append(pkg, s)
+			}
+		}
+		if len(pkg) == 1 {
+			return bound(candidate{pkg[0], model.ConfidenceHigh, ruleSamePackage})
+		}
+		if len(pkg) > 1 {
+			// One name declared more than once in a package: build variants.
+			sortCandidates(pkg)
+			if s, ok := preferByArity(c.ref, pkg); ok {
+				return bound(candidate{s, model.ConfidenceMedium, ruleSamePackage + " (several, argument count selects one)"})
+			}
+			return bound(candidate{pkg[0], model.ConfidenceMedium, ruleSamePackage + " (several)"})
+		}
+	}
+
+	if c.spec.Calls.NoFreeFunctions {
+		// Every function here belongs to a type. A candidate that seems to
+		// belong to none was not attributed, and is not something an import
+		// or a neighbouring file could bring into scope.
+		return ambiguousCall
+	}
+	if len(reach) > c.spec.MaxCandidates {
+		stats.CapExceeded++
+		stats.CapDropped++
+		return ambiguousCall
+	}
+	if best, ok := r.pickImported(c.imports, c.ref, reach); ok {
+		return bound(best)
+	}
+	if !c.spec.PackageIsDirectory {
+		if best, ok := r.pickSameDir(c.spec, c.fr, reach); ok {
+			best.confidence = weaker(best.confidence, c.spec.Calls.Measured.neighbour())
+			return bound(best)
+		}
+	}
+	if len(reach) == 1 && reach[0].Exported && !r.specs.IsGenericName(c.ref.Name) {
+		return bound(candidate{reach[0], model.ConfidenceLow, "unique name in repository, no import evidence"})
+	}
+	return ambiguousCall
+}
+
+// bindInModule binds the call to what a module defines under the call's name:
+// in the module's own file, or — where the module is a package's index —
+// in exactly one file beneath it.
+func bindInModule(c call, m module, among []registry.SymbolIndexEntry, ruleDefines, ruleReExports string) (decision, bool) {
+	var defined, beneath []registry.SymbolIndexEntry
+	for _, s := range among {
+		if !isModuleLevel(s) {
+			continue
+		}
+		switch {
+		case m.contains != nil && m.contains(s):
+			defined = append(defined, s)
+		case m.beneath != nil && m.beneath(s):
+			beneath = append(beneath, s)
+		}
+	}
+	if len(defined) > 0 {
+		if first, ok := callableFirst(c.ref, defined); ok {
+			return bound(candidate{first, model.ConfidenceHigh, ruleDefines}), true
+		}
+		return ambiguousCall, true
+	}
+	if len(beneath) > 0 {
+		if first, ok := callableFirst(c.ref, beneath); ok {
+			return bound(candidate{first, model.ConfidenceHigh, ruleReExports}), true
+		}
+		return ambiguousCall, true
+	}
+	return decision{}, false
+}
+
+// callableFirst picks one definition from module-level candidates of one name
+// in one module: a function before a type of the same name (TypeScript
+// declares both under one name, and a call invokes the function), and among
+// several declarations of one function the one the argument count selects.
+func callableFirst(ref registry.Reference, group []registry.SymbolIndexEntry) (registry.SymbolIndexEntry, bool) {
+	var callables []registry.SymbolIndexEntry
+	for _, s := range group {
+		if isCallableKind(s.Kind) {
+			callables = append(callables, s)
+		}
+	}
+	if len(callables) > 0 {
+		group = callables
+	}
+	if first, ok := firstDeclaration(group); ok {
+		if len(group) > 1 {
+			if s, picked := preferByArity(ref, group); picked {
+				return s, true
+			}
+		}
+		return first, true
+	}
+	return registry.SymbolIndexEntry{}, false
+}
+
+// callSelf binds `self.f()` and `this.f()`.
+func (r *Resolver) callSelf(c call, stats *Stats) decision {
+	t, ok := c.enclosingType()
+	if !ok {
+		// `this` in a function that belongs to no type the index knows: an
+		// object literal's method, a callback. A value of unknown type.
+		return r.memberByName(c, model.ConfidenceMedium, stats)
+	}
+	if d, ok := c.bindMember(t, ruleEnclosingType); ok {
+		return d
+	}
+	// Not declared on the type: inherited, mixed in, or generated. Its
+	// ancestors are asked; failing them the name alone is a weak answer.
+	return r.inherit(c, t, false, r.memberByName(c, model.ConfidenceLow, stats), stats)
+}
+
+// callSuper binds `super.f()`. Only an ancestor's member is an answer, and
+// with no fallback: the one definition of the name in the file is, more often
+// than not, the very method the call is written in.
+func (r *Resolver) callSuper(c call, stats *Stats) decision {
+	t, ok := c.enclosingType()
+	if !ok {
+		return unresolvedCall
+	}
+	return r.inherit(c, t, true, unresolvedCall, stats)
+}
+
+// callTyped binds `x.f()` where the source states x's type.
+func (r *Resolver) callTyped(c call, stats *Stats) decision {
+	segs := receiverSegments(c.ref.Receiver)
+	if len(segs) == 0 {
+		return r.memberByName(c, model.ConfidenceLow, stats)
+	}
+	name := segs[len(segs)-1]
+	if len(segs) > 1 {
+		if c.spec.hasExternalRoot(segs) {
+			return externalCall
+		}
+		// A type qualified by a package: `http.ResponseWriter`. Where the
+		// parser followed a field chain as far as a qualified type and no
+		// further, the fields it could not type follow the type's name.
+		if c.spec.Calls.Imports == ImportsNameDirectories {
+			m, ok := r.goModule(c.imports, segs[0])
+			switch {
+			case ok && m.where == presenceExternal:
+				return externalCall
+			case ok && len(segs) == 2:
+				return r.memberOfTypeIn(c, m, name, stats)
+			default:
+				return r.memberByName(c, model.ConfidenceMedium, stats)
+			}
+		}
+		if len(segs) > 2 && !capitalised(name) {
+			// A field chain behind a type; the field's type is not known.
+			return r.memberByName(c, model.ConfidenceMedium, stats)
+		}
+	}
+
+	t, found, known := r.typeNamed(c, name)
+	if found && !qualifierFits(c.spec, segs, t) {
+		// `fs::DirEntry` is not this repository's DirEntry.
+		return unresolvedCall
+	}
+	if !found {
+		if r.importedFromOutside(c, name) || c.spec.isBuiltinType(name) {
+			return externalCall
+		}
+		if known {
+			// Several types of the name and nothing to choose by.
+			return ambiguousCall
+		}
+		// The type is not in the index. Whatever declares a member of this
+		// name here, it is not what this call reaches.
+		return unresolvedCall
+	}
+	if d, ok := c.bindMember(t, ruleStatedType); ok {
+		return d
+	}
+	return r.inherit(c, t, false, unresolvedCall, stats)
+}
+
+// memberOfTypeIn binds the call to a member of the type `name` declared in a
+// module.
+func (r *Resolver) memberOfTypeIn(c call, m module, name string, stats *Stats) decision {
+	if m.contains == nil {
+		return unresolvedCall
+	}
+	for _, s := range c.symbols[name] {
+		if !isTypeKind(s.Kind) || !m.contains(s) {
+			continue
+		}
+		qual, _ := strings.CutPrefix(s.FQN, s.FilePath+":")
+		t := typeRef{name: name, fileID: s.FileID, filePath: s.FilePath, qual: qual, strong: true}
+		if d, ok := c.bindMember(t, ruleStatedType); ok {
+			return d
+		}
+		return r.inherit(c, t, false, unresolvedCall, stats)
+	}
+	return unresolvedCall
+}
+
+// importedFromOutside reports whether the file's imports show a name comes
+// from a package that is not in the repository.
+func (r *Resolver) importedFromOutside(c call, name string) bool {
+	switch c.spec.Calls.Imports {
+	case ImportsNameClasses:
+		m, ok := r.classImport(c.imports, name)
+		return ok && m.where == presenceExternal
+	case ImportsNameModules:
+		m, _, ok := r.scriptQualifier(c.fr, c.imports, name)
+		return ok && m.where == presenceExternal
+	}
+	return false
+}
+
+// callNamed binds `x.f()` where x is an identifier the enclosing code does not
+// declare: an import, a type, or something at file level or beyond.
+func (r *Resolver) callNamed(c call, stats *Stats) decision {
+	name := c.ref.Receiver
+
+	// An import says what the name is before anything else is asked.
+	switch c.spec.Calls.Imports {
+	case ImportsNameDirectories:
+		if m, ok := r.goModule(c.imports, name); ok {
+			return qualifiedBy(c, m)
+		}
+	case ImportsNameModules:
+		if m, member, ok := r.scriptQualifier(c.fr, c.imports, name); ok {
+			if m.where == presenceExternal {
+				return externalCall
+			}
+			if !member {
+				return qualifiedBy(c, m)
+			}
+			// Imported FROM the module: a class it defines, or a namespace it
+			// re-exports. A class is found below, as a type. A namespace is
+			// the file of that name beneath the module.
+			if _, isType, _ := r.typeNamed(c, name); !isType {
+				return namespaceBeneath(c, m, name)
+			}
+		}
+	}
+	return r.callOnTypeOrValue(c, name, stats)
+}
+
+// qualifiedBy binds a call qualified by a module to what that module defines.
+func qualifiedBy(c call, m module) decision {
+	if m.where == presenceExternal {
+		return externalCall
+	}
+	if d, ok := bindInModule(c, m, c.cands, ruleQualifiedModule, ruleQualifiedPackage); ok {
+		return d
+	}
+	// The package is here and defines nothing callable by this name: a
+	// function-valued variable, or a definition the extractor missed.
+	return unresolvedCall
+}
+
+// namespaceBeneath binds a call qualified by a namespace that a package index
+// re-exports: `import { util } from "../core/index.js"` and
+// `util.joinValues()`, where core/index.ts has `export * as util from
+// "./util.js"`. The namespace is the file of that name beneath the package.
+func namespaceBeneath(c call, m module, namespace string) decision {
+	if m.beneath == nil && m.contains == nil {
+		return unresolvedCall
+	}
+	var inFile []registry.SymbolIndexEntry
+	for _, s := range c.cands {
+		if !isModuleLevel(s) || !strings.EqualFold(fileBaseName(s.FilePath), namespace) {
+			continue
+		}
+		if (m.beneath != nil && m.beneath(s)) || (m.contains != nil && m.contains(s)) {
+			inFile = append(inFile, s)
+		}
+	}
+	if first, ok := callableFirst(c.ref, inFile); ok {
+		return bound(candidate{first, model.ConfidenceHigh, ruleQualifiedPackage})
+	}
+	if len(inFile) > 0 {
+		return ambiguousCall
+	}
+	return unresolvedCall
+}
+
+// callOnTypeOrValue binds a call made on a name that is a type — its member —
+// or, failing that, a value of unknown type.
+func (r *Resolver) callOnTypeOrValue(c call, name string, stats *Stats) decision {
+	t, found, known := r.typeNamed(c, name)
+	if found {
+		if d, ok := c.bindMember(t, ruleNamedType); ok {
+			return d
+		}
+		// `Type.new`, `Type::new()` on a type that writes no such member:
+		// the language constructs it.
+		if c.ref.Name == "new" {
+			if d, ok := r.constructs(c, t); ok {
+				return d
+			}
+		}
+		return r.inherit(c, t, false, unresolvedCall, stats)
+	}
+	if known {
+		return ambiguousCall
+	}
+	if r.importedFromOutside(c, name) || c.spec.isBuiltinType(name) {
+		return externalCall
+	}
+	if c.spec.Calls.TypesAreCapitalised && capitalised(name) && len(c.symbols[name]) == 0 {
+		// Spelled as a type, and the repository defines nothing of that name.
+		// It is somebody else's type, and a member of that name declared here
+		// is not what the call reaches.
+		return unresolvedCall
+	}
+	return r.memberByName(c, model.ConfidenceHigh, stats)
+}
+
+// constructs binds `Type.new` to the type itself, as an instantiation.
+func (r *Resolver) constructs(c call, t typeRef) (decision, bool) {
+	for _, s := range c.symbols[t.name] {
+		if s.FileID == t.fileID && isConstructibleKind(s.Kind) && s.FQN == t.filePath+":"+t.qual {
+			confidence := model.ConfidenceHigh
+			if !t.strong {
+				confidence = model.ConfidenceMedium
+			}
+			return bound(candidate{s, confidence, ruleConstructs + " (" + t.name + ")"}), true
+		}
+	}
+	return decision{}, false
+}
+
+// callScoped binds `a::f()` and `a::b::f()`: the path names a type or a
+// module, never a value.
+func (r *Resolver) callScoped(c call, stats *Stats) decision {
+	segs := receiverSegments(c.ref.Receiver)
+	if len(segs) == 0 {
+		return r.memberByName(c, model.ConfidenceLow, stats)
+	}
+	if c.spec.hasExternalRoot(segs) {
+		return externalCall
+	}
+	last := segs[len(segs)-1]
+
+	// Rust's path keywords: this module, its parent, the crate root.
+	switch last {
+	case "self", "super":
+		// An inline `mod tests { use super::*; }` and its parent share a file.
+		var here []registry.SymbolIndexEntry
+		for _, s := range c.cands {
+			if s.FileID == c.fr.FileID && isModuleLevel(s) {
+				here = append(here, s)
+			}
+		}
+		if first, ok := callableFirst(c.ref, here); ok {
+			return bound(candidate{first, model.ConfidenceHigh, ruleQualifiedFile})
+		}
+		if last == "self" {
+			return unresolvedCall
+		}
+		return r.moduleByStem(c, path.Base(path.Dir(c.fr.Path)), stats)
+	case "crate":
+		return r.freeByName(c)
+	}
+
+	// A type: `Status::OK()`, `SearcherBuilder::new()`, `Rack::Mutex.new`.
+	if t, found, known := r.typeNamed(c, last); found || known {
+		if !found {
+			return ambiguousCall
+		}
+		if !qualifierFits(c.spec, segs, t) {
+			// `Rack::Response` is not Sinatra::Response, and `textwrap::Options`
+			// is not this workspace's Options.
+			return unresolvedCall
+		}
+		if d, ok := c.bindMember(t, ruleNamedType); ok {
+			return d
+		}
+		if c.ref.Name == "new" {
+			if d, ok := r.constructs(c, t); ok {
+				return d
+			}
+		}
+		return r.inherit(c, t, false, unresolvedCall, stats)
+	}
+	if c.spec.isBuiltinType(last) {
+		return externalCall
+	}
+	if c.spec.Calls.TypesAreCapitalised && capitalised(last) {
+		// A type the repository does not define, or a variant of one.
+		return unresolvedCall
+	}
+	if c.spec.Calls.ScopeNamesModule {
+		return r.moduleByStem(c, last, stats)
+	}
+	return unresolvedCall
+}
+
+// qualifierFits reports whether the path a type was written with is
+// consistent with the type that was identified by its last segment alone.
+//
+// Where qualified names carry their namespaces (Ruby's `Sinatra.Response`),
+// the written qualifier must be the tail of the type's own. Where a module is
+// a file (Rust), the written qualifier must name the type's file or one of the
+// directories above it: `ignore::DirEntry` fits crates/ignore/src/walk.rs and
+// `fs::DirEntry` does not. Anywhere else, and for an unqualified name, it
+// fits — a qualifier that cannot be checked is not evidence against.
+func qualifierFits(spec LanguageSpec, segs []string, t typeRef) bool {
+	if len(segs) < 2 {
+		return true
+	}
+	qualifier := segs[len(segs)-2]
+	switch qualifier {
+	case "crate", "self", "super", "Self":
+		return true
+	}
+	typeSegs := strings.Split(t.qual, ".")
+	if len(typeSegs) >= 2 {
+		// A namespaced qualified name: compare as many trailing segments as
+		// both have.
+		for i := 1; i <= len(segs) && i <= len(typeSegs); i++ {
+			if segs[len(segs)-i] != typeSegs[len(typeSegs)-i] {
+				return false
+			}
+		}
+		return true
+	}
+	if !spec.Calls.ScopeNamesModule || spec.Calls.ImplicitSelf {
+		return true
+	}
+	want := strings.ReplaceAll(strings.ToLower(qualifier), "-", "_")
+	for _, seg := range strings.Split(strings.ToLower(trimScriptExtension(strings.TrimSuffix(t.filePath, path.Ext(t.filePath)))), "/") {
+		if strings.ReplaceAll(seg, "-", "_") == want || strings.HasSuffix(want, "_"+strings.ReplaceAll(seg, "-", "_")) {
+			return true
+		}
+	}
+	return false
+}
+
+// moduleByStem binds a call qualified by a module to a free function in the
+// file that module is: `messages::errored()` and messages.rs.
+func (r *Resolver) moduleByStem(c call, stem string, stats *Stats) decision {
+	var inFile, free []registry.SymbolIndexEntry
+	for _, s := range c.cands {
+		if !isModuleLevel(s) || !isCallableKind(s.Kind) {
+			continue
+		}
+		free = append(free, s)
+		if strings.EqualFold(moduleStem(c.spec, s.FilePath), stem) {
+			inFile = append(inFile, s)
+		}
+	}
+	if first, ok := firstDeclaration(inFile); ok {
+		return bound(candidate{first, model.ConfidenceHigh, ruleQualifiedFile})
+	}
+	if len(inFile) > 1 {
+		// Two files of that name each define one. Nearest wins only if one
+		// shares the caller's directory.
+		var near []registry.SymbolIndexEntry
+		for _, s := range inFile {
+			if strings.HasPrefix(s.FilePath, path.Dir(c.fr.Path)+"/") {
+				near = append(near, s)
+			}
+		}
+		if first, ok := firstDeclaration(near); ok {
+			return bound(candidate{first, model.ConfidenceMedium, ruleQualifiedFile + " (nearest of several)"})
+		}
+		return ambiguousCall
+	}
+	// The module is not a file of that name: an inline module, a re-export, a
+	// C++ namespace spread over files. One free function of the name in the
+	// whole repository is weak evidence, and labelled as that.
+	if r.layout.Known() && !r.layout.HasStem(stem) && !r.layout.HasDirNamed(stem) && !c.spec.Calls.ImplicitSelf {
+		// No file and no directory of that name: a module of another crate.
+		return unresolvedCall
+	}
+	if first, ok := firstDeclaration(free); ok && !r.specs.IsGenericName(c.ref.Name) {
+		return bound(candidate{first, model.ConfidenceLow, ruleOnlyFree})
+	}
+	if len(free) > 1 {
+		return ambiguousCall
+	}
+	return unresolvedCall
+}
+
+// freeByName binds `crate::f()`: a free function at the crate's root. The
+// root is not identified, so this is the one free function of the name.
+func (r *Resolver) freeByName(c call) decision {
+	var free []registry.SymbolIndexEntry
+	for _, s := range c.cands {
+		if isModuleLevel(s) && isCallableKind(s.Kind) {
+			free = append(free, s)
+		}
+	}
+	if first, ok := firstDeclaration(free); ok {
+		return bound(candidate{first, model.ConfidenceMedium, ruleQualifiedFile + " (the crate's only one)"})
+	}
+	if len(free) > 1 {
+		return ambiguousCall
+	}
+	return unresolvedCall
+}
+
+// callPath binds `a.b.f()`: a longer qualifier, whose head or whose tail may
+// say what it is.
+func (r *Resolver) callPath(c call, stats *Stats) decision {
+	segs := receiverSegments(c.ref.Receiver)
+	if len(segs) == 0 {
+		return r.memberByName(c, model.ConfidenceLow, stats)
+	}
+	if c.spec.hasExternalRoot(segs) {
+		return externalCall
+	}
+	head, last := segs[0], segs[len(segs)-1]
+
+	// Anything reached through a package that is not here is not here.
+	switch c.spec.Calls.Imports {
+	case ImportsNameDirectories:
+		if m, ok := r.goModule(c.imports, head); ok && m.where == presenceExternal {
+			return externalCall
+		}
+	case ImportsNameModules:
+		if m, _, ok := r.scriptQualifier(c.fr, c.imports, head); ok && m.where == presenceExternal {
+			return externalCall
+		}
+	case ImportsNameClasses:
+		if m, ok := r.classImport(c.imports, head); ok && m.where == presenceExternal {
+			return externalCall
+		}
+	}
+
+	// `a.b.Util.stat()`, `Outer.Inner.make()`: the tail names a type.
+	if c.spec.Calls.TypesAreCapitalised && capitalised(last) {
+		return r.callOnTypeOrValue(c, last, stats)
+	}
+	return r.memberByName(c, model.ConfidenceHigh, stats)
+}
+
+// memberByName binds a member call whose receiver's type nothing states.
+//
+// The candidates are members only — a call made on something cannot reach a
+// free function — and never the function the call is written in: `x.f()`
+// inside `f` on an `x` of unknown type is delegation far more often than it is
+// recursion, and binding it to `f` was 193 self-loops on ripgrep, 13 wrong of
+// 18 sampled.
+//
+// limit is the most this rule may claim for the shape it was reached from: an
+// expression with no name is never more than `low`. Below that limit the tier
+// is the one the language's measurement earned (CallTraits.Measured).
+func (r *Resolver) memberByName(c call, limit model.Confidence, stats *Stats) decision {
+	var members []registry.SymbolIndexEntry
+	delegating := false
+	for _, s := range c.cands {
+		if !isCallableKind(s.Kind) {
+			continue
+		}
+		if s.ID == c.within {
+			delegating = true
+			continue
+		}
+		if _, isMember := memberOwner(s); isMember {
+			members = append(members, s)
+		}
+	}
+	if len(members) == 0 {
+		return unresolvedCall
+	}
+	if delegating {
+		// The call is written inside a member of the same name, which was set
+		// aside. What is left is one candidate fewer than the repository has,
+		// and being the only one LEFT is weaker than being the only one: the
+		// wrapped value is usually of a type declared somewhere else.
+		limit = model.ConfidenceLow
+	}
+
+	// A receiver named after a type is evidence about its type: `request` is
+	// usually a Request. It chooses between types that declare the member.
+	if hint := namingHint(c.ref); hint != "" {
+		var named []registry.SymbolIndexEntry
+		for _, s := range members {
+			if owner, _ := memberOwner(s); strings.EqualFold(owner, hint) {
+				named = append(named, s)
+			}
+		}
+		if first, _, ok := oneDeclaration(c.ref, named); ok {
+			return bound(candidate{first, weaker(c.spec.Calls.Measured.namedAfterType(), limit), ruleNamedAfterType})
+		}
+	}
+
+	if first, _, ok := oneDeclaration(c.ref, members); ok {
+		if r.specs.IsGenericName(c.ref.Name) || c.spec.isCoreMember(c.ref.Name) {
+			// One `get` in a repository says nothing about what a `get(...)`
+			// meant; the others are in libraries that were never indexed. The
+			// same holds for a name the language's own library declares on
+			// every string or collection. See corenames.go.
+			return ambiguousCall
+		}
+		return bound(candidate{first, weaker(c.spec.Calls.Measured.unknownReceiver(), limit), ruleOnlyMember})
+	}
+	if len(members) > c.spec.MaxCandidates {
+		stats.CapExceeded++
+		stats.CapDropped++
+	}
+	return ambiguousCall
+}
+
+// namingHint is the receiver as a type's name might be spelled: the last
+// identifier of what the call was made on, without the sigils and prefixes a
+// field carries. "" for a receiver with no name or one too short to mean
+// anything.
+func namingHint(ref registry.Reference) string {
+	switch ref.ReceiverKind {
+	case model.ReceiverName, model.ReceiverValue, model.ReceiverPath, model.ReceiverScope:
+	default:
+		return ""
+	}
+	hint := strings.TrimLeft(lastSegment(ref.Receiver), "_@$")
+	hint = strings.TrimPrefix(hint, "m_")
+	hint = strings.TrimRight(hint, "_")
+	if len(hint) < 3 {
+		return ""
+	}
+	return hint
+}
+
+// weaker returns the lower of two confidences.
+func weaker(a, b model.Confidence) model.Confidence {
+	if a.AtLeast(b) {
+		return b
+	}
+	return a
+}

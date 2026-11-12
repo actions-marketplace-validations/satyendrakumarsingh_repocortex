@@ -45,17 +45,21 @@ func seedPrecision(t *testing.T, root string, withCompiler bool) {
 		`INSERT INTO files(id, index_run_id, path, language, content_hash)
 		   VALUES(3,1,'README.md','markdown','h3')`,
 	}
+	// B and C are two definitions of ONE name, `callee`. A resolver binds a
+	// reference to a candidate of the reference's own name, so a wrong binding
+	// is always the right name on the wrong definition, and an edge is
+	// adjudicated only against a compiler fact about that same name.
 	for _, spec := range []struct {
-		id, file int
-		name     string
+		id, file  int
+		name, fqn string
 	}{
-		{1, 1, "Caller"}, {2, 1, "B"}, {3, 1, "C"},
-		{4, 2, "tsCaller"}, {5, 2, "tsTarget"},
+		{1, 1, "Caller", "Caller"}, {2, 1, "callee", "B"}, {3, 1, "callee", "C"},
+		{4, 2, "tsCaller", "tsCaller"}, {5, 2, "tsTarget", "tsTarget"},
 	} {
 		stmts = append(stmts, fmt.Sprintf(
 			`INSERT INTO symbols(id, index_run_id, file_id, kind, name, fqn, confidence, source)
 			   VALUES(%d,1,%d,'function','%s','pkg.%s','high','source_code')`,
-			spec.id, spec.file, spec.name, spec.name))
+			spec.id, spec.file, spec.name, spec.fqn))
 	}
 
 	type hEdge struct {

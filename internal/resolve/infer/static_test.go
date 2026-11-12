@@ -242,7 +242,11 @@ func TestUnknownReceiverIsNeverHigh(t *testing.T) {
 				pyCall(2, "delete", receiver, 13), // the only delete in an imported module
 			},
 		})
-		wantEdge(t, edges, 12, 1, model.ConfidenceMedium)
+		// The only `save` in the FILE is the weakest of the name-only answers
+		// and is reported two levels down: hand-checked on flask it was right
+		// 2 times in 12. The only one in an imported module was right 9 times
+		// in 12, and stays one level down.
+		wantEdge(t, edges, 12, 1, model.ConfidenceLow)
 		wantEdge(t, edges, 13, 2, model.ConfidenceMedium)
 		if !strings.Contains(edges[12].Evidence.Detail, "rests on the name") {
 			t.Errorf("reason %q does not say the binding is by name", edges[12].Evidence.Detail)

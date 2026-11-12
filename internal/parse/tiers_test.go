@@ -34,7 +34,7 @@ func TestTierForPythonIsTyped(t *testing.T) {
 func TestTypedTierIsEarnedByDiscrimination(t *testing.T) {
 	for lang, tier := range Tiers() {
 		_, hasArity := arityDialectFor(lang)
-		earned := ImportQuery(lang) != "" && ReceiverQuery(lang) != "" &&
+		earned := ImportQuery(lang) != "" && HasMeasuredReceivers(lang) &&
 			(hasArity || HasScopeAnalysis(lang))
 		if (tier == TierTyped) != earned {
 			t.Errorf("%s: tier %v, but imports+receiver+(arity or scope analysis) = %v", lang, tier, earned)

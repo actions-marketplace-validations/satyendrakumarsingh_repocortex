@@ -66,9 +66,13 @@ import (
 // IDENTIFIER receiver, so `s.repo.Save(id)` arrives with an empty one.
 //
 // The fact and the filter are therefore separated on purpose. This type carries
-// the fact. Nothing reads it to exclude a candidate, and nothing may, until
-// internal/parse can distinguish "no receiver in the source" from "a receiver
-// the query could not express".
+// the fact. Nothing reads it to exclude a candidate.
+//
+// internal/parse has since learned to distinguish "no receiver in the source"
+// from "a receiver the query could not express" — every call reference states
+// its shape (model.ReceiverBare and its siblings) — and the rules that act on
+// a call's shape are in shaped.go, driven by CallTraits. This type stays what
+// it was: a description.
 type CallShape uint8
 
 const (
@@ -361,6 +365,13 @@ type LanguageSpec struct {
 	// TestFiles is the language's test-code naming convention. DESCRIPTIVE —
 	// see TestFiles, and A19, for why nothing in the binding path reads it.
 	TestFiles TestFiles
+
+	// Calls is how this language's calls reach definitions: which languages it
+	// can call into, whether a bare name may be a member, how its imports bind
+	// names. Filled from callTraitsByLanguage for every spec, the fallback
+	// included, so it is never the zero value for a named language. See
+	// calltraits.go.
+	Calls CallTraits
 }
 
 // namesAType reports whether a receiver token may be treated as the NAME OF A
@@ -864,16 +875,27 @@ func NewSpecs() *Specs {
 		}
 	}
 	// RSpec and Minitest: `_spec.rb` under spec/, `_test.rb` under test/.
-	add(scopeSpec("ruby", []string{"ruby"}, TestFiles{
+	ruby := scopeSpec("ruby", []string{"ruby"}, TestFiles{
 		Suffixes: []string{"_spec.rb", "_test.rb"},
 		Dirs:     []string{"spec", "test"},
-	}))
+	})
+	// Measured on sinatra: a free function of the call's name in the same
+	// directory was the target 0 times in 12. A Ruby file reaches another
+	// through `require`, and a neighbour it did not require is not in scope.
+	ruby.ProximityIsEvidence = false
+	add(ruby)
 	// Cargo: integration tests are any file under tests/, benchmarks under
 	// benches/. Unit tests live INSIDE the module under #[cfg(test)], which a
 	// file-level convention cannot see and this spec does not claim to.
-	add(scopeSpec("rust", []string{"rust"}, TestFiles{
+	rust := scopeSpec("rust", []string{"rust"}, TestFiles{
 		Dirs: []string{"tests", "benches"},
-	}))
+	})
+	// `flags/doc/mod.rs` is the module `doc`: the directory names it and the
+	// stem names nothing, exactly as `__init__.py` does for Python. Without
+	// this `super::render()` from flags/doc/man.rs looked for a file called
+	// `doc` and found none.
+	rust.PackageInitStem = "mod"
+	add(rust)
 	// PHPUnit: `*Test.php`, conventionally under tests/.
 	add(scopeSpec("php", []string{"php"}, TestFiles{
 		Suffixes: []string{"test.php"},
@@ -951,6 +973,12 @@ func NewSpecs() *Specs {
 		generic[n] = struct{}{}
 	}
 
+	// Every spec takes its call traits from the one table that states them.
+	for name, spec := range byName {
+		spec.Calls = callTraitsFor(name)
+		byName[name] = spec
+	}
+
 	return &Specs{byName: byName, fallback: fallback, generic: generic}
 }
 
@@ -965,6 +993,7 @@ func (s *Specs) For(language string) LanguageSpec {
 	}
 	spec := s.fallback
 	spec.Name = language
+	spec.Calls = callTraitsFor(language)
 	return spec
 }
 
@@ -1037,6 +1066,16 @@ func languageOfPath(p string) string {
 		return "rust"
 	case "php":
 		return "php"
+	case "c", "h":
+		return "c"
+	case "cc", "cpp", "cxx", "hpp", "hh", "hxx":
+		return "cpp"
+	case "swift":
+		return "swift"
+	case "dart":
+		return "dart"
+	case "groovy":
+		return "groovy"
 	case "cs":
 		// The GRAMMAR name, as internal/parse spells it and as the c_sharp spec
 		// is keyed. This used to say "csharp", which no spec is named, so a

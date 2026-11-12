@@ -1,0 +1,149 @@
+package infer
+
+import "strings"
+
+// # Member names a language's own library declares
+//
+// memberByName binds `x.f()` on an `x` of unknown type when exactly one type in
+// the repository declares an `f`. That uniqueness is evidence only if the
+// repository is where an `f` would be declared — and for the names below it is
+// not. Every string has a `toString`, every Rust collection a `clone`, every
+// Ruby object a `to_s`. A repository that happens to declare exactly one of
+// those says nothing about what `issue.maximum.toString()` reaches: the other
+// declarations are in a library that was never indexed. This is A20's
+// argument — uniqueness can be a property of the index's boundary rather than
+// of the program — applied to members.
+//
+// Measured before this list existed, on the "only member of this name" rule:
+// zod, 3 right of 14 sampled, eleven of the wrong ones `toString`, `includes`
+// and `bigint` on built-in values; ripgrep, 4 right of 8, the wrong ones
+// `as_str`, `as_path`, `is_symlink` and `clone`.
+//
+// The lists are the method names of each language's core types — strings,
+// numbers, collections, the root object — and nothing wider. They are not a
+// model of a standard library and are not meant to grow into one: a name here
+// costs a correct binding wherever a repository's own type declares it and is
+// called on a receiver whose type the source does not state. That call is
+// recorded ambiguous, which is what it is.
+//
+// Go has no list. A Go value's methods are declared by a package — this
+// repository's or an imported one — and never by the language, and the rule
+// measured 99.3% on gin (458 of 461, against scip-go) without one.
+
+// coreMembers maps a language to the member names its core library declares.
+// Built once, read-only afterwards.
+var coreMembers = buildCoreMembers()
+
+func buildCoreMembers() map[string]map[string]struct{} {
+	coreMembers := make(map[string]map[string]struct{}, 24)
+	script := words(`
+		toString valueOf toJSON toLocaleString hasOwnProperty isPrototypeOf
+		includes indexOf lastIndexOf slice splice join split trim trimStart trimEnd
+		replace replaceAll match matchAll test exec search at charAt charCodeAt codePointAt
+		substring substr padStart padEnd repeat startsWith endsWith toLowerCase toUpperCase
+		normalize localeCompare concat push pop shift unshift reverse sort fill flat flatMap
+		map filter reduce reduceRight forEach some every find findIndex findLast findLastIndex
+		keys values entries has get set add delete clear size then catch finally bind call apply
+		toFixed toPrecision toExponential bigint getTime getFullYear getMonth getDate getHours
+		toISOString toDateString next return throw copyWithin subarray isArray from of assign
+		freeze resolve reject all race any now parse stringify log warn error info debug`)
+	for _, lang := range []string{"javascript", "typescript", "tsx", "vue", "svelte", "astro"} {
+		coreMembers[lang] = script
+	}
+
+	jvm := words(`
+		toString equals hashCode getClass compareTo clone finalize notify notifyAll wait
+		length charAt substring indexOf lastIndexOf contains startsWith endsWith isEmpty isBlank
+		trim strip split join replace replaceAll matches format valueOf toLowerCase toUpperCase
+		toCharArray getBytes repeat concat intern lines chars
+		add addAll remove removeAll removeIf retainAll clear size get set put putAll putIfAbsent
+		containsKey containsValue keySet values entrySet getOrDefault computeIfAbsent merge
+		iterator hasNext next forEach stream toArray sort reverse subList of copyOf
+		map filter collect reduce findFirst findAny anyMatch allMatch noneMatch flatMap limit
+		skip distinct sorted count min max orElse orElseThrow orElseGet isPresent ifPresent
+		append insert delete deleteCharAt setLength capacity intValue longValue doubleValue
+		floatValue shortValue byteValue booleanValue charValue parseInt parseLong parseDouble
+		name ordinal getName getMessage getCause printStackTrace close flush read write run
+		start interrupt sleep currentThread getKey getValue setValue peek push pop poll offer
+		first last`)
+	for _, lang := range []string{"java", "kotlin", "scala", "groovy"} {
+		coreMembers[lang] = jvm
+	}
+
+	coreMembers["ruby"] = words(`
+		to_s to_i to_f to_a to_h to_sym to_str to_proc to_json inspect class is_a? kind_of?
+		instance_of? respond_to? send public_send method methods nil? empty? frozen? freeze dup
+		clone tap then itself hash eql? equal? instance_variable_get instance_variable_set
+		instance_variables define_method extend include? each each_with_index each_with_object
+		map flat_map collect select filter reject find detect find_all reduce inject sum count
+		size length first last take drop sort sort_by min max min_by max_by group_by partition
+		zip uniq compact flatten reverse join split strip chomp chop sub gsub tr upcase downcase
+		capitalize start_with? end_with? match match? scan index rindex slice push pop shift
+		unshift append prepend insert delete delete_if delete_at clear concat key? has_key?
+		value? keys values fetch dig merge merge! update store any? all? none? one? times upto
+		downto step call new lock unlock synchronize join raise puts print p format`)
+
+	coreMembers["rust"] = words(`
+		clone to_string to_owned into from as_ref as_mut borrow borrow_mut deref eq ne cmp
+		partial_cmp hash fmt default drop unwrap unwrap_or unwrap_or_else unwrap_or_default
+		expect ok err ok_or ok_or_else map map_err map_or map_or_else and_then or_else and or
+		is_some is_none is_ok is_err take replace get_or_insert_with as_deref iter iter_mut
+		into_iter next peekable collect filter filter_map flat_map fold for_each enumerate zip
+		rev skip chain any all find position count sum last nth cloned copied len is_empty push
+		pop insert remove get get_mut contains contains_key keys values entry extend clear
+		truncate drain retain sort sort_by sort_unstable dedup first split join trim
+		trim_start trim_end starts_with ends_with as_str as_bytes as_slice as_path as_os_str
+		to_str to_path_buf to_vec to_lowercase to_uppercase to_string_lossy chars bytes lines
+		parse write write_all write_fmt flush read read_to_string read_line lock unwrap_err
+		display exists is_file is_dir is_symlink file_name file_type extension parent metadata
+		path with_extension strip_prefix components canonicalize`)
+
+	coreMembers["c_sharp"] = words(`
+		ToString Equals GetHashCode GetType CompareTo Clone Dispose Add AddRange Remove RemoveAt
+		RemoveAll Clear Contains ContainsKey ContainsValue TryGetValue Insert IndexOf LastIndexOf
+		Count Length ToArray ToList ToDictionary First FirstOrDefault Last LastOrDefault Single
+		SingleOrDefault Where Select SelectMany Any All OrderBy OrderByDescending GroupBy Sum Min
+		Max Average Aggregate Distinct Skip Take Concat Reverse Sort ForEach Find FindAll Exists
+		GetEnumerator MoveNext Reset Substring Split Join Trim TrimStart TrimEnd Replace
+		StartsWith EndsWith ToLower ToUpper ToLowerInvariant ToUpperInvariant PadLeft PadRight
+		Format Append AppendLine AppendFormat Parse TryParse Write WriteLine Read ReadLine Flush
+		Close GetValue SetValue Invoke CopyTo AsEnumerable Cast OfType HasValue GetValueOrDefault`)
+
+	coreMembers["cpp"] = words(`
+		size length empty clear begin end cbegin cend rbegin rend front back data c_str at
+		push_back pop_back emplace_back emplace insert erase find count substr append assign
+		compare resize reserve capacity swap get reset release str first second lock unlock
+		wait notify_one notify_all join detach load store exchange what open close read write
+		flush good eof fail`)
+	coreMembers["c"] = coreMembers["cpp"]
+
+	coreMembers["python"] = words(`
+		append extend insert remove pop clear index count sort reverse copy keys values items
+		get setdefault update popitem add discard union intersection difference join split
+		rsplit strip lstrip rstrip replace format startswith endswith lower upper title
+		capitalize encode decode find rfind isdigit isalpha isspace zfill splitlines partition
+		read write readline readlines close flush seek tell`)
+
+	coreMembers["php"] = words(`__toString __construct count getMessage getCode current key next rewind valid`)
+	coreMembers["swift"] = words(`
+		append insert remove removeAll contains count isEmpty first last map filter reduce
+		forEach sorted sort joined split hasPrefix hasSuffix lowercased uppercased description`)
+	return coreMembers
+}
+
+func words(s string) map[string]struct{} {
+	fields := strings.Fields(s)
+	out := make(map[string]struct{}, len(fields))
+	for _, f := range fields {
+		out[f] = struct{}{}
+	}
+	return out
+}
+
+// isCoreMember reports whether a language's own core library declares a
+// member of this name, so that a repository declaring exactly one says nothing
+// about what a call on an unknown receiver reaches.
+func (s LanguageSpec) isCoreMember(name string) bool {
+	_, ok := coreMembers[s.Name][name]
+	return ok
+}

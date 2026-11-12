@@ -577,198 +577,29 @@ func SupplementedLanguages() []string {
 	return out
 }
 
-// receiverQueries capture the OBJECT a method is called on.
+// receiverLanguages are the languages whose call receivers have been part of
+// the `typed` tier's claim since that tier was first derived.
 //
-// This is the query that makes the resolver's receiver tier reachable. Before
-// it existed, Reference.Receiver was empty for every reference in every
-// language — 0 of 342,589 across five real repositories — so the tier that
-// matches a call against the type it is called on never ran once, and every
-// call fell through to name-only matching.
+// It used to be the key set of a map of receiver QUERIES, one tree-sitter
+// pattern per language, each capturing a simple identifier in front of a call.
+// Those queries are gone: shape.go reads the receiver of every call in every
+// language from the tag's own ranges, and tells a bare call from one made on a
+// path, on `self`, or on an expression no query could express — which the
+// queries could not, and which cost every chained Go call its receiver (A18 in
+// internal/resolve/infer).
 //
-// The cost was worst in Java, where `obj.method()` is the dominant call form
-// and method names repeat across classes: on a 2,681-file service, `build` had
-// 250 definitions and 643 references to it were abandoned as ambiguous, along
-// with getAmount, filter and getMessageKey. A receiver narrows exactly that.
-//
-// Each query captures @name at the method identifier so the result can be
-// matched to the reference the tags query already produced at that position,
-// and @receiver at the object expression. Only a simple identifier receiver is
-// captured: `a.b.c()` and `foo().bar()` are chains whose type this package
-// cannot infer, and guessing from the nearest token would produce confident
-// wrong answers, which is the failure the confidence model exists to prevent.
-var receiverQueries = map[string]string{
-	"java": `
-(method_invocation object: (identifier) @receiver name: (identifier) @name)
-`,
-	"go": `
-(call_expression
-  function: (selector_expression
-    operand: (identifier) @receiver
-    field: (field_identifier) @name))
-`,
-	"python": `
-(call
-  function: (attribute
-    object: (identifier) @receiver
-    attribute: (identifier) @name))
-`,
-	"typescript": `
-(call_expression
-  function: (member_expression
-    object: (identifier) @receiver
-    property: (property_identifier) @name))
-`,
-	"javascript": `
-(call_expression
-  function: (member_expression
-    object: (identifier) @receiver
-    property: (property_identifier) @name))
-`,
-	"kotlin": `
-(call_expression
-  (navigation_expression
-    (simple_identifier) @receiver
-    (navigation_suffix (simple_identifier) @name)))
-`,
-
-	"rust": `
-(call_expression
-  function: (field_expression
-    value: (identifier) @receiver
-    field: (field_identifier) @name))
-`,
-
-	"c_sharp": `
-(invocation_expression
-  (member_access_expression
-    (identifier) @receiver
-    (identifier) @name))
-`,
-
-	"cpp": `
-(call_expression
-  function: (field_expression
-    argument: (identifier) @receiver
-    field: (field_identifier) @name))
-`,
-
-	"ruby": `
-(call
-  receiver: (identifier) @receiver
-  method: (identifier) @name)
-`,
+// The set is kept because TierFor derives a published tier from it. Every
+// language has receivers now; which languages have had their receiver handling
+// MEASURED is a narrower claim, and it is the one the tier makes. Adding a
+// language here is a statement about a measurement, not about the parser.
+var receiverLanguages = map[string]bool{
+	"java": true, "go": true, "python": true, "typescript": true, "javascript": true,
+	"kotlin": true, "rust": true, "c_sharp": true, "cpp": true, "ruby": true,
 }
 
-// ReceiverQuery returns the receiver query for a language, or "" when it has
-// none. A language without one loses the receiver tier, not correctness.
-func ReceiverQuery(language string) string { return receiverQueries[language] }
-
-// varTypeQueries capture a local variable's declared TYPE.
-//
-// Capturing the receiver alone was not enough. `receiverMatches` compares the
-// receiver against a candidate's qualified name, which works when a variable is
-// named after its type — `paymentService.process()` finds PaymentService — and
-// fails completely when it is not: `b.build()` matches every candidate whose
-// name contains a "b", narrowing nothing.
-//
-// Measured on a 2,681-file Java service: 33,538 references gained a receiver
-// and resolution moved by two edges, because the receivers that mattered were
-// short names like `b`, `e` and `req`.
-//
-// A declared type is the missing half. Java, being explicitly typed, states it
-// at the declaration; the parser can carry the type forward to every call on
-// that variable in the same file, which is what turns `b.build()` into
-// `Builder.build()` and makes the receiver tier able to narrow 250 candidates
-// to one.
-//
-// Deliberately file-local and declaration-only. No flow analysis, no
-// reassignment tracking, no generics resolution: a variable that is declared
-// once and used is the overwhelmingly common case, and anything cleverer would
-// be inference presented as fact.
-//
-// # A3 — extending this past the explicitly-typed languages was MEASURED AND REVERTED
-//
-// Only java, kotlin and typescript have an entry, which is why only those three
-// LanguageSpecs set ReceiverDenotesType. The three share a property that makes
-// them easy: the declaration WRITES the type. A3 built the same environment for
-// Go and Python out of the two places a single file states a type without any
-// flow analysis — a declaration that carries one (`var s *Service`, a typed
-// parameter `func f(svc *Service)`, a Python annotation `s: Service`) and a
-// composite literal (`c := &Client{}`), which names its own type at the
-// assignment.
-//
-// It worked as a parser. `svc *Service`, `reg Registry`, `var q *Queue` and
-// `c := &Client{}` all reached the resolver as types instead of as `svc`,
-// `reg`, `q` and `c`, and `n := NewService()` was correctly left alone.
-//
-// It still lost precision on the tier the product tells you to act on, so it is
-// not here. Measured on RepoCortex's own source, 419 Go files, adjudicated
-// against a 17 MB scip-go 0.2.7 index, same frozen tree and same index in every
-// arm:
-//
-//	                          high    high    medium   all
-//	                          prec    recall  prec     recall
-//	baseline                  98.6%   60.4%   35.4%    60.6%
-//	+ Go type environment     98.3%   60.2%   50.0%    60.5%
-//	+ ReceiverDenotesType     98.3%   60.6%   54.5%    61.0%
-//
-// The last row is the tempting one: `medium` nearly doubles and all-tiers recall
-// gains 0.4pp. The cost is that `high` gained 18 correct edges and 14 wrong
-// ones — a 56% hit rate on everything it added, into a tier that was running at
-// 98.6%. Diluting the tier a consumer is told to trust is the trade this package
-// exists not to make, so both arms were reverted.
-//
-// The MECHANISM, which is the part worth keeping: in Go the receiver tier sits
-// ABOVE the same-directory tier, and Go is a language where the directory IS the
-// package. While Go receivers arrived as `s` and `c` the receiver tier almost
-// never fired and proximity effectively decided. Giving Go real type names woke
-// tier 2 up and let a file-stem coincidence (`Store` matching store.go)
-// out-rank the in-package definition that was correct. That is the same
-// ordering result the import-vs-proximity tiers already record, reached from a
-// new direction: for a directory-is-package language, INFERRED type evidence
-// must not outrank package proximity.
-//
-// So this is not "Go type inference does not work". It is "the tier order was
-// tuned for a Go receiver that carried no type, and supplying one changes which
-// tier decides". Retrying A3 means moving the receiver tier below
-// pickSameDir where PackageIsDirectory holds, and measuring THAT.
-//
-// One further property was checked and did not fully hold, which is worth
-// knowing before any retry. The safety argument for inferring types at all is
-// that a mis-inference is inert: receiverMatches validates rather than
-// contains (A16), so a type name the program never had matches nothing. That is
-// true for `high` and NOT true in general — a receiver matching two candidates
-// by file stem takes tier 2's overload branch and emits a deterministic
-// preference at `medium`. See TestMisInferredReceiverYieldsNoEdge in
-// internal/resolve/infer, which pins both halves.
-var varTypeQueries = map[string]string{
-	"java": `
-(local_variable_declaration
-  type: (type_identifier) @type
-  declarator: (variable_declarator name: (identifier) @var))
-(field_declaration
-  type: (type_identifier) @type
-  declarator: (variable_declarator name: (identifier) @var))
-(formal_parameter
-  type: (type_identifier) @type
-  name: (identifier) @var)
-`,
-	"kotlin": `
-(property_declaration
-  (variable_declaration (simple_identifier) @var (user_type (type_identifier) @type)))
-`,
-	"typescript": `
-(variable_declarator
-  name: (identifier) @var
-  type: (type_annotation (type_identifier) @type))
-(required_parameter
-  pattern: (identifier) @var
-  type: (type_annotation (type_identifier) @type))
-`,
-}
-
-// VarTypeQuery returns the declared-type query for a language, or "".
-func VarTypeQuery(language string) string { return varTypeQueries[language] }
+// HasMeasuredReceivers reports whether a language's receiver handling is part
+// of the `typed` tier's claim. See receiverLanguages.
+func HasMeasuredReceivers(language string) bool { return receiverLanguages[language] }
 
 // # A4 — arity queries
 //
@@ -779,9 +610,8 @@ func VarTypeQuery(language string) string { return varTypeQueries[language] }
 //
 // Each query captures @name on the SAME identifier node the tags query already
 // reports, so the results can be matched to the symbol or reference at that
-// position without either query knowing about the other. This is the mechanism
-// receiverQueries established; see the callSite type in generic.go for why the
-// match is on line plus name and never on column.
+// position without either query knowing about the other. See the callSite type
+// in generic.go for why the match is on line plus name and never on column.
 //
 // # Only Go is listed, and that is a measurement statement rather than a gap
 //

@@ -248,10 +248,10 @@ func (c *CandidateCache) fetch(ctx context.Context, names []string) (map[string]
 		// arrived in rowid order, and the resolver's single-candidate tiers
 		// read cands[0] directly. Leaving the order to the planner would make
 		// resolution's output depend on which index it chose.
-		q := `SELECT id, name, fqn, kind, file_id, path, exported, param_count FROM (
+		q := `SELECT id, name, fqn, kind, file_id, path, exported, param_count, language FROM (
 		        SELECT s.id AS id, s.name AS name, s.fqn AS fqn, s.kind AS kind,
 		               s.file_id AS file_id, f.path AS path, s.exported AS exported,
-		               s.param_count AS param_count,
+		               s.param_count AS param_count, f.language AS language,
 		               ROW_NUMBER() OVER (PARTITION BY s.name ORDER BY s.id) AS rn
 		          FROM symbols s
 		          JOIN files f ON f.id = s.file_id
@@ -269,7 +269,7 @@ func (c *CandidateCache) fetch(ctx context.Context, names []string) (map[string]
 			var e SymbolIndexEntry
 			var exported, paramCount int
 			if err := rows.Scan(&e.ID, &e.Name, &e.FQN, &e.Kind, &e.FileID, &e.FilePath,
-				&exported, &paramCount); err != nil {
+				&exported, &paramCount, &e.Language); err != nil {
 				_ = rows.Close()
 				return nil, err
 			}
@@ -277,6 +277,7 @@ func (c *CandidateCache) fetch(ctx context.Context, names []string) (map[string]
 			e.ParamCount = model.Arity(paramCount)
 			e.FilePath = c.internPath(e.FilePath)
 			e.Kind = c.internKind(e.Kind)
+			e.Language = c.internKind(e.Language)
 			// The name is this bucket's key; reuse that copy rather than
 			// keeping one more per candidate.
 			if bucket, ok := out[e.Name]; ok {

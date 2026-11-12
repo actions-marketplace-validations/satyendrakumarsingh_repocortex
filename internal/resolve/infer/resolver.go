@@ -59,6 +59,11 @@ type Options struct {
 	// Defaults to ConfidenceLow (record everything, labelled).
 	MinConfidence model.Confidence
 
+	// Layout is what the run knows about the repository as a whole, and is
+	// what lets a call qualified by a package be recorded as EXTERNAL when the
+	// package is not here. Nil records nothing as external. See layout.go.
+	Layout *Layout
+
 	// Ancestry enables the deferred pass for inherited method dispatch. Nil
 	// disables it entirely: nothing is parked and ResolveDeferred is a no-op,
 	// so a caller that has not been wired up resolves exactly as before. See
@@ -73,6 +78,19 @@ type Stats struct {
 	Ambiguous  int64
 	Unresolved int64
 	Edges      int64
+
+	// External counts the unresolved calls whose qualifier was shown to name
+	// something outside the repository — the standard library, a declared
+	// dependency, a type imported from one. A subset of Unresolved: a call
+	// that leaves the repository is bound to nothing here, and is counted
+	// with everything else that is, and then separately as the part of that
+	// number which is not a gap in the index.
+	External int64
+
+	// Instantiations counts the calls bound to a TYPE rather than a callable:
+	// `Account(...)`, `Type::new()`. They are written as INSTANTIATES edges,
+	// not CALLS, and are a subset of Resolved.
+	Instantiations int64
 
 	// Deferred counts references parked for the inherited-dispatch pass, and
 	// Inherited/InheritedAmbiguous what draining them produced. An inherited
@@ -135,6 +153,7 @@ type Candidates interface {
 type Resolver struct {
 	candidates Candidates
 	ancestry   Ancestry
+	layout     *Layout
 	opts       Options
 
 	// specs answers every question resolution has about a language. Held per
@@ -166,7 +185,7 @@ func NewStreaming(c Candidates, opts Options) *Resolver {
 	if !opts.MinConfidence.Valid() {
 		opts.MinConfidence = model.ConfidenceLow
 	}
-	return &Resolver{candidates: c, ancestry: opts.Ancestry, opts: opts, specs: NewSpecs()}
+	return &Resolver{candidates: c, ancestry: opts.Ancestry, layout: opts.Layout, opts: opts, specs: NewSpecs()}
 }
 
 // mapCandidates adapts a preloaded index to the Candidates port.
@@ -285,6 +304,28 @@ type candidate struct {
 // tier 2's overload branch and emits a deterministic preference at `medium`.
 // TestMisInferredReceiverYieldsNoEdge pins both halves.
 //
+// # What changed when the parser began to say what a call was made on
+//
+// A18's own note ends "the rule becomes sound the moment parse can distinguish
+// the two cases". It can now: every call reference carries the shape of its
+// receiver (Reference.ReceiverKind, migration 0014), and an empty receiver
+// means "the source wrote none" exactly when the kind is ReceiverBare. Calls
+// with a recorded shape are therefore bound by shaped.go, one rule per shape,
+// and the tiers in pick() below no longer see them.
+//
+// pick() still runs, for two things: supertype references, which have no
+// receiver and are weighed by name as they always were; and a call from an
+// index written before the migration, whose shape is unknown — for which the
+// name tiers are the only evidence there is, and whose answer ResolveFile caps
+// at `low`.
+//
+// The lesson of A19 was not argued away. shaped.go removes candidates (a
+// member is unreachable from a bare call in Go, a free function is unreachable
+// from a call made on a value), and removing candidates does change which
+// references resolve. It was measured rather than reasoned about: by hand on
+// nine public projects and against scip-go and scip-python, recorded in
+// docs/accuracy.md under "Receivers".
+//
 // ResolveFile binds every reference in one file.
 //
 // Returns the edges to write and the per-reference outcomes to record. Both are
@@ -307,10 +348,11 @@ func (r *Resolver) ResolveFile(
 	// Select this file's language strategy once. Every per-language question
 	// below reads a field of it rather than re-switching on the name, which is
 	// what stops the three switches this replaced from drifting apart again.
-	spec := r.specs.For(fr.Language)
+	spec := r.specs.For(languageOfFile(fr))
 
 	// Index this file's imports once; every reference in the file consults them.
 	imports := buildImportSet(spec, fr.Imports)
+	imports.layout = r.layout
 	if spec.QualifiedMembers {
 		imports.base = pathSegments(path.Dir(fr.Path))
 	}
@@ -351,10 +393,18 @@ func (r *Resolver) ResolveFile(
 		if !ok {
 			return
 		}
+		kind := edgeKindFor(ref.Kind)
+		if kind == model.EdgeCalls && isConstructibleKind(best.entry.Kind) {
+			// A call bound to a type constructs it. Recorded under its own
+			// kind, so "what calls this function" is answered from edges that
+			// point at callables.
+			kind = model.EdgeInstantiates
+			stats.Instantiations++
+		}
 		edges = append(edges, model.Edge{
 			SrcID:      src,
 			DstID:      best.entry.ID,
-			Kind:       edgeKindFor(ref.Kind),
+			Kind:       kind,
 			Confidence: best.confidence,
 			Evidence: model.Evidence{
 				FilePath: fr.Path,
@@ -373,6 +423,14 @@ func (r *Resolver) ResolveFile(
 		outcomes = append(outcomes, registry.RefOutcome{
 			RefID: ref.ID, Resolution: registry.ResolutionAmbiguous})
 	}
+	unresolved := func(ref registry.Reference, external bool) {
+		stats.Unresolved++
+		if external {
+			stats.External++
+		}
+		outcomes = append(outcomes, registry.RefOutcome{
+			RefID: ref.ID, Resolution: registry.ResolutionUnresolved, External: external})
+	}
 
 	for _, ref := range fr.Refs {
 		stats.References++
@@ -384,26 +442,31 @@ func (r *Resolver) ResolveFile(
 		cands := symbols[ref.Name]
 
 		// The ONE exclusion made before the tiers, and it is not a heuristic
-		// about likelihood — it is a fact about module systems. A Vue component
-		// cannot call a Python function: the two share no mechanism by which
-		// one could resolve the other, however well the names match.
+		// about likelihood — it is a fact about what a reference can denote. A
+		// Vue component cannot call a Python function: the two share no
+		// mechanism by which one could resolve the other, however well the
+		// names match. And a call cannot denote a table column, a
+		// configuration key or a dependency line in a manifest, in any
+		// language. See LanguageSpec.canBind and languageFamilies.
 		//
 		// A18 and A19 both filtered here and both were reverted, so the bar is
 		// high. The difference is falsifiability: those guards guessed that a
 		// candidate was UNLIKELY (a bare name is not a method; production does
 		// not call into tests) and were wrong about the parser and about
 		// ambiguity respectively. This one drops candidates that are
-		// IMPOSSIBLE, and it fails open on any pair it cannot classify.
+		// IMPOSSIBLE.
 		//
-		// Measured cause: `readiness.exceptions(...)` in a .vue file bound to a
-		// Python function named `exceptions` in another service at `high`
-		// confidence, and surfaced as an architecture violation reading "the
-		// warehouse UI reaches into inventory-service". 62 python->go edges at
-		// `high` shared the cause.
+		// Measured causes: `readiness.exceptions(...)` in a .vue file bound to
+		// a Python function named `exceptions` in another service at `high`,
+		// and surfaced as an architecture violation reading "the warehouse UI
+		// reaches into inventory-service"; libc `write` bound to a Python
+		// function; `req.text()` to a Prisma column; and every JavaScript `low`
+		// binding in express to a dependency line in package.json.
+		edgeKind := edgeKindFor(ref.Kind)
 		if len(cands) > 0 {
 			kept := cands[:0:0]
 			for _, c := range cands {
-				if spec.bindableAcross(c.FilePath) {
+				if spec.canBind(c, edgeKind) {
 					kept = append(kept, c)
 				}
 			}
@@ -413,13 +476,57 @@ func (r *Resolver) ResolveFile(
 			cands = kept
 		}
 
+		// A type is not its own supertype. `class Flask(flask.Flask)` declares
+		// a Flask that extends ANOTHER Flask, and the name alone bound it to
+		// itself: the clause's qualifier is not captured, and the nearest
+		// definition of the name is the class being declared.
+		if edgeKind == model.EdgeExtends || edgeKind == model.EdgeImplements {
+			if self, ok := enclosing(fr.Symbols, ref.Line); ok {
+				for i, c := range cands {
+					if c.ID == self {
+						cands = append(cands[:i:i], cands[i+1:]...)
+						break
+					}
+				}
+			}
+		}
+
 		// A call through a local value — a parameter, a loop variable — names no
 		// definition, and the parser said so. It is a call site, and it is
 		// bound to nothing.
 		if strings.HasSuffix(ref.Kind, indirectCallSuffix) {
-			stats.Unresolved++
-			outcomes = append(outcomes, registry.RefOutcome{
-				RefID: ref.ID, Resolution: registry.ResolutionUnresolved})
+			unresolved(ref, false)
+			continue
+		}
+
+		// A call whose shape the parser recorded is bound by that shape, in
+		// every language but the one static.go was written for. It runs
+		// before the "no candidates" exit below because a call qualified by a
+		// package that is not in the repository has no candidates, and is the
+		// one kind of unresolved reference that is known not to be a gap.
+		if edgeKind == model.EdgeCalls && ref.ReceiverKind != "" && !spec.QualifiedMembers {
+			d := r.resolveCall(call{
+				spec: spec, fr: fr, imports: imports, ref: ref, cands: cands, symbols: symbols,
+			}, stats)
+			switch {
+			case d.verdict == verdictBound && d.best.confidence.AtLeast(r.opts.MinConfidence):
+				bind(ref, d.best)
+			case d.verdict == verdictExternal:
+				unresolved(ref, true)
+			case d.verdict == verdictUnresolved:
+				unresolved(ref, false)
+			default:
+				ambiguous(ref)
+			}
+			continue
+		}
+
+		// A receiver that is the local name of an import of something outside
+		// the repository: `_json.dumps()` after `import json as _json`. The
+		// call leaves the repository, whatever the repository also names
+		// `dumps`.
+		if spec.QualifiedMembers && edgeKind == model.EdgeCalls && r.qualifiedByOutsideModule(imports, ref) {
+			unresolved(ref, true)
 			continue
 		}
 
@@ -436,9 +543,7 @@ func (r *Resolver) ResolveFile(
 			// or third-party call — real, but outside this repository. Recording
 			// it as unresolved keeps the gap visible instead of pretending the
 			// call site does not exist.
-			stats.Unresolved++
-			outcomes = append(outcomes, registry.RefOutcome{
-				RefID: ref.ID, Resolution: registry.ResolutionUnresolved})
+			unresolved(ref, false)
 			continue
 		}
 
@@ -476,6 +581,17 @@ func (r *Resolver) ResolveFile(
 		}
 
 		best, ok := r.pickCapped(spec, fr, imports, ref, cands, stats)
+		if ok && edgeKind == model.EdgeCalls && ref.ReceiverKind == "" && !spec.QualifiedMembers {
+			// A call from an index that did not record what it was made on. An
+			// empty receiver there means nothing — a bare call, a chained one
+			// and a qualified one all look alike — so whatever the name tiers
+			// answer is the least this package can claim.
+			if best.confidence != model.ConfidenceLow {
+				best.confidence = model.ConfidenceLow
+				best.reason += "; this index does not record what the call was made on, re-index to bind it properly"
+			}
+			ok = best.confidence.AtLeast(r.opts.MinConfidence)
+		}
 		if !ok {
 			// A21 — nothing here could bind it. If it has a receiver, the
 			// ancestry chain may name the type that owns it; park it for the
@@ -489,6 +605,16 @@ func (r *Resolver) ResolveFile(
 	}
 
 	return edges, outcomes, nil
+}
+
+// languageOfFile is the language a file was indexed as, or failing that what
+// its extension says. The index always records one; a FileRefs built by hand
+// may not, and a file of no language at all could bind to nothing.
+func languageOfFile(fr registry.FileRefs) string {
+	if fr.Language != "" {
+		return fr.Language
+	}
+	return languageOfPath(fr.Path)
 }
 
 // AppendNames appends the names resolving a file will ask candidates for, in
@@ -521,11 +647,21 @@ func (r *Resolver) AppendNames(dst []string, seen map[string]struct{}, fr regist
 		seen[name] = struct{}{}
 		dst = append(dst, name)
 	}
-	spec := r.specs.For(fr.Language)
+	spec := r.specs.For(languageOfFile(fr))
 	for _, ref := range fr.Refs {
 		add(ref.Name)
-		if spec.QualifiedMembers && spelledAsClass(ref.Receiver) {
-			add(ref.Receiver)
+		if spec.QualifiedMembers {
+			if spelledAsClass(ref.Receiver) {
+				add(ref.Receiver)
+			}
+			continue
+		}
+		// A receiver that may name a type is looked up to learn whether it
+		// does. A value and an expression name nothing, and `self` names the
+		// enclosing type, which is in this file.
+		switch ref.ReceiverKind {
+		case model.ReceiverName, model.ReceiverType, model.ReceiverScope, model.ReceiverPath:
+			add(lastSegment(ref.Receiver))
 		}
 	}
 	return dst
@@ -879,6 +1015,11 @@ type importSet struct {
 	// Looked up, never iterated.
 	members map[string][]int
 
+	// layout is the run's directory index, where there is one. An absolute
+	// import cannot name a module from inside a package directory, and only
+	// the layout knows which directories are packages.
+	layout *Layout
+
 	// base is the referencing file's directory as segments, which is what a
 	// relative import is relative TO. Set by ResolveFile; empty in a set built
 	// without a file, where a relative import then anchors at the root.
@@ -903,6 +1044,12 @@ type importEntry struct {
 	// "repo/x.go" — and splitting both into segments is what makes them
 	// comparable at all.
 	segments []string
+
+	// raw is the path exactly as the file wrote it. The rules that trace a
+	// qualifier to a package need it whole: a Go import's directory, an
+	// ECMAScript specifier's `./`, the class a Java import names in its own
+	// case.
+	raw string
 
 	// relative is how many leading dots the path was written with: 0 for an
 	// absolute import, 1 for `from .mod`, 2 for `from ..mod`. The unanchored
@@ -951,7 +1098,7 @@ func buildImportSet(spec LanguageSpec, imports []registry.Import) importSet {
 				i = len(s.imports)
 				byPath[imp.Path] = i
 				s.imports = append(s.imports, importEntry{
-					segments: pathSegments(p), relative: leadingDots(imp.Path)})
+					segments: pathSegments(p), relative: leadingDots(imp.Path), raw: imp.Path})
 			}
 			if s.members == nil {
 				s.members = make(map[string][]int, len(imports))
@@ -962,7 +1109,7 @@ func buildImportSet(spec LanguageSpec, imports []registry.Import) importSet {
 		if p == "" {
 			continue
 		}
-		e := importEntry{alias: imp.Alias, segments: pathSegments(p), relative: leadingDots(imp.Path)}
+		e := importEntry{alias: imp.Alias, segments: pathSegments(p), relative: leadingDots(imp.Path), raw: imp.Path}
 		if len(e.segments) == 0 {
 			continue
 		}
@@ -1087,6 +1234,28 @@ func (s importSet) coversFrom(e importEntry, filePath string) bool {
 	return len(segs) > 0 && commonSuffixLen(e.segments, segs) > 0
 }
 
+// insidePackage reports whether a file that an ABSOLUTE import's path matches
+// from the right sits inside a package directory, which means the import does
+// not name it. `import json` is the top-level `json`: it cannot be
+// `flask/json/__init__.py`, because `flask` is itself a package and its
+// submodule is spelled `flask.json`. Measured on flask, where `_json.dumps`
+// after `import json as _json` bound to flask's own `dumps` — the function the
+// call is written in.
+//
+// False wherever it cannot tell: no layout, a relative import, a language
+// with no package marker.
+func (s importSet) insidePackage(e importEntry, filePath string) bool {
+	if !s.layout.Known() || e.relative > 0 || s.spec.PackageInitStem == "" {
+		return false
+	}
+	segs := fileSegments(s.spec, filePath)
+	n := commonSuffixLen(e.segments, segs)
+	if n == 0 || n > len(segs) {
+		return false
+	}
+	return s.layout.IsPackageDir(segs[:len(segs)-n])
+}
+
 // commonSuffixLen counts the trailing segments two paths agree on.
 func commonSuffixLen(a, b []string) int {
 	n := 0
@@ -1138,7 +1307,7 @@ func (r *Resolver) pickAliased(
 
 	var inPackage []registry.SymbolIndexEntry
 	for _, c := range cands {
-		if imports.coversFrom(entry, c.FilePath) {
+		if imports.coversFrom(entry, c.FilePath) && !imports.insidePackage(entry, c.FilePath) {
 			inPackage = append(inPackage, c)
 		}
 	}

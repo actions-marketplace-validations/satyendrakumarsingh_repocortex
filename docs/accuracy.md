@@ -8,6 +8,13 @@ Everything here is reproducible with the tool itself. If you disagree with a
 number, run the four commands in "Method" against a repository you know and
 send the disagreement.
 
+The newest measurement is ["Receivers"](#receivers-binding-a-call-by-what-it-was-made-on),
+below the first result. It re-measured every tier by hand on nine projects
+after the resolver stopped ignoring what a call was made on, it is where the
+floor for `medium` is stated, and it corrects the adjudication the older
+tables in this document were computed with. Where it and an older section
+disagree about what a tier is worth, it is the one to read.
+
 ## Result
 
 Heuristic `CALLS` edges adjudicated against a compiler-backed index, across
@@ -90,6 +97,377 @@ only under shadowing or reflection"; at ~87% roughly one edge in eight is wrong
 for reasons not yet characterised, and saying so is what makes characterising
 them possible.
 
+## Receivers: binding a call by what it was made on
+
+Measured 12 November 2026, on the eight projects and by the method of
+[the verification record](verification/2026-11-12/README.md), so the two can be
+compared. The record found that the largest source of wrong high-confidence
+edges, in every language it checked, was one defect: a call with a receiver or
+a qualifier was bound as if it had none. `errors.New(...)` bound to the
+package's own `New`; a Java local `reader` was stored as a call and bound to a
+method `reader(String)`; `self.inner.foo()` inside `fn foo` bound to itself.
+
+This section is what replaced that, and what it measured.
+
+### The floors
+
+| Tier | Promise | Where it comes from |
+|---|---|---|
+| `high` | at least 86.8% of edges are right | the floor this document has published since the first measurement |
+| `medium` | at least 60% | stated here for the first time; before this section `medium` had no floor and measured 5.7% to 37.5% |
+| `low` | none: a hint that a name exists | unchanged |
+
+A rule is given the tier whose floor its own measurement meets, per language
+where the rule's precision depends on the language. A rule that measured 47%
+is `low`, whatever its evidence sounds like, and a rule that reads like a guess
+and measured 96% is `high`.
+
+### What is recorded
+
+Every call reference now carries the shape of its receiver
+(`symbol_references.receiver_kind`, migration 0014), in one vocabulary for
+every language:
+
+| Kind | Source | `receiver` holds |
+|---|---|---|
+| `bare` | `f()` | nothing: the source wrote no receiver |
+| `name` | `x.f()` | the identifier, where the enclosing code does not declare it: an import, a type, a global |
+| `value` | `x.f()` | the identifier, where the enclosing code declares it with no stated type |
+| `type` | `x.f()` | the TYPE the source states for `x`: a typed declaration, a typed parameter, a constructor (`x := &T{}`, `new T()`) |
+| `path` | `a.b.f()` | the chain, as written |
+| `scope` | `a::f()`, `a::b::f()` | the path through the scope operator, which names a module or a type |
+| `self` | `self.f()`, `this.f()` | the token |
+| `super` | `super.f()`, `super().f()`, `base.f()` | the token |
+| `expr` | `g().f()`, `a[i].f()` | `?` |
+
+It is read from the tag's own two ranges and one walk of the syntax tree
+(`internal/parse/shape.go`), not from a query per language, so a grammar gains
+it without a line written for it. The same walk qualifies every definition by
+what encloses it (`Context.Set`, `outer.<locals>.inner`), which is what lets
+`self.f()` be bound to the enclosing type's `f`.
+
+A receiver identifier is no longer a call reference. The inferred tags queries
+emitted one for every `x` in `x.f()`:
+
+| Project | Call references before | After | Receiver rows gone |
+|---|---:|---:|---:|
+| gson (Java) | 29,093 | 20,200 | 8,893 (30.6%) |
+| ripgrep (Rust) | 18,723 | 16,879 | 1,844 (9.8%) |
+| flask (Python) | 4,671 | 3,904 | 767 (16.4%) |
+| sinatra (Ruby) | 14,615 | 14,596 | 19 |
+| zod (TypeScript) | 53,387 | 53,374 | 13 |
+| gin (Go), leveldb (C++) | 9,311 / 6,126 | 9,311 / 6,126 | 0: their queries never tagged the receiver |
+
+redis and Newtonsoft.Json are absent from this table because their reference
+totals move for another reason: which files hit the parse timeout differs from
+run to run on a loaded machine. Two runs of builds whose parsers are identical
+recorded 77,411 and 78,849 call references on redis, and 13,456 and 14,276 on
+Newtonsoft.Json. The C and C# tags queries capture the callee alone, so neither
+had receiver rows to lose.
+
+### The rules, with what each measured
+
+Each sampled edge was checked by reading the call site and the target. The
+samples are stratified: every k-th edge by id within each rule, 12 to 25 per
+rule per project, 1,408 edges in all. The reviewers were sub-agents of an AI
+assistant, as in the record, judging strictly (the right overload is required;
+a standard-library or third-party call bound to a repository symbol is wrong).
+"Right / judged" pools every language the rule fired in.
+
+| Rule | Tier | Right / judged | Edges | Notes |
+|---|---|---:|---:|---|
+| bare call, defined in the same file | high | 143 / 145 | 14,491 | |
+| bare call, defined in the enclosing scope | high | 41 / 41 | 347 | a definition local to the calling function |
+| bare call, same package directory (Go) | high | 25 / 25 | 887 | medium where a package declares the name twice |
+| bare call, imported by name | high | 23 / 24 | 299 | ECMAScript named imports, Python `from x import y` |
+| bare call, statically imported (Java) | high | 8 / 8 | 8 | |
+| bare or `self`/`this` call, declared on the enclosing type | high | 136 / 138 | 3,994 | |
+| inherited: declared on an ancestor | high | 45 / 45 | 257 | `super`, and members the type does not declare; needs recorded inheritance |
+| receiver's stated type declares it | high | 107 / 107 | 5,146 | |
+| receiver names a type that declares it | high | 65 / 65 | 1,152 | `Type.f()`, `Type::f()` |
+| as the two above, type identified only as the one of that name | high in Rust and C#, medium elsewhere | 48 / 50 | 2,184 | C# 31 / 33, Rust 12 / 12, Ruby 5 / 5 |
+| qualified by an imported package or module that defines it | high | 37 / 37 | 468 | Go import names, ECMAScript namespace imports resolved to the file |
+| qualified by an imported package that re-exports it | high | 24 / 24 | 435 | |
+| qualified by the module whose file defines it (Rust) | high | 12 / 12 | 30 | `messages::errored()` and messages.rs |
+| receiver named after the type that declares it | high in Go, Java, C++, Rust, Ruby; medium elsewhere | 54 / 55 | 320 | a naming convention, and it measured as more than one |
+| Ruby: a method of this name in a required file | high | 24 / 25 | 745 | low where several required files define one |
+| Ruby: the only method of this name in the file | high | 24 / 25 | 352 | |
+| bare call, free function in the same directory, no import | medium; low in C++; off in Ruby and Python | C 23 / 25, Rust 25 / 25, C++ 6 / 12, Ruby 0 / 12 | 9,208 | |
+| unknown receiver, the only member of that name in the repository | high in Go; medium in Rust, Java, C#; low elsewhere; never above low for an `expr` receiver | see below | 3,000 | |
+| overloaded, the first declaration | low | 49 / 96 | 4,065 | the type is right; which overload is not chosen |
+| unique name in the repository, no import evidence | low | 13 / 15 | 64 | |
+| Python: single match in an imported module, receiver's class unknown | medium | 9 / 12 | 114 | |
+| Python: defined in the same file, receiver's class unknown | low | 2 / 12 before two exclusions, 1 / 7 after | 41 | was medium |
+
+The unknown-receiver rule is the one whose worth is a fact about the language:
+
+| Language | Right / judged | Tier |
+|---|---:|---|
+| Go | 25 / 25 by hand; 458 / 458 against `scip-go` on gin while the rule was still labelled `medium`, and 10,396 / 10,398 for the whole `high` tier on this repository with the rule in it | high |
+| C# | 25 / 28 | medium |
+| Java | 11 / 12 | medium |
+| Rust | 22 / 25 | medium |
+| Ruby | 18 / 25 | low |
+| TypeScript | 7 / 12 | low |
+| C++ | 3 / 12 | low |
+
+A Go value's methods are declared by a package and never by the language, so a
+name the repository declares once is seldom anyone else's. Everywhere else the
+language's own library declares methods on every string and collection, which
+is why the rule also refuses a short list of core member names per language
+(`internal/resolve/infer/corenames.go`): before that list, zod measured 3 right
+of 14 and ripgrep 4 of 8 on this rule.
+
+What no rule does: bind a qualified call to a free function, or to the
+function it is written in, because the name matched.
+
+### Calls that leave the repository
+
+A call qualified by an import of the standard library or of a declared
+dependency, or made on a type imported from one, binds to nothing and is
+recorded as external (`symbol_references.external`). It is a subset of
+`unresolved`, set only on evidence: the import table, the repository's
+directory layout, and its manifests.
+
+| Project | Unresolved | of which external |
+|---|---:|---:|
+| gin | 5,048 | 4,003 |
+| gson | 10,849 | 6,620 |
+| zod | 36,353 | 13,524 |
+| Newtonsoft.Json | 4,938 | 999 |
+| ripgrep | 9,055 | 948 |
+| sinatra | 9,727 | 314 |
+| flask | 1,637 | 252 |
+| leveldb | 4,037 | 229 |
+
+### Candidates
+
+A call binds only to a function or a method written in a language the caller
+can call; the table is `languageFamilies` in
+`internal/resolve/infer/calltraits.go`. A field, a constant, a configuration
+key, a table column and a dependency line are not candidates. Dependency
+bindings are not kept under another kind: they are gone.
+
+| | CALLS edges to something that is not a function or method | CALLS edges into another language |
+|---|---|---|
+| Before | gin 196, gson 927, flask 330, ripgrep 1,136, leveldb 33, Newtonsoft.Json 39, zod 16, redis 10 | gson 31, redis 11, zod 9, flask 7, ripgrep 3 |
+| After | 0 on every project | 0, other than TypeScript to JavaScript and C++ to a header indexed as C |
+
+A call that constructs a type is an `INSTANTIATES` edge to the type, not a
+`CALLS` edge: `Account(...)` in Python, `Type.new` in Ruby where the type
+writes no `new`, a Go conversion. The choice is the type rather than its
+constructor because several of these languages have no constructor in source
+and a compiler index reports the type. `callers` and `find_callers` read
+`CALLS` only; impact analysis, test discovery, data-flow traversal and
+`references` follow both.
+
+### Precision per tier
+
+Thirty judged edges per tier per project, allocated across the tier's rules in
+proportion to their populations (fewer where the tier holds fewer judged
+edges). "Weighted" is each rule's sampled precision weighted by its population
+in that tier.
+
+| Project | `high` sample | weighted | `medium` sample | weighted | `low` sample | weighted |
+|---|---:|---:|---:|---:|---:|---:|
+| gin (Go) | 30 / 30 | 99.9% | 1 / 1 | — | none judged | — |
+| gson (Java) | 30 / 30 | 100.0% | 4 / 4 | — | 19 / 30 | 63.5% |
+| zod (TypeScript) | 30 / 30 | 97.1% | none (1 edge) | — | 7 / 12 | 58.3% |
+| flask (Python) | 29 / 30 | 99.0% | 10 / 13 | 75.4% | 8 / 16 | 32.9% |
+| sinatra (Ruby) | 30 / 30 | 98.2% | 8 / 8 | — | 18 / 28 | 68.3% |
+| ripgrep (Rust) | 30 / 30 | 100.0% | 28 / 30 | 93.8% | 18 / 19 | 94.0% |
+| leveldb (C++) | 29 / 29 | 100.0% | none (0 edges) | — | 14 / 26 | 56.3% |
+| redis (C) | 25 / 25 | 100.0% | 23 / 25 | 92.0% | 3 / 3 | — |
+| Newtonsoft.Json (C#) | 27 / 30 | 95.1% | 22 / 24 | 91.7% | 13 / 28 | 58.4% |
+
+The record measured `high` at 54% to 100% and `medium` at 10% to 100% on the
+same projects. Every `high` here is above the 86.8% floor and every `medium`
+with more than a handful of edges is above 60%.
+
+Sampled edge ids, in the index each project produced at this commit, with the
+ones judged wrong after the bar:
+
+- gin high: 1, 45, 47, 86, 211, 266, 278, 313, 375, 577, 631, 664, 802, 818, 900, 969, 1005, 1102, 1260, 1266, 1286, 1291, 1433, 1507, 1619, 1713, 1801, 1828, 1943, 2026 | none. Medium: 118 | none.
+- gson high: 120, 160, 205, 468, 532, 720, 966, 1014, 1272, 1547, 1739, 1768, 2087, 2390, 2613, 3019, 3307, 3408, 3689, 3741, 4065, 4417, 5203, 5224, 5474, 5684, 5993, 6141, 6322, 6503 | none. Medium: 291, 507, 2781, 3434 | none. Low: 150, 172, 218, 852, 1133, 1785, 2034, 2157, 2363, 2838, 2993, 3169, 3303, 3515, 3639, 3815, 3992, 4169, 4336, 4489, 4572, 4667, 4782, 4931, 5063, 5157, 5678, 7467, 7804, 8073 | 172, 218, 2034, 2157, 2363, 3169, 3992, 4489, 5678, 7467, 7804.
+- zod high: 20, 91, 134, 172, 230, 249, 299, 348, 513, 585, 845, 868, 1031, 1111, 1209, 1312, 1441, 1464, 1606, 1631, 1755, 1831, 1961, 2350, 2421, 2483, 2610, 2760, 2773, 2912 | none. Low: 257, 541, 561, 598, 629, 693, 729, 773, 780, 797, 1104, 2354 | 541, 773, 780, 797, 1104.
+- flask high: 21, 22, 23, 26, 30, 60, 81, 85, 88, 97, 140, 156, 170, 178, 257, 275, 303, 409, 429, 443, 501, 530, 533, 614, 650, 688, 709, 721, 746, 833 | 178. Medium: 92, 176, 284, 331, 363, 481, 567, 591, 629, 638, 738, 869, 1000 | 92, 629, 738. Low: 117, 133, 167, 188, 217, 254, 268, 344, 346, 585, 594, 607, 642, 647, 744, 914 | 254, 268, 585, 594, 607, 642, 647, 744.
+- sinatra high: 6, 8, 21, 72, 134, 175, 176, 198, 257, 329, 464, 566, 632, 705, 760, 822, 910, 944, 998, 1084, 1127, 1168, 1211, 1251, 1293, 1385, 1456, 1464, 1572, 2067 | none. Medium: 389, 412, 462, 730, 1313, 1316, 1320, 1326 | none. Low: 86, 217, 228, 396, 452, 467, 526, 664, 753, 801, 852, 946, 1003, 1049, 1105, 1184, 1268, 1329, 1365, 1452, 1634, 1716, 1825, 1890, 1978, 2037, 2220, 2245 | 86, 217, 228, 452, 467, 1268, 1634, 1716, 1890, 2220.
+- ripgrep high: 27, 61, 65, 76, 92, 175, 805, 825, 982, 1112, 1346, 1417, 1448, 1504, 1619, 1714, 1803, 1872, 1954, 2202, 2217, 2313, 2497, 2647, 2727, 2835, 3015, 3060, 3242, 3321 | none. Medium: 126, 154, 179, 207, 250, 266, 275, 299, 323, 350, 376, 406, 432, 459, 485, 512, 542, 568, 592, 615, 639, 923, 1591, 1682, 1938, 2095, 2519, 2944, 3653, 3852 | 1682, 2095. Low: 83, 107, 354, 878, 1085, 1363, 1476, 2351, 2513, 2528, 2770, 3017, 3178, 3282, 3466, 3774, 4078, 4128, 4172 | 83.
+- leveldb high: 1, 4, 100, 147, 207, 246, 283, 319, 355, 391, 427, 466, 509, 548, 584, 620, 663, 704, 742, 754, 821, 877, 1038, 1074, 1110, 1189, 1229, 1287, 1361 | none. Low: 20, 21, 23, 124, 152, 185, 494, 638, 762, 784, 830, 844, 894, 917, 933, 949, 965, 981, 997, 1132, 1165, 1205, 1221, 1325, 1343, 1374 | 21, 494, 638, 784, 917, 933, 949, 965, 981, 997, 1165, 1221.
+- redis high: 236, 795, 1325, 2151, 2890, 3624, 4062, 4539, 5125, 5599, 6015, 6460, 7915, 8826, 10066, 10953, 11999, 12885, 13412, 14155, 14588, 15470, 16907, 18031, 19487 | none. Medium: 578, 1715, 2451, 3072, 4645, 6838, 7340, 7767, 8487, 8927, 9403, 9853, 10376, 11021, 11623, 12094, 12691, 13562, 14739, 15286, 16342, 16879, 17419, 17882, 18975 | 8487, 15286. Low: 19938, 19939, 19940 | none.
+- Newtonsoft.Json high: 93, 146, 244, 610, 672, 1344, 1660, 1682, 1683, 1699, 1720, 1924, 2190, 2418, 2929, 2933, 3156, 3478, 3697, 3707, 4746, 4861, 4952, 5015, 5182, 5207, 5357, 5446, 5704, 5910 | 1682, 1720, 4746. Medium: 233, 444, 489, 848, 961, 1017, 1061, 1119, 1175, 1362, 1384, 1406, 1521, 1587, 1764, 1872, 2085, 2205, 2446, 2562, 2625, 3015, 3064, 5846 | 1872, 5846. Low: 163, 534, 544, 556, 570, 620, 680, 1582, 1640, 1648, 1703, 1938, 1980, 2784, 3153, 3198, 3316, 3391, 3535, 3702, 3757, 4332, 4688, 4689, 5003, 5683, 6081, 6086 | 534, 544, 556, 570, 620, 1640, 1648, 1703, 1938, 2784, 3153, 3391, 3702, 3757, 6086.
+
+The redis and Newtonsoft.Json ids are from one run; their edge ids shift with
+which files time out. The judgements were made on an earlier build of the same
+rules and carried to this one by call site and target: every judged edge
+survived on six projects, 175 of 182 on flask, 151 of 164 on sinatra (all 13
+that did not were wrong edges the last changes removed) and 159 of 199 on
+Newtonsoft.Json, where restoring owners to 671 methods rebound many calls.
+
+### Edges and outcomes, before and after
+
+Call references in the language named, and the edges their file produced.
+
+| Project | Resolved | Ambiguous | Unresolved | `high` | `medium` | `low` | `INSTANTIATES` |
+|---|---|---|---|---|---|---|---|
+| gin | 3,572 → 2,919 | 1,410 → 1,344 | 4,329 → 5,048 | 3,448 → 2,814 | 103 → 50 | 8 → 39 | 0 → 10 |
+| gson | 9,201 → 8,122 | 7,850 → 1,229 | 12,042 → 10,849 | 7,199 → 5,610 | 1,851 → 72 | 39 → 2,371 | 0 |
+| zod | 6,499 → 6,453 | 23,496 → 10,568 | 23,392 → 36,353 | 1,742 → 2,699 | 674 → 1 | 1 → 74 | 0 |
+| flask | 1,109 → 937 | 1,702 → 1,330 | 1,860 → 1,637 | 895 → 540 | 173 → 116 | 26 → 58 | 0 → 217 |
+| sinatra | 2,932 → 3,149 | 5,246 → 1,720 | 6,437 → 9,727 | 2,073 → 1,616 | 269 → 10 | 0 → 671 | 0 → 36 |
+| ripgrep | 4,906 → 4,355 | 5,825 → 3,469 | 7,992 → 9,055 | 3,034 → 3,030 | 1,419 → 870 | 286 → 397 | 0 → 50 |
+| leveldb | 1,997 → 1,596 | 990 → 493 | 3,139 → 4,037 | 1,242 → 965 | 243 → 0 | 111 → 334 | 0 → 34 |
+| Newtonsoft.Json | 4,604 → 6,253 | 6,275 → 3,085 | 2,168 → 4,938 | 2,857 → 3,524 | 916 → 669 | 776 → 1,993 | 0 |
+
+Fewer references are resolved on most projects, and that is the point of the
+change rather than its cost: of the 3,448 `high` edges gin had, about 170 were
+standard-library calls bound to gin symbols and 196 pointed at something that
+is not a function. The flask "before" is the scope-aware Python resolver merged
+the same day, not the older one the record measured; its call edges included
+239 to classes, now `INSTANTIATES`, and the receiver rows.
+
+### Recall
+
+Call-site recall on the five files per project the record used, by its method:
+the first ten call sites in each file whose target is defined in the
+repository. The sites were listed and checked by hand once, on this build, and
+the build before the change was scored on the same sites.
+
+| Project | Sites | Correct before | Correct after | After: wrong / ambiguous / unbound / no enclosing function |
+|---|---:|---:|---:|---|
+| gin | 37 | 22 (59%), 12 wrong | 33 (89%) | 0 / 4 / 0 / 0 |
+| ripgrep | 33 | 17 (52%) | 24 (73%) | 0 / 6 / 3 / 0 |
+| zod | 32 | 13 (41%) | 18 (56%) | 0 / 0 / 1 / 13 |
+| flask | 31 | 22 (71%), 6 wrong | 24 (77%) | 4 / 3 / 0 / 0 |
+| gson | 42 | 22 (52%) | 23 (55%) | 1 / 2 / 16 / 0 |
+| sinatra | 31 | 20 (65%), 2 wrong | 20 (65%) | 1 / 0 / 10 / 0 |
+| redis | 45 | 39 (87%) | 39 (87%) | 0 / 0 / 6 / 0 |
+| Newtonsoft.Json | 43 | 15 (35%) | 15 (35%) | 4 / 0 / 24 / 0 |
+| leveldb | 41 | 3 (7%) | 3 (7%) | 0 / 1 / 31 / 6 |
+
+Recall rose or held on every project. What it did not reach is unchanged and is
+not about receivers: constructor calls with `new` are not captured in Java, C#
+and TypeScript (all 16 unbound gson sites), C++ loses classes declared in
+headers and out-of-line members, and a call at module top level has no
+enclosing function to hang an edge on (13 of zod's 32 sites).
+
+### Against a compiler index
+
+`scip-go` 0.2.7 and `scip-python` 0.6.6, by `repocortex accuracy`. A Rust index
+could not be produced: `rust-analyzer` on this machine is a toolchain proxy
+with no component behind it, and installing one was out of bounds.
+
+| Corpus | | `high` | `medium` | all tiers | recall | wrong edges |
+|---|---|---|---|---|---|---|
+| gin, 2,239 call sites | before | 99.1% (1,983 / 2,002) | 0 / 11 | 98.5% | 88.6% | 30 |
+| | after | 100.0% (1,976 / 1,976) | 28 / 28 | 99.9% | 89.6% | 3 |
+| this repository, 11,300 call sites | before | 99.0% (10,301 / 10,408) | 54 / 86 | 98.7% | 91.7% | 139 |
+| | after | 100.0% (10,396 / 10,398) | 2 / 10 | 99.9% | 92.1% | 10 |
+| flask | before, 431 sites | 98.9% (351 / 355) | 23 / 24 | 97.9% | 87.2% | 8 |
+| | after, 341 sites | 98.7% (293 / 297) | 17 / 17 | 97.8% | 93.0% | 7 |
+
+These figures understate what changed, and the reason is in the method. A
+compiler index holds facts only about symbols the repository defines, so the
+calls this change is mostly about — `errors.New` bound to gin's `New` — sit on
+lines the compiler has no fact for and are not adjudicated at all. The hand
+samples above are where those show.
+
+flask's two rows have different denominators because the adjudication itself
+was corrected; see the next heading. The 90 sites that left were receivers.
+
+### A correction to the adjudication
+
+A call site used to be adjudicated when the compiler resolved its line to
+exactly one definition, whatever that definition was. For `bp.route("/")`
+`scip-python` resolves only `bp`: `route` lives in a library it has no source
+for. The parser also emitted the receiver as a "call" to `bp`, the resolver
+bound that row to the variable, and the line was scored as a call site answered
+correctly at `high`. On flask that was 59 of the 351 sites scored right.
+
+A compiler fact now adjudicates a call only when it names the callee, and a
+resolver edge is compared only with a fact about its own name (`accuracyCTE` in
+`internal/registry/accuracy.go`, and the same in `doctor
+--resolution-precision`). Measured without the correction, dropping the
+receiver rows read as a regression from 92.4% to 85.1% at `high` on flask; it
+was the instrument that had been rewarding the defect. An `INSTANTIATES` edge
+answers a call site as a `CALLS` edge does.
+
+The rows marked "before" above were adjudicated with the corrected method, on
+an index the earlier build wrote. Tables elsewhere in this document predate it.
+
+### The record's wrong bindings, one by one
+
+| Wrong binding in the record | Now |
+|---|---|
+| Go: `errors.New`, `log.New`, `template.New` bound to gin's `New`; `http.Dir` to `gin.Dir` | unbound, recorded external |
+| Go: `require.Error` (87 times) bound to a gin method | unbound, external (a declared dependency) |
+| Go: `c.Request.Header.Set` bound to `(*Context).Set` | unbound (ambiguous) |
+| Go: `w.Header().Get` bound to the package variable `binding.Header` (80 edges) | unbound: a variable is not a candidate. `Header` is external where `w` is declared an `http.ResponseWriter` and ambiguous where `w` has no stated type |
+| Go: `root.addRoute` bound to the enclosing `(*Engine).addRoute` | bound to `(*node).addRoute`, which is right |
+| Go: `engine().LoadHTMLGlob(p)` bound to the enclosing function | bound to `(*Engine).LoadHTMLGlob` at `low`, which is right |
+| Go: `cn.CloseNotify()` on an `http.CloseNotifier` bound to itself | still wrong, differently: bound at `low` to a test double, the only other `CloseNotify` |
+| Java: local `reader` stored as a call and bound to `reader(String)` (1,025 edges) | no such reference; `reader.peek()` binds to `JsonReader.peek` by the declared type |
+| Java: `strings.add(..)` on a `java.util.List` bound to a test class's `add` | unbound, external |
+| Java: `asBigDecimal().intValue()`, `super.clone()` bound to the enclosing method | unbound |
+| Java: first-declared overload chosen | unchanged in what is chosen; now labelled `low` unless the argument count selects one |
+| TypeScript: `util.joinValues` in v4 bound to `v3/helpers/util.ts` (121 edges) | bound to `v4/core/util.ts`: the import specifier is resolved |
+| TypeScript: `Object.defineProperty`, `Reflect.deleteProperty` bound to a proxy handler | unbound, external |
+| TypeScript: `Array.map`, `types.includes(...)` bound to zod methods | unbound |
+| Python: an edge to the object `client` for `client.get("/")` | no such reference |
+| Python: `_json.dumps` bound to flask's own `dumps` | unbound, external |
+| Python: builtin `open()` bound to `FlaskClient.open` | unbound |
+| Python: `auth.login()` on a fixture bound to the view `login` at `high` | unbound (ambiguous): a declared value is not read as a module |
+| Ruby: `String.new`, `Mutex.new` bound to one `def self.new` (44 edges) | unbound, external |
+| Ruby: `respond_to?` (61) and `to_s` (41) bound to one class's methods | unbound |
+| Rust: `self.inner.foo()` inside `fn foo` bound to itself (193 self-loops) | 22 self-loops remain, all `self.f()` or bare recursion; the field's declared type decides |
+| Rust: `SearcherBuilder::new().line_number(false)` bound to a test `fn line_number` | unbound (ambiguous) |
+| Rust: 24% of call edges pointed at a struct, enum or dependency | 0 |
+| Rust: `messages::errored()` produced an edge to a function `messages` | no such reference |
+| C/C++: `parser->callbacks.error(p_ctx)` bound to a function `error` | unbound |
+| C++: `iter->Next()` bound to the only override in the file | unbound: the type is declared in a header the index does not hold |
+| A C macro bound to a JSON key, libc `write` to a Python function, `req.text()` to a Prisma column, `importlib.metadata.version()` to a YAML key, JavaScript calls to `package.json` lines | unbound: not callable, or not a language the caller can call |
+
+Each is pinned by `fixtures/receivers`, a hand-written tree per language whose
+marked calls `TestReceiverFixtureBindsNothingWrongly` checks end to end.
+
+### What is still wrong
+
+- Overloads are not resolved. Where a type declares several methods of one name
+  and the argument count does not single one out, the first declaration is
+  bound, at `low`: 4,065 edges on gson, Newtonsoft.Json and leveldb, 49 right of
+  96.
+- A value whose type no declaration states is bound by name or not at all.
+  `router := New()` leaves `router` untyped: return types are not read. On gin
+  that is 176 of the call sites `scip-go` resolves and this does not.
+- A member called on a standard-library interface from inside a wrapper of the
+  same name binds, at `low`, to whatever other member of that name the
+  repository has (`cn.CloseNotify()`).
+- "External" is claimed from imports, manifests and directories. An import
+  whose package the repository vendors under another path is recorded external.
+  Python modules that share a name with any file in the repository (`typing`
+  where `flask/typing.py` exists) are not, and stay plain unresolved.
+- Ruby binds a bare call inside a block by what the file requires. That
+  measured 96%, and it is a statement about sinatra, whose DSL makes it true.
+- C# and Java members the syntax tree leaves outside their class are given the
+  class declared before them. A nested type's members after such a break are
+  attributed to the outer type.
+- Nothing here was measured on PHP, Kotlin, Scala, Swift or Dart, whose rows in
+  the trait table are written from the languages' rules and not from a sample.
+  PHP, Kotlin and Scala still extract no references at all.
+
+### Cost
+
+Index plus resolve on zod (743 files), three runs each, same machine:
+
+| | Index | Resolve |
+|---|---|---|
+| Before | 5.41, 5.48, 5.98 s | 1.23, 1.25, 1.30 s |
+| After | 5.30, 5.54, 5.56 s | 1.40, 1.41, 1.45 s |
+
+The tree walk replaces three queries per file, which is why indexing did not
+slow. Resolution reads two more things per run, every file path and every
+declared dependency, and nothing per reference. `tests/scale` passes unchanged.
+
 ## Method
 
 ```bash
@@ -121,6 +499,13 @@ On unambiguous lines the answer is defined whatever either tool believes about
 columns. Everything else is reported as uncovered rather than scored — a
 measurement that quietly counts cases it cannot decide is worse than a smaller
 one that says so.
+
+**The compiler's one target must be the callee.** Added with the receiver
+change, and described under "A correction to the adjudication" above: a line
+whose single compiler fact is about the receiver of a call says nothing about
+what the call reaches, and an edge is compared only with a fact about its own
+name. The tables in the sections below were computed before this restriction
+and include lines it now leaves out.
 
 ## What this is not
 
