@@ -149,6 +149,8 @@ NO VULNERABILITY DATA. Spec §27 is explicit that vulnerability information must
 not be invented, and a scanner shipping an embedded advisory list is exactly
 that — stale the day it is built. Versions are reported accurately so a real
 scanner can consume them; the lookup belongs against a live database.
+'repocortex sbom' writes these declarations as CycloneDX for a scanner, and
+'repocortex vulns' checks them against advisories you supply as local files.
 
 An unused dependency is a PROMPT, not a verdict: a package can be loaded by
 reflection, required by a build plugin, or imported under a name that does not

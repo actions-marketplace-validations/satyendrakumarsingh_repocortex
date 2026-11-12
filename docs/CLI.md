@@ -72,6 +72,7 @@ Most commands are 0 on success and 1 on error. Four gate:
 | [`arch --fail-on`](#arch) | 1 when a violation at or above that severity exists |
 | [`bench --fail-on-regression`](#bench) | 1 when any case fails |
 | [`docs --check`](#docs) | 1 when the committed documents have drifted |
+| [`vulns --fail-on`](#vulns) | 1 when a finding at that reachability or stronger exists, when its version could not be compared, or when an advisory file could not be read |
 | [`rename`](#rename-old-new) | 0 would apply, or applied with `verify` passing or advisory; 1 error, `verify` `fail`, or an incomplete rollback; 2 refused (nothing written); 3 applied but not verified complete |
 
 ---
@@ -595,6 +596,178 @@ DECLARED BUT NOT IMPORTED (1)
 
 2 dependency(ies) declared. Pass --all for the full list.
 ```
+
+`deps` itself carries no advisory data. [`sbom`](#sbom) writes the same
+declarations for a scanner, and [`vulns`](#vulns) checks them against advisories
+you supply.
+
+### `sbom`
+
+**Answers:** what does this project declare it depends on, in a form another
+tool reads? Writes a CycloneDX 1.5 JSON document, and nothing else, on stdout.
+
+| Flag | Effect |
+|---|---|
+| `--timestamp <RFC 3339>` | write this time as `metadata.timestamp` (default: none) |
+| `--name <name>` | name of the project described (default: the root manifest's own module or package name) |
+
+```
+$ repocortex sbom > sbom.cdx.json
+$ repocortex sbom -q | head -5
+{
+  "$schema": "http://cyclonedx.org/schema/bom-1.5.schema.json",
+  "bomFormat": "CycloneDX",
+  "specVersion": "1.5",
+  "version": 1,
+```
+
+Each component has a package URL for its ecosystem and the version exactly as
+the manifest or a lockfile states it. The property `repocortex:versionState`
+says how much is known:
+
+| State | Meaning | `version` | `purl` |
+|---|---|---|---|
+| `pinned` | the manifest states one exact version | that version | with version |
+| `locked` | the manifest gives a range; a lockfile beside it states the version | the lockfile's version | with version |
+| `range` | declared as a range, and no lockfile pins it | the range as written | no version |
+| `unpinned` | no constraint, or one managed elsewhere (a parent POM, a BOM) | as written, or absent | no version |
+| `unresolved` | a property placeholder, a Git or path source, a local `replace` | as written | no version |
+
+A range is never written into a package URL: `pkg:npm/lodash@^4.17.20` names a
+release that does not exist. The other properties are `repocortex:declaredVersion`,
+`repocortex:versionSource` (the manifest line or the lockfile), `repocortex:declaredIn`,
+`repocortex:ecosystem`, `repocortex:scope`, `repocortex:indirect`,
+`repocortex:declaredName` (under a Go `replace` or a Cargo rename) and
+`repocortex:note`.
+
+| Ecosystem | Manifest | Lockfile read for the version | Package URL |
+|---|---|---|---|
+| Go | `go.mod` (with `replace`) | none needed | `pkg:golang/<module>@<version>` |
+| npm | `package.json` | `package-lock.json`, `npm-shrinkwrap.json`, `yarn.lock` | `pkg:npm/<name>@<version>` |
+| PyPI | `requirements.txt`, `requirements-dev.txt`, `pyproject.toml` (`[project] dependencies`) | `poetry.lock`, `uv.lock` | `pkg:pypi/<name>@<version>` |
+| Cargo | `Cargo.toml` | `Cargo.lock` | `pkg:cargo/<name>@<version>` |
+| Maven | `pom.xml` (properties of the same POM resolved) | none | `pkg:maven/<group>/<artifact>@<version>` |
+| Gradle | `build.gradle`, `build.gradle.kts` | `gradle.lockfile` | `pkg:maven/<group>/<artifact>@<version>` |
+
+The output is deterministic — sorted, no serial number, no timestamp unless
+`--timestamp` sets one, no tool version — so the file can be committed and its
+diff is a diff of the dependencies.
+
+**Declared dependencies only.** A package that appears only in a lockfile (the
+transitive closure) is not listed, and the document says so itself
+(`compositions: incomplete`). `pnpm-lock.yaml`, `Pipfile.lock` and Poetry's
+`[tool.poetry.dependencies]` table are not read. Lockfiles are read from the
+working tree; the declarations come from the index. A summary, and a warning
+when components have no single version, go to the log on stderr.
+
+### `vulns`
+
+**Answers:** given advisories I supply, which declared dependencies are in an
+affected range, and does the indexed code use them?
+
+| Flag | Effect |
+|---|---|
+| `--advisories <path>` | OSV JSON file, or directory of them (repeatable) |
+| `--fail-on <level>` | exit 1 when a finding at this reachability or stronger exists: `referenced`, `imported`, `affected` |
+| `--ignore <id>` | leave out an advisory by id or alias (repeatable); the report lists what was ignored |
+| `--all` | list the not-affected comparisons and every importing file |
+| `-n`, `--limit <n>` | importing files and symbol references shown per finding (default 5) |
+
+**No network, no built-in advisories.** The command never downloads a
+vulnerability database and ships none. Advisories are
+[OSV](https://ossf.github.io/osv-schema/) records in local files: one record, a
+JSON array of records, an OSV API response, or `osv-scanner`'s JSON report.
+Without `--advisories` it checks nothing, says where advisories come from, and
+exits 0.
+
+```
+$ repocortex vulns --advisories used-cobra.json --advisories unused-gin.json
+2 advisory record(s) from 2 file(s) checked against 75 declared dependency(ies)
+
+AFFECTED (1)
+  github.com/spf13/cobra v1.10.2  [go]  go.mod:13  HAND-2026-0001 (CVE-0000-0001)
+    Hand-written test advisory: cobra argument validation (not a real vulnerability)
+    version: v1.10.2 is in a range affected from the first release and before the fix 1.11.0
+    fixed in: 1.11.0
+    use: REFERENCED — 16 qualified reference(s) to a symbol the advisory names; 1 named method(s) were not checked (Command.ExecuteContext)
+      internal/cli/apidb.go:241  cobra.ExactArgs in a file that imports github.com/spf13/cobra
+      internal/cli/bench.go:49  cobra.ExactArgs in a file that imports github.com/spf13/cobra
+      internal/cli/events.go:78  cobra.ExactArgs in a file that imports github.com/spf13/cobra
+      internal/cli/planchange.go:33  cobra.ExactArgs in a file that imports github.com/spf13/cobra
+      internal/cli/prune.go:26  cobra.ExactArgs in a file that imports github.com/spf13/cobra
+      ... and 11 more (--all, or --json)
+    imported by 52 file(s):
+      internal/cli/accuracy.go:10  github.com/spf13/cobra
+      internal/cli/accuracy_test.go:12  github.com/spf13/cobra
+      internal/cli/agentsetup.go:14  github.com/spf13/cobra
+      internal/cli/agentsetup_test.go:19  github.com/spf13/cobra
+      internal/cli/apidb.go:15  github.com/spf13/cobra
+      ... and 47 more (--all, or --json)
+
+1 of 2 advisory record(s) name no DECLARED dependency. That is not the same as not present: a lockfile-only package is not examined.
+
+What this report covers
+  go: 75 declared, 75 with a concrete version; ordering: semver 2.0.0
+    "not imported" is claimed: yes: a Go file must import a package to use it, and the import path names the module
+    symbols: package-level functions called as pkg.Func, where the advisory lists symbols (the Go vulnerability database does); methods are not bound
+    go: 698 file(s), imports recorded, 0 not fully parsed
+
+Advisories: 2 record(s) used; skipped 0 withdrawn, 0 duplicate, 0 JSON file(s) with no OSV record
+```
+
+The report closes with three standing caveats, omitted above: only declared
+dependencies were checked; imports and references are those of first-party
+indexed code; and "imported, symbol use unknown" is not a finding that the
+vulnerable code is unused.
+
+**Version status.** `affected`: compared, and inside an affected range.
+`could_not_compare`: the comparison could not be made, and this is never
+reported as unaffected — a range with no lockfile, a placeholder, a Git commit
+range, a version the ecosystem's ordering cannot read. `not_affected`: every
+range was compared and the version is outside all of them (counted; `--all` and
+`--json` list each comparison).
+
+| Ecosystem | Ordering |
+|---|---|
+| npm, Go, Cargo | semver 2.0.0 |
+| PyPI | PEP 440 |
+| Maven, Gradle | Maven `ComparableVersion`; a dotted qualifier against a hyphenated one on the same release (`1.0.0.RC1` vs `1.0.0-RC2`) is refused, because Maven 3.9 reversed it |
+
+**Reachability**, for each affected or uncompared dependency:
+
+| State | Meaning |
+|---|---|
+| `referenced` | a file that imports the package references a symbol the advisory names |
+| `imported_symbol_use_unknown` | imported; the advisory names no symbol, or the index could not bind one. Not a clearance |
+| `not_imported` | no indexed file imports it |
+| `import_use_unknown` | no import matched, where that shows nothing: an ecosystem whose package names do not determine import paths, or an index holding no source file in a language that could import the package |
+
+`not_imported` is said only where a package name determines its import path:
+
+| Ecosystem | Import evidence | `not_imported` claimed | Symbols bound |
+|---|---|---|---|
+| Go | import statements; an import belongs to the longest declared module path | yes | `pkg.Func` calls, from `ecosystem_specific.imports` or `affected_functions`; an advisory narrowed to packages is checked per package. Methods are not bound |
+| npm | static `import` / `export … from`, and `require("x")` read from the indexed line. Dynamic `import()` is not recorded | yes | none |
+| PyPI | import statements, by module name | only for about 50 well-known distributions whose module names are built in (`PyYAML` → `yaml`) | module-level functions from `affected_functions`. Methods are not bound |
+| Cargo | `use` declarations | no: a crate can be used by path without `use` | a `use` of the affected function itself |
+| Maven, Gradle | imports under the `groupId`, plus a few known package prefixes | no: a coordinate does not name its Java packages | none |
+
+Every report ends with its coverage: per ecosystem, the languages whose imports
+the index records, the source files that were not fully parsed, and the
+standing limits. **Only declared dependencies are checked** — a vulnerable
+package that appears only in a lockfile is not examined, and Go standard-library
+advisories are counted and not evaluated (`govulncheck` covers both for Go;
+`osv-scanner` reads lockfiles). One exception is reported rather than dropped:
+a Go or npm package an advisory names that no manifest declares but the indexed
+code imports anyway (a transitive dependency used directly). It has no declared
+version, so it is always `could_not_compare`, shown as `NOT DECLARED in any
+manifest`.
+
+**`--fail-on`** follows [`blindspots --fail-on`](#missed). A dependency whose
+version could not be compared fails the gate exactly as an affected one does,
+`import_use_unknown` counts as imported, and an advisory file that could not be
+read fails every level. `--fail-on` without `--advisories` is an error: a gate
+with nothing to check must not pass.
 
 ### `arch`
 

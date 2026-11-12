@@ -18,7 +18,9 @@
 // information", and a scanner that ships a stale embedded advisory list is
 // exactly that. Vulnerability lookup belongs in an integration layer against a
 // live database, and reporting a version accurately is the useful half RepoCortex
-// can do honestly today.
+// can do honestly today. internal/capability/supplychain keeps to the same rule
+// from the other side: it compares these versions against advisories the USER
+// supplies as files, and ships none of its own.
 //
 // No license inference either. A license is a legal fact about a package, not
 // something to guess from a name.
@@ -284,7 +286,32 @@ func parsePOM(src string) []Dependency {
 
 // ---------------------------------------------------------------- Python
 
-var requirementLine = regexp.MustCompile(`^([A-Za-z0-9._-]+)\s*(\[[^\]]*\])?\s*([=<>!~]=?.*)?$`)
+// requirementLine splits a requirement into its name, optional extras and the
+// rest. The rest is cleaned by requirementSpec, not by this pattern: a version
+// specifier can be followed by an environment marker, pip options and a line
+// continuation, and a requirement can have a marker with no specifier at all
+// (`pywin32 ; sys_platform == "win32"`), which is still a dependency.
+var requirementLine = regexp.MustCompile(`^([A-Za-z0-9._-]+)\s*(\[[^\]]*\])?\s*(.*)$`)
+
+// requirementSpec reduces what follows a requirement's name to its version
+// specifier: `==2.11.2 ; python_version >= "3.6" --hash=sha256:...` is
+// `==2.11.2`.
+//
+// ok is false when what remains is neither empty, a specifier, nor a direct
+// reference (`@ https://...`) — the line was not a requirement.
+func requirementSpec(rest string) (spec string, ok bool) {
+	if i := strings.Index(rest, ";"); i >= 0 {
+		rest = rest[:i]
+	}
+	if i := strings.Index(rest, " --"); i >= 0 {
+		rest = rest[:i]
+	}
+	rest = strings.TrimSpace(strings.TrimSuffix(strings.TrimSpace(rest), `\`))
+	if rest == "" || strings.ContainsAny(rest[:1], "=<>!~@") {
+		return rest, true
+	}
+	return "", false
+}
 
 func parseRequirements(src string, dev bool) []Dependency {
 	scope := ScopeRuntime
@@ -307,15 +334,26 @@ func parseRequirements(src string, dev bool) []Dependency {
 		if m == nil {
 			continue
 		}
+		spec, ok := requirementSpec(m[3])
+		if !ok {
+			continue
+		}
 		out = append(out, Dependency{
-			Name: m[1], Version: strings.TrimSpace(m[3]),
+			Name: m[1], Version: spec,
 			Ecosystem: EcosystemPyPI, Scope: scope, Line: i + 1,
 		})
 	}
 	return out
 }
 
-var pyprojectDep = regexp.MustCompile(`^\s*["']?([A-Za-z0-9._-]+)["']?\s*(?:[=<>!~]=?\s*([^"',]*))?`)
+// pyprojectDep reads one PEP 508 requirement string from a `dependencies`
+// array. The specifier is kept WITH its operator and in full: `>=2.0,<3` and
+// `==2.0` are different statements, and recording both as "2.0" would let a
+// range be read as a pin by anything that compares versions.
+var pyprojectDep = regexp.MustCompile(`^\s*([A-Za-z0-9._-]+)\s*(?:\[[^\]]*\])?\s*(.*)$`)
+
+// pyprojectInlineItem matches one quoted requirement of a single-line array.
+var pyprojectInlineItem = regexp.MustCompile(`"([^"]+)"|'([^']+)'`)
 
 func parsePyProject(src string) []Dependency {
 	var out []Dependency
@@ -328,6 +366,25 @@ func parsePyProject(src string) []Dependency {
 			dev = strings.Contains(trimmed, "dev") || strings.Contains(trimmed, "test")
 			continue
 		case strings.HasPrefix(trimmed, "dependencies"):
+			// `dependencies = ["a>=1", "b"]` opens and closes on one line.
+			// Read as the start of a block, it lost both requirements and
+			// then took every following key (`requires-python = ...`) for a
+			// dependency until some later "]".
+			_, value, _ := strings.Cut(trimmed, "=")
+			value = strings.TrimSpace(value)
+			if strings.HasPrefix(value, "[") && strings.Contains(value, "]") {
+				for _, item := range pyprojectInlineItem.FindAllStringSubmatch(value, -1) {
+					if d, ok := pyprojectRequirement(item[1]+item[2], dev, i+1); ok {
+						out = append(out, d)
+					}
+				}
+				continue
+			}
+			// `dependencies = {file = ["requirements.txt"]}` is setuptools
+			// saying where the list lives, not the list.
+			if value != "" && !strings.HasPrefix(value, "[") {
+				continue
+			}
 			inDeps = true
 			continue
 		}
@@ -338,20 +395,38 @@ func parsePyProject(src string) []Dependency {
 			inDeps = false
 			continue
 		}
-		m := pyprojectDep.FindStringSubmatch(strings.Trim(trimmed, `",`))
-		if m == nil || m[1] == "" {
-			continue
+		// Each requirement is a quoted string. Taking the string rather than
+		// the line keeps a trailing comment, or the array's closing bracket,
+		// out of the version specifier.
+		for _, item := range pyprojectInlineItem.FindAllStringSubmatch(trimmed, -1) {
+			if d, ok := pyprojectRequirement(item[1]+item[2], dev, i+1); ok {
+				out = append(out, d)
+			}
 		}
-		scope := ScopeRuntime
-		if dev {
-			scope = ScopeDev
+		if strings.Contains(pyprojectInlineItem.ReplaceAllString(trimmed, ""), "]") {
+			inDeps = false
 		}
-		out = append(out, Dependency{
-			Name: m[1], Version: strings.TrimSpace(m[2]),
-			Ecosystem: EcosystemPyPI, Scope: scope, Line: i + 1,
-		})
 	}
 	return out
+}
+
+func pyprojectRequirement(req string, dev bool, line int) (Dependency, bool) {
+	m := pyprojectDep.FindStringSubmatch(req)
+	if m == nil || m[1] == "" {
+		return Dependency{}, false
+	}
+	spec, ok := requirementSpec(m[2])
+	if !ok {
+		return Dependency{}, false
+	}
+	scope := ScopeRuntime
+	if dev {
+		scope = ScopeDev
+	}
+	return Dependency{
+		Name: m[1], Version: spec,
+		Ecosystem: EcosystemPyPI, Scope: scope, Line: line,
+	}, true
 }
 
 // ---------------------------------------------------------------- Cargo

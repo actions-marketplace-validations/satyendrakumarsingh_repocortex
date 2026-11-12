@@ -185,11 +185,19 @@ contributor's home directory is a rule that is not enforced.**
 
 ## It does not ship vulnerability data
 
-**Where:** `repocortex deps --help`
+**Where:** `repocortex deps --help`, `repocortex vulns --help`
 
 `deps` reports versions accurately so that a real scanner can consume them, and
 performs no vulnerability lookup itself. A scanner shipping an embedded advisory
 list is stale the day it is built; the lookup belongs against a live database.
+
+`vulns` keeps to that. It compares declared versions against OSV advisories
+**you** supply as local files — from `osv-scanner`, or an OSV dump — and it
+neither ships an advisory nor downloads one. With none supplied it checks
+nothing and says so. It examines **declared** dependencies only: a package that
+appears only in a lock file is outside it, which is most of what a real scanner
+finds, so it is a reachability view over a scanner's findings and not a
+replacement for the scanner.
 
 It reads **manifests, not lock files**. A lock file is the resolved transitive
 closure — hundreds of packages, most of which no line of the repository mentions.
