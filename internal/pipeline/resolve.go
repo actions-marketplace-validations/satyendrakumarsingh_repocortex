@@ -54,6 +54,11 @@ type ResolveOptions struct {
 	// OnHandlers reports the outcome of binding endpoint handlers across files,
 	// if set. A callback for the same reason OnClientCalls is one.
 	OnHandlers func(registry.HandlerBindStats)
+
+	// OnEventsMerged reports how many duplicate event-topic symbols were
+	// folded into one node each. `index` counts them one per declaring file;
+	// the merge is why the symbol count can be lower after `resolve`.
+	OnEventsMerged func(removed int)
 }
 
 // DefaultResolveBatch is how many edges accumulate before a write.
@@ -281,8 +286,12 @@ func Resolve(
 		opts.OnInfraUnits(unitsBound)
 	}
 
-	if err := reg.UnifyEventSymbols(ctx, runID); err != nil {
+	merged, err := reg.UnifyEventSymbols(ctx, runID)
+	if err != nil {
 		return stats, fmt.Errorf("unify event symbols: %w", err)
+	}
+	if opts.OnEventsMerged != nil {
+		opts.OnEventsMerged(merged)
 	}
 	return stats, nil
 }
