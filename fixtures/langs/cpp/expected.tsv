@@ -3,7 +3,10 @@
 # written in front of it). A forward declaration (`class Cache;`) is not a definition.
 # Export and attribute macros in front of a class or function are masked before the
 # definition is read. Declarations without a body, out-of-line destructors and `using`
-# aliases are not listed; see KNOWN_GAPS.md.
+# aliases are not listed; see KNOWN_GAPS.md. A googletest or benchmark test (TEST, TEST_F,
+# TEST_P, TYPED_TEST, BENCHMARK_F) is one function named by its arguments, Suite.Name; any other
+# upper-case macro in function position with no return type (REGISTER_THING(x) { }, MY_MACRO(a, b) { })
+# is not a definition (tests.cc). A variable constructed by declaration is a reference, not a definition.
 store.h	10	class	Comparator
 store.h	16	class	Env
 store.h	19	function	Size
@@ -22,3 +25,16 @@ store.cc	26	function	Twice
 store.cc	28	function	At
 store.cc	32	method	Peek
 store.cc	34	function	Destroy
+tests.cc	3	function	Suite.Name
+tests.cc	7	function	Fixture.Other
+tests.cc	9	function	Param.Case
+tests.cc	11	function	Typed.Works
+tests.cc	13	function	BM_Fixture.Bench
+tests.cc	25	function	real
+tests.cc	27	class	Widget
+tests.cc	28	function	Widget
+tests.cc	29	function	Widget
+tests.cc	32	class	Holder
+tests.cc	34	function	API_EXPORT
+tests.cc	35	function	Holder
+tests.cc	38	function	use

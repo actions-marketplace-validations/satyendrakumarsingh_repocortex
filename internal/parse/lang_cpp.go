@@ -43,7 +43,21 @@ func init() {
 (type_definition (function_declarator (parenthesized_declarator (pointer_declarator (type_identifier) @name)))) @definition.type
 (type_definition (pointer_declarator (function_declarator (parenthesized_declarator (pointer_declarator (type_identifier) @name))))) @definition.type
 
+(function_definition (function_declarator (function_declarator (identifier) @name))) @definition.function
+
 (call_expression (identifier) @name) @reference.call
 (call_expression (field_expression (field_identifier) @name)) @reference.call
+
+(declaration type: (type_identifier) @name @reference.call.new (init_declarator declarator: (identifier) value: (argument_list)))
+(declaration type: (type_identifier) @name @reference.call.new (init_declarator declarator: (identifier) value: (initializer_list)))
+(declaration type: (template_type name: (type_identifier) @name) @reference.call.new (init_declarator declarator: (identifier) value: (argument_list)))
+(declaration type: (template_type name: (type_identifier) @name) @reference.call.new (init_declarator declarator: (identifier) value: (initializer_list)))
+(declaration type: (qualified_identifier scope: (namespace_identifier) @_s name: (type_identifier) @name) @reference.call.new (init_declarator declarator: (identifier) value: (argument_list)) (#not-eq? @_s "std"))
+(declaration type: (qualified_identifier scope: (namespace_identifier) @_s name: (type_identifier) @name) @reference.call.new (init_declarator declarator: (identifier) value: (initializer_list)) (#not-eq? @_s "std"))
+(compound_statement (declaration type: (type_identifier) @name @reference.call.new (function_declarator declarator: (identifier) parameters: (parameter_list . (parameter_declaration type: (type_identifier) !declarator) .))))
+(compound_statement (declaration type: (type_identifier) @name @reference.call.new (function_declarator declarator: (identifier) parameters: (parameter_list . (parameter_declaration type: (type_identifier) !declarator) (parameter_declaration type: (type_identifier) !declarator) .))))
+(compound_statement (declaration type: (type_identifier) @name @reference.call.new (function_declarator declarator: (identifier) parameters: (parameter_list . (parameter_declaration type: (type_identifier) !declarator) (parameter_declaration type: (type_identifier) !declarator) (parameter_declaration type: (type_identifier) !declarator) .))))
+(compound_statement (declaration type: (type_identifier) @name @reference.call.new (function_declarator declarator: (identifier) parameters: (parameter_list . (parameter_declaration type: (type_identifier) !declarator) (parameter_declaration type: (type_identifier) !declarator) (parameter_declaration type: (type_identifier) !declarator) (parameter_declaration type: (type_identifier) !declarator) .))))
+(declaration type: (qualified_identifier scope: (namespace_identifier) @_s name: (template_type name: (type_identifier) @name)) @reference.call.new (init_declarator declarator: (identifier) value: (argument_list)) (#not-eq? @_s "std"))
 `, true)
 }
