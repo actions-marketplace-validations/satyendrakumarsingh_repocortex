@@ -17,8 +17,34 @@ import (
 type languageReport struct {
 	Typed    []string `json:"typed"`
 	Resolved []string `json:"resolved"`
-	Parsed   []string `json:"parsed"`
-	Total    int      `json:"total"`
+	// Parsed is the definitions-only tier: a definition query exists.
+	Parsed []string `json:"parsed"`
+	// GrammarOnly lists grammars the binary carries and extracts nothing from.
+	// They were counted under Parsed until it was checked what a file in one
+	// of them yields, which is nothing.
+	GrammarOnly []string `json:"grammar_only"`
+	// WithDefinitions is how many languages can produce a definition at all.
+	WithDefinitions int `json:"with_definitions"`
+	// Total is every grammar in the binary, extractable or not.
+	Total int `json:"total"`
+}
+
+const grammarOnlyDescription = "grammar bundled, nothing extracted: files are skipped"
+
+func buildLanguageReport() languageReport {
+	rep := languageReport{
+		Typed:       parse.LanguagesInTier(parse.TierTyped),
+		Resolved:    parse.LanguagesInTier(parse.TierResolved),
+		GrammarOnly: parse.GrammarOnlyLanguages(),
+	}
+	for _, l := range parse.LanguagesInTier(parse.TierParsed) {
+		if parse.ExtractsDefinitions(l) {
+			rep.Parsed = append(rep.Parsed, l)
+		}
+	}
+	rep.WithDefinitions = len(rep.Typed) + len(rep.Resolved) + len(rep.Parsed)
+	rep.Total = rep.WithDefinitions + len(rep.GrammarOnly)
+	return rep
 }
 
 func newLanguagesCmd(g *Global) *cobra.Command {
@@ -26,23 +52,24 @@ func newLanguagesCmd(g *Global) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "languages",
 		Short: "Report what RepoCortex can do for each language it parses",
-		Long: `Languages fall into three tiers.
+		Long: `Languages fall into three tiers, and a fourth group that is not a tier.
 
-  typed     definitions, imports, and receiver discrimination by arity or
-            by class. References here can reach 'high' confidence.
-  resolved  definitions and imports. References bind across files.
-  parsed    definitions and full-text search only. No cross-file
-            relationship is claimed for these.
+  typed         definitions, imports, and receiver discrimination by arity
+                or by class. References here can reach 'high' confidence.
+  resolved      definitions and imports. References bind across files.
+  parsed        definitions and full-text search only. No cross-file
+                relationship is claimed for these.
+  grammar only  the grammar is bundled but there is no definition query, so
+                nothing is extracted and files in these languages are skipped.
 
-The tiers are derived from what the parser can do at run time, not from a
+A tier says what the parser is built to do, not how well it does it. How much
+of a language's definitions and calls are actually found was measured by hand
+and varies widely within every tier: see docs/verification.
+
+The groups are derived from what the parser can do at run time, not from a
 list, so this output always matches what the binary can actually do.`,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			rep := languageReport{
-				Typed:    parse.LanguagesInTier(parse.TierTyped),
-				Resolved: parse.LanguagesInTier(parse.TierResolved),
-				Parsed:   parse.LanguagesInTier(parse.TierParsed),
-			}
-			rep.Total = len(rep.Typed) + len(rep.Resolved) + len(rep.Parsed)
+			rep := buildLanguageReport()
 
 			if g.JSON {
 				return emitJSON(cmd.OutOrStdout(), rep)
@@ -53,6 +80,8 @@ list, so this output always matches what the binary can actually do.`,
 			fmt.Fprintf(w, "typed\t%d\t%s\n", len(rep.Typed), parse.TierTyped.Description())
 			fmt.Fprintf(w, "resolved\t%d\t%s\n", len(rep.Resolved), parse.TierResolved.Description())
 			fmt.Fprintf(w, "parsed\t%d\t%s\n", len(rep.Parsed), parse.TierParsed.Description())
+			fmt.Fprintf(w, "with definitions\t%d\t\n", rep.WithDefinitions)
+			fmt.Fprintf(w, "grammar only\t%d\t%s\n", len(rep.GrammarOnly), grammarOnlyDescription)
 			fmt.Fprintf(w, "total\t%d\t\n", rep.Total)
 			if err := w.Flush(); err != nil {
 				return err
@@ -62,12 +91,14 @@ list, so this output always matches what the binary can actually do.`,
 			fmt.Fprintf(cmd.OutOrStdout(), "resolved: %v\n", rep.Resolved)
 			if verbose {
 				fmt.Fprintf(cmd.OutOrStdout(), "parsed:   %v\n", rep.Parsed)
+				fmt.Fprintf(cmd.OutOrStdout(), "grammar only: %v\n", rep.GrammarOnly)
 			} else {
-				fmt.Fprintf(cmd.OutOrStdout(), "\n(%d parsed-tier languages not listed; pass --verbose)\n", len(rep.Parsed))
+				fmt.Fprintf(cmd.OutOrStdout(), "\n(%d parsed-tier and %d grammar-only languages not listed; pass --verbose)\n",
+					len(rep.Parsed), len(rep.GrammarOnly))
 			}
 			return nil
 		},
 	}
-	cmd.Flags().BoolVar(&verbose, "verbose", false, "list the parsed-tier languages too")
+	cmd.Flags().BoolVar(&verbose, "verbose", false, "list the parsed-tier and grammar-only languages too")
 	return cmd
 }

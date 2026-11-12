@@ -254,15 +254,21 @@ list, so this output cannot disagree with what the binary does. A language is
 `typed` when it has definition, import and receiver queries and something that
 tells candidates of one name apart — an arity query (Go, Java, TypeScript) or a
 scope analysis that states the receiver's class (Python); `resolved` when it has
-definitions and imports; `parsed` when only a grammar ships for it.
+definitions and imports; `parsed` when it has a definition query and nothing more. A grammar that is
+bundled without a definition query is not in a tier at all: it is listed as
+`grammar only`, and files in that language are skipped. How much each language
+actually yields was checked by hand; see
+[verification](verification/2026-11-12/README.md).
 
 ```
 $ repocortex languages
-TIER      COUNT  WHAT YOU GET
-typed     4      definitions, imports, receiver discrimination by arity or class — references can reach 'high'
-resolved  10     definitions and imports — references bind across files
-parsed    192    definitions and search only — no cross-file references claimed
-total     206    
+TIER              COUNT  WHAT YOU GET
+typed             4      definitions, imports, receiver discrimination by arity or class — references can reach 'high'
+resolved          10     definitions and imports — references bind across files
+parsed            72     definitions and search only — no cross-file references claimed
+with definitions  86     
+grammar only      120    grammar bundled, nothing extracted: files are skipped
+total             206    
 
 typed:    [go java python typescript]
 resolved: [c c_sharp cpp javascript kotlin php ruby rust scala tsx]

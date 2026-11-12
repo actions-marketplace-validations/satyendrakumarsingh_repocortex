@@ -1873,16 +1873,18 @@ with.
 
 ```console
 $ repocortex languages
-TIER      COUNT  WHAT YOU GET
-typed     4      definitions, imports, receiver discrimination by arity or class — references can reach 'high'
-resolved  10     definitions and imports — references bind across files
-parsed    192    definitions and search only — no cross-file references claimed
-total     206    
+TIER              COUNT  WHAT YOU GET
+typed             4      definitions, imports, receiver discrimination by arity or class — references can reach 'high'
+resolved          10     definitions and imports — references bind across files
+parsed            72     definitions and search only — no cross-file references claimed
+with definitions  86     
+grammar only      120    grammar bundled, nothing extracted: files are skipped
+total             206    
 
 typed:    [go java python typescript]
 resolved: [c c_sharp cpp javascript kotlin php ruby rust scala tsx]
 
-(192 parsed-tier languages not listed; pass --verbose)
+(72 parsed-tier and 120 grammar-only languages not listed; pass --verbose)
 ```
 
 **How to read it:**

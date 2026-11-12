@@ -504,10 +504,12 @@ survive. The numbers this project publishes, and how they were produced, are in
 
 ```
 $ repocortex languages
-TIER      COUNT  WHAT YOU GET
-typed     4      definitions, imports, receiver discrimination by arity or class — references can reach 'high'
-resolved  10     definitions and imports — references bind across files
-parsed    192    definitions and search only — no cross-file references claimed
+TIER              COUNT  WHAT YOU GET
+typed             4      definitions, imports, receiver discrimination by arity or class — references can reach 'high'
+resolved          10     definitions and imports — references bind across files
+parsed            72     definitions and search only — no cross-file references claimed
+with definitions  86     
+grammar only      120    grammar bundled, nothing extracted: files are skipped
 ```
 
 The tiers are computed from what the parser can do at run time, so this output cannot

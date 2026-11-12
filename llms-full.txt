@@ -15,8 +15,8 @@ An AI agent asks RepoCortex a question instead of searching: what a task touches
 ## Facts
 - Command: `repocortex`. Requires Go 1.26+ to build from source; no CGO.
 - Protocol: MCP over stdio, or Streamable HTTP with `repocortex serve --http 127.0.0.1:7788` (bearer token required, loopback by default) for ChatGPT, Android Studio and other remote-only clients. `repocortex install --rules` configures 30 agents, including Claude Code, Codex CLI, Copilot CLI, Gemini CLI, Cursor, VS Code, Visual Studio, Windsurf, Devin Desktop, Antigravity, Claude Desktop, Zed, Goose, Kiro, Junie, Amp, Qwen Code, Continue and Warp, and writes AGENTS.md guidance. Any stdio MCP client works; Aider uses the CLI through CONVENTIONS.md. Full list: docs/guides/coding-agents.md.
-- Confidence tiers: `exact` (proven by a compiler index, SCIP), `high` (syntax tree with imports; 94.2–100% precise per language in measurements), `medium` (inferred; under 50%), `low` (loose name match; hidden by default). Details: docs/accuracy.md.
-- Languages: 206 tree-sitter grammars. Typed (3): Go, Java, TypeScript. Resolved (11): C, C#, C++, JavaScript, Kotlin, PHP, Python, Ruby, Rust, Scala, TSX. Parsed (192): definitions and search only.
+- Confidence tiers: `exact` (proven by a compiler index, SCIP), `high` (syntax tree with imports; 94.2–100% precise against a compiler index on four repositories, 54–100% in a hand check of eleven languages), `medium` (inferred; under 50%), `low` (loose name match; hidden by default). Details: docs/accuracy.md.
+- Languages: definitions are extracted for 86 languages; 120 more grammars are bundled and nothing is extracted from them. Typed (4): Go, Java, Python, TypeScript. Resolved (10): C, C#, C++, JavaScript, Kotlin, PHP, Ruby, Rust, Scala, TSX (Kotlin, PHP and Scala extract no calls yet). Parsed (72): definitions and search only.
 - Privacy: no network requests while indexing or serving, no telemetry. The opt-in `repocortex indexers install` is the only command that downloads anything.
 - MCP profiles: `minimal` (default) exposes 7 tools (about 1,700 tokens of schema per request), `standard` 18 (about 4,400), `full` 25 (about 6,400).
 - Surfaces: the same tools over MCP (stdio or Streamable HTTP), a REST API at `/api/v1/tools/{name}` with an OpenAPI 3.1 document at `/api/v1/openapi.json`, and the shell (`repocortex tool call <tool> key=value`).
@@ -148,7 +148,7 @@ their answer, so CI can act on them:
 |---|---|---|---|---|
 | `verify` | pass, or only leads found | at least one fact found | nothing to check against | – |
 | `rename` | would apply, or applied and verified | error, or verify failed | refused, nothing written | applied, but the old name still appears |
-| `system` | every member read | error | at least one member could not be read | – |
+| `system`, `system contracts` | every member read | error | at least one member could not be read | – |
 | `arch --fail-on`, `missed --fail-on` | nothing at or above the level | something at or above the level | – | – |
 | `docs --check`, `licenses --check` | up to date | drifted | – | – |
 | `bench --fail-on-regression` | every case passed | a case failed | – | – |
@@ -214,6 +214,7 @@ $ repocortex --json status
 | | Declared but unused dependencies | [`deps`](#repocortex-deps) |
 | | What ran in production? | [`trace`](#repocortex-trace) |
 | | Calls between repositories | [`system`](#repocortex-system) |
+| | Client calls that no longer match a route | [`system contracts`](#repocortex-system-contracts) |
 | **Quality and governance** | Does the code break declared rules? | [`arch`](#repocortex-arch) |
 | | Where is the index blind? | [`missed`](#repocortex-missed) |
 | | How accurate is the index here? | [`accuracy`](#repocortex-accuracy) |
@@ -1488,6 +1489,123 @@ WHAT THIS IS NOT
 **Exit codes:** `0` all members read; `2` at least one member was missing or
 unreadable, so the report is incomplete.
 
+### `repocortex system contracts`
+
+**Answers:** Does each client still call a route that exists, with the right
+method?
+
+**Use it when:** You are about to release a service or a client and want the
+calls that no longer line up with the routes, across repositories.
+
+**Run:** With two tiny repositories that are not under git, so `REVISION` is
+empty. `orders-api` is Go and declares six routes with `mux.HandleFunc`. `web`
+is TypeScript and makes nine calls with `fetch` and `axios`, one of them to a
+misspelt path and one with the wrong method, plus one call in a test file:
+
+```console
+$ repocortex system contracts --member web=web/.repocortex/index.db --member orders-api=orders-api/.repocortex/index.db
+CONTRACTS: 2 member repositories, 2 readable
+  MEMBER      REVISION  INDEXED  ROUTES  CALLS  CALLS READ IN  CALLS NOT READ IN
+  orders-api  —         0h ago   6       0      go             —
+  web         —         0h ago   0       10     typescript     —
+…
+CALLS EXAMINED: 9
+  method and path agree with a declared route          2
+  literal prefix of a run-time target starts a route   1
+  path matches a route, method does not                1
+  path-variable count differs from the nearest route   1
+  no route in any member                               2
+  agree only under a base path nothing indexed states  1
+  not compared                                         1
+  1 further call in test files was set aside: a test calling a server it
+  started is not a client of this system.
+ROUTES EXAMINED: 6, of which no indexed call reaches 1
+
+METHOD MISMATCH (1)
+
+  [medium] web  DELETE /api/orders/42
+    call   src/orders.ts:24  in cancelOrder  via axios
+    route  orders-api  GET /api/orders/{id}  internal/httpapi/routes.go:8  handler GetOrder
+    the path matches a parameterised route that accepts GET; no route matching
+    this path accepts DELETE. A path variable absorbed a segment, so which
+    resource the call names is not proven.
+
+PATH-VARIABLE MISMATCH (1)
+
+  [medium] web  GET /api/orders/42/items
+    call   src/orders.ts:29  in firstItem  via fetch
+    route  orders-api  GET /api/orders/{id}/items/{item}  internal/httpapi/routes.go:10  handler GetItem
+    the nearest route declares 1 path variable after /api/orders/42/items and
+    the call supplies none: it has 4 path segments where the route has 5.
+
+NO MATCHING ROUTE (2)
+
+  [high] web  GET /api/order
+    call   src/orders.ts:19  in listOrdersTypo  via fetch
+    no route declared by any member matches this path; the call is broken, or
+    it is answered by something outside this system (a static file, a third
+    party, a service absent from the member list).
+
+  [high] web  POST https://collector.example.com/v1/traces
+    call   src/orders.ts:44  in track  via fetch
+    no route declared by any member matches this path; the target names the
+    host collector.example.com, so this is an external call unless that host
+    is one of these members — no index records which service a host is.
+
+BASE PATH UNVERIFIED (1)
+
+  [low] web  GET /orders-service/health
+    call   src/orders.ts:34  in health  via fetch
+    route  orders-api  GET /health  internal/httpapi/routes.go:12  handler Health
+    the call matches this route only if the service is reached under
+    /orders-service — a mount point, context path or gateway prefix that no
+    indexed file states.
+
+NOT COMPARED (1)
+
+  web  GET <unresolved>
+    call   src/orders.ts:39  in configured  via fetch
+    the target begins with a run-time value — most often a base URL read from
+    configuration or the environment, which this tool does not read — and the
+    index keeps only the literal text before the first run-time part, so the
+    path that follows was not indexed and cannot be compared.
+
+ROUTES NO INDEXED CALL REACHES (1) — informational, the weakest section
+  ! 1 call could not be compared at all (see NOT COMPARED) and may reach any
+    route listed here.
+  [low] orders-api  DELETE /api/admin/cache  internal/httpapi/routes.go:11  handler PurgeCache
+
+WHAT THIS IS NOT
+  Matching is a HEURISTIC over two pieces of source text written by two teams.
+  …
+```
+
+**How to read it:**
+
+- **Member table first.** `CALLS NOT READ IN` lists the languages a member
+  holds whose outbound calls are not extracted. A member with entries there
+  makes calls this report cannot see.
+- **CALLS EXAMINED.** Every call lands in exactly one row, so the rows add up
+  to the total. The first two rows are the calls that line up.
+- **The four finding sections.** Each finding shows its confidence, the call
+  with file and line, and each route it is about with file and line. The
+  confidence is never `exact` and never above `high`. `(one tier weaker: see
+  above)` after a finding means part of the route side was not read; the
+  member section says which part.
+- **NOT COMPARED.** `fetch(` `` `${API_BASE}/api/orders` `` `)` is here: the
+  path after a run-time base URL is not in the index, so it is not guessed at.
+- **ROUTES NO INDEXED CALL REACHES.** Leads only. A mobile app, a cron job or a
+  caller in Java or Python would not appear.
+- The misspelt `/api/order` and the call to another company's host are both
+  `no_matching_route`. The index cannot tell a broken call from one that
+  leaves the system, so the second names its host.
+
+**Useful flags:** the member flags of `system`, `-n`/`--limit 50` (rows per
+section), `--json`.
+
+**Exit codes:** `0` all members read; `2` at least one member was missing or
+unreadable. Findings do not change the exit code.
+
 ---
 
 ## Quality and governance
@@ -1827,16 +1945,18 @@ with.
 
 ```console
 $ repocortex languages
-TIER      COUNT  WHAT YOU GET
-typed     3      definitions, imports, receiver and arity discrimination — references can reach 'high'
-resolved  11     definitions and imports — references bind across files
-parsed    192    definitions and search only — no cross-file references claimed
-total     206    
+TIER              COUNT  WHAT YOU GET
+typed             4      definitions, imports, receiver discrimination by arity or class — references can reach 'high'
+resolved          10     definitions and imports — references bind across files
+parsed            72     definitions and search only — no cross-file references claimed
+with definitions  86     
+grammar only      120    grammar bundled, nothing extracted: files are skipped
+total             206    
 
-typed:    [go java typescript]
-resolved: [c c_sharp cpp javascript kotlin php python ruby rust scala tsx]
+typed:    [go java python typescript]
+resolved: [c c_sharp cpp javascript kotlin php ruby rust scala tsx]
 
-(192 parsed-tier languages not listed; pass --verbose)
+(72 parsed-tier and 120 grammar-only languages not listed; pass --verbose)
 ```
 
 **How to read it:**
@@ -4161,7 +4281,9 @@ Most commands are 0 on success and 1 on error. Four gate:
 | [`arch --fail-on`](#arch) | 1 when a violation at or above that severity exists |
 | [`bench --fail-on-regression`](#bench) | 1 when any case fails |
 | [`docs --check`](#docs) | 1 when the committed documents have drifted |
+| [`vulns --fail-on`](#vulns) | 1 when a finding at that reachability or stronger exists, when its version could not be compared, or when an advisory file could not be read |
 | [`rename`](#rename-old-new) | 0 would apply, or applied with `verify` passing or advisory; 1 error, `verify` `fail`, or an incomplete rollback; 2 refused (nothing written); 3 applied but not verified complete |
+| [`move`](#move-symbol-from-file-to-file) | 0 would apply, or applied and the package built; 1 error or an incomplete rollback; 2 refused (nothing written, or everything restored); 3 applied but no build checked it |
 
 ---
 
@@ -4336,21 +4458,29 @@ repocortex dev (commit none, built unknown, darwin/amd64)
 **Answers:** which languages does this binary actually resolve, and to what
 depth? No flags beyond `--verbose`, which lists the parsed-tier grammars too.
 
-The tiers are computed from the query set at run time, not read from a list,
-so this output cannot disagree with what the binary does. A language is `typed`
-when it has definition, import, receiver and arity queries; `resolved` when it
-has definitions and imports; `parsed` when only a grammar ships for it.
+The tiers are computed from what the parser can do at run time, not read from a
+list, so this output cannot disagree with what the binary does. A language is
+`typed` when it has definition, import and receiver queries and something that
+tells candidates of one name apart — an arity query (Go, Java, TypeScript) or a
+scope analysis that states the receiver's class (Python); `resolved` when it has
+definitions and imports; `parsed` when it has a definition query and nothing more. A grammar that is
+bundled without a definition query is not in a tier at all: it is listed as
+`grammar only`, and files in that language are skipped. How much each language
+actually yields was checked by hand; see
+[verification](verification/2026-11-12/README.md).
 
 ```
 $ repocortex languages
-TIER      COUNT  WHAT YOU GET
-typed     1      definitions, imports, receiver and arity discrimination — references can reach 'high'
-resolved  11     definitions and imports — references bind across files
-parsed    194    definitions and search only — no cross-file references claimed
-total     206
+TIER              COUNT  WHAT YOU GET
+typed             4      definitions, imports, receiver discrimination by arity or class — references can reach 'high'
+resolved          10     definitions and imports — references bind across files
+parsed            72     definitions and search only — no cross-file references claimed
+with definitions  86     
+grammar only      120    grammar bundled, nothing extracted: files are skipped
+total             206    
 
-typed:    [go]
-resolved: [c_sharp java javascript kotlin php python ruby rust scala tsx typescript]
+typed:    [go java python typescript]
+resolved: [c c_sharp cpp javascript kotlin php ruby rust scala tsx]
 ```
 
 Read the tiers as a coverage statement before trusting an empty relationship
@@ -4685,6 +4815,178 @@ DECLARED BUT NOT IMPORTED (1)
 2 dependency(ies) declared. Pass --all for the full list.
 ```
 
+`deps` itself carries no advisory data. [`sbom`](#sbom) writes the same
+declarations for a scanner, and [`vulns`](#vulns) checks them against advisories
+you supply.
+
+### `sbom`
+
+**Answers:** what does this project declare it depends on, in a form another
+tool reads? Writes a CycloneDX 1.5 JSON document, and nothing else, on stdout.
+
+| Flag | Effect |
+|---|---|
+| `--timestamp <RFC 3339>` | write this time as `metadata.timestamp` (default: none) |
+| `--name <name>` | name of the project described (default: the root manifest's own module or package name) |
+
+```
+$ repocortex sbom > sbom.cdx.json
+$ repocortex sbom -q | head -5
+{
+  "$schema": "http://cyclonedx.org/schema/bom-1.5.schema.json",
+  "bomFormat": "CycloneDX",
+  "specVersion": "1.5",
+  "version": 1,
+```
+
+Each component has a package URL for its ecosystem and the version exactly as
+the manifest or a lockfile states it. The property `repocortex:versionState`
+says how much is known:
+
+| State | Meaning | `version` | `purl` |
+|---|---|---|---|
+| `pinned` | the manifest states one exact version | that version | with version |
+| `locked` | the manifest gives a range; a lockfile beside it states the version | the lockfile's version | with version |
+| `range` | declared as a range, and no lockfile pins it | the range as written | no version |
+| `unpinned` | no constraint, or one managed elsewhere (a parent POM, a BOM) | as written, or absent | no version |
+| `unresolved` | a property placeholder, a Git or path source, a local `replace` | as written | no version |
+
+A range is never written into a package URL: `pkg:npm/lodash@^4.17.20` names a
+release that does not exist. The other properties are `repocortex:declaredVersion`,
+`repocortex:versionSource` (the manifest line or the lockfile), `repocortex:declaredIn`,
+`repocortex:ecosystem`, `repocortex:scope`, `repocortex:indirect`,
+`repocortex:declaredName` (under a Go `replace` or a Cargo rename) and
+`repocortex:note`.
+
+| Ecosystem | Manifest | Lockfile read for the version | Package URL |
+|---|---|---|---|
+| Go | `go.mod` (with `replace`) | none needed | `pkg:golang/<module>@<version>` |
+| npm | `package.json` | `package-lock.json`, `npm-shrinkwrap.json`, `yarn.lock` | `pkg:npm/<name>@<version>` |
+| PyPI | `requirements.txt`, `requirements-dev.txt`, `pyproject.toml` (`[project] dependencies`) | `poetry.lock`, `uv.lock` | `pkg:pypi/<name>@<version>` |
+| Cargo | `Cargo.toml` | `Cargo.lock` | `pkg:cargo/<name>@<version>` |
+| Maven | `pom.xml` (properties of the same POM resolved) | none | `pkg:maven/<group>/<artifact>@<version>` |
+| Gradle | `build.gradle`, `build.gradle.kts` | `gradle.lockfile` | `pkg:maven/<group>/<artifact>@<version>` |
+
+The output is deterministic — sorted, no serial number, no timestamp unless
+`--timestamp` sets one, no tool version — so the file can be committed and its
+diff is a diff of the dependencies.
+
+**Declared dependencies only.** A package that appears only in a lockfile (the
+transitive closure) is not listed, and the document says so itself
+(`compositions: incomplete`). `pnpm-lock.yaml`, `Pipfile.lock` and Poetry's
+`[tool.poetry.dependencies]` table are not read. Lockfiles are read from the
+working tree; the declarations come from the index. A summary, and a warning
+when components have no single version, go to the log on stderr.
+
+### `vulns`
+
+**Answers:** given advisories I supply, which declared dependencies are in an
+affected range, and does the indexed code use them?
+
+| Flag | Effect |
+|---|---|
+| `--advisories <path>` | OSV JSON file, or directory of them (repeatable) |
+| `--fail-on <level>` | exit 1 when a finding at this reachability or stronger exists: `referenced`, `imported`, `affected` |
+| `--ignore <id>` | leave out an advisory by id or alias (repeatable); the report lists what was ignored |
+| `--all` | list the not-affected comparisons and every importing file |
+| `-n`, `--limit <n>` | importing files and symbol references shown per finding (default 5) |
+
+**No network, no built-in advisories.** The command never downloads a
+vulnerability database and ships none. Advisories are
+[OSV](https://ossf.github.io/osv-schema/) records in local files: one record, a
+JSON array of records, an OSV API response, or `osv-scanner`'s JSON report.
+Without `--advisories` it checks nothing, says where advisories come from, and
+exits 0.
+
+```
+$ repocortex vulns --advisories used-cobra.json --advisories unused-gin.json
+2 advisory record(s) from 2 file(s) checked against 75 declared dependency(ies)
+
+AFFECTED (1)
+  github.com/spf13/cobra v1.10.2  [go]  go.mod:13  HAND-2026-0001 (CVE-0000-0001)
+    Hand-written test advisory: cobra argument validation (not a real vulnerability)
+    version: v1.10.2 is in a range affected from the first release and before the fix 1.11.0
+    fixed in: 1.11.0
+    use: REFERENCED — 16 qualified reference(s) to a symbol the advisory names; 1 named method(s) were not checked (Command.ExecuteContext)
+      internal/cli/apidb.go:241  cobra.ExactArgs in a file that imports github.com/spf13/cobra
+      internal/cli/bench.go:49  cobra.ExactArgs in a file that imports github.com/spf13/cobra
+      internal/cli/events.go:78  cobra.ExactArgs in a file that imports github.com/spf13/cobra
+      internal/cli/planchange.go:33  cobra.ExactArgs in a file that imports github.com/spf13/cobra
+      internal/cli/prune.go:26  cobra.ExactArgs in a file that imports github.com/spf13/cobra
+      ... and 11 more (--all, or --json)
+    imported by 52 file(s):
+      internal/cli/accuracy.go:10  github.com/spf13/cobra
+      internal/cli/accuracy_test.go:12  github.com/spf13/cobra
+      internal/cli/agentsetup.go:14  github.com/spf13/cobra
+      internal/cli/agentsetup_test.go:19  github.com/spf13/cobra
+      internal/cli/apidb.go:15  github.com/spf13/cobra
+      ... and 47 more (--all, or --json)
+
+1 of 2 advisory record(s) name no DECLARED dependency. That is not the same as not present: a lockfile-only package is not examined.
+
+What this report covers
+  go: 75 declared, 75 with a concrete version; ordering: semver 2.0.0
+    "not imported" is claimed: yes: a Go file must import a package to use it, and the import path names the module
+    symbols: package-level functions called as pkg.Func, where the advisory lists symbols (the Go vulnerability database does); methods are not bound
+    go: 698 file(s), imports recorded, 0 not fully parsed
+
+Advisories: 2 record(s) used; skipped 0 withdrawn, 0 duplicate, 0 JSON file(s) with no OSV record
+```
+
+The report closes with three standing caveats, omitted above: only declared
+dependencies were checked; imports and references are those of first-party
+indexed code; and "imported, symbol use unknown" is not a finding that the
+vulnerable code is unused.
+
+**Version status.** `affected`: compared, and inside an affected range.
+`could_not_compare`: the comparison could not be made, and this is never
+reported as unaffected — a range with no lockfile, a placeholder, a Git commit
+range, a version the ecosystem's ordering cannot read. `not_affected`: every
+range was compared and the version is outside all of them (counted; `--all` and
+`--json` list each comparison).
+
+| Ecosystem | Ordering |
+|---|---|
+| npm, Go, Cargo | semver 2.0.0 |
+| PyPI | PEP 440 |
+| Maven, Gradle | Maven `ComparableVersion`; a dotted qualifier against a hyphenated one on the same release (`1.0.0.RC1` vs `1.0.0-RC2`) is refused, because Maven 3.9 reversed it |
+
+**Reachability**, for each affected or uncompared dependency:
+
+| State | Meaning |
+|---|---|
+| `referenced` | a file that imports the package references a symbol the advisory names |
+| `imported_symbol_use_unknown` | imported; the advisory names no symbol, or the index could not bind one. Not a clearance |
+| `not_imported` | no indexed file imports it |
+| `import_use_unknown` | no import matched, where that shows nothing: an ecosystem whose package names do not determine import paths, or an index holding no source file in a language that could import the package |
+
+`not_imported` is said only where a package name determines its import path:
+
+| Ecosystem | Import evidence | `not_imported` claimed | Symbols bound |
+|---|---|---|---|
+| Go | import statements; an import belongs to the longest declared module path | yes | `pkg.Func` calls, from `ecosystem_specific.imports` or `affected_functions`; an advisory narrowed to packages is checked per package. Methods are not bound |
+| npm | static `import` / `export … from`, and `require("x")` read from the indexed line. Dynamic `import()` is not recorded | yes | none |
+| PyPI | import statements, by module name | only for about 50 well-known distributions whose module names are built in (`PyYAML` → `yaml`) | module-level functions from `affected_functions`. Methods are not bound |
+| Cargo | `use` declarations | no: a crate can be used by path without `use` | a `use` of the affected function itself |
+| Maven, Gradle | imports under the `groupId`, plus a few known package prefixes | no: a coordinate does not name its Java packages | none |
+
+Every report ends with its coverage: per ecosystem, the languages whose imports
+the index records, the source files that were not fully parsed, and the
+standing limits. **Only declared dependencies are checked** — a vulnerable
+package that appears only in a lockfile is not examined, and Go standard-library
+advisories are counted and not evaluated (`govulncheck` covers both for Go;
+`osv-scanner` reads lockfiles). One exception is reported rather than dropped:
+a Go or npm package an advisory names that no manifest declares but the indexed
+code imports anyway (a transitive dependency used directly). It has no declared
+version, so it is always `could_not_compare`, shown as `NOT DECLARED in any
+manifest`.
+
+**`--fail-on`** follows [`blindspots --fail-on`](#missed). A dependency whose
+version could not be compared fails the gate exactly as an affected one does,
+`import_use_unknown` counts as imported, and an advisory file that could not be
+read fails every level. `--fail-on` without `--advisories` is an error: a gate
+with nothing to check must not pass.
+
 ### `arch`
 
 **Answers:** does the code match the architecture you declared? Compares the
@@ -4916,6 +5218,163 @@ RepoCortex did not bind, so the old name survives; the exit code is 3, never 0,
 until you handle them by hand. Verify passing does not make a rename complete.
 
 MCP equivalent: none. The MCP server only plans (`plan_rename`, `plan_change`); it never edits.
+
+### `move <symbol> <from-file> <to-file>`
+
+**Answers:** can this Go declaration be moved to another file of its package,
+and exactly what would change in the two files? It moves one top-level
+declaration (a function, type, constant or variable, with its doc comment) and
+corrects the import lists of both files: the imports the moved code uses are
+added to the target, and the ones nothing else uses are removed from the
+source. A method is named `Type.Method`. A dry run by default: nothing is
+written without `--apply`.
+
+Inside a package a move changes no reference, so the whole edit is syntax, and
+it is read with the Go standard parser from the files as they are now. Paths
+are relative to the project root.
+
+`--apply` writes only if **all** of this holds:
+
+1. both files are Go files in one directory and one package, built under the
+   same constraints (the same `//go:build` line and the same `_test`,
+   `_GOOS`, `_GOARCH` file-name suffix), and neither is generated or a cgo
+   file. A target that does not exist is created, with the source's package
+   clause and `//go:build` line;
+2. both files are byte-for-byte what was indexed (otherwise re-index), inside
+   the project root, regular, writable, and not reached through a symlink;
+3. the name is declared exactly once in the source file, on lines of its own,
+   and the target does not already declare it;
+4. every name the moved code writes before a dot is accounted for: a local, a
+   name the package declares, or an import whose package name is **known** —
+   written in the file, a standard-library path, or reported by `go list`. The
+   name of a package outside the standard library is never guessed from its
+   import path;
+5. the move cannot change what the program does at start-up (below);
+6. with `go` on PATH, the package builds with the planned files in place.
+
+If anything fails, nothing is written, every reason is listed, and the exit
+code is 2.
+
+**What is refused, and why**
+
+| Refused | Why |
+|---|---|
+| any language but Go | there is no exact way here to cut a declaration out of another language's file |
+| a target in another directory, or with another `package` clause | every reference would need a new qualifier and import, and unexported names would stop resolving |
+| a method on its bare name; a method leaving its receiver type's package | a method moves only as `Type.Method`, and only inside the package |
+| `init` | init functions run in the order of the files that hold them |
+| a member of a constant group that uses `iota` or leaves a value out | the other members' values depend on its position |
+| a variable with an initialiser, in a package where any initialiser runs code | Go initialises package variables in declaration order, files taken by name; moving one changes that order, which is invisible only when no initialiser calls a function |
+| files with different build constraints, a `_test.go` file on one side only, an old-style `// +build` line with no `//go:build` | the declaration would be compiled in different builds than before, and one machine's build cannot show it |
+| generated files, cgo files, files named `_x.go` or `.x.go` | the generator would undo the move; a cgo preamble binds declarations to their file; the go command ignores those names |
+| a name declared more than once in the file, or in one statement with other names (`var a, b = 1, 2`) | the name does not say what to move |
+| a declaration that shares a line with other code | it cannot be cut out by lines |
+| a `//go:embed`, `//go:linkname`, `//go:generate` or `//export` directive on the declaration | each ties it to its file in a way syntax does not show |
+| the target already declares the name, imports the same package under another name, or uses the import's name for a different package | the result would not compile, or would mean something else |
+| the source dot-imports a package the moved code may draw on | what a dot-import supplies is not syntax |
+| an import whose package name is unknown (no `go` on PATH, or the module is not downloaded) and that the moved code may use | give the import an explicit name, or make the toolchain available |
+| a package that does not build before the move | no build could then tell a break from what was already broken; `--no-build` accepts a result checked by parsing only |
+| a file changed since indexing, not in the index, read-only, over 8 MiB, or a file of the package that cannot be read safely | as for [`rename`](#rename-old-new) |
+
+**How it is written and checked.** Before anything is written the two new
+files are scanned back into tokens and compared with the old ones: the source
+must be what it was less the cut lines, the target what it was plus the
+declaration, with no comment lost and no import changed beyond the plan. Then,
+with `go` on PATH, the package is compiled with the planned files substituted
+through `go build -overlay` (`go test -c` when the files are test files), still
+without writing. A second build, with the planned source made uncompilable,
+must then fail: that is what shows the first one compiled the moved code. Where
+it does not fail — the file's build constraints exclude it on this machine —
+the move is reported as not build-checked, never as passing. `go` runs with
+`GOPROXY=off`: nothing is downloaded.
+
+`--apply` then writes the target, then the source, each atomically, under the
+same `.repocortex-edit.lock` as `rename`. A new file is hard-linked into
+place, which fails rather than replace a file that has appeared since the plan
+(on a filesystem without hard links it is renamed into place after a last
+check that the name is free). If the second write fails the first is undone. The package is built once more from the files on disk, and both files
+are restored if that build fails. The index is not updated: run
+`repocortex index` afterwards.
+
+Each site carries a confidence. It is `exact` only when a compiler checked the
+result; without a build the sites are `high`, located by the Go parser and
+compiled by nobody.
+
+| Flag | Effect |
+|---|---|
+| `--apply` | write the edits (default is a dry run) |
+| `--no-build` | do not compile the result; it is checked by parsing only, sites are `high`, and an apply exits 3 |
+| global `--json` | machine-readable report: `declaration`, `sites`, `refusals`, `build`, `notes`, `limits` |
+
+| Exit | Meaning |
+|---|---|
+| 0 | dry run: would apply. Apply: written, and the package built from the files on disk |
+| 1 | error, or a rollback that could not restore a file |
+| 2 | refused: nothing was written, or everything written was restored |
+| 3 | applied, but **no build checked it**: `--no-build`, no `go` on PATH, or files this platform does not build |
+
+**Limits.** One declaration per run. A type's methods stay where they are;
+move each with `Type.Method`. A new file gets no licence or header comment.
+The declaration is appended to the target, not placed among related
+declarations. A file not gofmt-formatted is edited in place and left as it
+was; a formatted one stays formatted. A declaration taken out of a group is
+always written in gofmt's form, its doc comment included (an empty last `//`
+line goes, as for any top-level doc comment). The build check compiles for
+this machine's platform only. Moving to another package is not supported.
+
+A dry run, an apply and a refusal on a small module:
+
+```
+$ repocortex move Normalize config/load.go config/keys.go
+Move func Normalize: config/load.go -> config/keys.go  (config/load.go:27-32)
+DRY RUN: nothing was written. Re-run with --apply to make these edits.
+
+SITES
+  exact  config/keys.go:1      create-file    new file, package config
+  exact  config/keys.go:3      add-import     import "strings", which the moved code uses
+  exact  config/keys.go:5-10   insert         func Normalize with its doc comment
+  exact  config/load.go:27-32  remove         func Normalize with its doc comment
+  exact  config/load.go:8      remove-import  import "strings", which nothing else in this file uses
+
+BUILD: PASS  go build .
+  compiled with the planned files in place of the two on disk (go's -overlay); nothing was written for it
+
+NOTES
+  config/keys.go is a new file: it gets the package clause, the build constraint and the imports the declaration needs, and no licence or header comment. Add one if this repository requires it.
+
+LIMITS: move relocates one declaration between two files of one Go package and corrects both import lists. ...
+$ echo $?
+0
+$ repocortex move Normalize config/load.go config/keys.go --apply
+Move func Normalize: config/load.go -> config/keys.go  (config/load.go:27-32)
+APPLIED to 2 file(s).
+
+SITES
+  exact  config/keys.go:1      create-file    new file, package config
+  exact  config/keys.go:3      add-import     import "strings", which the moved code uses
+  exact  config/keys.go:5-10   insert         func Normalize with its doc comment
+  exact  config/load.go:27-32  remove         func Normalize with its doc comment
+  exact  config/load.go:8      remove-import  import "strings", which nothing else in this file uses
+
+BUILD: PASS  go build .
+  built from the files on disk after writing
+...
+$ echo $?
+0
+$ repocortex move FromFile config/kinds.go config/keys.go
+Move FromFile: config/kinds.go -> config/keys.go
+REFUSED: nothing was written.
+
+REASONS
+  config/kinds.go:8  FromFile is part of a constant group in which iota numbers the members, so taking a member out would change the values of the others. Move the whole group by hand
+...
+$ echo $?
+2
+```
+
+(The `LIMITS` paragraph is truncated here; the tool prints it in full.)
+
+MCP equivalent: none. The MCP server only plans; it never edits.
 
 ### `prune <file>`
 
@@ -5411,6 +5870,72 @@ the report is a floor rather than a total.
 A single member is refused: one repository is already answered by `api` and
 `db`.
 
+### `system contracts`
+
+**Answers:** does each client still call a route that exists, with the right
+method? Compares the outbound HTTP calls indexed in every member with the
+routes indexed in every member, and reports what does not line up.
+
+```bash
+repocortex system contracts --member web=../web/.repocortex/index.db \
+                            --member orders=../orders/.repocortex/index.db
+repocortex system contracts --members ./repocortex.system.yml
+```
+
+| Flag | Effect |
+|---|---|
+| `--member`, `--members`, `--stale-after` | the same flags as `system`, with the same meaning |
+| `-n`, `--limit N` | most rows to list in each section (default 50); what was cut is counted |
+| `--json` | the report as JSON, with the keys named below |
+
+| Finding (`kind`) | Meaning | Strongest confidence |
+|---|---|---|
+| `method_mismatch` | the call's path matches a route, and no route with that path in any member accepts the call's method | `high` on a literal path, `medium` when a path variable absorbed a segment |
+| `path_variable_mismatch` | a route starts where the call starts and the two differ in how many path segments follow | `medium` when the route needs a variable the call does not supply, `low` otherwise |
+| `no_matching_route` | nothing any member declares matches the call: a broken call, or a call out of this system | `high` for a literal path, `low` for a run-time target |
+| `base_path_unverified` | the call and a route agree only if a mount point, gateway prefix or client base URL is assumed | always `low` |
+
+Every finding carries the file and line of the call and of each route it is
+about; `no_matching_route` has no route side by definition. After the findings
+come two weaker lists: `not_compared`, the calls the index holds too little of
+to compare, and `uncalled_routes`, the routes no indexed call reaches. The
+second is informational and always `low`: a mobile app, a cron job, a partner,
+or a caller in a language whose calls are not extracted would not appear.
+
+No finding is ever `exact` or above `high`. Only a compiler index can make
+`exact`, and none spans two repositories.
+
+What is compared is the method, the path and the number of path segments. Path
+variables match across syntaxes (`{id}`, `:id`, `<int:id>`), and case, a
+trailing slash, a query string and a fragment are ignored. Three things are not
+guessed:
+
+- **Hosts.** The host of an absolute URL is shown and never used, because no
+  index records which member a hostname is.
+- **Base URLs.** A target that begins with a run-time value, such as
+  `` `${API_BASE}/orders` ``, keeps none of its path in the index. It is listed
+  under `not_compared` with that reason.
+- **Mount prefixes.** A service mounted under `/api`, or reached through a
+  gateway prefix, declares its routes without it. A call that matches only if
+  such a prefix is assumed is reported as `base_path_unverified`, naming the
+  prefix that would have to be true.
+
+Query, header and body parameters are in the index on neither side, so they
+are not compared. Calls made from test files are counted and set aside: a test
+calling a server it started is not a client of this system.
+
+The report begins with the members. For each it lists the languages its
+outbound calls were read in and the ones they were not: calls are extracted
+from Go and the JavaScript family (`fetch`, `axios`, `net/http`), so a Java or
+Python member makes calls this report cannot see, and says so. When the route
+side is incomplete — a member whose index is missing, partial or older than
+`--stale-after`, or a member holding a language routes are not extracted from
+— every finding loses one confidence tier and the report names the member that
+cost it.
+
+Exit status is 0 when every member was read and 2 when one was not. Findings do
+not change it: they are leads to check, not a gate.
+
 ### `licenses`
 
 **Answers:** regenerate `THIRD_PARTY.md` from the module graph, or verify it.
@@ -5436,6 +5961,7 @@ Lists definitions nothing in the index calls, graded `likely` or `possible`.
 ```bash
 repocortex dead-code
 repocortex dead-code --path internal/billing/ --all
+repocortex dead-code --include-test-only
 ```
 
 | Flag | Meaning |
@@ -5443,12 +5969,36 @@ repocortex dead-code --path internal/billing/ --all
 | `--path PREFIX` | Only files under this prefix |
 | `--all` | Also list candidates graded `possible` |
 | `--include-exported` | Also list exported definitions (implies `--all`) |
+| `--include-test-only` | Also list, in a separate section, definitions whose every caller is in a test file |
 | `-n`, `--limit N` | Most candidates to list (default 50) |
 
 A row is `likely` only when it is unexported, its file parsed cleanly, no
 unbound reference is spelled like it, and its name appears nowhere in the code
 outside its own definition. Never delete on this evidence alone. Agent tool:
 `list_dead_code`.
+
+A function a framework calls is never `likely`. The handler a route was bound
+to has the route pointing at it, so it is not listed at all. A definition
+spelled like a handler some route names and could not bind (`route handler`),
+and a definition that consumes an event topic (`event consumer`), are graded
+`possible` with that reason, and the count of them is printed.
+
+`--include-test-only` adds a second list under its own heading, `REACHED ONLY
+FROM TESTS`: definitions that do have callers, every one of them in a test
+file. It does not change the first list or its counts.
+
+| What | How it is reported |
+|---|---|
+| Certainty | Always `possible`, reason `only reached from tests`. Never `likely`: code only its tests keep alive may be finished work that lost its last caller or a helper written for the tests, and an index cannot tell which |
+| Order | Rows confirmed against the source text first, largest first; then rows whose name also appears in code that is not a test, marked `name appears elsewhere` (a production use the graph has no edge for, such as a function passed as a value, or an unrelated identifier spelled the same) |
+| `TEST REFS` | How many references point at the definition, all from test files |
+| Left out | Exported definitions unless `--include-exported`, definitions named like an entry point, languages the index does not bind references for, and route handlers and event consumers |
+
+Its limits are printed with it. Callers are direct callers only, so a helper
+called by a test-only function is not listed. A use the index could not bind is
+not counted. Tests written in the same file as the code they test, as in Rust,
+are not seen as tests. It is a second pass over the index, bounded by its own
+scan budget, and says so if it stops short.
 
 ### `hotspots`
 
@@ -5469,6 +6019,122 @@ repocortex hotspots --path internal/ --commits 1000
 | `-n`, `--limit N` | Most files to list (default 20) |
 
 Needs a git repository. Agent tool: `list_hotspots`.
+
+### `bus-factor`
+
+Lists the directories whose recent commits come from the fewest people, most
+concentrated first.
+
+```bash
+repocortex bus-factor
+repocortex bus-factor --path internal/ --commits 2000
+repocortex bus-factor --depth 1
+repocortex bus-factor --files --path internal/billing/
+```
+
+| Flag | Meaning |
+|---|---|
+| `--path PREFIX` | Only files under this prefix |
+| `--commits N` | How many recent commits to read (default 500) |
+| `--min-commits N` | Fewest commits a directory needs to be measured (default 5) |
+| `--depth N` | Group by the first N path segments instead of each file's own directory |
+| `--files` | Measure each file instead of each directory |
+| `-n`, `--limit N` | Most directories to list (default 20) |
+
+```
+$ repocortex bus-factor
+Knowledge distribution from the last 38 commit(s) (2025-06-16 to 2025-07-23) by 6 author name(s).
+4 directory(ies) measured, 3 with a bus factor of 1. Most concentrated first.
+
+BUS FACTOR  DIRECTORY  COMMITS  PEOPLE  TOP CONTRIBUTOR  SHARE  THEIR LAST CHANGE  IDLE
+1           auth       6        2       kit              83%    2025-07-15         8d
+1           billing    11       2       Robin Vega       82%    2025-06-24         29d
+1           search     6        2       ash              50%    2025-07-10         13d
+2           api        8        3       Ash Berg         38%    2025-07-02         21d
+```
+
+| Column | Meaning |
+|---|---|
+| `BUS FACTOR` | The smallest number of people whose commits make up at least half of the commits that touched the directory |
+| `PEOPLE` | Distinct author names among those commits |
+| `SHARE` | The part of those commits made by the largest contributor |
+| `IDLE` | Days between that person's last change there and the newest commit read. Measured against the history, not today |
+
+The order is the lowest bus factor, then the largest share, then the most
+commits. A commit counts once for each directory it touches. Below the table
+the command gives the same figure for every commit read taken together, then
+what it could not see, then what the figure cannot establish.
+
+What to keep in mind when reading it:
+
+- It counts who changed the code in the commits read, not who understands it.
+  Review, pairing and co-authors named only in a commit message are not counted.
+- People are the author names git recorded, exactly as spelled. Names are never
+  merged, so one person under two spellings counts as two and a bus factor can
+  read higher than it is. When two names committed from one address the output
+  says which names, and still leaves them apart. Email addresses are never
+  printed; a name that was itself recorded as an address is cut at the at sign.
+- The output says how many commits were read and the dates they span. A shallow
+  clone and a squash-merge workflow both distort the figures: the first has no
+  history before its depth, the second records a whole branch as one commit
+  under one name. On a shallow clone whose history cannot be walked, the command
+  says so and measures nothing.
+- Directories with fewer than `--min-commits` commits are not measured and are
+  counted in the output. They are unmeasured, not low risk. So are directories
+  the index does not hold: never indexed, or deleted or renamed since. Renames
+  are not followed.
+
+A directory that is not a git repository gets an explanation, not an error.
+Agent tool: `list_knowledge_risks`.
+
+### `communities`
+
+Groups files into communities: sets of files whose calls and references run
+between each other more than they run outwards.
+
+```bash
+repocortex communities
+repocortex communities --path internal/ --limit 10
+repocortex communities --members 20 --min-confidence high
+```
+
+| Flag | Meaning |
+|---|---|
+| `--path PREFIX` | Only group files under this prefix; relationships leaving it are counted, not followed |
+| `-n`, `--limit N` | Most communities to list, largest first (default 20) |
+| `--members N` | Most files to list for each community (default 8; 0 lists none) |
+| `--min-confidence TIER` | Weakest relationship that links two files: `exact`, `high`, `medium` or `low` (default `medium`) |
+
+One community from `repocortex communities --members 3` on this repository:
+
+```text
+3. internal/web  (35 files)
+   NAMED FOR  the directory every member is under
+   ID         internal/web/accuracy.go
+   MOSTLY IN  internal/web (35)
+   INSIDE     467 relationship(s) between members
+   CROSSING   279 relationship(s) with a file outside
+   MEMBERS, most referenced by the others first
+     internal/web/web.go         220
+     internal/web/confidence.go  85
+     internal/web/omission.go    65
+     ... and 32 more; raise --members to list them
+```
+
+A community is named for the directory all its members share, or for its
+most-referenced file when they share none; `NAMED FOR` says which. `ID` is its
+first member in path order: a real file, and the same on every run over the same
+index. The number beside a member is how many relationships from the other
+members end in it.
+
+A community describes how the indexed code refers to itself. It is not a
+declared architecture, and it is computed only from relationships the index
+bound: a reference it could not bind is a missing link, so files that work
+together can be listed apart or in no community. Every answer prints how many
+references are unbound, how many low-confidence relationships were left out, and
+how many files are in no community. A graph of more than 250,000 file-to-file
+links is not partitioned; narrow it with `--path`. Agent tool:
+`list_communities`.
 
 ### `path <from> <to>`
 
@@ -5521,6 +6187,100 @@ repocortex tool call find_callers name=ParseConfig min_confidence=high
 `--profile` (default `full`), `--args JSON`, `--args-file FILE`, `--audit-log
 FILE`. Full description: [protocols](guides/protocols.md#command-line).
 
+### `stats`
+
+**Answers:** what the agent tools were used for, from an [audit
+log](guides/protocols.md#audit-log): calls, answer sizes, time and failures per
+tool, per transport and per day, and the slowest calls.
+
+```bash
+repocortex stats .repocortex/audit.jsonl
+repocortex stats --since 2026-11-01 --slowest 20
+tail -n 500 audit.jsonl | repocortex stats -
+```
+
+| Flag | Effect |
+|---|---|
+| `--since DATE` | count only calls at or after this date or RFC 3339 time |
+| `--until DATE` | count only calls before this date or RFC 3339 time |
+| `--slowest N` | how many of the slowest calls to list (default 10, at most 100) |
+
+With no file it reads the one named by `REPOCORTEX_AUDIT_LOG`; `-` reads
+standard input. It needs no index.
+
+```
+$ repocortex stats audit.jsonl --slowest 3
+Audit log: audit.jsonl
+14 call(s) from 2026-11-12T09:35:35Z to 2026-11-12T09:39:18Z, 3 failed (21.4%).
+Answers: 64,283 bytes of text, an estimated 16,076 tokens. Time answering: 955 ms.
+
+BY TOOL
+TOOL                  CALLS  FAILED  FAIL RATE  ANSWER BYTES  EST. TOKENS  TOTAL MS  SLOWEST MS
+find_callers          6      2       33.3%      11,940        2,986        184       99
+get_task_context      2      0       0.0%       45,434        11,360       627       519
+search_code           2      0       0.0%       999           251          35        34
+get_project_overview  1      0       0.0%       958           240          12        12
+get_session_stats     1      0       0.0%       2,318         580          10        10
+list_hotspots         1      0       0.0%       2,634         659          87        87
+no_such_tool          1      1       100.0%     0             0            0         0
+
+BY TRANSPORT
+TRANSPORT  CALLS  FAILED  FAIL RATE  ANSWER BYTES  EST. TOKENS  TOTAL MS  SLOWEST MS
+mcp        8      2       25.0%      34,921        8,733        144       108
+cli        6      1       16.7%      29,362        7,343        811       519
+
+BY DAY (UTC)
+DAY         CALLS  FAILED  FAIL RATE  ANSWER BYTES  EST. TOKENS  TOTAL MS  SLOWEST MS
+2026-11-12  14     3       21.4%      64,283        16,076       955       519
+
+SLOWEST CALLS
+TIME (UTC)            TOOL              TRANSPORT  MS   ANSWER BYTES  OUTCOME
+2026-11-12T09:39:17Z  get_task_context  cli        519  22,457        ok
+2026-11-12T09:35:35Z  get_task_context  mcp        108  22,977        ok
+2026-11-12T09:39:16Z  find_callers      cli        99   1,824         ok
+
+FILES THE ANSWERS NAMED
+TRANSPORT  FILES  BYTES WHEN INDEXED  EST. TOKENS  A FILE IS COUNTED
+mcp        16     283,106             70,777       once per session
+cli        49     909,193             227,299      once per call: each 'tool call' is its own session
+This is the size of the indexed files the answers pointed at: an upper bound on what
+reading those files whole would have cost. It is not a saving. An agent with search
+would not necessarily have read them, and could have read parts.
+
+Token figures are estimates: bytes / 4, rounded up; no tokenizer is run and the true
+count depends on the model. Times are the whole milliseconds the log records, so a call
+faster than 1 ms counts as 0. This is usage; no saving is reported because none has been
+measured.
+```
+
+How to read it:
+
+- **It reports usage, not a saving.** No "tokens saved" figure is printed,
+  because there is no measurement that supports one; see
+  [benchmarking](BENCHMARKING.md#5-agent-benchmark).
+- **EST. TOKENS is an estimate**: each answer's bytes divided by four, rounded
+  up. No tokenizer is run, and the true count depends on the model.
+- **FAILED** counts answers the tool flagged as failures and calls that never
+  reached a tool, such as an unknown tool name.
+- **Times are whole milliseconds**, as the log records them, so a call faster
+  than 1 ms counts as 0.
+- **FILES THE ANSWERS NAMED** is the size of the indexed files the answers
+  pointed at, and is printed only when the log carries it. It is an upper
+  bound on reading those files whole, not a saving. It has one row per
+  transport because the counting differs: an MCP session counts a file once
+  however many answers name it, while each `repocortex tool call` is a session
+  of its own and counts it again.
+- **Only numbers, tool names and transports are printed.** The arguments in
+  the log say what someone was working on, and are never read into the summary.
+- A line that is not an audit event is skipped and counted, not fatal.
+
+`--json` prints the same totals as `{file, calls, failures, failure_rate, tools,
+transports, days, slowest, cited_files, ...}` with `token_basis: "estimated"`.
+`cited_files` carries a `meaning` string that says what the figure is, so the
+number does not travel without its label.
+Agent tool: `get_session_stats`, which gives the same accounting for one live
+session; see [MCP tools](reference/mcp-tools.md#get_session_stats).
+
 ## Serving
 
 ### `serve`
@@ -5538,6 +6298,8 @@ exposing the index to a coding agent.
 | `--http host:port` | serve MCP over Streamable HTTP at `/mcp` instead of stdio, for clients that only accept a remote server |
 | `--allow-remote` | with `--http`, allow a non-loopback listen address |
 | `--allowed-host name` | with `--http`, also accept this `Host`/`Origin` hostname, such as a tunnel's (repeatable) |
+| `--tokens-file FILE` | with `--http`, accept the named, scoped tokens in this file instead of one token; see [`serve create-token`](#serve-create-token) |
+| `--audit-log FILE` | append one JSON line per tool call (default: `$REPOCORTEX_AUDIT_LOG`); records the call, never the answer |
 
 ```bash
 claude mcp add repocortex -- repocortex --project /path/to/repo serve
@@ -5569,6 +6331,46 @@ MCP profile "minimal" exposes 7 tool(s):
 Responses are bounded and never contain whole files. Repository content is
 labelled as untrusted evidence, because indexed source may have been written by
 someone other than you.
+
+### `serve create-token`
+
+**Answers:** makes one named token for a server shared by a team, prints it
+once, and stores only its SHA-256 hash.
+
+| Flag | Effect |
+|---|---|
+| `--name NAME` | required. Who or what the token is for; the audit log records it. Lower-case letters, digits, `.`, `_`, `-` |
+| `--profile P` | the tools the token may use: `minimal` (default), `standard` or `full` |
+| `--tool NAME` | narrow the profile to this tool (repeatable). Default: the whole profile |
+| `--expires WHEN` | `2027-01-31` (works through that day, UTC) or an RFC 3339 time. Default: no expiry |
+| `--tokens-file FILE` | append the hashed entry to this file, created with mode 0600. Without it the entry is printed for you to add |
+
+```bash
+repocortex serve create-token --name ci --profile minimal --tokens-file team-tokens.jsonl
+repocortex serve --http 127.0.0.1:7788 --tokens-file team-tokens.jsonl --audit-log audit.jsonl
+```
+
+```
+$ repocortex serve create-token --name ci --profile minimal --tokens-file team-tokens.jsonl
+Token "ci" (profile minimal, no expiry):
+
+    rcx_<64 hexadecimal characters>
+
+This is the only time it is shown. RepoCortex keeps its SHA-256 hash, not the token.
+Appended the entry to team-tokens.jsonl. A running server reads the file at start: restart it to load this token.
+```
+
+`--json` prints `{name, token, entry, tokens_file, appended}`. The command needs
+no index. It refuses what the server would refuse (a duplicate name, a tool the
+profile does not expose, a tokens file that is already malformed) and an expiry
+that has already passed.
+
+With `--tokens-file`, `serve` takes a token only as `Authorization: Bearer`, a
+tool outside a token's scope does not exist for it, `REPOCORTEX_MCP_TOKEN` is
+ignored, and the file is read once at start: restart to add or revoke a token.
+A malformed file stops the server. Running it behind a reverse proxy, and what
+shared mode does not do (no SSO, no per-repository permissions, no user
+directory): [sharing one index with a team](guides/protocols.md#sharing-one-index-with-a-team).
 
 ### `ui`
 
@@ -5986,6 +6788,12 @@ set, or several matches among the imports. Measured against compiler ground
 truth across five repositories it lands between **5.7%** (prometheus) and
 **37.5%** (a Python corpus). At 5.7% it is wrong roughly nineteen times out of
 twenty.
+
+In Python `medium` also holds something the other languages' does not: every
+method call bound on its NAME because the receiver's class is unknown —
+`target.save()` bound to the only `save` in the file. Those were `high` until
+they were measured at 26–48% and moved; see "Python: the receiver's class, read
+from the source" in [accuracy.md](accuracy.md).
 
 An earlier version of this project documented `medium` as "probable".
 Measurement does not support that, and [accuracy.md](accuracy.md) records the
@@ -6610,6 +7418,318 @@ which is the tier the number is for. It is recorded here because a tier moving
 30pp is exactly the kind of thing that looks like a defect six months later if
 nobody wrote down why it happened.
 
+## Python: the receiver's class, read from the source
+
+Until this change a Python method call was resolved by its NAME. `self.save()`
+bound when the file happened to contain exactly one `save`; `account.save()`
+bound to that same `save` whatever `account` was; and a class imported from the
+package that re-exports it — which is how a library's public names are imported
+— was found only by the last-resort tier that asks whether a name is unique in
+the repository. The parser knew none of the three things that would have
+settled those: which class a definition belongs to, what class a receiver is,
+and which name an import brought in.
+
+`internal/parse/pyscope.go` now states them, and
+`internal/resolve/infer/static.go` uses them.
+
+**What the parser states.**
+
+- A definition's qualified name follows Python's own `__qualname__`:
+  `shop/models/account.py:Account.save`, and `build.<locals>.Item.render` for
+  anything defined inside a function. Two classes' `save` are two names.
+- A receiver is replaced by a class where the source says what it is, and
+  nowhere else: a parameter annotated `account: Account` (also `Optional[...]`,
+  `X | None`, the quoted and dotted forms), or a variable the function assigns
+  exactly once from `Ledger(...)`. A second assignment, a loop target, a `with
+  ... as`, an unpacking or a `global` anywhere in the function withdraws it.
+  Nothing reads a function's return type, an attribute's type or a module-level
+  variable's.
+- A call on an expression with no name — `self.repo.save()`, `make().run()` —
+  is recorded as made on `?`, so that an empty receiver means the source wrote a
+  bare name. `super().save()` is recorded as made on `super`.
+- A call through a local value — a parameter, a loop variable — is marked, and
+  is bound to nothing.
+- `from shop.models import Account` records that `Account` came from
+  `shop.models`, and a relative import keeps its dots.
+
+**What the resolver does with them.**
+
+- `self.x()`, `cls.x()`, `Account.x()` and a receiver the parser replaced with a
+  class are asked about THAT class first, ahead of the same-file tier: the
+  method the class declares, and failing that the nearest one an ancestor
+  declares.
+- A bare call cannot name a method, and a definition local to a function is
+  visible only inside it. Those candidates are removed, and among what is left
+  the innermost definition wins.
+- A name imported by name resolves through the import that named it: to the
+  module if the module defines it, and otherwise to the one definition of that
+  name beneath the package — a re-export. `models.CharField(...)` after
+  `from django.db import models`, and `httpx.Client()` after `import httpx`,
+  resolve the same way.
+- `shop/models/__init__.py` is the module `shop.models`.
+
+**What was taken out of `high`.** A method called on an object whose class
+nothing states — `target.save()`, `self.repo.save()` — used to bind to the only
+`save` in the file, or the only one in an imported module, and be reported at
+`high`. Those bindings are still made. They are reported one level down, as
+what they are: a binding on a name. The same-directory tier is off for Python
+entirely. The measurement behind both is under "What the old tiers were worth".
+
+### Measured against hand-written ground truth
+
+`fixtures/pycalls` is a small package in which every interesting call site
+states, in a comment, the definition it reaches, or that it is dynamic and
+nothing may claim it at `high`: 57 call sites with a known target and 13
+dynamic ones. It covers the shapes a compiler index cannot adjudicate — the
+target of a call through a parameter is a local value, which SCIP does not
+record — and it is a regression gate (`TestPythonCallGroundTruth`).
+
+| | `high`: right | `high`: wrong | all tiers: right | wrong | no edge | dynamic calls claimed at `high` |
+|---|---:|---:|---:|---:|---:|---:|
+| before | 26 | **9** | 36 | 9 | 12 | **4 of 13** |
+| after | **55** | **0** | 55 | 1 | 1 | **0 of 13** |
+
+The one wrong edge left is `service.charge(...)` where `service` is what a
+function returned: the receiver's class is unknown, the name-only tier picks the
+one `charge` in an imported module, and that is the subclass's override. It is
+reported at `medium`. The one miss is `Tree.Node().walk()`, a call on the
+result of a call.
+
+### Measured against a compiler index
+
+Four repositories, each a `--depth 1` clone of a pinned commit, each indexed
+once with `scip-python` 0.6.6 and that one index used for both arms. Figures are
+`repocortex accuracy` output, unedited: call sites the parser recorded a call on
+and the compiler resolved to exactly one definition.
+
+| repository | call sites | arm | `high` sites | right | wrong | `high` precision | `high` recall | all-tier precision | all-tier recall | no edge |
+|---|---:|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| scrapy `c7eacdbb` (480 `.py`) | 9,999 | before | 5,230 | 5,017 | 213 | 95.9% | 50.2% | 93.1% | 63.9% | 3,132 |
+| | | **after** | 6,732 | 6,709 | 23 | **99.7%** | **67.1%** | 96.2% | 72.6% | 2,446 |
+| requests `v2.32.3` (36) | 352 | before | 293 | 283 | 10 | 96.6% | 80.4% | 95.0% | 80.4% | 54 |
+| | | **after** | 300 | 295 | 5 | **98.3%** | **83.8%** | 96.4% | 83.8% | 46 |
+| httpx `0.28.1` (60) | 1,826 | before | 405 | 376 | 29 | 92.8% | 20.6% | 54.1% | 31.7% | 755 |
+| | | **after** | 1,293 | 928 | 365 | 71.8% | 50.8% | 67.0% | 51.6% | 420 |
+| django `5.1.4` (2,788) | 44,787 | before | 17,996 | 15,443 | 2,553 | 85.8% | 34.5% | 78.7% | 40.6% | 21,667 |
+| | | **after** | 30,359 | 27,579 | 2,780 | 90.8% | 61.6% | 86.3% | 63.0% | 12,084 |
+
+Two rows in that table do not say what they appear to. On httpx `high`
+precision FELL, from 92.8% to 71.8%, and on django it reached only 90.8%. Both
+are the compiler index being wrong, and the next section is the evidence for
+saying so rather than a reason to look away from the number.
+
+One row says something about the baseline: on django, before this change,
+`high` measured **85.8%** — under the 86.8% floor this document publishes for
+the tier.
+
+### The compiler index is wrong about wildcard re-exports
+
+`httpx/__init__.py` is twelve lines of `from ._models import *`. A test that
+writes `httpx.Cookies()` reaches the class `Cookies` in `httpx/_models.py`.
+`scip-python` 0.6.6 records that occurrence as a reference to
+`` `httpx._models`/Request# `` — a different class in the same module — and does
+the same for every name that arrives through a wildcard import: every
+`models.CharField(...)`, `models.IntegerField(...)` and `models.BooleanField(...)`
+in django's tests is attributed to `DateTimeField`. Read from the SCIP file
+directly, not from RepoCortex's import of it:
+
+```
+tests/models/test_cookies.py:24   cookies = httpx.Cookies()
+  [23 14 19]  scip-python python … httpx/__init__:
+  [23 20 27]  scip-python python … `httpx._models`/Request#
+```
+
+So an edge that names the right class is scored wrong, and the better the
+resolver gets at these calls the lower its measured precision goes. The
+baseline's precision on httpx was high because it bound almost none of them at
+`high`; it bound them at `low`, where 424 of 618 were scored wrong for the same
+reason.
+
+This was checked with something that depends on neither tool. For every call
+site where an edge and the compiler index disagree and the call is a bare name
+or is qualified by a name the file imported, the import chain is followed with
+Python's own `ast` module — `from … import *` and `__all__` included — and the
+site is counted right only if the chain ends exactly where the edge points. A
+second, smaller class is corrected the same way: where an edge names a function
+defined inside the function the call is written in, and the compiler index names
+a same-named function defined inside a DIFFERENT function, Python's scoping
+makes the compiler's answer impossible. Nothing else is touched. Both
+corrections are applied to both arms, whatever tier and reason an edge carries.
+
+| repository | arm | verdicts corrected | `high` right | wrong | `high` precision | `high` recall | all-tier precision | all-tier recall |
+|---|---|---:|---:|---:|---:|---:|---:|---:|
+| scrapy | before | 0 | 5,017 | 213 | 95.9% | 50.2% | 93.1% | 63.9% |
+| | **after** | 17 | 6,726 | 6 | **99.9%** | **67.3%** | 96.4% | 72.8% |
+| requests | before | 0 | 283 | 10 | 96.6% | 80.4% | 95.0% | 80.4% |
+| | **after** | 0 | 295 | 5 | **98.3%** | **83.8%** | 96.4% | 83.8% |
+| httpx | before | 358 | 376 | 29 | 92.8% | 20.6% | 87.5% | 51.3% |
+| | **after** | 365 | 1,293 | 0 | **100.0%** | **70.8%** | 93.0% | 71.6% |
+| django | before | 842 | 15,573 | 2,423 | 86.5% | 34.8% | 82.4% | 42.5% |
+| | **after** | 2,725 | 30,299 | 60 | **99.8%** | **67.7%** | 94.7% | 69.1% |
+
+Read the first table as the measurement and the second as what it means. The
+first is what the tool prints; the second is what remains after 3,107 verdicts
+the index got wrong are set right by a method anyone can re-run. Neither is
+offered without the other.
+
+A third artefact is left in both tables because it cuts both ways and cannot be
+corrected, only counted. A call site is adjudicated per LINE, so a line holding
+two calls is scored against whichever one the compiler resolved. On requests all
+5 `high` sites still scored wrong are of that kind — the compiler's one target
+on the line has a different name from the call that was bound — and on scrapy 3
+of the remaining 6 are.
+
+### What each rule is worth
+
+Edge by edge rather than site by site, over the four repositories together,
+after the two corrections above. The last column is the same figure as the
+compiler index scores it.
+
+| tier | why the edge was made | django | scrapy | httpx | requests | all four | agreed | as indexed |
+|---|---|---:|---:|---:|---:|---:|---:|---:|
+| `high` | imported by name from the module that defines it | 5,584 of 5,584 | 2,318 of 2,320 | 134 of 134 | 135 of 138 | 8,171 of 8,176 | 99.9% | 99.8% |
+| `high` | inherited: declared on an ancestor of the receiver's class | 6,650 of 6,714 | 799 of 805 | 49 of 49 | 7 of 7 | 7,505 of 7,575 | 99.1% | 99.1% |
+| `high` | imported by name from a package that re-exports it | 5,252 of 5,273 | 789 of 789 | — | — | 6,041 of 6,062 | 99.7% | 99.5% |
+| `high` | declared on the enclosing class (`self`, `cls`) | 4,544 of 4,545 | 1,345 of 1,348 | 88 of 88 | 67 of 67 | 6,044 of 6,048 | 99.9% | 99.9% |
+| `high` | qualified by an imported package that re-exports it | 4,122 of 4,122 | 8 of 8 | 576 of 576 | 0 of 6 | 4,706 of 4,712 | 99.9% | 36.2% |
+| `high` | defined in the same file (a bare name) | 2,727 of 2,729 | 911 of 911 | 187 of 187 | 80 of 80 | 3,905 of 3,907 | 99.9% | 97.6% |
+| `high` | declared on the receiver's class (annotation, constructor, or the class written out) | 978 of 978 | 518 of 518 | 259 of 259 | 5 of 5 | 1,760 of 1,760 | 100.0% | 100.0% |
+| `high` | qualified by an imported module that defines it | 366 of 367 | 15 of 17 | — | 1 of 1 | 382 of 385 | 99.2% | 99.2% |
+| `high` | defined in the enclosing scope, nearest of several | 84 of 84 | 23 of 24 | — | — | 107 of 108 | 99.1% | 98.1% |
+| `high` | receiver spells a module's file name | 0 of 3 | — | — | — | 0 of 3 | 0.0% | 0.0% |
+| `medium` | one match in an imported module; receiver's class unknown | 420 of 1,204 | 397 of 483 | 6 of 13 | 0 of 2 | 823 of 1,702 | 48.4% | 48.4% |
+| `medium` | one match in the same file; receiver's class unknown | 49 of 207 | 37 of 118 | 4 of 17 | 0 of 6 | 90 of 348 | 25.9% | 25.9% |
+| `medium` | the class does not declare it, its ancestors did not settle it; one match by name | 89 of 109 | 10 of 11 | — | — | 99 of 120 | 82.5% | 82.5% |
+| `medium` | one match in an imported module; a bare name the file never imported | 28 of 46 | — | — | 0 of 2 | 28 of 48 | 58.3% | 58.3% |
+| `low` | several matches among imports; receiver's class unknown | 8 of 1,227 | 110 of 237 | 4 of 24 | 0 of 1 | 122 of 1,489 | 8.2% | 8.2% |
+| `low` | unique name in the repository, no import evidence | 64 of 100 | 0 of 12 | 0 of 66 | — | 64 of 178 | 36.0% | 33.1% |
+| `low` | the class does not declare it, its ancestors did not settle it; several matches by name | 0 of 4 | — | — | — | 0 of 4 | 0.0% | 0.0% |
+
+Over all four, `high` is 38,621 of 38,736 edges, **99.7%** — 91.7% as indexed.
+`medium` is 46.9% and `low` 11.1%, which is what those two labels say they are.
+
+The six `high` edges on requests the correction could not reach are
+`requests.get(...)` and `requests.Request(...)` in a `src/`-layout repository:
+the lines are among the "different name" artefacts above, and the `ast` walk
+does not look under `src/`. They are left as the index scores them.
+
+### What the old tiers were worth
+
+The relabelling was decided by this table. It was taken on an intermediate
+build, before the labels moved, on scrapy and django, and counts edges for a
+method called on an object whose class nothing states:
+
+| what bound it, at `high` | scrapy | django |
+|---|---:|---:|
+| the only definition of the name in the file | 37 of 113 (33%) | 48 of 168 (29%) |
+| the only one in an imported module | 393 of 479 (82%) | 394 of 1,057 (37%) |
+| several among the imports (then `medium`) | 110 of 235 (47%) | 7 of 1,098 (1%) |
+
+None of the three clears 86.8%, and on django the first two were most of the
+reason `high` measured 85.8%. They are `medium` and `low` now, and the final
+table above is the same population after the move.
+
+The same-directory tier, which reports `medium` where a language requires an
+import, was right **1 time in 213** on Python across scrapy, requests and httpx:
+a Python name a file neither defines nor imports cannot denote a neighbour's
+definition. It is off for Python (`LanguageSpec.ProximityIsEvidence`), and a
+reference only it could bind is recorded ambiguous.
+
+A call on `super()` whose class has no indexed ancestor declaring the method
+used to fall back to the only definition of the name in the file — which is,
+more often than not, the method the call is written in. Measured on django
+before that fallback was removed: right 0 times in 54.
+
+### Arity for Python: measured, and removed
+
+A Python arity query was built for the same run: a method's `self` taken off the
+count, and a signature with a default, a splat or a bare `*` refused outright,
+as a call passing a splat is. One binary with it and one without, same trees,
+same indexes.
+
+| repository | `high` | `medium` | `low` right, with arity | `low` right, without |
+|---|---|---|---:|---:|
+| scrapy | identical | identical | 109 | 110 |
+| django | identical | identical | 66 | 67 |
+| requests, httpx | identical | identical | identical | identical |
+
+It chose between candidates 56 times, all in the lowest tier, and was right
+once; without it two more call sites were right. That is the TypeScript result
+again (see "A4 on TypeScript" below) for the same reason — arity only ranks
+candidates a tier has already accepted, and in Python those are the name-only
+bindings for an unknown receiver — and it got the same decision. The query, its
+dialect and the method bookkeeping were deleted.
+
+### The tier
+
+`repocortex languages` now lists Python as `typed`. The tier is derived, not
+listed (`internal/parse/tiers.go`), and until now the derivation had one route:
+import, receiver and arity queries. Python has no arity query, for the reason
+just given, so the derivation gained a second route — a scope analysis that
+states the receiver's class — and the tier's description changed from "receiver
+and arity discrimination" to "receiver discrimination by arity or class".
+
+That is a change to what the word means, made on these numbers:
+
+| | `high` precision | `high` recall |
+|---|---:|---:|
+| Python, four repositories, as indexed | 71.8 – 99.7% | 50.8 – 83.8% |
+| Python, four repositories, corrected | 98.3 – 100.0% | 67.3 – 83.8% |
+| Go (own source) | 98.6% | 60.4% |
+| TypeScript | 99.5% | 66.4% |
+| Java (spring-petclinic-rest) | 100.0% | 32.7% |
+
+If the correction is not accepted the as-indexed row is the one to read, and on
+it Python clears the 86.8% floor on three repositories of four and not on httpx.
+The promotion rests on the corrected row, and on the correction being checkable.
+
+### Cost
+
+django, 2,788 Python files, `index --full` then `resolve`, the two binaries
+alternated within each of three rounds on one machine:
+
+| phase | binary | wall clock, three rounds | CPU, three rounds |
+|---|---|---:|---:|
+| `index --full` | before | 30.4 – 34.6 s | 73.8 – 88.2 s |
+| | after | 24.2 – 35.9 s | 63.4 – 85.7 s |
+| `resolve` | before | 6.8 – 8.9 s | 7.6 – 9.7 s |
+| | after | 8.5 – 11.5 s | 9.2 – 12.4 s |
+
+The machine was doing other work throughout, which is why the wall clock ranges
+overlap and the CPU column is the one to compare. Indexing is unchanged within
+that noise: 6,817 files discovered, 2,340 indexed, 41,688 symbols in both arms.
+`resolve` costs about a quarter more CPU — round by round 9.7 to 12.4 s, 7.6 to
+9.7 s and 7.7 to 9.2 s — and most of it is the hierarchy lookups for parked
+references and the SQLite writes for edges it did not use to find. On scrapy
+(480 files) neither phase moved outside the noise.
+
+Resolution writes 32% more edges on that tree (57,015 to 75,129) and 24% fewer
+reference rows are stored (253,125 to 192,001: the object of `row.save()` is no
+longer recorded as a call to `row` when `row` is a local value). Two costs were
+found by profiling and removed before these figures were taken: the scoping
+filter re-derived a reference's kind once per candidate, and the hierarchy pass
+asked the registry for the same class's supertypes once per chunk of parked
+references rather than once per run.
+
+### What this does not do
+
+- **A receiver whose class is only inferable.** `crawler = get_crawler()`,
+  `self.settings.getbool(...)`, a pytest fixture: 1,088 of scrapy's 2,446
+  remaining misses are a method on such a receiver. Reading return annotations
+  and attribute types would reach some of them; neither is done.
+- **Method resolution order.** Two bases that both declare a method leave the
+  call ambiguous, because the hierarchy is stored by name and unordered. Python
+  would take the leftmost.
+- **A class identified by name alone.** The hierarchy is keyed by class NAME.
+  A receiver's own class is pinned to one definition; its ancestors are not, so
+  two unrelated classes called `Base` share their ancestry.
+- **Aliased members.** `from m import a as b` is not followed.
+- **The denominator.** About 1,200 of scrapy's remaining misses are lines where
+  the compiler's one target has a different name from every call the parser
+  recorded there — `isinstance(x, Response)` resolves `Response`, and
+  `isinstance` is a builtin. No call resolver can produce that edge. They count
+  as misses for both arms, as they did before.
+
 ## Measured on a polyglot repository that is not ours
 
 Every figure above this section was measured on Go, on corpora chosen for
@@ -6774,7 +7894,7 @@ Restricted to call sites the compiler resolved to exactly one definition:
 
 | | `high` precision | `high` recall | F1 | adjudicated sites | produced no edge |
 |---|---:|---:|---:|---:|---:|
-| **Python** | 94.2% | 56.3% | 70.4% | 3,277 | **1,306 (39.9%)** |
+| **Python** (before the scope analysis) | 94.2% | 56.3% | 70.4% | 3,277 | **1,306 (39.9%)** |
 | **TypeScript** | 99.5% | 66.4% | 79.6% | 2,330 | **749 (32.1%)** |
 | Go (own source) | 98.6% | 60.4% | 75.0% | 8,315 | 2,855 (34.3%) |
 | Java (spring-petclinic-rest) | 100.0% | 32.7% | 49.2% | 251 | **169 (67.3%)** |
@@ -6782,6 +7902,13 @@ Restricted to call sites the compiler resolved to exactly one definition:
 **TypeScript is the most precise tier measured anywhere in this project** —
 99.5%, eight wrong edges in 1,554. Python is the least at 94.2%, and both clear
 the 86.8% floor.
+
+The Python row was taken on a private service that cannot be re-measured, and
+it predates the scope analysis. What Python measures now, on four public
+repositories, is in "Python: the receiver's class, read from the source" above:
+`high` precision 98.3–100.0% and recall 67.3–83.8% once the compiler index's
+errors on wildcard re-exports are corrected, and 71.8–99.7% and 50.8–83.8% as
+the index scores it.
 
 **The recall gap is consistent across Go, Python and TypeScript**: between a third and
 two fifths of known call sites produce no edge at all. That number is the same
@@ -7327,6 +8454,7 @@ The numbers above came from:
 | RepoCortex | commit at the time of writing, `CGO_ENABLED=0` |
 | Ground truth | `scip-go` 0.2.7, `scip-typescript` 0.3.14, `scip-python` 0.6.6, `scip-java` `HEAD-20260402-1456` (pinned image digest `a05564b9…`, docker runner) |
 | Corpora | `--depth 1` clones: prometheus, nest, scrapy, requests, spring-petclinic-rest (`4cd8e1b`) |
+| Python scope analysis | `--depth 1` clones of scrapy `c7eacdbb30a4563bbbe04ed02781768f4e19eabb`, requests `v2.32.3` (`0e322af8`), httpx `0.28.1` (`26d48e06`), django `5.1.4` (`2d4add11`); `scip-python index --project-name repocortex-repository --project-version 0.0.0`, as `repocortex indexers` runs it; `index --full --accuracy fast`, `resolve --no-scip`, `scip import`, `accuracy` |
 
 `scip-go` on prometheus takes about eight minutes and produces a 57 MB index.
 On RepoCortex's own source it takes nineteen seconds and produces 7 MB.
