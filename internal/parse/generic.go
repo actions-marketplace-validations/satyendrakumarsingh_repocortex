@@ -471,14 +471,14 @@ func (p *genericParser) Parse(ctx context.Context, path string, src []byte) (*Re
 			res.Status = StatusFailed
 			res.Reason = model.ParseReasonUnspecified
 			res.Err = err
-			return nil, nil, stop, nil, nil, true, nil
+			return nil, nil, stop, nil, nil, true, nil //nolint:nilerr // deliberate: recorded on the result, see above
 		}
 		tags, implementers, err = by.tagTree(tree, src)
 		if err != nil {
 			res.Status = StatusFailed
 			res.Reason = model.ParseReasonUnspecified
 			res.Err = err
-			return nil, nil, stop, nil, nil, true, nil
+			return nil, nil, stop, nil, nil, true, nil //nolint:nilerr // deliberate: a failed query is this file's result, not the run's
 		}
 		return by, tree, stop, tags, implementers, false, nil
 	}
@@ -791,8 +791,11 @@ func (c parserConfig) probeMicros(language string, srcLen int) uint64 {
 	if !maskedLanguages[language] && !condLanguages[language] {
 		return full
 	}
-	probe := uint64((probeBase + time.Duration(srcLen>>10)*probePerKiB).Microseconds())
-	return min(full, probe)
+	us := (probeBase + time.Duration(srcLen>>10)*probePerKiB).Microseconds()
+	if us < 1 {
+		us = 1
+	}
+	return min(full, uint64(us))
 }
 
 // ceilingMicros is the ceiling in the unit the parser takes it in, never zero:

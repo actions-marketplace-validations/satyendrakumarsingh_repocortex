@@ -188,7 +188,7 @@ func scanCondDirectives(src []byte, csharp bool) []condDirective {
 		case c == '\'':
 			lineStart = false
 			code(c, i)
-			if !csharp && i > 0 && isIdentByte(src[i-1]) && !(src[i-1] == 'L' || src[i-1] == 'u' || src[i-1] == 'U') {
+			if !csharp && i > 0 && isIdentByte(src[i-1]) && src[i-1] != 'L' && src[i-1] != 'u' && src[i-1] != 'U' {
 				i++ // a digit separator, 1'000
 				continue
 			}
