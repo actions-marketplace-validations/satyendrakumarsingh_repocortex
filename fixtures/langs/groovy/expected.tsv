@@ -1,0 +1,56 @@
+# Groovy definition rule. Recorded: class and enum (class), interface, @interface and trait
+# (interface); methods and constructors in a class, interface, trait or enum body (method);
+# Spock string-named methods (method, named by the title without quotes); closures assigned to a
+# field (method) or to a script variable (function); def and typed functions at the top level of a
+# script (function); Gradle tasks (function): task name {}, task name(type: T) {},
+# task('name') {}, tasks.register/create('name') {} and project.task('name').
+# Not recorded: plain fields and script variables, enum constants, locals, parameters, calls,
+# configuration blocks (repositories {}, dependencies {}), tasks.named (configures an existing task).
+# A class with an annotation starts at the annotation line (Inventory.groovy 5).
+# Not captured, see KNOWN_GAPS.md: Inventory.groovy 24 (private constructor with two parameters), 80-84 (enum constants and constructor).
+Inventory.groovy	5	class	Inventory
+Inventory.groovy	13	method	formatter
+Inventory.groovy	14	method	handler
+Inventory.groovy	16	method	Inventory
+Inventory.groovy	20	method	Inventory
+Inventory.groovy	26	method	add
+Inventory.groovy	31	method	create
+Inventory.groovy	35	method	intercept
+Inventory.groovy	39	method	skus
+Inventory.groovy	41	method	reset
+Inventory.groovy	45	method	compareTo
+Inventory.groovy	47	method	toString
+Inventory.groovy	49	method	maximum of two numbers
+Inventory.groovy	54	class	Nested
+Inventory.groovy	55	method	run
+Inventory.groovy	58	class	Entry
+Inventory.groovy	61	method	Entry
+Inventory.groovy	62	method	isEmpty
+Inventory.groovy	66	interface	Repository
+Inventory.groovy	67	method	find
+Inventory.groovy	68	method	findAll
+Inventory.groovy	69	method	save
+Inventory.groovy	70	method	describe
+Inventory.groovy	73	interface	Auditable
+Inventory.groovy	75	method	audit
+Inventory.groovy	76	method	owner
+Inventory.groovy	79	class	Status
+Inventory.groovy	86	method	label
+Inventory.groovy	89	interface	Marker
+Inventory.groovy	90	method	value
+Inventory.groovy	93	class	Account
+Inventory.groovy	94	method	Account
+Inventory.groovy	97	function	helper
+Inventory.groovy	101	function	shout
+Inventory.groovy	103	function	util
+Inventory.groovy	109	function	run
+build.gradle	19	function	hello
+build.gradle	25	function	copyDocs
+build.gradle	30	function	legacy
+build.gradle	34	function	lint
+build.gradle	39	function	format
+build.gradle	43	function	bundle
+build.gradle	47	function	viaProject
+build.gradle	55	function	computeVersion
+build.gradle	59	function	describe
+build.gradle	61	function	helperClosure
