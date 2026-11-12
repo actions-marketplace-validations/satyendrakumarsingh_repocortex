@@ -472,10 +472,10 @@ func (s *candScan) declMacros(i int) []macroCandidate {
 		lastFrom = j
 		j = next
 	}
-	if len(found) == 0 {
+	if len(found) == 0 && s.word(j) == "" {
 		return nil
 	}
-	if s.word(j) == "" {
+	if len(found) > 0 && s.word(j) == "" {
 		// The run ended on a macro alone on its line, in front of a directive,
 		// an Objective-C `@` declaration or a closing brace.
 		if s.aloneOnLine(lastFrom, j) {
@@ -486,7 +486,7 @@ func (s *candScan) declMacros(i int) []macroCandidate {
 	// A lone macro on a line of its own in front of the next declaration
 	// (`FMT_BEGIN_NAMESPACE`, `G_BEGIN_DECLS`): it takes no arguments, nothing
 	// else is on its line, and the next token starts a later one.
-	if len(found) == 1 && !hasParen && bytes.IndexByte(s.src[s.toks[j-1].end:s.toks[j].start], '\n') >= 0 &&
+	if len(found) == 1 && !hasParen && j < len(s.toks) && bytes.IndexByte(s.src[s.toks[j-1].end:s.toks[j].start], '\n') >= 0 &&
 		(lastFrom == 0 || bytes.IndexByte(s.src[s.toks[lastFrom-1].end:s.toks[lastFrom].start], '\n') >= 0) {
 		return found
 	}
@@ -502,6 +502,17 @@ loop:
 		t := s.toks[k]
 		switch {
 		case t.kind == ctIdent:
+			// A macro in the middle of the head, between the return type and
+			// the name (`void *JEMALLOC_ATTR(malloc) je_malloc(`): one that is
+			// followed by more of the head, never the name in front of `(`.
+			if c, next, ok := s.macroAt(k); ok && (s.word(next) != "" || s.punct(next, '*') || s.punct(next, '&')) {
+				found = append(found, c)
+				if next-1 > k {
+					hasParen = true
+				}
+				k = next
+				continue
+			}
 			words++
 			k++
 		case t.kind == ctScope:
@@ -536,7 +547,7 @@ loop:
 	// `MACRO name(`: one word is the return type's absence; that is a call or
 	// a constructor-like macro use, unless the macro took arguments of its own
 	// (`MACRO(type) name(`).
-	if words < 2 && !hasParen {
+	if len(found) == 0 || words < 2 && !hasParen {
 		return nil
 	}
 	if name := k - 1; s.toks[name].kind == ctIdent && s.definesBody(k) {
