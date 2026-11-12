@@ -1,0 +1,10 @@
+# Circom: functions (function), templates (class) and the 'component main' entry point (function, named main).
+# Not listed: signals, variables, component instances and calls, which are locals or uses.
+# Templates written 'template Name(...)' on one line are not listed either: the grammar puts the space
+# before the name into the name. See KNOWN_GAPS.md.
+sample.circom	5	function	log2
+sample.circom	18	function	twice
+sample.circom	48	class	Sum
+sample.circom	58	class	Gate
+sample.circom	64	class	Splitter
+sample.circom	99	function	main
