@@ -1,6 +1,10 @@
 package parse
 
-import "sort"
+import (
+	"sort"
+
+	ts "github.com/odvcencio/gotreesitter"
+)
 
 // Tags-query supplements.
 //
@@ -820,7 +824,10 @@ func HasMeasuredReceivers(language string) bool { return receiverLanguages[langu
 // position without either query knowing about the other. See the callSite type
 // in generic.go for why the match is on line plus name and never on column.
 //
-// # Only Go is listed, and that is a measurement statement rather than a gap
+// # Python is not listed, and that is a measurement statement rather than a gap
+//
+// Kotlin, Scala, C# and C++ register theirs from arity_langs.go, with the rule
+// each one counts by.
 //
 // The counting itself is language-specific in a way that is easy to get subtly
 // wrong, and a wrong count is worse than no count:
@@ -918,6 +925,38 @@ type arityDialect struct {
 	// parameter — `func h(int, string)` declares two parameters and names
 	// neither.
 	group map[string]bool
+
+	// items, when non-nil, closes the dialect: the only named children of a
+	// list that count as one item each are these types, and any other named
+	// child (a default value the grammar writes beside its parameter, a
+	// `params` array it leaves bare) makes the whole list unknown. A nil items
+	// keeps the older, open behaviour of the Go, Java and TypeScript dialects,
+	// where every named child is one item.
+	items map[string]bool
+
+	// closedIn narrows items to the lists of these types, for a language whose
+	// argument lists hold any expression and so cannot be closed (C++'s
+	// parameter_list is closed, its argument_list is not). Empty means every
+	// list the dialect counts.
+	closedIn map[string]bool
+
+	// skip types are named children that are neither items nor a reason to
+	// give up: a modifier list that belongs to the next parameter, the type
+	// arguments of a call.
+	skip map[string]bool
+
+	// flatten types are wrappers whose own children are counted in their place
+	// (Kotlin's `value_arguments` inside a `call_suffix`).
+	flatten map[string]bool
+
+	// opaque reports an item whose presence makes the count unknown although
+	// it is a plain item by type: a C# parameter with a default value, or the
+	// `this` of an extension method.
+	opaque func(item *ts.Node, lang *ts.Language, src []byte) bool
+
+	// voidList reports a list that declares nothing although it has a child:
+	// C and C++ write `f(void)` for a function of no parameters.
+	voidList func(list *ts.Node, lang *ts.Language, src []byte) bool
 }
 
 // arityDialects is keyed by the same language names as the queries above. A

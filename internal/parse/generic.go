@@ -562,7 +562,10 @@ func (p *genericParser) Parse(ctx context.Context, path string, src []byte) (*Re
 				continue
 			}
 			sym := p.toSymbol(tag)
-			sym.ParamCount = paramCounts[callSite{line: sym.Range.Start.Line, name: sym.Name}]
+			// Keyed by the line of the NAME, not of the range: an annotation or an
+			// attribute above the declaration starts the range a line or more earlier
+			// than the name the arity query captured.
+			sym.ParamCount = paramCounts[callSite{line: int(tag.NameRange.StartPoint.Row) + 1, name: sym.Name}]
 			if py != nil {
 				// A nested definition is qualified by what encloses it, so that
 				// two classes' `save` are two names. Module-level definitions
@@ -1183,7 +1186,7 @@ func (p *genericParser) extractCounts(
 		if name == "" || line == 0 || list == nil {
 			continue
 		}
-		n := p.arity.count(list, p.lang)
+		n := p.arity.count(list, p.lang, src)
 		k := callSite{line: line, name: name}
 		if prev, seen := out[k]; seen && prev != n {
 			conflict[k] = true
@@ -1208,30 +1211,69 @@ func (p *genericParser) extractCounts(
 // Extra nodes — comments, and anything else the grammar attaches out of band —
 // are skipped rather than counted. A comment between two arguments is not a
 // third argument.
-func (d arityDialect) count(list *ts.Node, lang *ts.Language) model.Arity {
+func (d arityDialect) count(list *ts.Node, lang *ts.Language, src []byte) model.Arity {
 	if list == nil {
 		return model.ArityUnknown
 	}
-	total := 0
+	total, ok := d.countItems(list, lang, src, 0)
+	if !ok {
+		return model.ArityUnknown
+	}
+	return model.KnownArity(total)
+}
+
+// countItems sums the items of a list. ok is false when the list holds
+// anything the dialect cannot count exactly: that makes the whole count
+// unknown, never a guess.
+func (d arityDialect) countItems(list *ts.Node, lang *ts.Language, src []byte, depth int) (total int, ok bool) {
+	if depth > 3 {
+		return 0, false
+	}
+	if d.voidList != nil && d.voidList(list, lang, src) {
+		return 0, true
+	}
 	for i := 0; i < list.ChildCount(); i++ {
 		c := list.Child(i)
-		if c == nil || !c.IsNamed() || c.IsExtra() {
+		if c == nil || c.IsExtra() {
 			continue
 		}
 		typ := c.Type(lang)
+		if !c.IsNamed() {
+			// An anonymous token can still make the list open-ended: C's `...`.
+			if d.variadic[typ] {
+				return 0, false
+			}
+			continue
+		}
+		closed := d.items != nil && (len(d.closedIn) == 0 || d.closedIn[list.Type(lang)])
 		switch {
+		case d.opaque != nil && d.opaque(c, lang, src):
+			return 0, false
+		case d.skip[typ]:
+			continue
+		case d.flatten[typ]:
+			n, ok := d.countItems(c, lang, src, depth+1)
+			if !ok {
+				return 0, false
+			}
+			total += n
 		case d.isVariadic(c, lang):
 			// Open-ended on one side means the two sides cannot be compared at
 			// all. Neither `func v(xs ...int)` nor `v(a, b, c)` is wrong about
 			// the other, so no count is published for either.
-			return model.ArityUnknown
+			return 0, false
 		case d.group[typ]:
 			total += namedFieldCount(c, lang)
+		case closed && !d.items[typ]:
+			// A closed dialect: a node it never classified (a default value
+			// written beside its parameter, a `params` array the grammar
+			// leaves bare) makes the list unknown.
+			return 0, false
 		default:
 			total++
 		}
 	}
-	return model.KnownArity(total)
+	return total, true
 }
 
 // isVariadic reports whether node or any of its immediate named children is a
