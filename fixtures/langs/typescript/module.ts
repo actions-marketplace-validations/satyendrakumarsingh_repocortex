@@ -25,3 +25,30 @@ export abstract class Base {
 
 exports.legacy = function legacy() {};
 Client.prototype.close = function close() {};
+
+export class Cache {
+  #store: Map<string, number> = new Map();
+  static #hits = 0;
+  #touch(key: string): void { this.#store.get(key); }
+  get #size(): number { return this.#store.size; }
+  public run(): void { this.#touch("a"); }
+}
+
+export function parse(input: string): string;
+export function parse(input: number): number;
+export function parse(input: any): any { return input; }
+
+export namespace Util {
+  export const LIMIT = 5;
+  export function clamp(n: number): number { return n; }
+}
+
+interface Reader {
+  read(n: number): string;
+  read(n: string): string;
+}
+
+class Account {
+  get balance(): number { return 1; }
+  set balance(v: number) {}
+}

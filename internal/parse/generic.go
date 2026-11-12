@@ -505,8 +505,10 @@ func (p *genericParser) Parse(ctx context.Context, path string, src []byte) (*Re
 	// it, and running after the drop is how the first receiver extraction
 	// silently extracted nothing at all. See shape.go.
 	var shapes *shapeFacts
+	var renames map[string]string
 	if py == nil {
 		shapes = by.analyzeShapes(tree, src, tags)
+		renames = by.renamedImports(tree, src)
 		res.Imports = mergeMemberImports(res.Imports, by.importedBindings(tree, src))
 	}
 
@@ -523,7 +525,7 @@ func (p *genericParser) Parse(ctx context.Context, path string, src []byte) (*Re
 
 	// Each clause head's arity, for the languages that write a function as
 	// several clauses. See clausemerge.go.
-	clauseKeys := by.clauseArities(tree, tags)
+	clauseKeys := by.clauseArities(tree, src, tags)
 
 	// The verdict on the parse itself, also read from the tree.
 	p.describeParse(res, tree, stop, src)
@@ -660,6 +662,12 @@ func (p *genericParser) Parse(ctx context.Context, path string, src []byte) (*Re
 			}
 			if t, ok := implementers[tag.NameRange.StartByte]; ok && isSupertypeRef(tag.Kind) {
 				r.Receiver, r.ReceiverKind = t, model.ReceiverImplementer
+			}
+			// A use of a renamed import is a use of the export. See
+			// renamedImports.
+			if orig, ok := renames[r.Name]; ok && (isSupertypeRef(tag.Kind) ||
+				(isCallTag(tag.Kind) && r.ReceiverKind == model.ReceiverBare)) {
+				r.Name = orig
 			}
 			res.References = append(res.References, r)
 		}

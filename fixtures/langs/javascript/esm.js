@@ -23,3 +23,10 @@ export class Store {
 const shared = build();
 const hiddenToo = build();
 export { shared };
+
+export class Vault {
+  #secret = 1;
+  open = 2;
+  #check(x) { return x; }
+  read() { return this.#check(this.#secret); }
+}

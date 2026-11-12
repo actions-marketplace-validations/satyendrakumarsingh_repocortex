@@ -186,8 +186,78 @@ func (p *genericParser) refineDefinitions(tree *ts.Tree, src []byte, path string
 // registerScriptLanguage registers the shared patterns and the refiner for one
 // of the three grammars, with extra patterns only that grammar can parse.
 func registerScriptLanguage(language, extra string) {
-	registerDefinitions(language, scriptDefinitions+scriptNewReferences+extra, false)
+	private := privateMembers
+	if language == "javascript" {
+		private += jsPrivateFields
+	} else {
+		private += tsPrivateFields + tsNamespaces
+		// An overload signature is folded into the implementation that follows
+		// it, see tsStubName.
+		registerStubFold(language, tsStubName)
+	}
+	registerDefinitions(language, scriptDefinitions+private+scriptNewReferences+extra, false)
 	definitionRefiners[language] = refineScriptDefinitions
+}
+
+// # Private members, namespaces and overload signatures
+//
+// A `#name` member is a private_property_identifier, a node type of its own
+// that the inferred patterns (which name property_identifier) never see: hono
+// declares its internal state and helpers that way, and 19 of the 20
+// definitions missed there and 6 of the 13 call sites missed were `#name`. A
+// member is named WITH its `#`, as the language writes it: `#init` and `init`
+// are two different members of one class, and `this.#init()` can only be the
+// first.
+//
+//	#status = 200            field    #status        (public_field_definition in
+//	static #count = 0        field    #count          TypeScript, field_definition
+//	                                                  in JavaScript)
+//	#init(a) {}              method   #init
+//	get #size() {}           method   #size
+//	this.#init(x)            call     #init, on this
+//	obj.#init(x)             call     #init, on obj
+//
+// JavaScript's other class fields are not definitions (see its fixture), so
+// only its private ones are added: a `#field` is a member nothing outside the
+// class can name, which is the case for finding it by name here.
+//
+// `namespace Outer { ... }` and `namespace A.B { ... }` are packages, named as
+// written. Members inside are not qualified by it: they stay what they were
+// (`inner` is a function), because the call `Outer.inner()` reaches them by the
+// plain name too. `declare module "x" {}` and `declare global {}` are not
+// namespaces of the program and are left out.
+const (
+	privateMembers = `
+(method_definition name: (private_property_identifier) @name) @definition.method
+(call_expression function: (member_expression property: (private_property_identifier) @name)) @reference.call
+`
+	tsPrivateFields = `
+(public_field_definition name: (private_property_identifier) @name) @definition.field
+`
+	jsPrivateFields = `
+(field_definition property: (private_property_identifier) @name) @definition.field
+`
+	tsNamespaces = `
+(internal_module name: (identifier) @name) @definition.module
+(internal_module name: (nested_identifier) @name) @definition.module
+`
+)
+
+// tsStubName reports whether the name belongs to a declaration with no body: a
+// function overload signature, or a method signature of a class or interface.
+// `function f(a: string): void; function f(a: number): void; function f(a:
+// any) {}` is one function, not three, and so is a method overloaded the same
+// way. A signature is folded into the declaration that follows it.
+func tsStubName(name *ts.Node, lang *ts.Language, _ []byte) bool {
+	parent := name.Parent()
+	if parent == nil {
+		return false
+	}
+	switch parent.Type(lang) {
+	case "function_signature", "method_signature", "abstract_method_signature":
+		return true
+	}
+	return false
 }
 
 // scriptNode is a node and the path from the root to it.
