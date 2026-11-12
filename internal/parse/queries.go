@@ -471,17 +471,17 @@ var importQueries = map[string]string{
 	"typescript": `
 (import_statement source: (string) @path)
 (export_statement source: (string (string_fragment) @path)) @import
-`,
+` + scriptRequireImports,
 
 	"tsx": `
 (import_statement source: (string) @path)
 (export_statement source: (string (string_fragment) @path)) @import
-`,
+` + scriptRequireImports,
 
 	"javascript": `
 (import_statement source: (string) @path)
 (export_statement source: (string (string_fragment) @path)) @import
-`,
+` + scriptRequireImports,
 
 	"rust": `
 (use_declaration argument: (scoped_identifier) @path)

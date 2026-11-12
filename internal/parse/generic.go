@@ -498,6 +498,12 @@ func (p *genericParser) Parse(ctx context.Context, path string, src []byte) (*Re
 		res.Imports = mergeMemberImports(res.Imports, by.importedBindings(tree, src))
 	}
 
+	// A language that needs a fact about a definition that no query can state
+	// (what an assignment is the definition OF, which object a prototype
+	// method belongs to) reads it here, from the same tree, for the same
+	// reason. Nil for every language without a refiner. See lang_javascript.go.
+	fixes := by.refineDefinitions(tree, src, path, tags)
+
 	// A4 — arity, read from the same tree, for the same reason imports and
 	// receivers are: it is the last chance before the tree is dropped.
 	argCounts := by.extractCounts(by.argCountQuery, "args", tree, src)
@@ -521,6 +527,18 @@ func (p *genericParser) Parse(ctx context.Context, path string, src []byte) (*Re
 	for _, tag := range tags {
 		switch {
 		case strings.HasPrefix(tag.Kind, "definition"):
+			fix, fixed := fixes[tag.NameRange.StartByte]
+			if fixed {
+				if fix.drop {
+					continue
+				}
+				if fix.name != "" {
+					tag.Name = fix.name
+				}
+				if fix.kind != "" {
+					tag.Kind = fix.kind
+				}
+			}
 			if isAnonymousName(tag.Name) {
 				continue
 			}
@@ -539,6 +557,9 @@ func (p *genericParser) Parse(ctx context.Context, path string, src []byte) (*Re
 				if q, ok := shapes.quals[tag.NameRange.StartByte]; ok {
 					sym.FQN = model.DefaultFQN(path, q)
 				}
+			}
+			if fixed && fix.owner != "" {
+				sym.FQN = model.DefaultFQN(path, fix.owner+"."+sym.Name)
 			}
 			res.Symbols = append(res.Symbols, sym)
 		case strings.HasPrefix(tag.Kind, "reference"):

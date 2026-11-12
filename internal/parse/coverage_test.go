@@ -511,11 +511,13 @@ const other = function () { return 2 }
 			}
 			// A constant that is not a function must NOT become a function
 			// symbol. Over-capturing here would fill the graph with every
-			// config value in the codebase.
-			for _, unwanted := range []string{"notAFunction", "NOT_A_FUNCTION"} {
-				if containsName(names, unwanted) {
-					t.Errorf("%s: %q is not a function and must not be captured; got %v",
-						tc.lang, unwanted, names)
+			// config value in the codebase. An EXPORTED constant is a
+			// definition of its own and is a constant: nothing can call it.
+			ext := map[string]string{"typescript": "x.ts", "tsx": "x.tsx", "javascript": "x.js"}[tc.lang]
+			for _, s := range parse(t, ext, tc.src).Symbols {
+				if (s.Name == "notAFunction" || s.Name == "NOT_A_FUNCTION") && s.Kind != "constant" {
+					t.Errorf("%s: %q is not a function and must not be a %s; got %v",
+						tc.lang, s.Name, s.Kind, names)
 				}
 			}
 		})
