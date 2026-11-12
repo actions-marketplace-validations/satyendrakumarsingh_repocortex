@@ -73,7 +73,7 @@ func commandGroupOf() map[string]string {
 		"vulns": groupHealth,
 
 		// Serve agents and integrate.
-		"serve": groupServe, "tool": groupServe, "ui": groupServe,
+		"serve": groupServe, "tool": groupServe, "stats": groupServe, "ui": groupServe,
 		"system": groupServe, "trace": groupServe, "export": groupServe,
 		"docs": groupServe, "report": groupServe, "sbom": groupServe,
 	}

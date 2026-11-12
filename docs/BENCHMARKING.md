@@ -354,6 +354,13 @@ because each called the tool and then checked its answer with a search.
 **Do not quote a token saving for RepoCortex.** There is no measurement that
 supports one.
 
+The product follows the same rule. `repocortex stats` and the `get_session_stats`
+tool report what a session used (calls, answer sizes, an estimated token count
+of those sizes, time) and print no saving. The one comparison they make is the
+size of the indexed files the answers named, labelled as an upper bound on
+reading those files whole, which an agent with search would not necessarily
+have done.
+
 ### Round 2, not yet run
 
 The next round needs a ground truth that search cannot produce, which means a

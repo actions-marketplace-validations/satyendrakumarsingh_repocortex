@@ -131,6 +131,19 @@ type Server struct {
 	// because a REST call or a CLI invocation is not a conversation. See
 	// invoke.go.
 	frontEnds sync.Map
+
+	// usage counts, per live session, what each tool was asked and how large
+	// its answers were, for get_session_stats. Bounded; see usage.go.
+	usage *usageBook
+
+	// now is the clock the call measurements read. A field so a test can
+	// make durations deterministic.
+	now func() time.Time
+
+	// definitionCost memoises the schema cost of the exposed tools, which is
+	// fixed once the server is built. See toolDefinitionCost.
+	definitionMu   sync.Mutex
+	definitionCost *ToolDefinitionCost
 }
 
 // runMeta is the slice of a committed run's data Provenance needs.
@@ -172,6 +185,8 @@ func New(deps Deps) (*Server, error) {
 		capDeps:   capability.NewDeps(deps.Registry, deps.Graph),
 		runMeta:   make(map[int64]runMeta),
 		headRepo:  headRepo,
+		usage:     newUsageBook(),
+		now:       time.Now,
 	}
 
 	if err := s.registerTools(); err != nil {
@@ -184,9 +199,10 @@ func New(deps Deps) (*Server, error) {
 	s.registerOwners(profileTools(deps.Config.MCPProfile))
 	s.registerKnowledge(profileTools(deps.Config.MCPProfile))
 	s.registerCommunities(profileTools(deps.Config.MCPProfile))
+	s.registerSessionStats(profileTools(deps.Config.MCPProfile))
 	s.registerPrompts()
 
-	s.sdk.AddReceivingMiddleware(s.auditMiddleware)
+	s.sdk.AddReceivingMiddleware(s.usageMiddleware)
 	return s, nil
 }
 
@@ -272,6 +288,10 @@ func fullOnlyTools() []string {
 		"list_dead_code",
 		"list_hotspots",
 		"list_communities",
+		// Full-only on purpose: a tool that reports what a session cost must
+		// not add its own definition to every session that never asks. See
+		// registerSessionStats.
+		"get_session_stats",
 	}
 }
 
@@ -519,6 +539,8 @@ func (s *Server) reply(ctx context.Context, req *sdk.CallToolRequest, r *Respons
 			s.ledgers.forSession(ss).apply(s.deps.Config.ProjectName, r)
 		}
 	}
+	// Last, so it counts the files named by the answer as sent.
+	s.noteCitations(ctx, req, r)
 	return &sdk.CallToolResult{
 		Content: []sdk.Content{&sdk.TextContent{Text: r.RenderText()}},
 	}, r, nil

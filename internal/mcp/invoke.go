@@ -102,6 +102,7 @@ func (i *Invoker) Close() error {
 		return nil
 	}
 	i.srv.frontEnds.Delete(i.server)
+	i.srv.usage.forget(i.server)
 	return i.client.Close()
 }
 
@@ -127,7 +128,7 @@ func (i *Invoker) Tools(ctx context.Context) ([]ToolInfo, error) {
 			Description:     t.Description,
 			InputSchema:     schema,
 			SchemaBytes:     cost,
-			EstimatedTokens: (cost + 3) / 4,
+			EstimatedTokens: int(EstimateTokens(int64(cost))),
 			WireBytes:       len(wire),
 		})
 	}

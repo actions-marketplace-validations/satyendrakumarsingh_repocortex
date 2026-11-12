@@ -96,6 +96,7 @@ keeps this table complete.
 | `analyze_change` | `impact --base --head` | | `find_owners` | `owners` |
 | `list_knowledge_risks` | `bus-factor` | | | |
 | `list_communities` | `communities` | | | |
+| `get_session_stats` | `stats` | | | |
 
 Any tool is also callable as itself: `repocortex tool call <tool>`.
 

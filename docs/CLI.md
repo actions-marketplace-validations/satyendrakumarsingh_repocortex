@@ -1812,6 +1812,100 @@ repocortex tool call find_callers name=ParseConfig min_confidence=high
 `--profile` (default `full`), `--args JSON`, `--args-file FILE`, `--audit-log
 FILE`. Full description: [protocols](guides/protocols.md#command-line).
 
+### `stats`
+
+**Answers:** what the agent tools were used for, from an [audit
+log](guides/protocols.md#audit-log): calls, answer sizes, time and failures per
+tool, per transport and per day, and the slowest calls.
+
+```bash
+repocortex stats .repocortex/audit.jsonl
+repocortex stats --since 2026-11-01 --slowest 20
+tail -n 500 audit.jsonl | repocortex stats -
+```
+
+| Flag | Effect |
+|---|---|
+| `--since DATE` | count only calls at or after this date or RFC 3339 time |
+| `--until DATE` | count only calls before this date or RFC 3339 time |
+| `--slowest N` | how many of the slowest calls to list (default 10, at most 100) |
+
+With no file it reads the one named by `REPOCORTEX_AUDIT_LOG`; `-` reads
+standard input. It needs no index.
+
+```
+$ repocortex stats audit.jsonl --slowest 3
+Audit log: audit.jsonl
+14 call(s) from 2026-11-12T09:35:35Z to 2026-11-12T09:39:18Z, 3 failed (21.4%).
+Answers: 64,283 bytes of text, an estimated 16,076 tokens. Time answering: 955 ms.
+
+BY TOOL
+TOOL                  CALLS  FAILED  FAIL RATE  ANSWER BYTES  EST. TOKENS  TOTAL MS  SLOWEST MS
+find_callers          6      2       33.3%      11,940        2,986        184       99
+get_task_context      2      0       0.0%       45,434        11,360       627       519
+search_code           2      0       0.0%       999           251          35        34
+get_project_overview  1      0       0.0%       958           240          12        12
+get_session_stats     1      0       0.0%       2,318         580          10        10
+list_hotspots         1      0       0.0%       2,634         659          87        87
+no_such_tool          1      1       100.0%     0             0            0         0
+
+BY TRANSPORT
+TRANSPORT  CALLS  FAILED  FAIL RATE  ANSWER BYTES  EST. TOKENS  TOTAL MS  SLOWEST MS
+mcp        8      2       25.0%      34,921        8,733        144       108
+cli        6      1       16.7%      29,362        7,343        811       519
+
+BY DAY (UTC)
+DAY         CALLS  FAILED  FAIL RATE  ANSWER BYTES  EST. TOKENS  TOTAL MS  SLOWEST MS
+2026-11-12  14     3       21.4%      64,283        16,076       955       519
+
+SLOWEST CALLS
+TIME (UTC)            TOOL              TRANSPORT  MS   ANSWER BYTES  OUTCOME
+2026-11-12T09:39:17Z  get_task_context  cli        519  22,457        ok
+2026-11-12T09:35:35Z  get_task_context  mcp        108  22,977        ok
+2026-11-12T09:39:16Z  find_callers      cli        99   1,824         ok
+
+FILES THE ANSWERS NAMED
+TRANSPORT  FILES  BYTES WHEN INDEXED  EST. TOKENS  A FILE IS COUNTED
+mcp        16     283,106             70,777       once per session
+cli        49     909,193             227,299      once per call: each 'tool call' is its own session
+This is the size of the indexed files the answers pointed at: an upper bound on what
+reading those files whole would have cost. It is not a saving. An agent with search
+would not necessarily have read them, and could have read parts.
+
+Token figures are estimates: bytes / 4, rounded up; no tokenizer is run and the true
+count depends on the model. Times are the whole milliseconds the log records, so a call
+faster than 1 ms counts as 0. This is usage; no saving is reported because none has been
+measured.
+```
+
+How to read it:
+
+- **It reports usage, not a saving.** No "tokens saved" figure is printed,
+  because there is no measurement that supports one; see
+  [benchmarking](BENCHMARKING.md#5-agent-benchmark).
+- **EST. TOKENS is an estimate**: each answer's bytes divided by four, rounded
+  up. No tokenizer is run, and the true count depends on the model.
+- **FAILED** counts answers the tool flagged as failures and calls that never
+  reached a tool, such as an unknown tool name.
+- **Times are whole milliseconds**, as the log records them, so a call faster
+  than 1 ms counts as 0.
+- **FILES THE ANSWERS NAMED** is the size of the indexed files the answers
+  pointed at, and is printed only when the log carries it. It is an upper
+  bound on reading those files whole, not a saving. It has one row per
+  transport because the counting differs: an MCP session counts a file once
+  however many answers name it, while each `repocortex tool call` is a session
+  of its own and counts it again.
+- **Only numbers, tool names and transports are printed.** The arguments in
+  the log say what someone was working on, and are never read into the summary.
+- A line that is not an audit event is skipped and counted, not fatal.
+
+`--json` prints the same totals as `{file, calls, failures, failure_rate, tools,
+transports, days, slowest, cited_files, ...}` with `token_basis: "estimated"`.
+`cited_files` carries a `meaning` string that says what the figure is, so the
+number does not travel without its label.
+Agent tool: `get_session_stats`, which gives the same accounting for one live
+session; see [MCP tools](reference/mcp-tools.md#get_session_stats).
+
 ## Serving
 
 ### `serve`

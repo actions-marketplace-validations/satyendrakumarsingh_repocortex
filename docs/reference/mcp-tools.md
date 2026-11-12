@@ -217,6 +217,7 @@ Exposed only with `mcp: { profile: full }`, and always available through
 | `list_hotspots` | `path`, `commits`, `limit`, `include_tests` | Files ranked by commits times size, each followed by the files that change with it |
 | `list_knowledge_risks` | `path`, `commits`, `limit`, `min_commits`, `depth`, `files` | Directories ranked by how few people made their recent commits: bus factor, the largest contributor's share and how long ago they last changed it |
 | `list_communities` | `path`, `limit`, `members`, `min_confidence` | Files grouped by how they refer to each other: one row per community, then its most-referenced files |
+| `get_session_stats` | none | What the current session has used: calls, failures, answer sizes, time, and the cost of the tool definitions |
 
 ### `list_knowledge_risks`
 
@@ -297,6 +298,64 @@ partitioned: the answer is empty, marked truncated, and asks for a `path`.
 
 The partition is deterministic label propagation over the file graph; no model
 and no randomness is involved. Command: `repocortex communities`.
+
+### `get_session_stats`
+
+Reports what the calling session has used so far. It takes no arguments and
+does not count the call that asks.
+
+This is a real answer, from an MCP session over stdio that had made seven
+calls (the remaining notes are elided):
+
+```text
+=== SYSTEM METADATA ===
+This session has made 7 tool call(s) before this one, 2 of which failed. Their answers totalled 32603 bytes of text, an estimated 8153 tokens.
+index_revision: 1  status: ready
+note: This is usage, not a saving. RepoCortex has no measurement that supports a token saving, so none is reported and none should be inferred from these figures.
+...
+session: transport=mcp calls=7 failed=2 answer_bytes=32603 est_answer_tokens=8153 structured_bytes=40621 time_ms=136.8 since=2026-11-12T09:35:35Z
+tool_definitions: profile=full tools=26 schema_bytes=25883 est_tokens_per_request=6484
+usage: find_callers calls=3 failed=1 answer_bytes=8138 est_answer_tokens=2035 time_ms=14.4 slowest_ms=8.0
+usage: (unregistered) calls=1 failed=1 answer_bytes=0 est_answer_tokens=0 time_ms=0.0 slowest_ms=0.0
+usage: get_project_overview calls=1 failed=0 answer_bytes=958 est_answer_tokens=240 time_ms=13.0 slowest_ms=13.0
+usage: get_task_context calls=1 failed=0 answer_bytes=22977 est_answer_tokens=5745 time_ms=108.0 slowest_ms=108.0
+usage: search_code calls=1 failed=0 answer_bytes=530 est_answer_tokens=133 time_ms=1.4 slowest_ms=1.4
+cited_files: files=16 bytes=283106 est_tokens=70777
+```
+
+The same figures are in the structured result under `session_stats`, where
+`token_basis` is `"estimated"` and `cited_files.meaning` states what that
+figure is.
+
+| Line | What it is | How it is known |
+|---|---|---|
+| `session` | Calls, failed calls, the size of the answers' text, the size of their structured copy, and time spent answering | Counted by the server as each call finishes |
+| `usage` | The same, per tool. A name the profile does not expose is counted under `(unregistered)` | Counted |
+| `est_answer_tokens` | The answer size in tokens | Estimated: bytes / 4, rounded up, per answer. No tokenizer is run |
+| `tool_definitions` | What the exposed tools' names, descriptions and input schemas cost on every model request. The same number `repocortex tool list` prints | Bytes counted, tokens estimated. The server cannot see how many requests the client's model made, so there is no session total |
+| `cited_files` | The size, when indexed, of the distinct indexed files the answers named. Each file once per session | Counted, from the index |
+
+**No saving is reported.** The one agent benchmark run so far found no token
+advantage on simple lookups ([benchmarking](../BENCHMARKING.md#5-agent-benchmark)),
+so there is no measured saving to print. `cited_files` is the only comparison,
+and it is an upper bound on what reading those files whole would have cost: an
+agent with search would not necessarily have read them, and could have read
+parts.
+
+What "this session" covers depends on how the call arrived, and the answer says
+which:
+
+| Surface | The session is |
+|---|---|
+| MCP (stdio or HTTP) | One client connection. Counters are discarded when it ends |
+| REST | Every REST call since the server started, from every caller |
+| `repocortex tool call` | That one command, so the report is always empty. Use [`repocortex stats`](../CLI.md#stats) on an audit log instead |
+
+The tool is on the `full` profile only. Every exposed tool's definition is
+charged to every model request, and a tool that reports cost should not raise
+it for sessions that never ask (it costs about 130 tokens). The counting runs
+on every profile. The server keeps counters for its 64 most recently active
+sessions, one small block per tool, and never a list of calls.
 
 ## Names
 

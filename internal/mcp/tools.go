@@ -563,6 +563,12 @@ func toolDescriptions() map[string]string {
 			"never with an email address. A shallow clone or a squash-merge workflow distorts the " +
 			"figures, and directories with too few commits are counted but not measured: an empty list " +
 			"means nothing could be measured, not that knowledge is well spread. Needs a git repository.",
+		"get_session_stats": "Report what this session has used so far: the calls and failures per tool, " +
+			"the size of the answers in bytes and estimated tokens, the time spent answering, and " +
+			"what the exposed tool definitions cost on every request. Use it when asked what " +
+			"RepoCortex cost a session. It reports usage and never a saving: token figures are " +
+			"estimates (bytes / 4), and nothing here compares against working without RepoCortex. " +
+			"Counts cover the current session only and leave out this call.",
 
 		"find_callees": "List what a symbol calls: the definitions inside this repository that its body " +
 			"invokes, each with the file and line of the call and how the binding was established " +

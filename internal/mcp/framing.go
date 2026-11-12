@@ -134,6 +134,12 @@ type Response struct {
 	// not that, and does not attempt to be. Omitted when this response sets
 	// no such claim.
 	Basis Basis `json:"basis,omitempty"`
+
+	// SessionStats is the usage report of get_session_stats, and is present
+	// only on that tool's response. It mixes counted figures (calls, bytes)
+	// with estimated ones (tokens), which one Basis label cannot describe, so
+	// it carries its own token_basis and leaves Basis unset.
+	SessionStats *SessionStats `json:"session_stats,omitempty"`
 }
 
 // Item is one result with the provenance needed to judge it.
@@ -691,6 +697,8 @@ func (r *Response) metadataExtras() string {
 	if r.RenamePlan != nil {
 		b.WriteString(renderRenamePlan(r.RenamePlan))
 	}
+
+	b.WriteString(renderSessionStats(r.SessionStats))
 
 	b.WriteString(renderOmission(r.Omitted))
 
