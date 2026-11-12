@@ -7,6 +7,26 @@ import (
 	"github.com/satyendrakumarsingh/repocortex/pkg/model"
 )
 
+// TestCSharpAndCppConstructionBindsToTheType: `new X(...)` and a C++ declaration
+// that constructs a variable are reference.call.new, and bind to the type.
+func TestCSharpAndCppConstructionBindsToTheType(t *testing.T) {
+	for _, tc := range []struct{ lang, file, user string }{
+		{"c_sharp", "src/Widget.cs", "src/Use.cs"},
+		{"cpp", "src/widget.cc", "src/use.cc"},
+	} {
+		cls := def(1, "class", tc.file, "Widget", 10)
+		ctor := def(2, "method", tc.file, "Widget.Widget", 10)
+		r := New(index(cls, ctor), Options{})
+		edges, _, _ := resolveOne(t, r, registry.FileRefs{
+			FileID: 20, Path: tc.user, Language: tc.lang, Symbols: within(90, tc.user, "Use.run"),
+			Refs: []registry.Reference{{ID: 1, Name: "Widget", Kind: "reference.call.new", ReceiverKind: model.ReceiverBare, Line: 5}},
+		})
+		if len(edges) != 1 || edges[0].DstID != 1 || edges[0].Kind != model.EdgeInstantiates {
+			t.Errorf("%s: construction bound as %+v, want INSTANTIATES to the type", tc.lang, edges)
+		}
+	}
+}
+
 func TestCoreFunctionsAndSyntax(t *testing.T) {
 	for _, tc := range []struct {
 		lang, name string

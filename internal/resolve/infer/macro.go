@@ -14,7 +14,13 @@ import (
 // invocation reaches. fd bound std's `format!` to a test function named
 // `format` at `high`, twice in thirty.
 //
-// What the parser must emit for this rule to act (it does not yet):
+// The parser now emits `reference.call.macro` (name without the bang, a path in
+// front as a scope receiver) but indexes `macro_rules! name` as a plain
+// `function` symbol, which nothing in the index tells from an `fn`. So a macro
+// invocation binds only to a symbol of kind `macro`, which no parser emits yet,
+// and otherwise to nothing: it is never bound to a function. A distinct kind
+// (or a flag on the symbol) for macro_rules definitions would make the rule
+// exact. What the rule needs:
 //
 //   - a reference of kind `reference.call.macro` for each invocation, written
 //     `name!(...)`, `name![...]` or `name!{...}`, with the name WITHOUT the

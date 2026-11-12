@@ -96,7 +96,10 @@ func buildCoreFunctions() map[string]map[string]struct{} {
 		pipe fork wait waitpid kill signal raise getpid unlink rename mkdir rmdir
 		chdir getcwd opendir readdir closedir mmap munmap select poll socket bind
 		listen accept connect send recv sin cos tan sqrt pow floor ceil fabs fmod log
-		exp isalpha isdigit isspace isupper islower toupper tolower assert`)
+		exp isalpha isdigit isspace isupper islower toupper tolower assert
+		pthread_mutex_lock pthread_mutex_unlock pthread_mutex_init pthread_mutex_destroy
+		pthread_once pthread_key_create pthread_key_delete pthread_getspecific
+		pthread_setspecific pthread_create pthread_join`)
 	out["c"] = libc
 	out["cpp"] = libc
 
