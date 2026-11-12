@@ -197,6 +197,12 @@ type TestReport struct {
 	// see", not "nothing covers this".
 	Undetermined string `json:"undetermined,omitempty"`
 
+	// ValueUse is the text check for a function passed as a value. A test that
+	// reaches the target that way leaves no edge, so when it has a finding
+	// "no test reaches this" is not something the report can say. Zero when the
+	// check was not asked for.
+	ValueUse capability.ValueUse `json:"value_use"`
+
 	Truncated       bool   `json:"truncated"`
 	TruncatedReason string `json:"truncated_reason,omitempty"`
 }
@@ -222,6 +228,12 @@ type Options struct {
 	SkipGraph      bool
 	SkipNaming     bool
 	SkipColocation bool
+
+	// CheckValueUse asks for the text check described in capability.ValueUse.
+	// Off by default for the same reason as impact.Options.CheckValueUse: it
+	// reads stored text, and a caller probing many symbols does not pay for it
+	// once per symbol.
+	CheckValueUse bool
 }
 
 // ProbeOptions bounds a discovery run that only needs to know WHETHER tests
@@ -315,6 +327,7 @@ func findTestsFor(ctx context.Context, deps capability.Deps, runID int64, tgt ca
 
 	var truncated bool
 	var truncReason string
+	var reached []int64
 
 	if !opts.SkipGraph {
 		res, err := deps.Graph.Traverse(ctx, graph.Query{
@@ -336,6 +349,7 @@ func findTestsFor(ctx context.Context, deps capability.Deps, runID int64, tgt ca
 			if n.Depth == 0 {
 				continue
 			}
+			reached = append(reached, n.SymbolID)
 			sym, ok := idx.Lookup(n.SymbolID)
 			if !ok || !capability.IsTestSymbol(sym.Kind, sym.Name, sym.FilePath) {
 				continue
@@ -401,6 +415,15 @@ func findTestsFor(ctx context.Context, deps capability.Deps, runID int64, tgt ca
 		rep.Undetermined = reason
 		rep.Completeness.Caveats = append(rep.Completeness.Caveats,
 			"Whether a test reaches "+tgt.Name+" through a call could not be determined: "+reason+".")
+	}
+	if opts.CheckValueUse {
+		rep.ValueUse, err = deps.ValueUse(ctx, runID, tgt, idx, reached)
+		if err != nil {
+			return TestReport{}, err
+		}
+		if rep.ValueUse.Any() {
+			rep.Completeness.Caveats = append(rep.Completeness.Caveats, rep.ValueUse.Lead()+".")
+		}
 	}
 	if rep.Untested {
 		rep.Completeness.Caveats = append(rep.Completeness.Caveats,

@@ -464,7 +464,7 @@ func toolDescriptions() map[string]string {
 			"For the opposite direction use find_callers.",
 
 		"find_implementations": "List a type's hierarchy in both directions: what implements or extends " +
-			"it, and what it implements or extends itself. Use it before changing an interface, an " +
+			"it, directly or through other subtypes, and what it implements or extends itself. Use it before changing an interface, an " +
 			"abstract method or a base class, when the callers of the declaration are not the whole " +
 			"story because the work happens in the types built on it. Each row carries its confidence " +
 			"tier; exact means a compiler index proved the relationship. Only DECLARED relationships " +
@@ -733,6 +733,18 @@ func (s *Server) findSymbol(ctx context.Context, req *sdk.CallToolRequest, args 
 	if err != nil {
 		return failFrom(err, "symbol lookup failed: %v", err)
 	}
+	if len(syms) == 0 {
+		// An owner and a member: Guard.AgainstNull, Guard::AgainstNull, Mailer#deliver.
+		cands, _, qerr := s.deps.Registry.SymbolCandidatesQualified(ctx, runID, args.Name, s.limits.MaxItems)
+		if qerr != nil {
+			return failFrom(qerr, "symbol lookup failed: %v", qerr)
+		}
+		for _, c := range cands {
+			if args.Kind == "" || c.Kind == args.Kind {
+				syms = append(syms, c.SymbolHit)
+			}
+		}
+	}
 
 	// A definition carries a confidence tier of its own: a compiler-indexed
 	// declaration is 'exact', one recovered from a partial parse is not. So the
@@ -812,12 +824,20 @@ func (s *Server) getSymbol(ctx context.Context, req *sdk.CallToolRequest, args s
 			return failFrom(err, "symbol lookup failed: %v", err)
 		}
 	}
+	qualified := false
+	if total == 0 {
+		// An owner and a member: Guard.AgainstNull, Guard::AgainstNull, Mailer#deliver.
+		if all, total, err = s.deps.Registry.SymbolCandidatesQualified(ctx, runID, name, maxSelectRows); err != nil {
+			return failFrom(err, "symbol lookup failed: %v", err)
+		}
+		qualified = total > 0
+	}
 	if total == 0 {
 		return s.missingSymbol(ctx, req, runID, status, name)
 	}
 	cands := all
 	if want := cleanPathHint(args.Path); want != "" {
-		if total > len(all) {
+		if total > len(all) && !qualified {
 			if cands, _, err = s.deps.Registry.SymbolCandidatesIn(ctx, runID, name, want, maxSelectRows); err != nil {
 				return failFrom(err, "symbol lookup failed: %v", err)
 			}
@@ -942,7 +962,10 @@ func (s *Server) relationshipQuery(ctx context.Context, req *sdk.CallToolRequest
 		// A caller list is about something callable. A class and its
 		// same-named constructor, or a function and a variable holding it,
 		// are the usual way a callable name is shared.
-		q.Prefer, q.PreferWord = callableKinds, "functions and methods"
+		q.Prefer, q.PreferWord, q.PreferNoun = callableKinds, "functions and methods", "function or method"
+		// What constructs a class is a caller of it in the sense that matters,
+		// and the answer counts the constructions separately.
+		q.Tolerate = typeKinds
 	}
 	q.Tool = tool
 
@@ -964,7 +987,7 @@ func (s *Server) relationshipQuery(ctx context.Context, req *sdk.CallToolRequest
 	// filtered registry query, item construction, coverage — is shared with
 	// plan_rename via referencesFor (rename.go) so there is one implementation
 	// of it, not two.
-	lookup, shortCircuit := s.referencesFor(ctx, req, q, minConf, kinds, page)
+	lookup, shortCircuit := s.referencesFor(ctx, req, q, minConf, kinds, page, callersOnly)
 	if shortCircuit != nil {
 		return shortCircuit, lookup.Resp, nil
 	}

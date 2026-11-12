@@ -2,6 +2,7 @@ package impact
 
 import (
 	"fmt"
+	"regexp"
 	"strings"
 
 	"github.com/satyendrakumarsingh/repocortex/internal/capability"
@@ -46,6 +47,18 @@ type Risk struct {
 	// does not: "few callers were found" and "few callers exist" are different
 	// claims, and only the first is supported. That one becomes LevelUnknown.
 	Undetermined string `json:"undetermined,omitempty"`
+
+	// Partial is non-empty when the analysis is known to be a floor for a reason
+	// other than Undetermined, and states it: the walk was cut at a bound, the
+	// name occurs where no call is recorded, or callers at a low confidence were
+	// left out and the count shown is zero. Level is then printed "or higher",
+	// for every level and not only for moderate and high: a low that stopped at
+	// a depth limit is as much a floor as a high is.
+	//
+	// Not in the JSON form, for the reason Plan.RiskPartial is not: the HTTP
+	// API's field contract is frozen and nothing renders it. Report.Risk.Level
+	// and the summaries carry it as "or higher".
+	Partial string `json:"-"`
 
 	// Factors are the inputs, in the order they were applied. Never empty.
 	Factors []Factor `json:"factors"`
@@ -265,6 +278,18 @@ func scoreRisk(r Report) Risk {
 				"partly guarded. This is reachability, not a coverage measurement.", tests),
 			Evidence: "e.g. " + example,
 		})
+	} else if r.ValueUse.Any() {
+		// Not "no test reaches it" either. A test that reaches the target through
+		// a function passed as a value leaves no edge, and the name occurs where
+		// such a use would be.
+		risk.Factors = append(risk.Factors, Factor{
+			Name: "observed_tests", Points: 0,
+			Detail: "Whether any test reaches this target is NOT KNOWN: the name of the target, or of a symbol " +
+				"on its path, occurs in code that is not recorded as a call, and a function passed as a value " +
+				"is reached by its callers without an edge. No points are added for missing tests, because " +
+				"none were shown to be missing.",
+			Evidence: "0 impacted symbols classified as tests, and the name occurs where no call is recorded",
+		})
 	} else if isUndetermined {
 		// Not "no test reaches it". A test that calls the target through a
 		// reference the index could not bind is a test this walk cannot see,
@@ -340,8 +365,36 @@ func scoreRisk(r Report) Risk {
 	if isUndetermined {
 		markUndetermined(&risk, undetermined)
 	}
+	risk.Partial = partialReason(r)
 	risk.Certainty, risk.CertaintyReason = certainty(r)
 	return risk
+}
+
+// depthLimit finds the limit in a truncation reason of the form graph writes:
+// "depth limit 3 reached, and 4 node(s) at the limit were not expanded".
+var depthLimit = regexp.MustCompile(`depth limit (\d+)`)
+
+// partialReason says why the level is a floor, apart from callers that could
+// not be determined. Empty when it is not.
+func partialReason(r Report) string {
+	var parts []string
+	if r.Truncated {
+		if m := depthLimit.FindStringSubmatch(r.TruncatedReason); m != nil {
+			parts = append(parts, "the analysis was cut at depth "+m[1])
+		} else if r.MaxDepth > 0 {
+			parts = append(parts, fmt.Sprintf("the analysis was cut at a bound within depth %d", r.MaxDepth))
+		} else {
+			parts = append(parts, "the analysis was cut at a bound")
+		}
+	}
+	if r.ValueUse.Any() {
+		parts = append(parts, "the name occurs where no call is recorded, so a function passed as a value "+
+			"may reach the target")
+	}
+	if r.LowConfidenceHiddenDirect > 0 && len(r.Direct) == 0 {
+		parts = append(parts, fmt.Sprintf("%d caller(s) at low confidence were excluded", r.LowConfidenceHiddenDirect))
+	}
+	return strings.Join(parts, "; ")
 }
 
 func dispatchEvidence(r Report) string {
@@ -522,6 +575,21 @@ func orUnrecorded(s string) string {
 // symbol with 200 low-confidence callers scores high and deserves little trust,
 // while one with 3 compiler-proven callers scores low and deserves a lot.
 func certainty(r Report) (string, string) {
+	level, reason := certaintyOfMix(r)
+	if !r.ValueUse.Any() {
+		return level, reason
+	}
+	// A function passed as a value is reached without an edge, so the set above
+	// is short by an amount nothing here can size. High is a claim that the set
+	// is nearly the whole of it.
+	if level == "high" {
+		level = "medium"
+	}
+	return level, reason + " Also: " + r.ValueUse.Lead() + ". A function passed as a value is invisible to the " +
+		"call graph, so the callers listed may be a fraction of the real ones, and certainty is not rated high."
+}
+
+func certaintyOfMix(r Report) (string, string) {
 	var strong, weak int
 	for _, list := range [][]Impacted{r.Direct, r.Indirect} {
 		for _, imp := range list {

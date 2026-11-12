@@ -228,6 +228,14 @@ type Options struct {
 	// and internal/graph names the refusal in the truncation reason, which
 	// reaches Report.TruncatedReason unchanged.
 	HubDegreeLimit int
+
+	// CheckValueUse asks for the text check described in capability.ValueUse:
+	// whether the target, or a symbol on the path with few callers, has its name
+	// in code the index records no reference for, which is what a function
+	// passed as a value looks like. It reads stored text, so it is opt-in: a
+	// caller analysing many symbols in one request (a diff, a ranking) does not
+	// pay for it once per symbol. The tools that answer about one symbol set it.
+	CheckValueUse bool
 }
 
 func (o Options) withDefaults() Options {
@@ -363,6 +371,12 @@ const (
 	// into an undetermined one.
 	UnknownUnboundName UnknownKind = "unbound_references_to_name"
 
+	// UnknownNameElsewhere: the target, or a symbol the report reaches it
+	// through, has its name in code that is neither a definition of it nor a
+	// reference the index recorded. A function passed as a value looks exactly
+	// like this, and the callers reached through it are not in the report.
+	UnknownNameElsewhere UnknownKind = "name_in_unrecorded_places"
+
 	// UnknownStaleIndex: the index run being queried was not built at either
 	// end of the range being analysed, or the two could not be compared. Every
 	// count in the report is then about code that is not the code in the diff —
@@ -492,6 +506,19 @@ type Report struct {
 	// edges is one thing the reader might have to look at, not three, and the
 	// traversal port (capability.Graph) reports nodes.
 	LowConfidenceHidden int `json:"low_confidence_hidden,omitempty"`
+
+	// LowConfidenceHiddenDirect is the part of LowConfidenceHidden that sits at
+	// depth 1: callers of the target itself that the floor kept out. It is what
+	// makes "0 direct" or "6 direct" a statement the first line can qualify.
+	LowConfidenceHiddenDirect int `json:"low_confidence_hidden_direct,omitempty"`
+
+	// MaxDepth is the depth limit the walk ran with, after defaults, so a
+	// report cut at it can say where.
+	MaxDepth int `json:"max_depth,omitempty"`
+
+	// ValueUse is the text check for a function passed as a value. Zero when
+	// Options.CheckValueUse was not set, which means "not measured".
+	ValueUse capability.ValueUse `json:"value_use"`
 }
 
 // TotalImpacted is the number of symbols reported as affected THROUGH RECORDED
@@ -604,6 +631,7 @@ func analyzeTarget(ctx context.Context, deps capability.Deps, runID int64,
 		Truncated:       res.Truncated,
 		TruncatedReason: res.TruncatedReason,
 		ConfidenceFloor: opts.MinConfidence,
+		MaxDepth:        opts.MaxDepth,
 	}
 
 	var frontier int
@@ -680,11 +708,11 @@ func analyzeTarget(ctx context.Context, deps capability.Deps, runID int64,
 	}
 	rep.Unknown = unknowns
 
-	hidden, hiddenBounded, err := countHiddenByFloor(ctx, deps, tgt, reported, res.Truncated, opts)
+	hidden, hiddenDirect, hiddenBounded, err := countHiddenByFloor(ctx, deps, tgt, reported, res.Truncated, opts)
 	if err != nil {
 		return Report{}, err
 	}
-	rep.LowConfidenceHidden = hidden
+	rep.LowConfidenceHidden, rep.LowConfidenceHiddenDirect = hidden, hiddenDirect
 	if hidden > 0 {
 		rep.Unknown = append(rep.Unknown, belowFloorUnknown(opts.MinConfidence, hidden, hiddenBounded))
 	}
@@ -720,6 +748,27 @@ func analyzeTarget(ctx context.Context, deps capability.Deps, runID int64,
 			Count:  rep.Binding.Unlisted(),
 		})
 		rep.Completeness.Caveats = append(rep.Completeness.Caveats, reason+".")
+	}
+	if opts.CheckValueUse {
+		reachedIDs := make([]int64, 0, len(rep.Direct)+len(rep.Indirect))
+		for _, list := range [][]Impacted{rep.Direct, rep.Indirect} {
+			for _, imp := range list {
+				reachedIDs = append(reachedIDs, imp.ID)
+			}
+		}
+		rep.ValueUse, err = deps.ValueUse(ctx, runID, tgt, idx, reachedIDs)
+		if err != nil {
+			return Report{}, err
+		}
+		if rep.ValueUse.Any() {
+			rep.Unknown = append(rep.Unknown, Unknown{
+				Kind:              UnknownNameElsewhere,
+				Detail:            rep.ValueUse.Detail(),
+				Count:             int64(rep.ValueUse.Places()),
+				CountIsLowerBound: true,
+			})
+			rep.Completeness.Caveats = append(rep.Completeness.Caveats, rep.ValueUse.Lead()+".")
+		}
 	}
 	rep.Risk = scoreRisk(rep)
 	return rep, nil
@@ -1142,11 +1191,11 @@ func countHiddenByFloor(
 	reported map[int64]struct{},
 	resTruncated bool,
 	opts Options,
-) (int, bool, error) {
+) (hidden, hiddenDirect int, bounded bool, err error) {
 	// A floor at the weakest tier excludes nothing, so there is nothing to
 	// count and no reason to pay for a second walk.
 	if !opts.MinConfidence.Valid() || opts.MinConfidence == model.ConfidenceLow {
-		return 0, false, nil
+		return 0, 0, false, nil
 	}
 
 	probe, err := deps.Graph.Traverse(ctx, graph.Query{
@@ -1164,10 +1213,9 @@ func countHiddenByFloor(
 		Direction: graph.Incoming,
 	})
 	if err != nil {
-		return 0, false, fmt.Errorf("impact: unfloored probe from %s: %w", tgt.FQN, err)
+		return 0, 0, false, fmt.Errorf("impact: unfloored probe from %s: %w", tgt.FQN, err)
 	}
 
-	var hidden int
 	for _, n := range probe.Nodes {
 		if n.Depth == 0 {
 			continue // the target is not impacted by itself
@@ -1179,8 +1227,11 @@ func countHiddenByFloor(
 			continue // absent for some other reason than the floor
 		}
 		hidden++
+		if n.Depth == 1 {
+			hiddenDirect++
+		}
 	}
-	return hidden, probe.Truncated || resTruncated, nil
+	return hidden, hiddenDirect, probe.Truncated || resTruncated, nil
 }
 
 // belowFloorUnknown states the filter, its size and how to undo it.

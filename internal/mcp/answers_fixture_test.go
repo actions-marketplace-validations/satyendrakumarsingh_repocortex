@@ -34,7 +34,14 @@ type symDef struct {
 	kind       model.EntityKind
 	start, end int
 	params     int // -1 for unknown
+	// owner is the type the member is declared in, which the real indexer puts
+	// in the qualified name (`path:Guard.AgainstNull`). Empty for a top-level
+	// definition.
+	owner string
 }
+
+// ownedBy returns s declared in owner.
+func (s symDef) ownedBy(owner string) symDef { s.owner = owner; return s }
 
 type refDef struct {
 	path, name, qualifier string
@@ -46,6 +53,9 @@ type refDef struct {
 	// target is "path:name@line" of the definition a resolved reference is
 	// bound to; empty for an unbound one.
 	target string
+	// refKind is the tag the extractor gave it: "reference.call" when empty,
+	// "reference.implementation" or "reference.extends" for a supertype.
+	refKind string
 }
 
 type edgeDef struct {
@@ -56,6 +66,19 @@ type edgeDef struct {
 	evLine   int
 }
 
+func cmpOr(v, def string) string {
+	if v == "" {
+		return def
+	}
+	return v
+}
+
+// superRef records a reference that names a supertype, as `impl T for X` or
+// `class C(T)` does, with what resolution made of it.
+func (b *indexBuilder) superRef(path, name string, line int, kind string, outcome registry.Resolution, target string) {
+	b.refs = append(b.refs, refDef{path: path, name: name, line: line, outcome: outcome, target: target, refKind: kind})
+}
+
 func symKey(path, name string, line int) string { return fmt.Sprintf("%s:%s@%d", path, name, line) }
 
 // file adds a source file. Its text has one line per number up to lines, so
@@ -63,9 +86,18 @@ func symKey(path, name string, line int) string { return fmt.Sprintf("%s:%s@%d",
 func (b *indexBuilder) file(path, lang string, lines int, syms ...symDef) {
 	var text strings.Builder
 	for i := 1; i <= lines; i++ {
-		fmt.Fprintf(&text, "line %d of %s\n", i, path)
+		// No path in the text: a path holds the names it files, and a
+		// fixture that said "ui/cn.go" on every line would mention the symbol
+		// "cn" 20 times, which no real source file does.
+		fmt.Fprintf(&text, "line %d of the file\n", i)
 	}
 	b.files = append(b.files, fileDef{path: path, lang: lang, text: text.String(), syms: syms})
+}
+
+// fileText adds a source file with the text given, for a test about what the
+// text says: a name used where no call is recorded.
+func (b *indexBuilder) fileText(path, lang, text string, syms ...symDef) {
+	b.files = append(b.files, fileDef{path: path, lang: lang, text: text, syms: syms})
 }
 
 func fn(name string, start, end int) symDef {
@@ -120,8 +152,12 @@ func (b *indexBuilder) seed(ctx context.Context, reg *registry.Registry, runID i
 			panic(err)
 		}
 		for _, s := range f.syms {
+			fqnName := s.name
+			if s.owner != "" {
+				fqnName = s.owner + "." + s.name
+			}
 			ms := model.Symbol{
-				FileID: id, Kind: s.kind, Name: s.name, FQN: model.DefaultFQN(f.path, s.name),
+				FileID: id, Kind: s.kind, Name: s.name, FQN: model.DefaultFQN(f.path, fqnName),
 				Range:      model.Range{Start: model.Position{Line: s.start}, End: model.Position{Line: s.end}},
 				Confidence: model.ConfidenceHigh, Source: model.SourceSourceCode,
 			}
@@ -137,7 +173,7 @@ func (b *indexBuilder) seed(ctx context.Context, reg *registry.Registry, runID i
 	}
 	for _, r := range b.refs {
 		if err := w.AddReference(ctx, fileIDs[r.path], registry.Reference{
-			Name: r.name, Kind: "reference.call", Receiver: r.qualifier, ReceiverKind: r.kind, Line: r.line,
+			Name: r.name, Kind: cmpOr(r.refKind, "reference.call"), Receiver: r.qualifier, ReceiverKind: r.kind, Line: r.line,
 		}); err != nil {
 			panic(err)
 		}

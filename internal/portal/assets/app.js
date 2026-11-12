@@ -485,13 +485,15 @@ function symbolView({ name, path, line, tab = 'callers', floor = '' }) {
   // tests reach the symbol.
   Promise.allSettled([cache.get('reach'), cache.get('tests')]).then(([reach, tests]) => {
     if (reach.status !== 'fulfilled') return;
-    const m = /(\d+) direct, (\d+) indirect\. Risk (\w+)/.exec(reach.value.summary || '');
+    const m = /(\d+) direct, (\d+) indirect\. Risk (\w+)( or higher)?/.exec(reach.value.summary || '');
     if (!m) { if (!verdict.textContent) verdict.textContent = reach.value.summary || ''; return; }
-    const [, direct, indirect, risk] = m;
+    const [, direct, indirect, risk, orHigher] = m;
     // The tool's own first line when the index cannot stand behind the
     // numbers: it says which, and a tidy sentence built from them would not.
     const level = (reach.value.reliability || {}).level || 'good';
-    if (risk === 'unknown' || level !== 'good') { verdict.textContent = reach.value.summary || ''; return; }
+    // "Risk low or higher (...)" says why the level is a floor; a tidy "Risk is
+    // low." would drop it.
+    if (risk === 'unknown' || orHigher || level !== 'good') { verdict.textContent = reach.value.summary || ''; return; }
     const parts = ['Used directly in ', h('b', { text: `${direct} place${direct === '1' ? '' : 's'}` }),
       '. A change can reach ', h('b', { text: `${Number(direct) + Number(indirect)} symbols` })];
     const n = tests.status === 'fulfilled' ? ((tests.value.page || {}).total ?? (tests.value.items || []).length) : 0;
@@ -512,7 +514,10 @@ function symbolView({ name, path, line, tab = 'callers', floor = '' }) {
       if (!slot) return;
       // The counted total when the tool gives one; a list of candidates is not
       // a count of anything.
-      if (a.outcome === 'ambiguous_name') slot.textContent = '?';
+      // A refusal because the name has no definition of the kind the tab is
+      // about (kind_not_indexed) counted nothing either, and a 0 there reads as
+      // an answer.
+      if (a.outcome === 'ambiguous_name' || a.outcome === 'kind_not_indexed') slot.textContent = '?';
       else if (a.page && typeof a.page.total === 'number') slot.textContent = String(a.page.total);
       else slot.textContent = `${(a.items || []).length}${a.truncated ? '+' : ''}`;
     }).catch(() => {});

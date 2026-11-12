@@ -56,7 +56,7 @@ The counts are what `repocortex tool list --profile <name>` prints.
 | `analyze_change` | full | `base` (required), `head`, `min_confidence` | Find out what a range of commits puts at risk: the symbols the change touched, everything those can reach, and the tests among them. |
 | `find_owners` | full | `symbol` (required), `limit`, `line`, `path` | Find who has recent context on the code a change would touch: the people who have lately changed the symbols a change to this one can reach, ranked by how much of that code they have worked on. |
 | `find_callees` | full | `name` (required), `limit`, `line`, `min_confidence`, `offset`, `path` | List what a symbol calls: the definitions inside this repository that its body invokes, each with the file and line of the call and how the binding was established (exact, high, medium or low). |
-| `find_implementations` | full | `name` (required), `limit`, `line`, `min_confidence`, `offset`, `path` | List a type's hierarchy in both directions: what implements or extends it, and what it implements or extends itself. |
+| `find_implementations` | full | `name` (required), `direct_only`, `limit`, `line`, `min_confidence`, `offset`, `path` | List a type's hierarchy in both directions: what implements or extends it, directly or through other subtypes, and what it implements or extends itself. |
 | `trace_call_path` | full | `from` (required), `to` (required), `from_line`, `from_path`, `max_depth`, `to_line`, `to_path` | Find how one symbol reaches another: the shortest chains of calls and references from 'from' to 'to', hop by hop, each hop with its file, line and confidence. |
 | `list_dead_code` | full | `include_exported`, `include_test_only`, `limit`, `min_certainty`, `path` | List definitions that nothing in the index calls or references, graded by how far that can be trusted. |
 | `list_hotspots` | full | `commits`, `include_tests`, `limit`, `path` | Rank files by how often they change against how much code they hold, from recent git history, and list for each the files that are usually committed with it. |
@@ -283,11 +283,12 @@ List what a symbol calls: the definitions inside this repository that its body i
 
 ### `find_implementations`
 
-List a type's hierarchy in both directions: what implements or extends it, and what it implements or extends itself. Use it before changing an interface, an abstract method or a base class, when the callers of the declaration are not the whole story because the work happens in the types built on it. Each row carries its confidence tier; exact means a compiler index proved the relationship. Only DECLARED relationships are visible from syntax, so a Go type that satisfies an interface without naming it is absent until a compiler index is imported — an empty result means none declared, not none exist.
+List a type's hierarchy in both directions: what implements or extends it, directly or through other subtypes, and what it implements or extends itself. Use it before changing an interface, an abstract method or a base class, when the callers of the declaration are not the whole story because the work happens in the types built on it. Each row carries its confidence tier; exact means a compiler index proved the relationship. Only DECLARED relationships are visible from syntax, so a Go type that satisfies an interface without naming it is absent until a compiler index is imported — an empty result means none declared, not none exist.
 
 | Parameter | Type | Required | Description |
 |---|---|---|---|
 | `name` | string | yes | Symbol name whose relationships you want. |
+| `direct_only` | boolean | no | Only direct subtypes. Default false: also those reached through other subtypes, direct ones first. |
 | `limit` | integer | no | Most rows to return. Default 50, maximum 200. |
 | `line` | integer | no | Line the definition starts on, to choose between several in one file (overloads). |
 | `min_confidence` | string | no | Lowest confidence to return: exact, high, medium or low. Default low. Recommended: 'high' for safe automated code changes and blast radius analysis to filter out heuristic false positives. |
@@ -485,7 +486,7 @@ The first line under `SYSTEM METADATA` is the summary. It is written to be safe 
 | `UNKNOWN` | Nothing can be concluded. The symbol's language yields no references in this index, or none has been resolved | Do not use the answer. Search for the name |
 | `UNRELIABLE` | Most references in the symbol's language are unbound, so the rows are a minority of the evidence | Treat the rows as leads |
 | `UNVERIFIED` | Some rows are probably bound to the wrong definition: the index records a call made on something that cannot reach it, such as a Go function called through a value | Read how each row's call is written; discard the ones made on a value, an instance or an expression |
-| `INCOMPLETE` | The rows are sound and the list is known to be short: rows were cut, or references spelled like the symbol were left unbound | Use the rows, conclude nothing from what is absent, read on with `offset` |
+| `INCOMPLETE` | The rows are sound and the list is known to be short: rows were cut, references spelled like the symbol were left unbound, its name occurs where no call is recorded, the confidence floor left callers out, or supertype references did not become subtypes | Use the rows, conclude nothing from what is absent, read on with `offset` |
 | `AMBIGUOUS` | The name matched several definitions and nothing was analysed | Pass `path` and `line` from one of the listed rows |
 
 A first line with none of these words has no known problem. It is still a lower bound: static analysis does not see reflection, dependency injection or code in other repositories.
@@ -493,6 +494,32 @@ A first line with none of these words has no known problem. It is still a lower 
 Coverage is judged for the language of the symbol asked about, not for the whole repository. A Kotlin symbol in a repository with a few Java files is described by the Kotlin files. When a language yields no references at all the answer says so in these words: "RepoCortex does not extract calls from Kotlin; nothing about callers can be concluded." That is said of the language when the index holds at least 20 definitions in it and no reference from any of them. With fewer, the answer says only that the index holds no reference from those files; nothing about callers follows either way. `repocortex resolve` is named as a remedy only when references are still pending.
 
 `get_resolution_coverage` lists the same figures for each language in the index.
+
+### A function passed as a value
+
+A function handed to something by name (`.then(handleResponse)`, `register("x", handler)`, a table of callbacks) is used, and the use is not a call, so no edge records it. The graph cannot see it. The text can, because the name is still there.
+
+`analyze_impact`, `find_callers`, `find_tests` and `plan_change` read the stored text for the target, and for `analyze_impact`, `find_tests` and `plan_change` also for up to four symbols on the reported path that have two or fewer recorded callers. They count the places where the name occurs as an identifier that are not a definition of it, not inside a definition of it, not an import, not inside a string, not a comment-only line and not the line of any reference the index recorded. Only functions and methods are checked, and a constructor never is: its name is its type's.
+
+When there are such places the first line leads `INCOMPLETE` and says so:
+
+```text
+INCOMPLETE — respond: its name appears in at least 9 other place(s) that are not recorded as calls: it may be passed as a value; handleResponse, on the path to it, is named in 1 other place(s) not recorded as calls (it may be passed as a value), so what reaches handleResponse is not listed. respond (lib/application.js:288): 1 direct, 0 indirect. Risk low or higher (...)
+```
+
+Three things follow. The verdict cannot be `strong`. Certainty is never `high`. And no tool says "no test reaches this" as a fact: `find_tests` says whether one does is `NOT KNOWN`, and `analyze_impact` adds no points for missing tests.
+
+This is a doubt and never a finding. The same name may belong to an unrelated symbol, or to a property (`ctx.respond`). A place counted is not a place proven to pass the function. The check reads the text of at most a dozen files per name, so a name found in more files than that is reported "at least". A name with more recorded references than 5,000 is not checked.
+
+### Callers the confidence floor left out
+
+`analyze_impact` follows relationships at `medium` or better unless `min_confidence=low` is passed; `find_callers` follows every tier. When the floor kept symbols out, the first line says how many and how to bring them back:
+
+```text
+readJsonValue (moshi/src/main/java/com/squareup/moshi/JsonReader.kt:446): 6 direct, 0 indirect; 1 more symbol(s) at low confidence are excluded; pass min_confidence=low. Risk unknown: ...
+```
+
+When the number of direct callers shown is zero only because of the floor, the answer leads `INCOMPLETE` and says so. `analyze_impact` counts distinct calling symbols and `find_callers` counts call sites, so the second can be larger for the same symbol even with no floor; a note says so when it is.
 
 ### The verdict
 
@@ -516,7 +543,7 @@ An answer whose rows carry a confidence tier has a `verdict` line, in structured
 |---|---|---|
 | `reliability.level` | first word of the summary | `good`, `incomplete`, `unverified`, `low` or `none`. Present on relationship answers |
 | `page` | `truncated:` | `offset`, `limit`, `total`, `returned`, `next_offset` for a paged list |
-| `outcome` | `outcome:` | `ambiguous_name` when the answer is a list of definitions to choose from. Absent otherwise |
+| `outcome` | `outcome:` | `ambiguous_name` when the answer is a list of definitions to choose from; `kind_not_indexed` when the name has definitions and none of the kind the tool is about (no rows). Absent otherwise |
 | `truncated`, `truncated_reason` | `truncated:` | Rows or traversal were cut, and why |
 | `omitted` | `omitted:` | What the cut rows were, by kind and confidence |
 | `notes` | `note:` | Caveats, most important first |
@@ -529,7 +556,9 @@ An answer whose rows carry a confidence tier has a `verdict` line, in structured
 
 `moderate` and `high` stay as scored when callers are missing, because a floor survives missing evidence. The summary then reads "Risk moderate or higher".
 
-`find_tests` follows the same rule. When no test is found and the calls to the symbol could not be bound, it says whether the symbol is tested is unknown. It does not say the symbol is untested.
+Any level reads "or higher", with the reason, when the analysis is known to be a floor for another cause: the walk was cut at its depth or node limit ("Risk low or higher (score 6; the analysis was cut at depth 3)"), or the name occurs where no call is recorded (see above). A cut analysis does not keep a bare `low`.
+
+`find_tests` follows the same rule. When no test is found and the calls to the symbol could not be bound, it says whether the symbol is tested is unknown. It does not say the symbol is untested. It says the same, as `NOT KNOWN`, when the name of the target or of a symbol on its path occurs where no call is recorded.
 
 ## Choosing between definitions
 
@@ -549,7 +578,35 @@ This is an ordinary answer, not an error. `repocortex tool call` exits 0.
 
 `path` and `line` together select any definition. A qualified name does not: it is the file and the identifier, so overloads in one file share it.
 
+A name may also be written as an owner and a member: `Guard.AgainstNull`, `Guard::AgainstNull`, `Mailer#deliver`. It is tried only when the name is not itself a definition and not a qualified name, and it selects the member whose qualified name ends in the owner and the member. Leading segments the index does not hold, such as a namespace, are dropped one at a time (`Serilog.Guard.AgainstNull` finds `Guard.AgainstNull`). An owner that does not declare the member finds nothing.
+
 A tool that is about one kind of thing prefers that kind when several definitions remain. `find_implementations` prefers a type over a method of the same name. `find_callers`, `find_callees` and `trace_call_path` prefer a function or method. The answer says when it chose this way. `get_symbol` shows every matching definition and `find_symbol` lists them all.
+
+When the name has definitions and none is of that kind, the tool does not answer for the wrong one. The first line says so, with `outcome: kind_not_indexed` and no rows:
+
+```text
+UNKNOWN — no type named "BenchmarkReporter" is indexed, so find_implementations answered for nothing. The only definition(s) of that name: a method at src/reporter.cc:33, and none has an extends or implements relationship recorded.
+```
+
+A zero there would be a statement about a constructor, read as one about the type. A `path` or `line` is the caller choosing and is honoured. `find_implementations` still answers for a method that has an extends or implements relationship recorded (an override is one), and `find_callers` still answers for a class, where it counts what constructs it.
+
+### Type hierarchies
+
+`find_implementations` lists every type that reaches the target through `extends` and `implements` edges, direct ones first, then by depth and the strength of the path. Each type appears once, at its shallowest depth, and a row below depth 1 says which type it names and that its confidence is the weakest link of the path. The walk is bounded at depth 8 and 20,000 types; a floor is reported "at least". `direct_only=true` lists the direct subtypes alone and still counts the rest:
+
+```text
+HandlerInterface (src/Monolog/Handler/HandlerInterface.php:21): 69 implementing or extending it (4 directly, 65 through other types; direct_only=true lists the direct ones alone), 0 it implements or extends.
+```
+
+Supertypes are the target's direct ones. The index holds supertype references that did not become subtypes, and when it does the first line leads `INCOMPLETE` with their count, so the verdict cannot be `strong`:
+
+| What the first line counts | Why the type is missing |
+|---|---|
+| Supertype references that bound to the target and became no edge | The extending type has no definition in the index: `impl Matcher for ExternalType` |
+| Supertype references that are ambiguous, unresolved or pending | The spelling is all that is known |
+| Lines that read as a type declaration (`class`, `struct`, `interface`, `trait`, `impl`, `extends`, `implements`) naming the target and recorded as no reference | The extractor did not read the declaration, such as `class URL(click.ParamType[str])` |
+
+The last is a text check of the kind described under "A function passed as a value", and it is a doubt, not a finding. Types that reach the target only through a type whose own supertype reference is unbound are not counted.
 
 ## Paging
 

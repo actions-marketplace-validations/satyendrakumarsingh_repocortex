@@ -182,7 +182,14 @@ repocortex tool call analyze_impact symbol=fromJson
 repocortex tool call analyze_impact symbol=fromJson path=gson/src/main/java/com/google/gson/Gson.java line=850
 ```
 
-`path` and `line` are accepted by every tool that takes `name` or `symbol`.
+`path` and `line` are accepted by every tool that takes `name` or `symbol`. A
+name may also be written as an owner and a member (`Guard.AgainstNull`,
+`Guard::AgainstNull`, `Mailer#deliver`).
+
+A tool about one kind of thing, such as `find_implementations` (types), does not
+answer for a definition of another kind that shares the name. It answers
+`UNKNOWN`, with `outcome: kind_not_indexed` and no rows, and exits 0.
+
 The list tools take `limit` (default 50, at most 200) and `offset`; an answer
 that does not carry every row says how many exist and which offset reads on.
 

@@ -93,6 +93,20 @@ type symbolQuery struct {
 	Prefer     []string
 	PreferWord string
 
+	// PreferNoun is one such thing, singular ("type"), for the sentence that
+	// says there is none. Tolerate lists kinds that are still answered for when
+	// no preferred kind exists, because the question has a meaning for them:
+	// a class has callers, in the sense of what constructs it.
+	PreferNoun string
+	Tolerate   []string
+
+	// Admit is asked about a definition of another kind when no preferred one
+	// exists, and answers whether the question still has a meaning for it: an
+	// abstract method has implementations though it is not a type. AdmitWhy
+	// completes "none of them ..." in the sentence that says none does.
+	Admit    func(ctx context.Context, runID int64, c registry.SymbolCandidate) bool
+	AdmitWhy string
+
 	// Rest is the caller's other arguments, as they should appear after the
 	// selector in the example call.
 	Rest string
@@ -150,6 +164,10 @@ var (
 // outcomeAmbiguous is Response.Outcome for a disambiguation answer.
 const outcomeAmbiguous = "ambiguous_name"
 
+// outcomeNoSuchKind is Response.Outcome for an answer that found definitions of
+// the name and none of the kind the tool is about.
+const outcomeNoSuchKind = "kind_not_indexed"
+
 // selectSymbol turns q into one definition.
 //
 // On any outcome other than success it returns the finished result the caller
@@ -185,6 +203,18 @@ func (s *Server) selectSymbol(ctx context.Context, req *sdk.CallToolRequest, q s
 			return selection{}, sc, r
 		}
 	}
+	// Not a qualified name either: `Guard.AgainstNull`, `Guard::AgainstNull` and
+	// `Mailer#deliver` name a member by its owner. Tried last, so a definition
+	// whose own name contains a dot is still found by that name first.
+	qualified := false
+	if total == 0 {
+		all, total, err = s.deps.Registry.SymbolCandidatesQualified(ctx, runID, name, maxSelectRows)
+		if err != nil {
+			sc, r, _ := failFrom(err, "symbol lookup failed: %v", err)
+			return selection{}, sc, r
+		}
+		qualified = total > 0
+	}
 	if total == 0 {
 		sc, r, _ := s.missingSymbol(ctx, req, runID, status, name)
 		return selection{}, sc, r
@@ -204,7 +234,7 @@ func (s *Server) selectSymbol(ctx context.Context, req *sdk.CallToolRequest, q s
 	if wantPath != "" {
 		// The name is too common to have read every definition of it, so the
 		// path is applied where all of them are: in the store.
-		if total > len(all) {
+		if total > len(all) && !qualified {
 			in, _, ierr := s.deps.Registry.SymbolCandidatesIn(ctx, runID, name, wantPath, maxSelectRows)
 			if ierr != nil {
 				sc, r, _ := failFrom(ierr, "symbol lookup failed: %v", ierr)
@@ -232,6 +262,15 @@ func (s *Server) selectSymbol(ctx context.Context, req *sdk.CallToolRequest, q s
 		cands = at
 		how = append(how, fmt.Sprintf("by %s", q.LineParam))
 		narrowed = append(narrowed, fmt.Sprintf("%s=%d", q.LineParam, q.Line))
+	}
+
+	// A tool about one kind of thing, and no definition of that kind: the
+	// answer would be "0" about something the question is not about. A path or
+	// a line is the caller choosing, and is honoured.
+	if len(how) == 0 && len(q.Prefer) > 0 && q.PreferNoun != "" &&
+		len(ofKinds(cands, q.Prefer)) == 0 && len(ofKinds(cands, q.Tolerate)) == 0 && !admitsAny(ctx, runID, q, cands) {
+		sc, r := s.noSuchKind(ctx, req, runID, status, q, cands, total)
+		return selection{}, sc, r
 	}
 
 	// Kind is a preference, applied last and only to break a tie the caller's
@@ -370,6 +409,86 @@ func quoteArg(v string) string {
 		return fmt.Sprintf("%q", v)
 	}
 	return v
+}
+
+// admitsAny reports whether any of the first few candidates is one the query
+// still has a meaning for.
+func admitsAny(ctx context.Context, runID int64, q symbolQuery, cands []registry.SymbolCandidate) bool {
+	if q.Admit == nil {
+		return false
+	}
+	for i, c := range cands {
+		if i == maxCandidateRows {
+			break
+		}
+		if q.Admit(ctx, runID, c) {
+			return true
+		}
+	}
+	return false
+}
+
+// noSuchKind is the answer to a name whose only definitions are of another kind
+// than the one the tool is about.
+//
+// It exists because the name used to select what it found. benchmark's
+// BenchmarkReporter class was not indexed, a constructor named like it was, and
+// find_implementations answered "0 implementing" for the constructor: a zero
+// about a method, read as a zero about the type. Nothing is analysed, and the
+// first line says what was asked, what exists instead, and that it is not zero.
+//
+// No rows: the definitions are in the sentence, because a list of rows under a
+// tool's name reads as its result and a client that offers rows to choose from
+// would re-ask for the very definition this refused.
+func (s *Server) noSuchKind(ctx context.Context, req *sdk.CallToolRequest, runID int64, status string,
+	q symbolQuery, cands []registry.SymbolCandidate, total int) (*sdk.CallToolResult, *Response) {
+	name := strings.TrimSpace(q.Name)
+
+	shown := cands
+	if len(shown) > 3 {
+		shown = shown[:3]
+	}
+	var found []string
+	for _, c := range shown {
+		found = append(found, fmt.Sprintf("a %s at %s:%d%s", c.Kind, c.FilePath, c.StartLine, inOwner(c)))
+	}
+	exists := strings.Join(found, "; ")
+	if more := max(total, len(cands)) - len(shown); more > 0 {
+		exists += fmt.Sprintf("; and %d more", more)
+	}
+
+	resp := &Response{
+		IndexRevision: runID,
+		IndexStatus:   status,
+		Outcome:       outcomeNoSuchKind,
+		Summary: fmt.Sprintf("%s — no %s named %q is indexed, so %s answered for nothing. "+
+			"The only definition(s) of that name: %s%s.", leadUnknown, q.PreferNoun, name, q.Tool, exists, admitWhy(q)),
+	}
+	resp.Notes = append(resp.Notes,
+		fmt.Sprintf("%s is about %s. This is not a count of zero: nothing of that kind was looked at. If the %s "+
+			"exists in the repository, the index does not hold it (a file that did not parse in full, a "+
+			"declaration behind a macro, generated code): run search_code for %q to see where it is written.",
+			q.Tool, q.PreferWord, q.PreferNoun, name),
+		fmt.Sprintf("To answer for what is indexed anyway, pass %s and %s of the definition above.",
+			q.PathParam, q.LineParam))
+
+	sc, r, _ := s.reply(ctx, req, resp)
+	return sc, r
+}
+
+func admitWhy(q symbolQuery) string {
+	if q.AdmitWhy == "" {
+		return ""
+	}
+	return ", and none " + q.AdmitWhy
+}
+
+// inOwner says which type holds a member, when the index recorded one.
+func inOwner(c registry.SymbolCandidate) string {
+	if c.Owner == "" {
+		return ""
+	}
+	return fmt.Sprintf(" (in %s %s)", c.OwnerKind, c.Owner)
 }
 
 // disambiguate is the answer to a name that did not come down to one

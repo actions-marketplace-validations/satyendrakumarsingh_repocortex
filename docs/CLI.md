@@ -2213,9 +2213,12 @@ Agent tool: `trace_call_path`.
 
 ### `implementations <name>`
 
-Shows what implements or extends a type, and what it implements or extends.
-Flags: `--path`, `--limit`, `--min-confidence`. Only declared relationships are
-visible without a compiler index. Agent tool: `find_implementations`.
+Shows what implements or extends a type, directly or through other types, and
+what it implements or extends. Direct subtypes come first; a deeper one shows its
+depth and the type it names. Flags: `--path`, `--limit`, `--min-confidence`,
+`--direct-only`. Only declared relationships are visible without a compiler
+index. The first line is the one the agent tool `find_implementations` leads
+with, including how many subtypes the index saw and could not list.
 
 ### `tests <symbol>`
 

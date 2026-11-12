@@ -44,6 +44,20 @@ type Plan struct {
 	// the caller steps below are the callers that were found, not the callers.
 	RiskUndetermined string `json:"risk_undetermined,omitempty"`
 
+	// RiskPartial is impact.Risk.Partial: why RiskLevel is a floor for a reason
+	// other than undetermined callers (a walk cut at a bound, a name that occurs
+	// where no call is recorded).
+	//
+	// Not in the JSON form: internal/web serialises a Plan under a frozen field
+	// contract that nothing renders these in yet. The plan-change command adds
+	// them to its own JSON.
+	RiskPartial string `json:"-"`
+
+	// ValueUse is the impact analysis's text check for a function passed as a
+	// value. When it has a finding the caller steps are the callers that were
+	// recorded, and the covering tests are the tests that were recorded.
+	ValueUse capability.ValueUse `json:"-"`
+
 	// TestsUndetermined is tests.TestReport.Undetermined for the target.
 	TestsUndetermined string                  `json:"tests_undetermined,omitempty"`
 	TotalCallers      int                     `json:"total_callers"`
@@ -101,6 +115,7 @@ func (p *Planner) PlanTarget(ctx context.Context, runID int64, tgt capability.Ta
 	imp, err := impact.AnalyzeTarget(ctx, p.deps, runID, tgt, impact.Options{
 		MinConfidence:  opts.MinConfidence,
 		HubDegreeLimit: opts.HubDegreeLimit,
+		CheckValueUse:  true,
 	})
 	if err != nil {
 		return nil, err
@@ -152,6 +167,8 @@ func (p *Planner) PlanTarget(ctx context.Context, runID int64, tgt capability.Ta
 		RiskLevel: imp.Risk.Level,
 
 		RiskUndetermined:  imp.Risk.Undetermined,
+		RiskPartial:       imp.Risk.Partial,
+		ValueUse:          imp.ValueUse,
 		TestsUndetermined: testsUndetermined,
 		TotalCallers:      imp.TotalReached(),
 		DirectCallers:     len(imp.Direct),

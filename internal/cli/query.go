@@ -277,6 +277,16 @@ func resolveTarget(ctx stdctx.Context, s *session, name, path string) (registry.
 		return registry.SymbolHit{}, nil, fmt.Errorf("symbol lookup: %w", err)
 	}
 	if len(syms) == 0 {
+		// An owner and a member: Guard.AgainstNull, Guard::AgainstNull, Mailer#deliver.
+		cands, _, qerr := s.reg.SymbolCandidatesQualified(ctx, s.runID, name, 50)
+		if qerr != nil {
+			return registry.SymbolHit{}, nil, fmt.Errorf("symbol lookup: %w", qerr)
+		}
+		for _, c := range cands {
+			syms = append(syms, c.SymbolHit)
+		}
+	}
+	if len(syms) == 0 {
 		return registry.SymbolHit{}, nil, fmt.Errorf(
 			"no symbol named %q in the index; names must match exactly — use 'repocortex search' for partial matches", name)
 	}
@@ -444,6 +454,9 @@ type relationshipSpec struct {
 	kinds []model.EdgeKind
 	// noun names the thing being listed, for output.
 	noun string
+	// tool is the agent tool that answers the same question, whose first line
+	// the command prints above its table.
+	tool string
 }
 
 func newReferencesCmd(g *Global) *cobra.Command {
@@ -456,6 +469,7 @@ implementations, extensions and plain references.
 Broader than 'callers', which counts only call edges.`,
 		incoming: true,
 		noun:     "reference",
+		tool:     "find_references",
 	})
 }
 
@@ -470,6 +484,7 @@ not a call.`,
 		incoming: true,
 		kinds:    []model.EdgeKind{model.EdgeCalls},
 		noun:     "caller",
+		tool:     "find_callers",
 	})
 }
 
@@ -482,6 +497,7 @@ depends on, rather than what depends on it.`,
 		incoming: false,
 		kinds:    []model.EdgeKind{model.EdgeCalls},
 		noun:     "callee",
+		tool:     "find_callees",
 	})
 }
 
@@ -549,9 +565,15 @@ because "nothing found" and "nothing resolvable" are different facts.`,
 				return fmt.Errorf("relationship lookup: %w", err)
 			}
 
+			// What an agent asking the same question is told first. The table
+			// below lists edges; this line says what the edges cannot (a
+			// function passed as a value, callers the floor left out).
+			line := askAgentTool(ctx, g, spec.tool, relationshipArgs(name, path, minConfidence))
+
 			if g.JSON {
 				return emitJSON(cmd.OutOrStdout(), map[string]any{
 					"name": name, "index_revision": s.runID,
+					"summary": line.Summary,
 					"target": map[string]any{
 						"id": target.ID, "kind": target.Kind,
 						"path": target.FilePath, "line": target.StartLine,
@@ -562,6 +584,7 @@ because "nothing found" and "nothing resolvable" are different facts.`,
 			}
 
 			out := cmd.OutOrStdout()
+			line.print(out)
 			fmt.Fprintf(out, "%s (%s) at %s:%d\n\n",
 				target.Name, target.Kind, target.FilePath, target.StartLine)
 
@@ -599,6 +622,18 @@ because "nothing found" and "nothing resolvable" are different facts.`,
 	cmd.Flags().StringVar(&minConfidence, "min-confidence", "",
 		"drop edges below this confidence (exact, high, medium, low)")
 	return cmd
+}
+
+// relationshipArgs are the arguments the agent tool takes for the same question.
+func relationshipArgs(name, path, minConfidence string) map[string]any {
+	args := map[string]any{"name": name}
+	if path != "" {
+		args["path"] = path
+	}
+	if minConfidence != "" {
+		args["min_confidence"] = minConfidence
+	}
+	return args
 }
 
 // reportAmbiguity names the other definitions sharing the queried name.

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"math/rand"
+	"strings"
 	"testing"
 	"time"
 
@@ -41,6 +42,14 @@ type SyntheticSpec struct {
 	// Files spreads symbols over this many files (across Files/10 directories),
 	// which is what the co-location signal indexes on.
 	Files int
+
+	// TextFiles and TextLines give the first TextFiles files stored text of
+	// TextLines lines each, so a query that reads the full-text index (the check
+	// for a function passed as a value) pays what it pays on a real tree and
+	// not the nothing it pays on an index with no text. Every line names several
+	// symbols, so a symbol's name occurs in many files. Zero leaves the files
+	// without text, which is what every other fixture here wants.
+	TextFiles, TextLines int
 
 	Refs Refs
 }
@@ -223,6 +232,7 @@ func BuildSynthetic(tb testing.TB, spec SyntheticSpec) (capability.Deps, int64, 
 
 	createEdgeIndexes(tb, db)
 	seedRefs(tb, db, runID, fileIDs["refs.go"], spec.Refs)
+	seedText(tb, db, spec, paths, fileIDs)
 
 	if err := db.QueryRowContext(ctx,
 		`SELECT count(*) FROM edges WHERE index_run_id = ?`, runID).Scan(&info.Edges); err != nil {
@@ -300,5 +310,34 @@ func bulk(tb testing.TB, db *store.DB, query string, gen func(emit func(...any))
 	}
 	if err := tx.Commit(); err != nil {
 		tb.Fatalf("commit: %v", err)
+	}
+}
+
+// seedText stores text for the first spec.TextFiles files: one function per
+// line, calling a few others, with the names of the symbols in the fixture.
+func seedText(tb testing.TB, db *store.DB, spec SyntheticSpec, paths []string, fileIDs map[string]int64) {
+	tb.Helper()
+	if spec.TextFiles <= 0 || spec.TextLines <= 0 {
+		return
+	}
+	ctx := context.Background()
+	for i := 0; i < min(spec.TextFiles, spec.Files); i++ {
+		var b strings.Builder
+		for line := 0; line < spec.TextLines; line++ {
+			n := (i*spec.TextLines+line)*7%spec.Symbols + 1
+			fmt.Fprintf(&b, "func sym%d() { x := sym%d(sym%d); return sym%d(x) }\n", n, n+1, n+2, (n*13)%spec.Symbols+1)
+		}
+		text := b.String()
+		r, err := db.ExecContext(ctx, `INSERT INTO files_fts (path, content, expanded) VALUES (?,?,?)`, paths[i], text, text)
+		if err != nil {
+			tb.Fatalf("index text of %s: %v", paths[i], err)
+		}
+		rowid, err := r.LastInsertId()
+		if err != nil {
+			tb.Fatalf("fts rowid: %v", err)
+		}
+		if _, err := db.ExecContext(ctx, `INSERT INTO files_fts_map (fts_rowid, file_id) VALUES (?,?)`, rowid, fileIDs[paths[i]]); err != nil {
+			tb.Fatalf("map text of %s: %v", paths[i], err)
+		}
 	}
 }
