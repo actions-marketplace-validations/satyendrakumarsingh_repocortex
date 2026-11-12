@@ -558,7 +558,7 @@ func (p *genericParser) Parse(ctx context.Context, path string, src []byte) (*Re
 					tag.Kind = fix.kind
 				}
 			}
-			if isAnonymousName(tag.Name) {
+			if isAnonymousName(tag.Name) || isKeywordName(p.entry.Name, tag.Name) {
 				continue
 			}
 			sym := p.toSymbol(tag)
