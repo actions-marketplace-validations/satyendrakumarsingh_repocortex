@@ -35,6 +35,7 @@ package db
 import (
 	"strings"
 	"unicode"
+	"unicode/utf8"
 )
 
 // Access is how a statement uses a table. Spec §22.
@@ -74,6 +75,11 @@ type Statement struct {
 	// definitions and INSERT column lists. Empty elsewhere — inferring the
 	// columns a SELECT * touches would be a guess.
 	Columns []string
+	// Existing is true for a DDL statement that works on a table it does not
+	// create: ALTER, DROP and CREATE INDEX. Such a statement USES the table, so
+	// the file it sits in is not where the table is declared. Only a CREATE
+	// TABLE (and what an ORM entity declares) is.
+	Existing bool
 	// Certain is false when the statement looked like a run-time fragment
 	// (unbalanced quotes or parens, a trailing conjunction, an interpolation
 	// marker). Callers downgrade confidence rather than dropping the fact.
@@ -474,6 +480,7 @@ func Parse(sql string) (Statement, bool) {
 		if verb == "CREATE" && hasKeyword(toks, "TABLE") {
 			st.Columns = createTableColumns(norm)
 		}
+		st.Existing = verb != "CREATE" || hasKeyword(toks, "INDEX")
 	default:
 		st.Access = AccessUnknown
 	}
@@ -559,13 +566,37 @@ func tokenise(norm string) []string {
 			if c == '[' {
 				end = ']'
 			}
-			flush()
-			j := i + 1
-			for ; j < len(norm) && norm[j] != end; j++ {
-				cur.WriteByte(norm[j])
+			joined := strings.HasSuffix(cur.String(), ".")
+			if c == '[' && cur.Len() > 0 && !joined {
+				// `ARRAY[1, 2]`, `b[i]`: a subscript, not a name. Its
+				// content is its own token, as it always was.
+				flush()
+				j := i + 1
+				for ; j < len(norm) && norm[j] != end; j++ {
+					cur.WriteByte(norm[j])
+				}
+				flush()
+				i = j
+				break
 			}
-			flush()
+			if !joined {
+				flush()
+			}
+			j := i + 1
+			for j < len(norm) && norm[j] != end {
+				j++
+			}
+			if j > i+1 {
+				// The token keeps its quotes, so a name with a space in it
+				// ("Line Items"), or one that is a keyword ("order"), stays
+				// one token and is still known to be a name. A qualifier on
+				// either side is joined to it: "shop"."Line Items".
+				cur.WriteString(norm[i:min(j+1, len(norm))])
+			}
 			i = j
+			if i+1 >= len(norm) || norm[i+1] != '.' {
+				flush()
+			}
 		case ' ', ';':
 			flush()
 		case ',', '(', ')':
@@ -632,35 +663,83 @@ var skipBeforeTable = map[string]bool{
 // isIdentifier rejects tokens that cannot be a table name: SQL keywords, and
 // anything not starting with a letter or underscore.
 func isIdentifier(t string) bool {
-	if t == "" {
+	parts, ok := nameParts(t)
+	if !ok {
 		return false
 	}
-	r := rune(t[0])
-	if !unicode.IsLetter(r) && r != '_' {
-		return false
+	// A bare word is a name unless it is a keyword. A quoted one always is:
+	// "order" and [key] are legal names, and the quotes are what say so. A
+	// qualified name was never a keyword as a whole.
+	if len(parts) == 1 && !parts[0].quoted {
+		return !sqlKeywords[strings.ToUpper(t)]
 	}
-	// EVERY character, not just the first. Checking only the first accepted
-	// `flex-1` and `font-medium` as table names, because a Vue template writes
-	// `class="truncate flex-1"` and the scan read that literal as
-	// `TRUNCATE <table>`. `repocortex db` then listed Tailwind utility classes
-	// among the repository's tables — an invented table, which the doc comment
-	// on LooksLikeSQL calls the failure that costs the reader's trust in every
-	// other row.
-	//
-	// A dot is allowed because qualification arrives here unstripped
-	// (`public.transactions`), and the quoting characters because a delimited
-	// name reaches this check before unqualify removes them. A hyphen is not
-	// an identifier character in any SQL dialect without those quotes.
-	for _, c := range t {
-		switch {
-		case unicode.IsLetter(c), unicode.IsDigit(c):
-		case c == '_', c == '.', c == '$':
-		case c == '"', c == '`', c == '[', c == ']':
-		default:
-			return false
+	return true
+}
+
+// namePart is one segment of a possibly qualified name.
+type namePart struct {
+	// text is the segment without its quotes.
+	text   string
+	quoted bool
+}
+
+// nameParts splits a table or column name on the dots that are outside quotes.
+// It reports false for anything that is not a name: an empty segment, an
+// unterminated quote, or a bare segment holding a character no SQL dialect
+// allows without quotes.
+//
+// EVERY character of a bare segment is checked, not just the first. Checking
+// only the first accepted `flex-1` and `font-medium` as table names, because a
+// Vue template writes `class="truncate flex-1"` and the scan read that literal
+// as `TRUNCATE <table>`. `repocortex db` then listed Tailwind utility classes
+// among the repository's tables — an invented table, which the doc comment on
+// LooksLikeSQL calls the failure that costs the reader's trust in every other
+// row. A hyphen is not an identifier character in any SQL dialect without
+// quotes, and inside quotes anything but the closing delimiter is.
+func nameParts(t string) ([]namePart, bool) {
+	var parts []namePart
+	i := 0
+	for {
+		if i >= len(t) {
+			return nil, false
 		}
+		switch c := t[i]; c {
+		case '"', '`', '[':
+			end := c
+			if c == '[' {
+				end = ']'
+			}
+			j := strings.IndexByte(t[i+1:], end)
+			if j <= 0 {
+				return nil, false
+			}
+			parts = append(parts, namePart{text: t[i+1 : i+1+j], quoted: true})
+			i += j + 2
+		default:
+			start := i
+			for i < len(t) && t[i] != '.' {
+				r, size := utf8.DecodeRuneInString(t[i:])
+				switch {
+				case unicode.IsLetter(r), r == '_':
+				case i > start && (unicode.IsDigit(r) || r == '$'):
+				default:
+					return nil, false
+				}
+				i += size
+			}
+			if i == start {
+				return nil, false
+			}
+			parts = append(parts, namePart{text: t[start:i]})
+		}
+		if i == len(t) {
+			return parts, true
+		}
+		if t[i] != '.' {
+			return nil, false
+		}
+		i++
 	}
-	return !sqlKeywords[strings.ToUpper(t)]
 }
 
 // sqlKeywords are words that must never be mistaken for a table name.
@@ -695,21 +774,54 @@ var sqlKeywords = map[string]bool{
 // that does not exist and nothing downstream can tell it apart from a real one.
 func unqualifiedIdent(t string) string {
 	name := unqualify(t)
-	if name == "" || sqlKeywords[upperASCII(name)] {
+	if name == "" {
+		return ""
+	}
+	if parts, ok := nameParts(t); ok && parts[len(parts)-1].quoted {
+		// "order" is a name; the quotes say so.
+		return name
+	}
+	if sqlKeywords[upperASCII(name)] {
 		return ""
 	}
 	return name
 }
 
-// unqualify strips a schema or database prefix and any trailing alias marker.
+// unqualify strips a schema or database prefix and the quotes, and lowercases.
 //
 // `public.transactions` and `transactions` are the same table; keeping both
-// would split every question about it in two.
+// would split every question about it in two. The dots that count are the ones
+// outside quotes: `"shop"."Line Items"` is `line items`.
 func unqualify(name string) string {
+	if parts, ok := nameParts(name); ok {
+		return strings.ToLower(parts[len(parts)-1].text)
+	}
 	if i := strings.LastIndex(name, "."); i >= 0 && i+1 < len(name) {
 		name = name[i+1:]
 	}
 	return strings.ToLower(strings.Trim(name, "\"`[]"))
+}
+
+// leadingName is the first name in s: a quoted one up to its closing
+// delimiter, which may hold spaces, else the first word.
+func leadingName(s string) string {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return ""
+	}
+	if c := s[0]; c == '"' || c == '`' || c == '[' {
+		end := c
+		if c == '[' {
+			end = ']'
+		}
+		if j := strings.IndexByte(s[1:], end); j > 0 {
+			return s[:j+2]
+		}
+	}
+	if f := strings.Fields(s); len(f) > 0 {
+		return f[0]
+	}
+	return ""
 }
 
 func hasKeyword(toks []string, kw string) bool {
@@ -761,12 +873,11 @@ func createTableColumns(norm string) []string {
 	depth := 0
 	item := strings.Builder{}
 	flush := func() {
-		f := strings.Fields(item.String())
+		name := leadingName(item.String())
 		item.Reset()
-		if len(f) == 0 {
+		if name == "" {
 			return
 		}
-		name := f[0]
 		if constraintKeywords[strings.ToUpper(name)] || !isIdentifier(name) {
 			return
 		}
@@ -847,11 +958,11 @@ func insertColumns(norm string) []string {
 	}
 	var cols []string
 	for _, part := range strings.Split(body, ",") {
-		f := strings.Fields(part)
-		if len(f) == 0 || !isIdentifier(f[0]) {
+		name := leadingName(part)
+		if name == "" || !isIdentifier(name) {
 			continue
 		}
-		if c := unqualifiedIdent(f[0]); c != "" {
+		if c := unqualifiedIdent(name); c != "" {
 			cols = append(cols, c)
 		}
 	}

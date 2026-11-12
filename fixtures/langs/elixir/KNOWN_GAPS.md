@@ -1,13 +1,19 @@
 # Elixir: known gaps
 
-## One symbol per clause head, not per function and arity
+## Clauses are folded by adjacency and head arity, not by the compiler's rules
 
+The query matches one clause head at a time. The parser folds consecutive
+clauses of one name into one symbol (`registerClauseMerge`), so
 `def handle_cast({:push, item}, state)` and `def handle_cast(:clear, _state)`
-are two symbols, as is a bodiless head such as `def floor(number, precision
-\\ 0)`. A query can capture a name but not the arity, and cannot tell a first
-clause from a later one, so the clauses of a function cannot be collapsed
-here. A module with many clauses of one function has that many symbols of the
-same name, at different lines.
+are one symbol that spans both, as is a bodiless head such as `def floor(number,
+precision \\ 0)` with the clauses that follow it.
+
+Two limits. The arity is the number of arguments written in the head, so
+`def f(a, b \\ 1)` is f/2 and a separate `def f(a)` is f/1, which is how the
+language numbers them. And "consecutive" means no other symbol of the module
+lies between the clauses: a clause of `f` that follows `g` is a second symbol
+named `f`, as are clauses of `f/1` and `f/2`. The compiler warns about the
+non-adjacent case, so it is rare in real code.
 
 ## A function whose name is generated
 

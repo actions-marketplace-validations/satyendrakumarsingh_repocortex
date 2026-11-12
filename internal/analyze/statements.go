@@ -58,10 +58,23 @@ func sqlFileStatements(src string) []located {
 	var cur strings.Builder
 	line, startLine := 1, 1
 
+	// started is false until the statement has a character that is neither
+	// white space nor part of a comment. A comment before a statement belongs
+	// to the chunk, so it is kept in the text, but the statement starts on the
+	// line of its first real character: `-- accounts` above `CREATE TABLE
+	// accounts` used to report the table on the comment's line.
+	started := false
+	begin := func() {
+		if !started {
+			startLine, started = line, true
+		}
+	}
+
 	var inSingle, inDouble, inLine, inBlock bool
 	flush := func() {
 		text := strings.TrimSpace(cur.String())
 		cur.Reset()
+		started = false
 		if text == "" {
 			return
 		}
@@ -120,21 +133,26 @@ func sqlFileStatements(src string) []located {
 			cur.WriteString("/*")
 			i++
 		case c == '\'':
+			begin()
 			inSingle = true
 			cur.WriteByte(c)
 		case c == '"':
+			begin()
 			inDouble = true
 			cur.WriteByte(c)
 		case c == ';':
 			flush()
 			startLine = line
 		default:
-			if cur.Len() == 0 && (c == ' ' || c == '\t' || c == '\n' || c == '\r') {
-				// Leading whitespace: keep startLine tracking the first real
-				// character, so a statement is reported at the line a reader
-				// would point to rather than at the blank line before it.
+			space := c == ' ' || c == '\t' || c == '\n' || c == '\r'
+			if cur.Len() == 0 && space {
+				// Leading whitespace: not part of the statement, and not where
+				// a reader would point.
 				startLine = line
 				continue
+			}
+			if !space {
+				begin()
 			}
 			cur.WriteByte(c)
 		}

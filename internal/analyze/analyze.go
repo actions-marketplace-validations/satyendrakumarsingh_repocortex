@@ -167,11 +167,13 @@ func File(path string, src []byte, symbols []model.Symbol) Result {
 
 	for _, stmt := range statementsIn(path, src) {
 		for _, table := range stmt.Tables {
-			if stmt.Access == db.AccessDDL {
-				// A DDL statement DECLARES the table, so this file is where the
+			if stmt.Access == db.AccessDDL && !stmt.Existing {
+				// A CREATE TABLE DECLARES the table, so this file is where the
 				// node lives. Declaring it from a query instead would put the
 				// table's canonical location in whichever file happened to be
-				// parsed first.
+				// parsed first. ALTER, DROP and CREATE INDEX work on a table
+				// declared elsewhere: they are accesses (below), not
+				// declarations.
 				res.Symbols = append(res.Symbols, tableSymbol(table, stmt, len(res.Symbols)))
 			}
 			res.Accesses = append(res.Accesses, Access{
