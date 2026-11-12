@@ -146,6 +146,9 @@ func (s *Server) impactAnalysis(ctx stdctx.Context, req *sdk.CallToolRequest, ar
 	// It is judged from the report's own Binding rather than a second query:
 	// the evidence shown must be the evidence the analysis used.
 	cov := s.coverageFor(ctx, runID, rep.Target.Language, rep.Target.FilePath, rep.Binding, aboutCallers)
+	// The blast radius is built on the same bindings find_callers lists, so
+	// the same evidence against them applies to it.
+	cov.Misbound = s.boundSites(ctx, runID, sel.Target).conflict(sel.Target)
 
 	resp := &Response{
 		IndexRevision: runID,
@@ -501,6 +504,7 @@ func (s *Server) findTests(ctx stdctx.Context, req *sdk.CallToolRequest, args ta
 	// through an unresolved reference is a test RepoCortex cannot see. Coverage
 	// is judged before that claim is worded, not after.
 	cov := s.coverageFor(ctx, runID, rep.Target.Language, rep.Target.FilePath, rep.Binding, aboutTests)
+	cov.Misbound = s.boundSites(ctx, runID, sel.Target).conflict(sel.Target)
 
 	resp := &Response{IndexRevision: runID, IndexStatus: status}
 	where := fmt.Sprintf("%s (%s:%d)", rep.Target.Name, rep.Target.FilePath, rep.Target.Line)
@@ -630,6 +634,7 @@ func (s *Server) planChange(ctx stdctx.Context, req *sdk.CallToolRequest, args t
 		return failFrom(err, "plan change for %q: %v", args.Symbol, err)
 	}
 	cov := s.coverageFor(ctx, runID, sel.Target.Language, sel.Target.FilePath, binding, aboutCallers)
+	cov.Misbound = s.boundSites(ctx, runID, sel.Target).conflict(sel.Target)
 
 	where := fmt.Sprintf("%s (%s:%d)", plan.Target.Name, plan.Target.FilePath, plan.Target.Line)
 	resp := &Response{IndexRevision: runID, IndexStatus: status}

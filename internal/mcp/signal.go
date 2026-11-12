@@ -397,7 +397,8 @@ func (c coverage) caveat(subject string) []string {
 		var out []string
 		if c.Misbound != "" {
 			out = append(out, "SOME ROWS ARE PROBABLY NOT CALLS TO THIS DEFINITION — "+c.Misbound+
-				" Each row says how its call is written; discard the ones qualified by something else.")
+				" find_callers says on each row how the call is written; discard the ones qualified by "+
+				"something else, and whatever was reached only through them.")
 		}
 		if s := c.Binding.UnlistedSentence(); s != "" {
 			out = append(out, "INCOMPLETE FOR THIS SYMBOL — "+s+". Any of them may be a use of this "+

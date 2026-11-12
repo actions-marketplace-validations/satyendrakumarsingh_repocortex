@@ -278,11 +278,18 @@ func bindingNote(b capability.TargetBinding, listed int) string {
 	}
 
 	var account string
-	if b.References == 0 {
+	switch {
+	case b.References == 0 && !b.LanguageExtracts && b.LanguageDefinitions > 0:
+		// "No reference by this name" is no comfort in a language none of whose
+		// references were recorded: it is what every name there looks like.
+		account = fmt.Sprintf("No reference spelled %q is recorded in this index, and none is recorded "+
+			"from any %s code, so its absence says nothing about whether the symbol is used.",
+			b.Name, capability.DisplayLanguage(b.Language))
+	case b.References == 0:
 		account = fmt.Sprintf("No reference spelled %q was recorded anywhere in this index. That rules out "+
 			"an unbound call by this name; it does not rule out a call the parser did not extract, "+
 			"reflection, a call through another name, or a file the index skipped.", b.Name)
-	} else {
+	default:
 		parts := []string{fmt.Sprintf("%d bound to this definition", b.BoundHere)}
 		if b.WithoutEdge > 0 {
 			parts[0] += fmt.Sprintf(" (%d of them from outside any indexed function, so bound but not listed)", b.WithoutEdge)

@@ -725,7 +725,10 @@ func TestCoverageIsReportedForTheSymbolsOwnLanguage(t *testing.T) {
 	if want := "UNKNOWN — RepoCortex does not extract calls from Kotlin; nothing about callers can be concluded."; !strings.HasPrefix(first, want) {
 		t.Errorf("first line = %q, want it to open %q", first, want)
 	}
-	for _, want := range []string{"COVERAGE UNKNOWN", "28 Kotlin definition", "Running 'repocortex resolve' again will not change this"} {
+	for _, want := range []string{"COVERAGE UNKNOWN", "28 Kotlin definition", "Running 'repocortex resolve' again will not change this",
+		// No reference by this name is not a finding where no reference by any
+		// name was recorded.
+		"none is recorded from any Kotlin code"} {
 		if !strings.Contains(text, want) {
 			t.Errorf("answer does not say %q:\n%s", want, text)
 		}
@@ -817,6 +820,17 @@ func TestCallerRowsSayHowTheCallIsWritten(t *testing.T) {
 	}
 	if _, urged := containsAny(text, goAheadWords); urged {
 		t.Errorf("the answer tells the agent to act on rows it has evidence against:\n%s", text)
+	}
+
+	// The blast radius, the tests and the plan are built on the same bindings.
+	for _, tool := range []string{"analyze_impact", "find_tests", "plan_change"} {
+		other, _ := answer(t, fs.sess, tool, map[string]any{"symbol": "New"})
+		if !strings.HasPrefix(firstLine(other), leadUnverified+" — ") {
+			t.Errorf("%s presents callers find_callers has evidence against: %q", tool, firstLine(other))
+		}
+		if _, urged := containsAny(other, goAheadWords); urged {
+			t.Errorf("%s tells the agent to act on them:\n%s", tool, other)
+		}
 	}
 }
 
