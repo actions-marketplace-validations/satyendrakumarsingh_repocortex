@@ -191,9 +191,9 @@ var supplements = map[string]string{
 `,
 
 	"cpp": `
-(class_specifier name: (type_identifier) @name) @definition.class
-(struct_specifier name: (type_identifier) @name) @definition.class
-(enum_specifier name: (type_identifier) @name) @definition.enum
+(class_specifier name: (type_identifier) @name body: (field_declaration_list)) @definition.class
+(struct_specifier name: (type_identifier) @name body: (field_declaration_list)) @definition.class
+(enum_specifier name: (type_identifier) @name body: (enumerator_list)) @definition.enum
 `,
 
 	"c_sharp": `

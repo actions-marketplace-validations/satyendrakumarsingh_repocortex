@@ -1,0 +1,24 @@
+# C++: classes and structs with a body (class), enums (class), functions (function), members
+# defined outside their class (method, named by the last segment and owned by the class
+# written in front of it). A forward declaration (`class Cache;`) is not a definition.
+# Export and attribute macros in front of a class or function are masked before the
+# definition is read. Declarations without a body, out-of-line destructors and `using`
+# aliases are not listed; see KNOWN_GAPS.md.
+store.h	10	class	Comparator
+store.h	16	class	Env
+store.h	19	function	Size
+store.h	26	class	Options
+store.h	30	class	Iterator
+store.h	35	class	Mode
+store.h	38	class	Box
+store.h	40	function	Get
+store.h	46	class	IteratorFactory
+store.cc	10	method	Env
+store.cc	12	method	Default
+store.cc	17	method	Next
+store.cc	19	function	Name
+store.cc	21	function	Defaults
+store.cc	26	function	Twice
+store.cc	28	function	At
+store.cc	32	method	Peek
+store.cc	34	function	Destroy
