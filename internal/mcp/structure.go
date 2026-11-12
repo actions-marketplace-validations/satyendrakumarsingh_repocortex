@@ -192,7 +192,7 @@ var hierarchyKinds = []string{string(model.EdgeImplements), string(model.EdgeExt
 type implementationArgs struct {
 	relationArgs
 
-	DirectOnly bool `json:"direct_only,omitempty" jsonschema:"List only the types that extend or implement it themselves. Default false: also the types that reach it through other subtypes, direct ones first."`
+	DirectOnly bool `json:"direct_only,omitempty" jsonschema:"Only direct subtypes. Default false: also those reached through other subtypes, direct ones first."`
 }
 
 func (s *Server) findImplementations(ctx context.Context, req *sdk.CallToolRequest, args implementationArgs) (*sdk.CallToolResult, *Response, error) {

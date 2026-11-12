@@ -2,8 +2,10 @@ package capability
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/satyendrakumarsingh/repocortex/internal/registry"
 )
@@ -52,6 +54,14 @@ const (
 	// maxNameDefs is how many definitions of a name are read to learn where the
 	// name is defined.
 	maxNameDefs = 500
+
+	// TextBudget is the time the whole check may take. Each name costs a read of
+	// up to a dozen files from the full-text index, which measured about 90ms a
+	// name when those files are 2,000 lines long (tests/scale), so five names are
+	// near half a second. A check that has used its budget stops and says how
+	// many names it reached: an answer that is late is worth less than one that
+	// says it looked at fewer.
+	TextBudget = 600 * time.Millisecond
 )
 
 // NameUse is the finding for one symbol.
@@ -83,6 +93,9 @@ type ValueUse struct {
 	// be worth checking; Checked can be smaller than 1 + PathCandidates when
 	// the bound was reached.
 	PathCandidates int `json:"path_candidates,omitempty"`
+
+	// OutOfTime is true when the check stopped at TextBudget with names left.
+	OutOfTime bool `json:"out_of_time,omitempty"`
 
 	// Uses are the symbols whose name occurs elsewhere, the target first.
 	Uses []NameUse `json:"uses,omitempty"`
@@ -190,6 +203,9 @@ func (v ValueUse) Detail() string {
 			"called, and leaves no call edge; this may be one. Search for the name before concluding that nothing reaches it. ")
 	}
 	fmt.Fprintf(&b, "Checked %d symbol(s) for this", v.Checked)
+	if v.OutOfTime {
+		b.WriteString(", and stopped at its time budget")
+	}
 	if v.PathCandidates > v.Checked-1 && v.Checked > 0 {
 		fmt.Fprintf(&b, "; %d other symbol(s) on the path have few callers and were not checked", v.PathCandidates-(v.Checked-1))
 	}
@@ -229,9 +245,17 @@ func (d Deps) ValueUse(ctx context.Context, runID int64, tgt Target, idx *Symbol
 	var out ValueUse
 	done := map[string]bool{}
 
+	parent := ctx
+	ctx, cancel := context.WithTimeout(ctx, TextBudget)
+	defer cancel()
+	// expired is whether err is this check's own deadline and not the caller's
+	// cancellation: the first returns what was found, the second is an error.
+	expired := func(err error) bool {
+		return errors.Is(err, context.DeadlineExceeded) && parent.Err() == nil
+	}
+
 	check := func(id int64, name, path string, line int, onPath bool) error {
 		done[name] = true
-		out.Checked++
 		defs, err := d.Registry.FindSymbolsByName(ctx, runID, name, "", maxNameDefs)
 		if err != nil {
 			return fmt.Errorf("capability: definitions of %q: %w", name, err)
@@ -247,6 +271,7 @@ func (d Deps) ValueUse(ctx context.Context, runID int64, tgt Target, idx *Symbol
 		if err != nil {
 			return err
 		}
+		out.Checked++
 		if !m.Known || m.Total == 0 {
 			return nil
 		}
@@ -259,6 +284,10 @@ func (d Deps) ValueUse(ctx context.Context, runID int64, tgt Target, idx *Symbol
 
 	if callable(tgt.Kind) && !constructorLike(tgt.FQN) {
 		if err := check(tgt.SymbolID, tgt.Name, tgt.FilePath, tgt.Line, false); err != nil {
+			if expired(err) {
+				out.OutOfTime = true
+				return out, nil
+			}
 			return out, err
 		}
 	}
@@ -308,9 +337,17 @@ func (d Deps) ValueUse(ctx context.Context, runID int64, tgt Target, idx *Symbol
 		}
 		checked++
 		if err := check(c.ID, c.Name, c.FilePath, 0, true); err != nil {
+			if expired(err) {
+				out.OutOfTime = true
+				return out, nil
+			}
 			return out, err
 		}
 		if err := ctx.Err(); err != nil {
+			if expired(err) {
+				out.OutOfTime = true
+				return out, nil
+			}
 			return out, err
 		}
 	}

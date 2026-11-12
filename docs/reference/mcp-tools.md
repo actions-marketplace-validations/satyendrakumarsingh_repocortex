@@ -288,7 +288,7 @@ List a type's hierarchy in both directions: what implements or extends it, direc
 | Parameter | Type | Required | Description |
 |---|---|---|---|
 | `name` | string | yes | Symbol name whose relationships you want. |
-| `direct_only` | boolean | no | List only the types that extend or implement it themselves. Default false: also the types that reach it through other subtypes, direct ones first. |
+| `direct_only` | boolean | no | Only direct subtypes. Default false: also those reached through other subtypes, direct ones first. |
 | `limit` | integer | no | Most rows to return. Default 50, maximum 200. |
 | `line` | integer | no | Line the definition starts on, to choose between several in one file (overloads). |
 | `min_confidence` | string | no | Lowest confidence to return: exact, high, medium or low. Default low. Recommended: 'high' for safe automated code changes and blast radius analysis to filter out heuristic false positives. |

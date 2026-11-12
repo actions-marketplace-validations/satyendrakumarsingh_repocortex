@@ -512,7 +512,10 @@ function symbolView({ name, path, line, tab = 'callers', floor = '' }) {
       if (!slot) return;
       // The counted total when the tool gives one; a list of candidates is not
       // a count of anything.
-      if (a.outcome === 'ambiguous_name') slot.textContent = '?';
+      // A refusal because the name has no definition of the kind the tab is
+      // about (kind_not_indexed) counted nothing either, and a 0 there reads as
+      // an answer.
+      if (a.outcome === 'ambiguous_name' || a.outcome === 'kind_not_indexed') slot.textContent = '?';
       else if (a.page && typeof a.page.total === 'number') slot.textContent = String(a.page.total);
       else slot.textContent = `${(a.items || []).length}${a.truncated ? '+' : ''}`;
     }).catch(() => {});
