@@ -695,6 +695,10 @@ func (r *Resolver) AppendNames(dst []string, seen map[string]struct{}, fr regist
 		dst = append(dst, name)
 	}
 	spec := r.specs.For(languageOfFile(fr))
+	if spec.Calls.ObjectsAreCallable && len(fr.Refs) > 0 {
+		// An object is called through its apply (object.go).
+		add("apply")
+	}
 	for _, ref := range fr.Refs {
 		add(ref.Name)
 		if ref.ReceiverKind == model.ReceiverImplementer {

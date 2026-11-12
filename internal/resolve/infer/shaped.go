@@ -591,11 +591,19 @@ func (r *Resolver) callBare(c call, stats *Stats) decision {
 				return d
 			}
 		}
+		// A member of the enclosing type shadows an object of the same name;
+		// failing one, the name may be an object called through its apply.
+		if d, ok := r.callBareObject(c); ok {
+			return d
+		}
 		// Not declared on it: inherited, statically imported, or a free
 		// function. Its ancestors are asked first, and what the name alone
 		// answers is what stands if they say nothing.
 		t, _ := c.enclosingType()
 		return r.inherit(c, t, false, r.bareBeyondType(c, reach, stats), stats)
+	}
+	if d, ok := r.callBareObject(c); ok {
+		return d
 	}
 	if c.spec.Calls.DynamicSelf {
 		return r.bareBeyondType(c, reach, stats)
@@ -1089,6 +1097,9 @@ func namespaceBeneath(c call, m module, namespace string) decision {
 // callOnTypeOrValue binds a call made on a name that is a type — its member —
 // or, failing that, a value of unknown type.
 func (r *Resolver) callOnTypeOrValue(c call, name string, stats *Stats) decision {
+	if d, ok := r.callInPackage(c, name); ok {
+		return d
+	}
 	t, found, known := r.typeNamed(c, name)
 	if found {
 		if d, ok := c.bindMember(t, ruleNamedType); ok {

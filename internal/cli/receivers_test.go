@@ -149,8 +149,9 @@ func receiverEdgesAt(t *testing.T, db *sql.DB, m receiverMarker) []receiverEdge 
 		  JOIN symbols s ON s.id = e.dst_id
 		  JOIN files f ON f.id = s.file_id
 		 WHERE e.source = 'source_code'
-		   AND e.evidence_file = ? AND e.evidence_line = ? AND s.name = ?
-		 ORDER BY e.id`, m.file, m.line, m.name)
+		   AND e.evidence_file = ? AND e.evidence_line = ?
+		   AND (s.name = ? OR (s.name = 'apply' AND s.fqn LIKE '%:' || ? || '.apply'))
+		 ORDER BY e.id`, m.file, m.line, m.name, m.name)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -255,7 +256,8 @@ func TestReceiverFixtureBindsNothingWrongly(t *testing.T) {
 	// A CALLS edge points at something callable.
 	if n := scalar(t, db, `
 		SELECT COUNT(*) FROM edges e JOIN symbols s ON s.id = e.dst_id
-		 WHERE e.kind = 'CALLS' AND e.source = 'source_code' AND s.kind NOT IN ('function', 'method')`); n != 0 {
+		 WHERE e.kind = 'CALLS' AND e.source = 'source_code' AND s.kind NOT IN ('function', 'method')
+		   AND NOT (s.kind = 'variable' AND COALESCE(e.detail, '') LIKE '%the object is called%')`); n != 0 {
 		t.Errorf("%d CALLS edge(s) point at something that is not a function or a method", n)
 	}
 	// An INSTANTIATES edge points at a type.
