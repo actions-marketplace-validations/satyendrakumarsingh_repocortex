@@ -14,7 +14,6 @@ import (
 	"github.com/satyendrakumarsingh/repocortex/internal/graph"
 	devmcp "github.com/satyendrakumarsingh/repocortex/internal/mcp"
 	"github.com/satyendrakumarsingh/repocortex/internal/registry"
-	"github.com/satyendrakumarsingh/repocortex/internal/store"
 
 	sdk "github.com/modelcontextprotocol/go-sdk/mcp"
 )
@@ -100,13 +99,8 @@ func openPendingAgentServer(ctx context.Context, g *Global, opts agentServerOpti
 	if err != nil {
 		return nil, nil, fmt.Errorf("prepare a placeholder schema: %w", err)
 	}
-	db, err := store.Open(ctx, store.Options{Path: filepath.Join(tmp, IndexFile)})
+	db, err := openPlaceholder(ctx, filepath.Join(tmp, IndexFile))
 	if err != nil {
-		_ = os.RemoveAll(tmp)
-		return nil, nil, fmt.Errorf("prepare a placeholder schema: %w", err)
-	}
-	if _, err := store.Migrate(ctx, db.DB, time.Now().Unix); err != nil {
-		_ = db.Close()
 		_ = os.RemoveAll(tmp)
 		return nil, nil, fmt.Errorf("prepare a placeholder schema: %w", err)
 	}
