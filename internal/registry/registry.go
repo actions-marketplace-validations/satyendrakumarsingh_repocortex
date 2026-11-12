@@ -444,10 +444,19 @@ func deleteRunRows(ctx context.Context, tx *sql.Tx, runID int64) error {
 
 // Counts are the row totals for one run.
 type Counts struct {
-	Files         int64
-	Symbols       int64
-	Edges         int64
+	Files   int64
+	Symbols int64
+	Edges   int64
+
+	// ParseFailures is every file the parser did not fully understand: the
+	// ones it gave up on and the ones it recovered from. It is what
+	// index_runs.parse_failures stores and what makes a run "degraded".
+	// ParseFailed and ParsePartial are its two parts, and they are what a
+	// person is shown, because "48 parse failures" for 43 files with no
+	// symbols and 5 with most of theirs reads as 48 files lost.
 	ParseFailures int64
+	ParseFailed   int64
+	ParsePartial  int64
 }
 
 func countRun(ctx context.Context, q queryer, runID int64) (Counts, error) {
@@ -456,12 +465,14 @@ func countRun(ctx context.Context, q queryer, runID int64) (Counts, error) {
 		SELECT (SELECT count(*) FROM files   WHERE index_run_id = ?),
 		       (SELECT count(*) FROM symbols WHERE index_run_id = ?),
 		       (SELECT count(*) FROM edges   WHERE index_run_id = ?),
-		       (SELECT count(*) FROM files   WHERE index_run_id = ? AND parse_status IN ('failed','partial'))`,
-		runID, runID, runID, runID).
-		Scan(&c.Files, &c.Symbols, &c.Edges, &c.ParseFailures)
+		       (SELECT count(*) FROM files   WHERE index_run_id = ? AND parse_status = 'failed'),
+		       (SELECT count(*) FROM files   WHERE index_run_id = ? AND parse_status = 'partial')`,
+		runID, runID, runID, runID, runID).
+		Scan(&c.Files, &c.Symbols, &c.Edges, &c.ParseFailed, &c.ParsePartial)
 	if err != nil {
 		return c, fmt.Errorf("registry: count run %d: %w", runID, err)
 	}
+	c.ParseFailures = c.ParseFailed + c.ParsePartial
 	return c, nil
 }
 

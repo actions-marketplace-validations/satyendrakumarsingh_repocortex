@@ -78,11 +78,14 @@ export function parseStatus(stdout: string): IndexStatus {
 /**
  * The index database file as the extension sees it on disk.
  *
- * `repocortex status` reports when the last FULL run finished. An
- * incremental `repocortex index` updates the same run in place and leaves
- * that timestamp alone, so on its own it would make a freshly updated index
- * look as old as its first build. The file's modification time moves on
- * every update, and reading the index does not move it.
+ * `repocortex status` reports when the index run last finished. RepoCortex
+ * up to 1.0.1 wrote that once, at the full run, and an incremental
+ * `repocortex index` left it alone, so on its own it made a freshly updated
+ * index look as old as its first build. Later versions move it on every
+ * incremental update, but `repocortex resolve` and `scip import` change the
+ * graph without moving it in any version. The file's modification time moves
+ * on every write, and reading the index does not move it, so the newer of
+ * the two is the honest age whichever binary is installed.
  */
 export interface IndexFile {
   readonly modifiedMs: number;
@@ -247,12 +250,12 @@ function presentIndexStatus(
   const age = Number.isNaN(updated) ? undefined : formatAge(now - updated);
   detail.push(`${status.files} files, ${status.symbols} symbols, ${status.relationships} relationships indexed.`);
   if (status.lastIndexed !== undefined) {
-    detail.push(`RepoCortex reports its last full index run finished ${status.lastIndexed}${!updatedInPlace && age !== undefined ? ` (${age})` : ''}.`);
+    detail.push(`RepoCortex reports its index run last finished ${status.lastIndexed}${!updatedInPlace && age !== undefined ? ` (${age})` : ''}.`);
   }
   if (updatedInPlace) {
     detail.push(
       `The index file was last written ${new Date(indexFile.modifiedMs).toISOString()}${age !== undefined ? ` (${age})` : ''}. ` +
-        'An incremental update does not move the run timestamp, so the age shown is the file\'s.',
+        'That is later than the run timestamp, which `resolve` never moves and older RepoCortex versions do not move on an incremental update, so the age shown is the file\'s.',
     );
   }
   if (status.gitRevision !== undefined) {

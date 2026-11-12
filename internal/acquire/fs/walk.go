@@ -91,6 +91,12 @@ type Discovered struct {
 
 	Skipped    bool   `json:"skipped"`
 	SkipReason string `json:"skip_reason,omitempty"`
+
+	// Unread is true when this walk did not open the file: its size and times
+	// matched what an earlier pass recorded, so ContentHash (or the binary
+	// skip) is that pass's and not a fresh reading. Only WalkTrusting sets
+	// it; see trust.go for the rule and what it does not cover.
+	Unread bool `json:"-"`
 }
 
 // Option adjusts a Walker. The knobs here are operational rather than
@@ -140,6 +146,11 @@ type Walker struct {
 	// language in a different repository.
 	detector *langdetect.Detector
 
+	// includeHidden is the subset of include whose globs name a hidden
+	// component, which is the only way to bring back something the hidden-file
+	// rule leaves out. See hidden.go.
+	includeHidden []pattern
+
 	maxFileSize int64
 	workers     int
 }
@@ -178,6 +189,9 @@ func NewWalker(root string, cfg config.Config, opts ...Option) (*Walker, error) 
 	for _, g := range include {
 		if p, ok := compilePattern(g, ""); ok {
 			w.include = append(w.include, p)
+			if !p.negate && namesHidden(g) {
+				w.includeHidden = append(w.includeHidden, p)
+			}
 		}
 	}
 	if len(w.include) == 0 {
@@ -279,11 +293,24 @@ func (w *Walker) Root() string { return w.root }
 // can distinguish "not present" from "present but not indexed" — the difference
 // between a deleted file and an oversized one.
 func (w *Walker) Walk(ctx context.Context) ([]Discovered, error) {
+	return w.WalkTrusting(ctx, nil)
+}
+
+// WalkTrusting is Walk for a tree an earlier pass has already read. A file
+// whose size and times match what that pass recorded, and whose times are old
+// enough to be believed, is returned with the recorded hash and Unread set,
+// without being opened. Everything else is read and hashed exactly as Walk
+// does. A nil trust is Walk.
+//
+// The rule, its reasoning and its limits are in trust.go. The saving is the
+// difference between one stat and one open, read and close per file, which is
+// most of what a pass over an unchanged tree costs.
+func (w *Walker) WalkTrusting(ctx context.Context, trust *Trust) ([]Discovered, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
 
-	st := &walkState{w: w, ctx: ctx, done: ctx.Done()}
+	st := &walkState{w: w, ctx: ctx, done: ctx.Done(), trust: trust}
 	// One slot per worker beyond the caller's own goroutine, which does real
 	// work rather than blocking on a queue.
 	if n := w.workers - 1; n > 0 {
@@ -305,6 +332,9 @@ type walkState struct {
 	w    *Walker
 	ctx  context.Context
 	done <-chan struct{} // ctx.Done(), hoisted so the hot path never calls it
+
+	// trust is read-only for the whole walk, so workers share it unlocked.
+	trust *Trust
 
 	sem chan struct{}
 	wg  sync.WaitGroup
@@ -371,7 +401,7 @@ func (st *walkState) walkDir(dir, rel string, rules ruleSet) {
 		return
 	}
 
-	rules = loadDirRules(rules, dir, rel)
+	rules = loadDirRules(rules, dir, rel, entries)
 
 	// Computed at most once per directory, and only if a header in it needs
 	// placing by what it sits beside. walkDir handles a directory's entries on
@@ -409,6 +439,13 @@ func (st *walkState) walkDir(dir, rel string, rules ruleSet) {
 		if st.w.configExcluded(childRel, isDir) {
 			continue
 		}
+		// Hidden entries that are editor or tool state, by the rule in
+		// hidden.go. Checked here, before the symlink and ignore-file logic,
+		// for the same reason config exclusions are: nothing a repository
+		// commits should be able to make the walk enter `.git`.
+		if st.w.hiddenExcluded(childRel, name, isDir) {
+			continue
+		}
 
 		if isSymlink {
 			st.emit(st.symlink(childPath, childRel))
@@ -434,7 +471,7 @@ func (st *walkState) walkDir(dir, rel string, rules ruleSet) {
 		case entry.Type()&iofs.ModeSymlink != 0:
 			st.emit(st.symlink(childPath, childRel))
 		case entry.Type().IsRegular():
-			st.emit(st.w.inspect(childPath, childRel, entry, siblings))
+			st.emit(st.w.inspect(childPath, childRel, entry, siblings, st.trust))
 		default:
 			// Sockets, devices and FIFOs. Opening a FIFO blocks until a writer
 			// appears, which would hang the indexer indefinitely on a
@@ -523,8 +560,9 @@ var headPool = sync.Pool{New: func() any {
 //
 // The language is decided from bytes the hashing loop has already read:
 // detection never opens a file a second time. A file that is skipped before or
-// during the read is identified by name alone.
-func (w *Walker) inspect(full, rel string, entry iofs.DirEntry, siblings func() langdetect.Neighbours) Discovered {
+// during the read is identified by name alone. With a trust it stops after the
+// stat when the file provably has not changed.
+func (w *Walker) inspect(full, rel string, entry iofs.DirEntry, siblings func() langdetect.Neighbours, trust *Trust) Discovered {
 	d := Discovered{Path: rel}
 
 	info, err := entry.Info()
@@ -540,6 +578,21 @@ func (w *Walker) inspect(full, rel string, entry iofs.DirEntry, siblings func() 
 		d.setDetection(w.detector.Detect(rel, nil, siblings))
 		d.Skipped, d.SkipReason = true, SkipTooLarge
 		return d
+	}
+
+	if trust != nil {
+		changed, hasChange := changeTimeUnix(info)
+		if known, ok := trust.unchanged(rel, d.SizeBytes, d.ModTimeUnix, changed, hasChange); ok {
+			// Not opened, so identified by name alone. Nothing re-parses an
+			// unchanged file, and the language the index holds for it stands.
+			d.setDetection(w.detector.Detect(rel, nil, nil))
+			d.Unread = true
+			d.ContentHash = known.ContentHash
+			if known.ContentHash == "" {
+				d.Skipped, d.SkipReason = true, known.SkipReason
+			}
+			return d
+		}
 	}
 
 	var head *[]byte

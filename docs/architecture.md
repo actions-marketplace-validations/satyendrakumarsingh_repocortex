@@ -371,6 +371,21 @@ Diffing is by **content hash, not mtime**. `git checkout` rewrites timestamps on
 files whose content is unchanged, so an mtime-based diff would reparse the whole
 repository after every branch switch.
 
+Size and time decide only which files need hashing. A file whose size and
+modification time match the index, and whose modification and inode change
+times are more than two seconds older than the previous pass, is not opened;
+everything else is hashed and the hash decides. The two-second margin is git's
+"racily clean" rule: a time that close to the pass that read it cannot rule out
+a second same-size write in the same second. `internal/acquire/fs/trust.go`
+states the rule and what it does not cover, and `repocortex index --rehash`
+reads everything.
+
+A completed in-place pass moves the run's `started_unix` and `finished_unix` to
+its own start and end (`registry.MarkUpdated`). They are the index age `status`
+and tool provenance report, and `started_unix` is the moment the next pass
+trusts file times against, so it is taken before discovery begins and written
+only when the pass succeeds.
+
 ### The determinism digest
 
 `registry.RegistryDigest` is a sha256 over the content of one run, and it is how

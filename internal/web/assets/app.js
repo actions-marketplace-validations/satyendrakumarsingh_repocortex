@@ -10127,9 +10127,13 @@ function renderOwnership(d, body) {
         + num(window_.requested) + ' requested ' + plural('commit', window_.requested) + ' were read, spanning '
         + (absoluteWhen(window_.oldest_unix) || 'an unrecorded moment') + ' to '
         + (absoluteWhen(window_.newest_unix) || 'an unrecorded moment') + '. '
-        + (window_.exhausted
-          ? 'The repository has no commits older than that, so this window is its whole history.'
-          : 'The repository has older commits that were not read.') }),
+        + (window_.shallow
+          ? 'Shallow clone: ' + num(window_.commits_read) + ' ' + plural('commit', window_.commits_read)
+            + ' available. Older history was never fetched, so this is not the repository’s whole history; '
+            + 'git fetch --unshallow brings in the rest.'
+          : window_.exhausted
+            ? 'The repository has no commits older than that, so this window is its whole history.'
+            : 'The repository has older commits that were not read.') }),
       history.repository_root
         ? el('p', { class: 'hint', text: 'Worktree: ' + text(history.repository_root)
           + (history.path_prefix ? ' · the indexed project sits at ' + text(history.path_prefix) + ' inside it' : '') })

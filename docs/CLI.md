@@ -102,13 +102,59 @@ Next: repocortex index
 ### `index`
 
 **Answers:** what is in this repository? Walks it, parses every supported file,
-and makes the result queryable. Incremental by default — files are compared by
-**content hash**, not mtime, so a `git checkout` does not trigger a full
-reparse.
+and makes the result queryable. Incremental by default: only files whose
+**content hash** changed are reparsed, so a `git checkout` that rewrites
+timestamps does not trigger a full reparse.
+
+An update costs a small fraction of a rebuild, but it is not independent of
+repository size: every file is stat'ed on every run, and after a change
+references are re-resolved across the whole index. On django (7,090 files) that
+is 0.13 s when nothing changed and about 1 s after a two-file edit; see
+[performance](performance.md#figures-other-tools-publish-measured-here).
+
+**Which files are read.** A file is read and hashed only when it might have
+changed. It is taken as unchanged, without being opened, when all of these hold:
+
+1. the previous run recorded it, under the same build;
+2. its size is the recorded size;
+3. its modification time is the recorded one, to the second;
+4. that time is at least two seconds older than the moment the previous run
+   began;
+5. on Linux and macOS, its inode change time is that old too.
+
+Every other file is hashed and the hash decides. A file that was touched but
+not changed is hashed once, found identical, not reparsed, and its new time
+recorded. A same-size edit made in the same second as the save the index
+recorded is not missed, because rule 4 does not believe a time that close to
+the run that read it. Rule 5 catches a same-size edit whose modification time
+was put back (`cp -p`, `rsync -t`, `touch -r`): a program cannot set the change
+time.
+
+Not covered, and what `--rehash` is for: Windows offers no change time without
+opening the file, so a same-size edit whose modification time was restored to
+the second is not seen there; and a clock stepped backwards by more than two
+seconds between runs, or a network filesystem whose clock is that far behind,
+can hide a same-size edit that lands on the recorded second.
+
+**Hidden files.** Hidden configuration is indexed (`.github/workflows/*.yml`,
+`.eslintrc.js`, `.env.example`, `.gitlab-ci.yml`). Hidden editor and tool state
+is not: any hidden directory other than a short list of automation directories
+(`.github`, `.gitlab`, `.circleci`, `.devcontainer`, `.husky` and the like), and
+hidden data or temporary files such as `.syms.json`, `.DS_Store` and `.x.swp`.
+`.git` and `.repocortex` are never indexed at any depth. `index.exclude` in
+`.repocortex.yml` removes more, and an `index.include` pattern that names a
+hidden path with a dot of its own (`.claude/**`, `.syms.json`) brings it back.
+The full rule is in the
+[user manual](user-manual.md#hidden-files-and-directories).
+
+`status` "Last indexed", and the `provenance.age_seconds` every tool answer
+carries, are the time of the latest run, full or incremental, including a run
+that found nothing to change.
 
 | Flag | Effect |
 |---|---|
 | `--full` | rebuild from scratch. Discards resolved edges; re-run `resolve` |
+| `--rehash` | incremental, but read and hash every file instead of trusting an unchanged size and modification time |
 | `--accuracy fast\|auto\|exact` | override the accuracy mode (full path only) |
 | `--workers N` | parse concurrency (default 4). Peak memory scales with this, not with repository size |
 | `--digest` | print the registry digest — the determinism gate |
@@ -138,6 +184,16 @@ $ repocortex index --full --digest
   Duration:      7346ms
 ```
 
+`Symbols`, and the `Partial parses` and `Parse failures` lines printed when there
+are any, are counted from the rows the run published, so they are the numbers
+`repocortex status` prints next and the two parse figures add up to the run's
+stored `parse_failures`. `Symbols` is everything the index holds a definition
+for: what the parsers extracted, plus the endpoints, tables, configuration keys
+and deployment units the analysers found. A partial parse is a file the parser
+recovered from or got nothing out of; a parse failure is a file with no symbols
+at all. The JSON form carries them as `symbols`, `partial_parses` and
+`parse_failures`.
+
 ### `resolve`
 
 **Answers:** which definition does each reference point at? Builds the call
@@ -160,16 +216,53 @@ does not fail `resolve`. JSON output carries the same under `scip`.
 $ repocortex resolve
   References:  29506
   Resolved:    12062 (40.9%)
+    by confidence:
+      high:    9714
+      medium:  133
+      low:     2215
   Ambiguous:   2063
-  Unresolved:  15381  (calls outside this repository)
-  Edges:       11720
-    high:    9714
-    medium:  133
-    low:     2215
+  Unresolved:  15381  (no definition of that name is indexed: code outside this
+               repository, or code in it that the index did not extract)
+  Edges:       11720  (one per caller and definition; references between the same pair share one)
   Data access: 476 statement(s), 458 bound to a declared table, 450 edges
   Config:      32 read(s), 2 bound to a declared key, 2 edges
   Duration:    1260ms
 ```
+
+The summary counts two different things and keeps them apart. The tiers under
+`Resolved` are **references**: how many of the bound references were bound at
+each confidence. `Edges` is **edge rows** in the graph, counted from the table,
+with their own tiers beneath (omitted from the older sample above). There are
+fewer edges than resolved references because references between the same two
+definitions share one edge. On sinatra:
+
+```
+  Resolved:    2932 (35.9% of the 8178 that name something this index defines)
+    by confidence:
+      high:    2564
+      medium:  367
+      low:     1
+  Ambiguous:   5246
+  Unresolved:  6437  (no definition of that name is indexed: code outside this
+               repository, or code in it that the index did not extract)
+  Edges:       2342  (one per caller and definition; references between the same pair share one)
+    high:    2073
+    medium:  269
+```
+
+The one low-confidence reference has no edge of its own: a stronger reference
+between the same two definitions already made it. A second `resolve` with
+nothing new to bind prints no tiers under `Resolved`, because a reference's tier
+is known only to the pass that binds it, and still prints the edges that are in
+the graph ("0 written by this pass").
+
+**Unresolved** means no definition with that name is in the index. That is
+every call into a library, and it is equally every call to code in this
+repository that the index holds no definition for: a language whose definitions
+are not extracted, a macro, a file that failed to parse. It is not a count of
+external calls. `--json` carries `by_confidence` (references bound by this pass),
+`edges` (edges written by this pass), and `edges_total` with
+`edges_by_confidence` (the graph).
 
 ### `watch`
 
@@ -183,6 +276,51 @@ Editors emit bursts of events for one save, so changes are debounced and
 coalesced. Each file updates in its own transaction, so an agent querying
 concurrently always sees a file either entirely before or entirely after a
 change.
+
+**Start-up.** `watch` registers every directory, then reconciles the index with
+the tree, then prints its banner:
+
+```
+$ repocortex watch
+Watching django: 3273 directories (revision 2), ready in 1.59s. Press Ctrl-C to stop.
+```
+
+When registration takes longer than two seconds, a `watching N directories...`
+line goes to standard error every two seconds until it is done, so a slow start
+says it is still starting. (It took 1.6 s on django, so none was printed there.)
+Ctrl-C during start-up stops it at the next directory. The reconcile runs after
+registration and not before, so an edit saved while `watch` was starting is
+picked up before the banner and not lost between the two.
+
+**What a watch costs, and what it can see.** One watch per directory, and none
+per file, on every platform:
+
+| Platform | Mechanism | A file rewritten in place | A file created, deleted or renamed (how most editors save) | Limit |
+|---|---|---|---|---|
+| Linux | inotify, through fsnotify | reported at once | reported at once | `fs.inotify.max_user_watches`, one per directory |
+| Windows | ReadDirectoryChangesW, through fsnotify | reported at once | reported at once | one handle per directory |
+| macOS | kqueue on each directory, plus a sweep | found by the next sweep | reported at once | one file descriptor per directory |
+
+macOS is the one with a trade in it. kqueue reports a write to a file only to a
+process holding that file open, so the usual approach (and fsnotify's) opens
+every file: 10,400 descriptors and as many `open` calls for django's 7,100 files
+and 3,273 directories, which is what made start-up take 17 s to over a minute
+and put a ceiling on the size of repository that could be watched at all.
+RepoCortex holds a descriptor per directory instead (3,298 on django). The
+kernel then reports every change to a directory's listing at once, and a file
+rewritten where it lies is found by a sweep that compares each file's size and
+modification time with what was last seen. The sweep runs every two seconds, or
+less often on a tree that takes long to sweep, so that it costs at most about a
+twentieth of one core; an in-place write is therefore noticed within one sweep
+interval and not instantly. On the BSDs fsnotify's kqueue backend is still
+used, with a descriptor per file.
+
+What the descriptor limit implies on macOS: the number of directories that can
+be watched is bounded by the process's open-file limit (`ulimit -n`; the
+per-process maximum is `sysctl kern.maxfilesperproc`, 10,240 by default on older
+systems). `watch` refuses more than 8,192 directories with a named error before
+that is reached. Hidden tool directories (`.venv`, `.idea`, `.claude` and the
+like) are not watched; see [index](#index).
 
 ### `status`
 
@@ -1822,6 +1960,15 @@ repocortex hotspots --path internal/ --commits 1000
 
 Needs a git repository. Agent tool: `list_hotspots`.
 
+On a shallow clone (`git clone --depth N`, which is what most CI checkouts are)
+the ranking is drawn from the commits the clone holds and says so: "Shallow
+clone: N commit(s) available". The oldest of those commits counts as read but
+contributes no files, because its parent was never fetched and what it changed
+cannot be computed. "The repository's whole history fits inside the window" is
+printed only for a full clone. `bus-factor` and `owners` state the same thing in
+the same words, and `impact --base` with a revision older than the clone depth
+fails with the reason and the fix (`git fetch --unshallow`).
+
 ### `bus-factor`
 
 Lists the directories whose recent commits come from the fewest people, most
@@ -1879,8 +2026,9 @@ What to keep in mind when reading it:
 - The output says how many commits were read and the dates they span. A shallow
   clone and a squash-merge workflow both distort the figures: the first has no
   history before its depth, the second records a whole branch as one commit
-  under one name. On a shallow clone whose history cannot be walked, the command
-  says so and measures nothing.
+  under one name. On a shallow clone the command reads the commits the clone
+  holds, says "Shallow clone: N commit(s) available", and never describes them
+  as every commit reachable from HEAD.
 - Directories with fewer than `--min-commits` commits are not measured and are
   counted in the output. They are unmeasured, not low risk. So are directories
   the index does not hold: never indexed, or deleted or renamed since. Renames
@@ -2096,6 +2244,19 @@ See [protocols](guides/protocols.md).
 
 **Answers:** runs an MCP server on stdio, or on Streamable HTTP with `--http`,
 exposing the index to a coding agent.
+
+**On a project with no index.** What happens depends on who started it:
+
+| Started by | Behaviour |
+|---|---|
+| An MCP client, over a pipe (Claude Desktop, an editor, any agent) | Starts. Lists its tools. Every call is answered, not as an error, with the project directory and the commands to run in it (`repocortex init`, `repocortex index`, `repocortex resolve`) and `index_status: absent`. The server's `instructions` say the same at connect time. When the index exists, the same process answers from it. |
+| A person at a terminal (standard input is a terminal) | Exits 1 with `no index at ... run 'repocortex init' and 'repocortex index' first` |
+| `--http` | Exits 1 with the same message |
+
+It does not index implicitly in any of the three, and writes nothing to the
+project. A client-launched server that exited was shown by the client as a
+server that failed to start, with the message that says what to do left in a
+log; that is why the stdio case differs.
 
 | Flag | Effect |
 |---|---|

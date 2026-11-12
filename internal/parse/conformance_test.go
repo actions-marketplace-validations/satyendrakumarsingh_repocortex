@@ -143,7 +143,7 @@ func TestLanguageConformance(t *testing.T) {
 					return fmt.Errorf("%s: %w", rel, err)
 				}
 				if res.Status == StatusFailed {
-					return fmt.Errorf("%s: parse failed: %v", rel, res.Err)
+					return fmt.Errorf("%s: parse failed: %w", rel, res.Err)
 				}
 				for _, s := range res.Symbols {
 					got[expectedDef{file: rel, line: s.Range.Start.Line, kind: string(s.Kind), name: s.Name}.String()] = true

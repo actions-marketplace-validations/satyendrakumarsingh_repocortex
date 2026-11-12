@@ -8,7 +8,6 @@ import (
 	"sort"
 	"strings"
 
-	gogit "github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/go-git/go-git/v5/plumbing/object"
 )
@@ -32,8 +31,35 @@ type Commit struct {
 	Subject string `json:"subject"`
 
 	// Paths are the repo-relative paths this commit touched, sorted. Populated
-	// by RecentCommits and left nil by RecentCommitsMeta.
+	// by RecentCommits and left nil by RecentCommitsMeta. Also nil for a
+	// commit at a shallow clone's boundary whose first parent was never
+	// fetched: what it changed cannot be computed without that parent, and
+	// reporting every file in its tree as "changed here" (which is what
+	// treating it as a root commit does) would credit one author with the
+	// whole repository.
 	Paths []string `json:"paths,omitempty"`
+
+	// ShallowBoundary marks a commit at the edge of a shallow clone
+	// (`git clone --depth`): at least one of its parents was never fetched, so
+	// the walk could not continue past it. A walk that returns such a commit
+	// is truncated by the clone, not by its limit and not by the repository's
+	// first commit, and nothing drawn from it may be described as the whole
+	// history. See ReachedShallowBoundary.
+	ShallowBoundary bool `json:"shallow_boundary,omitempty"`
+}
+
+// ReachedShallowBoundary reports whether a walk ran into a shallow clone's
+// boundary: older commits exist upstream and were not available to read.
+//
+// It is false for a shallow clone whose boundary lies beyond the walk's limit.
+// That walk was cut by the limit, and the caller already says so.
+func ReachedShallowBoundary(commits []Commit) bool {
+	for i := range commits {
+		if commits[i].ShallowBoundary {
+			return true
+		}
+	}
+	return false
 }
 
 // FileRevision identifies the commit that last changed a path.
@@ -48,6 +74,12 @@ type FileRevision struct {
 // limit must be positive; see ErrUnboundedWalk. A repository with no commits
 // returns an empty slice and a nil error, because that is the state
 // `repocortex init` finds on a fresh project.
+//
+// A shallow clone is read up to its boundary and no further. The commits at the
+// boundary are returned with ShallowBoundary set, and the walk ends there
+// without an error: CI checkouts are shallow by default, so "the history stops
+// here because it was never fetched" is an ordinary answer, not a failure. Use
+// ReachedShallowBoundary before describing the result as a whole history.
 //
 // Filling Paths costs one tree diff per commit and still dominates this call,
 // but by a factor rather than by three orders of magnitude: on a 767-commit
@@ -88,16 +120,12 @@ func (r *Repo) recentCommits(ctx context.Context, limit int, withPaths bool) (ou
 		}
 	}()
 
-	// LogOrderCommitterTime rather than go-git's default depth-first order:
-	// depth-first on a merge-heavy history returns one long ancestor chain
-	// before the recent commits on other parents, so "the 20 newest commits"
-	// would not actually be the 20 newest.
-	iter, err := view.repo.Log(&gogit.LogOptions{Order: gogit.LogOrderCommitterTime})
+	iter, cut, err := view.walk()
 	if err != nil {
-		if errors.Is(err, plumbing.ErrReferenceNotFound) {
-			return nil, nil // no commits yet
-		}
-		return nil, fmt.Errorf("git: open commit log: %w", err)
+		return nil, err
+	}
+	if iter == nil {
+		return nil, nil // no commits yet
 	}
 	defer iter.Close()
 
@@ -119,13 +147,16 @@ func (r *Repo) recentCommits(ctx context.Context, limit int, withPaths bool) (ou
 		}
 
 		commit := Commit{
-			SHA:         c.Hash.String(),
-			AuthorName:  c.Author.Name,
-			AuthorEmail: c.Author.Email,
-			When:        c.Author.When.Unix(),
-			Subject:     subject(c.Message),
+			SHA:             c.Hash.String(),
+			AuthorName:      c.Author.Name,
+			AuthorEmail:     c.Author.Email,
+			When:            c.Author.When.Unix(),
+			Subject:         subject(c.Message),
+			ShallowBoundary: cut.boundary(c),
 		}
-		if withPaths {
+		// A boundary commit whose first parent is missing has nothing to be
+		// diffed against; see Commit.Paths.
+		if withPaths && !cut.firstParentMissing(c) {
 			paths, perr := r.commitPaths(ctx, c)
 			if perr != nil {
 				return nil, perr
@@ -203,6 +234,9 @@ func (r *Repo) commitPaths(ctx context.Context, c *object.Commit) ([]string, err
 // The walk stops after MaxHistoryScan commits and returns ErrScanLimit. That
 // bound exists because go-git has no path index: asking about a path that was
 // never committed would otherwise read every commit in the repository.
+//
+// In a shallow clone, a path that did not change inside the fetched history
+// returns ErrShallowHistory: its last change is in a commit that is not here.
 func (r *Repo) FileLastModified(ctx context.Context, path string) (rev FileRevision, err error) {
 	if !r.isRepo {
 		return FileRevision{}, ErrNotRepository
@@ -224,12 +258,12 @@ func (r *Repo) FileLastModified(ctx context.Context, path string) (rev FileRevis
 		}
 	}()
 
-	iter, err := view.repo.Log(&gogit.LogOptions{Order: gogit.LogOrderCommitterTime})
+	iter, cut, err := view.walk()
 	if err != nil {
-		if errors.Is(err, plumbing.ErrReferenceNotFound) {
-			return FileRevision{}, ErrNoHistory // no commits yet
-		}
-		return FileRevision{}, fmt.Errorf("git: open commit log: %w", err)
+		return FileRevision{}, err
+	}
+	if iter == nil {
+		return FileRevision{}, ErrNoHistory // no commits yet
 	}
 	defer iter.Close()
 
@@ -262,6 +296,12 @@ func (r *Repo) FileLastModified(ctx context.Context, path string) (rev FileRevis
 				return FileRevision{SHA: c.Hash.String(), When: c.Author.When.Unix()}, nil
 			}
 			return FileRevision{}, ErrNoHistory
+		}
+
+		if cut.firstParentMissing(c) {
+			// The path may have last changed here or in any commit that was
+			// never fetched. Naming this commit would be a guess.
+			return FileRevision{}, ErrShallowHistory
 		}
 
 		parent, err := c.Parent(0)

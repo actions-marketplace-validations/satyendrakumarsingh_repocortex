@@ -59,12 +59,14 @@ $ repocortex index
 $ repocortex resolve
   References:  29506
   Resolved:    12062 (40.9%)
+    by confidence:
+      high:    9714
+      medium:  133
+      low:     2215
   Ambiguous:   2063
-  Unresolved:  15381  (calls outside this repository)
-  Edges:       11720
-    high:    9714
-    medium:  133
-    low:     2215
+  Unresolved:  15381  (no definition of that name is indexed: code outside this
+               repository, or code in it that the index did not extract)
+  Edges:       11720  (one per caller and definition; references between the same pair share one)
 ```
 
 40.9% is the honest number for a heuristic pass over a repository whose

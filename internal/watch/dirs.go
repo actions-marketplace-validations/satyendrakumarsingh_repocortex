@@ -8,6 +8,7 @@ import (
 	"sort"
 	"strings"
 	"sync/atomic"
+	"time"
 
 	"github.com/fsnotify/fsnotify"
 )
@@ -95,6 +96,19 @@ type dirSet struct {
 	// status line, `repocortex doctor`) without a lock and without the race
 	// detector rightly objecting to a concurrent map read.
 	n atomic.Int64
+
+	// stop, when non-nil, is consulted before each directory is registered. A
+	// walk over a large tree is the one long stretch in this package, and it
+	// used to be uninterruptible: Ctrl-C nine seconds into start-up on django
+	// exited 51 seconds later.
+	stop func() error
+
+	// progress, when non-nil, is told how many directories are watched, no
+	// more often than progressEvery. Start-up printed nothing for as long as
+	// it took, which on a loaded machine was over a minute.
+	progress      func(watched int)
+	progressEvery time.Duration
+	lastProgress  time.Time
 }
 
 func newDirSet(b backend, root string, ignore func(string, bool) bool, max int) *dirSet {
@@ -213,6 +227,17 @@ func (d *dirSet) rewatchTree(abs, rel string) ([]entry, error) {
 // walk registers abs and descends. force re-registers directories already in
 // the set; see rewatchTree.
 func (d *dirSet) walk(abs, rel string, found *[]entry, force bool) error {
+	if d.stop != nil {
+		if err := d.stop(); err != nil {
+			return err
+		}
+	}
+	if d.progress != nil {
+		if now := time.Now(); now.Sub(d.lastProgress) >= d.progressEvery {
+			d.lastProgress = now
+			d.progress(d.count())
+		}
+	}
 	known := d.watched(abs)
 	if known && force {
 		// Deliberately not counted or re-inserted: this is the same watch,

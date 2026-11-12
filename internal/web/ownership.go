@@ -360,7 +360,17 @@ func (s *Server) handleOwnership(w http.ResponseWriter, r *http.Request) {
 	// work missing from a list of names reads exactly like work that never
 	// happened. Stated only when the walk actually stopped short: on a history
 	// it exhausted there is nothing older to have missed.
-	if report.Window.CommitsRead > 0 && !report.Window.Exhausted {
+	if report.Window.Shallow {
+		// Not the window: the clone. Raising ?commits= cannot help, so the
+		// action offered is the one that can.
+		om.Note(ReasonTraversalBound,
+			fmt.Sprintf("Shallow clone: %d commit(s) available. History older than the depth this "+
+				"repository was cloned at was never fetched. Anyone whose work on these files is older "+
+				"than that is absent from the ranking, and the bus-factor count is computed over the "+
+				"same commits — a file counted as single-contributor may have had others before it.",
+				report.Window.CommitsRead),
+			"run `git fetch --unshallow` in the repository, then reload")
+	} else if report.Window.CommitsRead > 0 && !report.Window.Exhausted {
 		om.Note(ReasonTraversalBound,
 			fmt.Sprintf("History was read %d commit(s) back from HEAD and no further. Anyone whose "+
 				"work on these files is older than that is absent from the ranking, and the "+
@@ -573,7 +583,8 @@ func (h *gitHistory) Commits(ctx context.Context, limit int) ([]ownership.Commit
 		out = append(out, ownership.Commit{
 			SHA: c.SHA, AuthorName: c.AuthorName, AuthorEmail: c.AuthorEmail,
 			When: c.When, Subject: c.Subject,
-			Paths: rebaseHistoryPaths(c.Paths, h.prefix),
+			Paths:           rebaseHistoryPaths(c.Paths, h.prefix),
+			ShallowBoundary: c.ShallowBoundary,
 		})
 	}
 	return out, nil

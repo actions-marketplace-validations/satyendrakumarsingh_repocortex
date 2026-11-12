@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"io"
+	iofs "io/fs"
 	"os"
 	"path"
 	"path/filepath"
@@ -362,9 +363,17 @@ func parseIgnoreFile(data []byte, base string) []pattern {
 }
 
 // loadDirRules reads the ignore files in dir and layers them onto parent.
-func loadDirRules(parent ruleSet, dir, rel string) ruleSet {
+//
+// entries is the directory listing the caller already holds. An ignore file
+// is opened only when the listing names it: most directories have none, and
+// two failed opens per directory were a measurable share of a walk that reads
+// nothing else.
+func loadDirRules(parent ruleSet, dir, rel string, entries []iofs.DirEntry) ruleSet {
 	var extra []pattern
 	for _, name := range ignoreFileNames {
+		if !listed(entries, name) {
+			continue
+		}
 		data, err := readCapped(filepath.Join(dir, name), maxIgnoreFileBytes)
 		if err != nil {
 			// A missing or unreadable ignore file must not abort indexing. The
@@ -375,6 +384,17 @@ func loadDirRules(parent ruleSet, dir, rel string) ruleSet {
 		extra = append(extra, parseIgnoreFile(data, rel)...)
 	}
 	return parent.extend(extra)
+}
+
+// listed reports whether a directory listing holds an entry with this name.
+// os.ReadDir returns entries sorted by name, but nothing here depends on it.
+func listed(entries []iofs.DirEntry, name string) bool {
+	for _, e := range entries {
+		if e.Name() == name {
+			return true
+		}
+	}
+	return false
 }
 
 func readCapped(name string, limit int64) ([]byte, error) {

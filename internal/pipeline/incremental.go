@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"time"
 
 	"github.com/satyendrakumarsingh/repocortex/internal/acquire/fs"
 	"github.com/satyendrakumarsingh/repocortex/internal/analyze"
@@ -30,6 +31,14 @@ const (
 type FileChange struct {
 	Path string
 	Kind ChangeKind
+
+	// Touched marks an unchanged file whose size or modification time no
+	// longer matches the index: it was read, and its content is what the index
+	// already holds. Incremental records the new size and time so the next
+	// pass can leave it unread; nothing is re-parsed.
+	Touched     bool
+	SizeBytes   int64
+	ModTimeUnix int64
 }
 
 // IncrementalStats reports what an incremental pass did.
@@ -42,13 +51,28 @@ type IncrementalStats struct {
 	Symbols   int64
 }
 
+// DiffOptions adjusts how the working tree is compared with the index.
+type DiffOptions struct {
+	// Rehash reads and hashes every file, as every pass did before files
+	// could be trusted by size and time. It is the answer to the cases
+	// internal/acquire/fs/trust.go lists as not covered.
+	Rehash bool
+}
+
 // Diff compares the working tree against a committed index run.
 //
-// Comparison is by content hash, not mtime. mtime is unreliable across
-// checkouts, clones and restores — `git checkout` rewrites timestamps on files
-// whose content is unchanged, which would make an mtime-based diff re-index a
-// whole repository after a branch switch. Hashing costs a read; getting this
-// wrong costs the entire point of incremental indexing.
+// The verdict on a file is its content hash, never its modification time.
+// mtime is unreliable across checkouts, clones and restores — `git checkout`
+// rewrites timestamps on files whose content is unchanged, which would make an
+// mtime-based diff re-index a whole repository after a branch switch.
+//
+// What size and time are used for is deciding which files need hashing at all.
+// A file whose size and times match the index, and are old enough to be
+// believed, is not read; every other file is hashed and the hash decides. The
+// rule is stated once, with its limits, in internal/acquire/fs/trust.go. It
+// exists because hashing was the cost of a pass: on django's 7,090 files a
+// re-index that changed nothing spent 1.1 s to 4.5 s reading files to learn
+// that, and with it 0.3 s.
 //
 // A content hash answers "did the SOURCE change". It cannot answer "would this
 // build extract something different from the same source", and a version-
@@ -66,11 +90,27 @@ func Diff(
 	walker *fs.Walker,
 	runningAs string,
 ) ([]FileChange, error) {
+	return DiffWith(ctx, reg, runID, walker, runningAs, DiffOptions{})
+}
+
+// DiffWith is Diff with options.
+func DiffWith(
+	ctx context.Context,
+	reg *registry.Registry,
+	runID int64,
+	walker *fs.Walker,
+	runningAs string,
+	opts DiffOptions,
+) ([]FileChange, error) {
 	run, err := reg.Run(ctx, runID)
 	if err != nil {
 		return nil, fmt.Errorf("read run %d: %w", runID, err)
 	}
-	return diffAgainst(ctx, reg, runID, walker, run.ProducerVersion, runningAs)
+	verified := run.StartedUnix
+	if opts.Rehash {
+		verified = 0
+	}
+	return diffAgainst(ctx, reg, runID, walker, run.ProducerVersion, runningAs, verified)
 }
 
 // diffAgainst is Diff with the two producer identities supplied, so the
@@ -102,6 +142,7 @@ func diffAgainst(
 	runID int64,
 	walker *fs.Walker,
 	indexedBy, runningAs string,
+	verifiedUnix int64,
 ) ([]FileChange, error) {
 	sameProducer := indexedBy != "" && indexedBy == runningAs
 
@@ -110,6 +151,15 @@ func diffAgainst(
 		return nil, fmt.Errorf("read indexed files: %w", err)
 	}
 	prior := make(map[string]string, len(indexed))
+	// What the walk may leave unread. Built only when this build wrote the
+	// run: across builds every file is re-parsed whatever its hash, so there
+	// is nothing a recorded hash could save. verifiedUnix is when the pass
+	// that last looked at every file began; zero trusts nothing.
+	var trust *fs.Trust
+	if sameProducer && verifiedUnix > 0 {
+		trust = &fs.Trust{Files: make(map[string]fs.Known, len(indexed)), VerifiedUnix: verifiedUnix}
+	}
+	stat := make(map[string]registry.FileStat, len(indexed))
 	for _, f := range indexed {
 		if !sameProducer {
 			// Present, so it is not "added" and not "deleted" — but never equal,
@@ -118,9 +168,19 @@ func diffAgainst(
 			continue
 		}
 		prior[f.Path] = f.ContentHash
+		stat[f.Path] = registry.FileStat{Path: f.Path, SizeBytes: f.SizeBytes, ModTimeUnix: f.ModTimeUnix}
+		if trust != nil {
+			known := fs.Known{SizeBytes: f.SizeBytes, ModTimeUnix: f.ModTimeUnix, ContentHash: f.ContentHash}
+			if f.ContentHash == "" {
+				// A file the walk skipped is stored with its reason as the
+				// parse error; see Runner.processFile.
+				known.SkipReason = f.ParseError
+			}
+			trust.Files[f.Path] = known
+		}
 	}
 
-	current, err := walker.Walk(ctx)
+	current, err := walker.WalkTrusting(ctx, trust)
 	if err != nil {
 		return nil, fmt.Errorf("discovery: %w", err)
 	}
@@ -137,7 +197,14 @@ func diffAgainst(
 		case oldHash != d.ContentHash:
 			changes = append(changes, FileChange{Path: d.Path, Kind: ChangeModified})
 		default:
-			changes = append(changes, FileChange{Path: d.Path, Kind: ChangeSame})
+			ch := FileChange{Path: d.Path, Kind: ChangeSame}
+			// Read, identical, and stat'ed differently from the index: record
+			// the new size and time so the next pass need not read it again.
+			if was, ok := stat[d.Path]; ok && !d.Unread && (!d.Skipped || d.SkipReason == fs.SkipBinary) &&
+				(was.SizeBytes != d.SizeBytes || was.ModTimeUnix != d.ModTimeUnix) {
+				ch.Touched, ch.SizeBytes, ch.ModTimeUnix = true, d.SizeBytes, d.ModTimeUnix
+			}
+			changes = append(changes, ch)
 		}
 	}
 
@@ -192,6 +259,7 @@ func Incremental(
 		parsers = parse.NewRegistry()
 	}
 
+	var touched []registry.FileStat
 	for _, ch := range changes {
 		if err := ctx.Err(); err != nil {
 			return stats, err
@@ -201,6 +269,11 @@ func Incremental(
 		switch ch.Kind {
 		case ChangeSame:
 			stats.Unchanged++
+			if ch.Touched {
+				touched = append(touched, registry.FileStat{
+					Path: ch.Path, SizeBytes: ch.SizeBytes, ModTimeUnix: ch.ModTimeUnix,
+				})
+			}
 			continue
 
 		case ChangeDeleted:
@@ -265,10 +338,74 @@ func Incremental(
 			}
 		}
 	}
+	if err := reg.RestatFiles(ctx, runID, touched); err != nil {
+		return stats, err
+	}
 	if opts.Resolve && (stats.Added > 0 || stats.Modified > 0 || stats.Deleted > 0) {
 		if _, err := Resolve(ctx, reg, runID, ResolveOptions{}); err != nil {
 			return stats, fmt.Errorf("incremental resolve: %w", err)
 		}
+	}
+	return stats, nil
+}
+
+// RefreshOptions configures Refresh.
+type RefreshOptions struct {
+	// RunningAs names the build doing the work; see Diff.
+	RunningAs string
+	// Rehash reads every file instead of trusting size and time; see
+	// DiffOptions.
+	Rehash  bool
+	Parsers parse.Registry
+	// Now is the wall clock, injectable for tests. It must be the clock file
+	// times are stamped by, which is why it is not the registry's.
+	Now func() time.Time
+}
+
+// Refresh brings a committed run up to date with the working tree, in place,
+// and records that it did.
+//
+// It is Diff, then Incremental, then the three facts a completed pass
+// establishes: which build's rules the run now reflects, when the pass began,
+// and when it ended. `repocortex index` and `repocortex watch` both go through
+// it, because they used to do those steps separately and differently. Watch
+// never stamped the build, so after an upgrade every batch of events re-parsed
+// the whole repository; and neither stamped a time, so an index updated a
+// minute ago reported the age of its first full build.
+//
+// The time the pass BEGAN is taken before discovery starts and is what the
+// next pass trusts file times against. Nothing is stamped when the pass fails.
+func Refresh(
+	ctx context.Context,
+	reg *registry.Registry,
+	runID int64,
+	walker *fs.Walker,
+	opts RefreshOptions,
+) (IncrementalStats, error) {
+	now := opts.Now
+	if now == nil {
+		now = time.Now
+	}
+	started := now().Unix()
+
+	changes, err := DiffWith(ctx, reg, runID, walker, opts.RunningAs, DiffOptions{Rehash: opts.Rehash})
+	if err != nil {
+		return IncrementalStats{}, fmt.Errorf("diff working tree: %w", err)
+	}
+	stats, err := Incremental(ctx, reg, runID, walker, changes, IncrementalOptions{
+		Parsers: opts.Parsers, Resolve: true,
+	})
+	if err != nil {
+		return stats, err
+	}
+	// The pass succeeded, so this run's contents are now this build's work.
+	// Skipping this would turn the build-crossing rule into a permanent
+	// penalty: the differ treats a version mismatch as "everything is dirty".
+	if err := reg.StampProducer(ctx, runID, opts.RunningAs); err != nil {
+		return stats, err
+	}
+	if err := reg.MarkUpdated(ctx, runID, started); err != nil {
+		return stats, err
 	}
 	return stats, nil
 }

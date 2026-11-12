@@ -63,6 +63,12 @@ not exist for it, and --audit-log records the token's name with every call:
 
 The file is read once at start; restart to apply a change to it.
 
+On a project with no index yet, a server launched by a client (stdin is a pipe)
+starts anyway: it lists its tools and answers every call with the commands
+that build the index and the directory to run them in, then answers from the
+index once it exists, without a restart. It never starts indexing itself. Run
+from a terminal, or with --http, it exits with that message instead.
+
 The exposed tool set is governed by mcp.profile in .repocortex.yml
 (minimal | standard | full). The default is deliberately small: every tool's
 schema is injected into the agent's context on every request, so a large tool
@@ -81,12 +87,29 @@ someone other than you.`,
 				return errors.New("--tokens-file applies only with --http")
 			}
 
-			srv, closeServer, err := openAgentServer(ctx, g, agentServerOptions{AuditPath: auditLog})
+			dbPath := g.DBPath()
+			serverOpts := agentServerOptions{AuditPath: auditLog}
+			open := openAgentServer
+			// A client that launched this over a pipe cannot show the user an
+			// exit message, so on a project with no index it gets a running
+			// server whose every answer says what to run. A person at a
+			// terminal, and --http, still get the message and a non-zero exit.
+			// See serve_noindex.go for the reasoning.
+			if _, statErr := os.Stat(dbPath); errors.Is(statErr, os.ErrNotExist) &&
+				(listTools || serveWithoutIndex(httpAddr != "", stdinIsTerminal())) {
+				open = openPendingAgentServer
+				if !listTools {
+					g.Log().Warn("no index for this project; serving anyway so the client sees a running server. "+
+						"Every tool call will answer with how to build one",
+						"index", dbPath, "run", "repocortex init && repocortex index && repocortex resolve",
+						"in", cfg.RepoRoot)
+				}
+			}
+			srv, closeServer, err := open(ctx, g, serverOpts)
 			if err != nil {
 				return err
 			}
 			defer closeServer()
-			dbPath := g.DBPath()
 
 			if listTools {
 				if g.JSON {

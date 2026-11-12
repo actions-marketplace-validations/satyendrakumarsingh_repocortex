@@ -17,7 +17,17 @@ and why. An entry with no such note describes current behaviour.
 
 **Cause.** `index`, `resolve` and `watch` all require the database file to exist.
 `init` creates it. `serve` reports the same condition with a slightly longer
-message: `no index at ... — run 'repocortex init' and 'repocortex index' first`.
+message, `no index at ... — run 'repocortex init' and 'repocortex index' first`,
+when it is run from a terminal or with `--http`.
+
+A `serve` that an MCP client launched (its standard input is a pipe) does not
+exit: the client could only show that as "server disconnected". It starts,
+lists its tools, and answers every call with "RepoCortex is running, but this
+project has no index yet", the directory, and the three commands to run there.
+The answer's `index_status` is `absent`, the server's instructions say so at
+connect time, and the same line is written to its log. Once the index exists
+the running server answers from it; there is nothing to restart. It never
+indexes on its own.
 
 **Fix.** `repocortex init`. If you expected an index to be there, check the path in
 the message — you are probably in a subdirectory, or the wrong repository. Use
@@ -200,12 +210,36 @@ per-path reasons. The skip reasons and what each means:
 | `irregular` | Socket, device or FIFO | Expected. Opening a FIFO would hang the indexer |
 | `unreadable` | Permission denied, broken link, unreadable directory | Fix permissions |
 
+A hidden file or directory that is absent has usually been left out by rule
+and has no row at all: hidden directories are not indexed unless they are one of
+a short list (`.github`, `.gitlab`, `.circleci`, `.devcontainer`, `.husky` and
+the like), and hidden data and temporary files (`.report.json`, `.x.swp`,
+`.DS_Store`) are not indexed. To index one, name it in `index.include` with its
+dot, keeping `**` in the list: `include: ["**", ".tooling/**"]`. The rule is in
+the user manual under "Hidden files and directories".
+
 Two more that appear as `parse_error` rather than a skip reason:
 
 - `no grammar for this file type` — the extension is not recognised by the
   grammar registry.
 - `no tags query available for "markdown"` — the grammar exists but ships no tags
   query, so no symbols can be extracted. Common for markup and data formats.
+
+### `repocortex index` says "up to date" after an edit
+
+**Cause.** An incremental run reads a file only when it might have changed: a
+file whose size and modification time match the index, and are more than two
+seconds older than the previous run, is taken as unchanged without being opened
+(on Linux and macOS its inode change time must be that old too). An ordinary
+save always fails that test and is hashed. What can slip through is a same-size
+edit whose modification time was deliberately restored on Windows, or one made
+across a clock that stepped backwards or a network filesystem whose clock is
+more than two seconds behind.
+
+**Fix.** `repocortex index --rehash` reads and hashes every file. If that finds
+the edit, the timestamps on that filesystem are not trustworthy; use `--rehash`
+there. `repocortex index --full` rebuilds from scratch and is not needed for
+this.
 
 ### `source is 300000 bytes, over the 262144 limit`
 
@@ -378,8 +412,11 @@ so look for build output, caches and vendored SDKs.
 ### `watch "some/dir": no space left on device`
 
 **Cause.** The kernel refused the watch. On Linux this is
-`fs.inotify.max_user_watches` (or `max_user_instances`) exhausted; on macOS/BSD
-it is `RLIMIT_NOFILE`, because kqueue costs a file descriptor per directory.
+`fs.inotify.max_user_watches` (or `max_user_instances`) exhausted. On macOS it is
+the open-file limit, and the message is `out of file descriptors after N watched
+directories`: RepoCortex holds one descriptor per watched directory there and
+none per file. On the BSDs, where fsnotify's kqueue backend is used, it is a
+descriptor per directory and per file.
 
 This arrives on the `Errors()` channel as a warning and degrades coverage rather
 than ending the session.
@@ -397,6 +434,23 @@ raise the OS limit: `sudo sysctl fs.inotify.max_user_watches=524288` on Linux, o
 hash on every batch rather than trusting the event stream, so a dropped event for
 a file that is later touched is caught. If you suspect the index is stale after a
 storm of changes, `repocortex index` reconciles everything.
+
+### `watch` takes a long time to print "Watching", or an edit takes seconds to be noticed
+
+**Start-up.** `watch` prints `watching N directories...` to standard error every
+two seconds while it registers the tree, then reconciles, then prints
+`Watching <project>: N directories (revision R), ready in T`. Ctrl-C works
+throughout. Up to v1.0.1 start-up on macOS opened every file in the repository
+one at a time (17 s to over a minute on a 7,100-file repository on a loaded
+machine), printed nothing, could not be interrupted, and lost edits saved while
+it ran.
+
+**An edit that takes a couple of seconds on macOS.** A file rewritten in place
+(an append, some editors' default save) is found by a sweep of file sizes and
+times that runs every two seconds, or less often on a tree that takes long to
+sweep. A save made by writing a temporary file and renaming it, which is what
+most editors do, is reported by the kernel at once. Linux and Windows report
+both at once. See `watch` in the CLI reference for why.
 
 ### Edits are not picked up
 
@@ -418,7 +472,10 @@ Check in order:
    goes quiet" below. If you can still reproduce a loss here, it is a bug worth
    reporting.
 
-### A whole subdirectory goes quiet (macOS/BSD)
+### A whole subdirectory goes quiet (BSD; macOS up to v1.0.1)
+
+This is a fault in fsnotify's kqueue backend. RepoCortex no longer uses that
+backend on macOS, so it applies there only to v1.0.1 and earlier.
 
 **Symptom.** Edits anywhere else in the repository are picked up, but nothing
 inside one directory is ever reported. No error is logged, `Add` succeeded, and
@@ -454,8 +511,9 @@ reported rather than silent, unlike a kernel-side overflow.
 
 ### `error: initial reconcile: ...`
 
-**Cause.** The startup reconcile pass failed before watching began. Files change
-while the watcher is not running, so `watch` diffs first; a failure here is
+**Cause.** The start-up reconcile pass failed. Files change while the watcher is
+not running and while it is starting, so `watch` registers its watches and then
+diffs the tree against the index before it reports ready; a failure here is
 usually the same underlying problem `repocortex index` would report.
 
 **Fix.** Run `repocortex index` and read its error, which is not wrapped.
@@ -480,14 +538,19 @@ facts only, which is exactly what you want after `repocortex scip import`.
   References:  55
   Resolved:    16 (29.1%)
   Ambiguous:   10
-  Unresolved:  29  (calls outside this repository)
+  Unresolved:  29  (no definition of that name is indexed: code outside this
+               repository, or code in it that the index did not extract)
 ```
 
 **Cause.** Usually correct, not broken.
 
-- **Unresolved** means the name matched nothing indexed — almost always a
-  standard-library or third-party call. On a Spring/JDBC codebase this is a large
-  share of every file and there is nothing to fix.
+- **Unresolved** means no definition with that name is in the index. Usually
+  that is a standard-library or third-party call; on a Spring/JDBC codebase it
+  is a large share of every file and there is nothing to fix. It is also what a
+  call to code in this repository looks like when the index holds no definition
+  for it: a language whose definitions are not extracted, a macro, a file that
+  failed to parse. `repocortex languages` and the parse failures in
+  `repocortex status` say which applies.
 - **Ambiguous** means the resolver refused to guess. A name matching more than 8
   symbols produces no edge at all, by design.
 
@@ -665,6 +728,28 @@ proceeds. RepoCortex indexes extracted tarballs and vendored trees.
 **Cause.** A repository with no commits yet.
 
 **Fix.** Nothing required for indexing — the revision is recorded as empty.
+
+### `Shallow clone: N commit(s) available`
+
+**Cause.** The repository was cloned with `--depth`, which is the default for
+most CI checkouts. `hotspots`, `bus-factor`, `owners` and their agent tools read
+the commits the clone holds and stop at its boundary. The oldest commit is
+counted but contributes no changed files, because the parent it would be
+compared with was never fetched. Everyone and everything older than the depth is
+absent, and the output says so instead of "the whole history was read".
+
+**Fix.** `git fetch --unshallow`, or in GitHub Actions `fetch-depth: 0` on
+`actions/checkout`. Nothing is needed if the recent commits are all you meant to
+rank.
+
+### `git: this is a shallow clone and the commit needed is older than the history that was fetched`
+
+**Cause.** A revision such as `HEAD~20` or a base branch passed to
+`impact --base` / `analyze_change` names a commit beyond a shallow clone's
+depth.
+
+**Fix.** `git fetch --unshallow`, or fetch with a `--depth` that reaches the
+base revision.
 
 ### `level=WARN msg="working tree has uncommitted changes; the index describes files on disk, not the commit"`
 

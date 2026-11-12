@@ -10,23 +10,37 @@ RepoCortex ships as a single, self-contained binary with **zero external runtime
 ```bash
 curl -fsSL https://raw.githubusercontent.com/satyendrakumarsingh/repocortex/main/install.sh | sh
 ```
-*Installs the universal binary to `/usr/local/bin/repocortex` (or `~/.local/bin/repocortex`), removes macOS quarantine flags, creates the `repocortex` alias, and verifies the SHA256 checksum against official release artifacts.*
+*Downloads the release archive for your OS and architecture, verifies its SHA-256 against the release's `SHA256SUMS` (there is no flag to skip this), installs `repocortex` to `~/.local/bin`, and on macOS removes the quarantine flag. If `~/.local/bin` is not on your `PATH` the script prints the line to add.*
+
+To choose the directory or a specific release, pass the script its options:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/satyendrakumarsingh/repocortex/main/install.sh | sh -s -- --dir /usr/local/bin --version v1.0.1
+```
+
+It needs `curl`, `tar` and `awk`, and writing to `/usr/local/bin` needs permission to do so.
 
 ### Windows (PowerShell)
 ```powershell
 irm https://raw.githubusercontent.com/satyendrakumarsingh/repocortex/main/install.ps1 | iex
 ```
-*Installs `repocortex.exe` and `repocortex.exe` to `%LOCALAPPDATA%\Programs\RepoCortex` and adds it to your user `PATH`.*
+*Downloads `repocortex_<tag>_windows_amd64.zip`, verifies its SHA-256 against the release's `SHA256SUMS`, installs `repocortex.exe` to `%LOCALAPPDATA%\Programs\repocortex` and adds that directory to your user `PATH`. Open a new terminal afterwards.*
+
+To choose the directory or a specific release, run the script as a block so it can take parameters:
+
+```powershell
+& ([scriptblock]::Create((irm https://raw.githubusercontent.com/satyendrakumarsingh/repocortex/main/install.ps1))) -Dir C:\Tools\repocortex -Version v1.0.1
+```
 
 ---
 
 ## 2. Install via Go Toolchain
 
-If you have Go installed (Go 1.23+):
+If you have Go installed (Go 1.26 or newer, which is what `go.mod` requires):
 ```bash
 go install github.com/satyendrakumarsingh/repocortex/cmd/repocortex@latest
 ```
-*Compiles the pure-Go binary with embedded Tree-sitter parsers and local SQLite.*
+*Compiles the pure-Go binary with embedded Tree-sitter parsers and local SQLite, and puts it in `$(go env GOPATH)/bin`. A binary built this way reports its version as `dev`: the release version is stamped in by the release build, not by `go install`.*
 
 ---
 
@@ -34,16 +48,23 @@ go install github.com/satyendrakumarsingh/repocortex/cmd/repocortex@latest
 
 Download precompiled, checksummed binaries from the [GitHub Releases page](https://github.com/satyendrakumarsingh/repocortex/releases):
 
+The archive names carry the release tag. For v1.0.1, the current release:
+
 | Target | Architecture | Archive |
 |---|---|---|
-| **macOS Universal** | Apple Silicon (M1-M4) & Intel x86_64 | `repocortex-mac.zip` |
-| **Linux AMD64** | x86_64 servers & containers | `repocortex_v1.0.0_linux_amd64.tar.gz` |
-| **Linux ARM64** | AWS Graviton, Raspberry Pi, ARM servers | `repocortex_v1.0.0_linux_arm64.tar.gz` |
-| **Windows AMD64** | Windows 10 / 11 x86_64 | `repocortex_v1.0.0_windows_amd64.zip` / `repocortex.exe` |
+| **macOS Universal** | Apple Silicon & Intel x86_64 in one binary | `repocortex-mac.zip` |
+| **macOS ARM64** | Apple Silicon | `repocortex_v1.0.1_darwin_arm64.tar.gz` |
+| **macOS AMD64** | Intel x86_64 | `repocortex_v1.0.1_darwin_amd64.tar.gz` |
+| **Linux AMD64** | x86_64 servers & containers | `repocortex_v1.0.1_linux_amd64.tar.gz` |
+| **Linux ARM64** | AWS Graviton, Raspberry Pi, ARM servers | `repocortex_v1.0.1_linux_arm64.tar.gz` |
+| **Windows AMD64** | Windows 10 / 11 x86_64 | `repocortex_v1.0.1_windows_amd64.zip`, or the bare `repocortex.exe` |
 
-Verify integrity using `SHA256SUMS`:
+Every archive holds the binary, `LICENSE`, `NOTICE` and `README.md` at its top level, with no enclosing directory. Unpack it and move `repocortex` (or `repocortex.exe`) to a directory on your `PATH`. A binary downloaded with a browser on macOS is quarantined; `xattr -d com.apple.quarantine repocortex` clears it.
+
+Verify integrity using `SHA256SUMS`, downloaded from the same release into the same directory:
 ```bash
-shasum -a 256 -c SHA256SUMS --ignore-missing
+shasum -a 256 -c SHA256SUMS --ignore-missing     # macOS
+sha256sum -c SHA256SUMS --ignore-missing         # Linux
 ```
 
 A checksum shows the download is intact, not who built it. From the next release (the first after v1.0.1), `SHA256SUMS` is signed with Sigstore, every archive has a build provenance attestation, and each has a CycloneDX SBOM. [Verifying a release](../operations/verifying-a-release.md) has the exact commands.
@@ -119,7 +140,7 @@ An `.mcpb` file is a one-file extension for Claude Desktop and other clients tha
 | Linux x86_64 | `repocortex_<tag>_linux_amd64.mcpb` |
 | Linux ARM64 | `repocortex_<tag>_linux_arm64.mcpb` |
 
-The bundle serves an index; it does not build one. The repository you pick must already have been indexed with `repocortex init`, `repocortex index` and `repocortex resolve`, which needs the command-line tool from one of the methods above. Pointed at a repository with no index, the server exits with `no index at … run 'repocortex init' and 'repocortex index' first`.
+The bundle serves an index; it does not build one. The repository you pick must already have been indexed with `repocortex init`, `repocortex index` and `repocortex resolve`, which needs the command-line tool from one of the methods above. Pointed at a repository with no index, the server still starts: it lists its tools and answers every call with the commands to run and the directory to run them in, and it begins answering from the index as soon as one exists, with no restart. It never starts indexing on its own. (Releases up to v1.0.1 exit instead, with `no index at … run 'repocortex init' and 'repocortex index' first`, which a client shows only as a server that disconnected.)
 
 ---
 
@@ -129,10 +150,11 @@ Confirm installation:
 ```bash
 repocortex version
 ```
-Expected output:
+Expected output, with your release, commit, build time and platform:
 ```text
-repocortex v1.0.0 (darwin/arm64)
+repocortex v1.0.1 (commit 1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b, built 2026-11-12T09:30:00Z, darwin/arm64)
 ```
+A build from source or `go install` prints `repocortex dev (commit none, built unknown, darwin/arm64)`.
 
 ---
 

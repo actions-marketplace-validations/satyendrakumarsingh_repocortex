@@ -50,6 +50,9 @@ type Commit struct {
 	SHA   string
 	When  int64 // author time, Unix seconds
 	Paths []string
+	// ShallowBoundary marks a commit at the edge of a shallow clone; see
+	// ownership.Commit.ShallowBoundary.
+	ShallowBoundary bool
 }
 
 // History is the bounded commit source. An implementation that cannot honour
@@ -142,6 +145,10 @@ type Report struct {
 	// WindowFull says whether more history exists beyond it.
 	CommitsRead int  `json:"commits_read"`
 	WindowFull  bool `json:"window_full"`
+	// ShallowClone says the walk ended at a shallow clone's boundary:
+	// CommitsRead is every commit this clone holds, and it is not the
+	// repository's history.
+	ShallowClone bool `json:"shallow_clone"`
 	// LargeCommitsSkipped counts commits left out of coupling for touching
 	// more than MaxCommitFiles files.
 	LargeCommitsSkipped int `json:"large_commits_skipped"`
@@ -173,6 +180,12 @@ func Rank(ctx context.Context, hist History, st Structure, runID int64, opts Opt
 	}
 
 	rep := &Report{RunID: runID, CommitsRead: len(commits), WindowFull: len(commits) >= window}
+	for i := range commits {
+		if commits[i].ShallowBoundary {
+			rep.ShallowClone = true
+			break
+		}
+	}
 
 	// Pass 1: change frequency per path.
 	type churn struct {
@@ -198,6 +211,7 @@ func Rank(ctx context.Context, hist History, st Structure, runID int64, opts Opt
 	}
 	if len(freq) == 0 {
 		rep.Notes = append(rep.Notes, emptyNote(len(commits), opts))
+		rep.Notes = append(rep.Notes, historyNotes(rep)...)
 		return rep, nil
 	}
 
@@ -278,10 +292,7 @@ func Rank(ctx context.Context, hist History, st Structure, runID int64, opts Opt
 	}
 
 	rep.Hotspots = hot
-	if !rep.WindowFull {
-		rep.Notes = append(rep.Notes, fmt.Sprintf(
-			"The repository's whole history (%d commits) fits inside the window.", len(commits)))
-	}
+	rep.Notes = append(rep.Notes, historyNotes(rep)...)
 	if rep.NotIndexed > 0 {
 		rep.Notes = append(rep.Notes, fmt.Sprintf(
 			"%d changed path(s) are not in the index (deleted, renamed or ignored since) and are not ranked.",
@@ -376,6 +387,29 @@ func keep(p string, opts Options) bool {
 		return false
 	}
 	return true
+}
+
+// historyNotes says how much of the history the ranking saw, when that is
+// something other than "the newest commits, up to the window".
+//
+// Fewer commits than the window means one of two different things, and they
+// must not share a sentence. On a full clone the whole history was read. On a
+// shallow clone the walk ran out of fetched commits, and a ranking of "where
+// change concentrates" drawn from the last dozen commits of a ten-year
+// project is a ranking of last week.
+func historyNotes(rep *Report) []string {
+	switch {
+	case rep.ShallowClone:
+		return []string{fmt.Sprintf(
+			"Shallow clone: %d commit(s) available. History older than the depth this repository was "+
+				"cloned at was never fetched, so this ranks only what those commits changed, and what "+
+				"the oldest of them changed is unknown because its parent is missing. "+
+				"`git fetch --unshallow` brings in the rest.", rep.CommitsRead)}
+	case !rep.WindowFull && rep.CommitsRead > 0:
+		return []string{fmt.Sprintf(
+			"The repository's whole history (%d commits) fits inside the window.", rep.CommitsRead)}
+	}
+	return nil
 }
 
 func emptyNote(commits int, opts Options) string {

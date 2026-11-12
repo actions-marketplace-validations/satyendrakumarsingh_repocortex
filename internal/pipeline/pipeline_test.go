@@ -59,7 +59,7 @@ func (c *collector) byPath(p string) (FileFacts, bool) {
 	return FileFacts{}, false
 }
 
-func writeTree(t *testing.T, root string, files map[string]string) {
+func writeTree(t testing.TB, root string, files map[string]string) {
 	t.Helper()
 	for rel, body := range files {
 		p := filepath.Join(root, filepath.FromSlash(rel))

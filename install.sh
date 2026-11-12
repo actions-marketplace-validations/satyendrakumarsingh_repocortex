@@ -16,7 +16,7 @@ usage() {
 Usage: install.sh [--dir <path>] [--version <tag>]
 
   --dir      install location (default: ~/.local/bin)
-  --version  release tag such as v0.2.0 (default: latest)
+  --version  release tag such as v1.0.1 (default: latest)
 USAGE
 }
 
@@ -31,7 +31,7 @@ while [ $# -gt 0 ]; do
   esac
 done
 
-for tool in curl tar; do
+for tool in curl tar awk; do
   command -v "$tool" >/dev/null 2>&1 || { echo "error: $tool is required" >&2; exit 1; }
 done
 
@@ -71,7 +71,7 @@ if command -v sha256sum >/dev/null 2>&1; then
 else
   actual="$(shasum -a 256 "${tmp}/${archive}" | cut -d' ' -f1)"
 fi
-expected="$(grep "${archive}" "${tmp}/SHA256SUMS" | cut -d' ' -f1)"
+expected="$(awk -v name="$archive" '$2 == name { print $1; exit }' "${tmp}/SHA256SUMS")"
 [ -n "$expected" ] || { echo "error: ${archive} is absent from SHA256SUMS" >&2; exit 1; }
 [ "$actual" = "$expected" ] || {
   echo "error: checksum mismatch for ${archive}" >&2
@@ -80,32 +80,29 @@ expected="$(grep "${archive}" "${tmp}/SHA256SUMS" | cut -d' ' -f1)"
   exit 1
 }
 
+# The release workflow packs repocortex, LICENSE, NOTICE and README.md at the
+# ROOT of the archive (.github/workflows/release.yml), so the binary is
+# directly under $tmp. TestInstallersMatchTheReleaseWorkflow keeps this path
+# and the workflow in step.
 tar -xzf "${tmp}/${archive}" -C "$tmp"
 mkdir -p "$INSTALL_DIR"
-extracted=""
-for cand in "${tmp}/repocortex_${VERSION}_${os}_${arch}/repocortex" \
-            "${tmp}/repocortex_${VERSION}_${os}_${arch}/repocortex" \
-            "${tmp}/repocortex_${VERSION}_${os}_${arch}/repocortex" \
-            "${tmp}/repocortex" "${tmp}/repocortex"; do
-  if [ -f "$cand" ]; then
-    extracted="$cand"
-    break
-  fi
-done
-[ -n "$extracted" ] || { echo "error: could not find binary in archive" >&2; exit 1; }
+extracted="${tmp}/repocortex"
+[ -f "$extracted" ] || { echo "error: repocortex is not at the root of ${archive}" >&2; exit 1; }
 
+# There is one command and it has one name. This script once also linked a
+# second name beside it; when the two names became the same, that line turned
+# into `ln -sf X X`, which replaces the binary just installed with a symlink
+# to itself, and the version check below then failed on every install.
 install -m 0755 "$extracted" "${INSTALL_DIR}/repocortex" 2>/dev/null \
   || { cp "$extracted" "${INSTALL_DIR}/repocortex" && chmod 0755 "${INSTALL_DIR}/repocortex"; }
-ln -sf "${INSTALL_DIR}/repocortex" "${INSTALL_DIR}/repocortex" 2>/dev/null || cp "${INSTALL_DIR}/repocortex" "${INSTALL_DIR}/repocortex"
 
 # Gatekeeper quarantines anything curl wrote. Without this the first run dies
 # with a dialog the user cannot dismiss from a terminal.
 if [ "$os" = "darwin" ] && command -v xattr >/dev/null 2>&1; then
   xattr -d com.apple.quarantine "${INSTALL_DIR}/repocortex" 2>/dev/null || true
-  xattr -d com.apple.quarantine "${INSTALL_DIR}/repocortex" 2>/dev/null || true
 fi
 
-echo "installed ${INSTALL_DIR}/repocortex (with repocortex alias)"
+echo "installed ${INSTALL_DIR}/repocortex"
 "${INSTALL_DIR}/repocortex" version
 
 case ":${PATH}:" in

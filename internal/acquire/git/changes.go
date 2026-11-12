@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"sort"
 
+	gogit "github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/go-git/go-git/v5/plumbing/object"
 	"github.com/go-git/go-git/v5/utils/merkletrie"
@@ -153,7 +154,7 @@ func (v *objectView) treeAt(rev string) (*object.Tree, error) {
 
 	hash, err := v.repo.ResolveRevision(plumbing.Revision(rev))
 	if err != nil {
-		return nil, fmt.Errorf("git: resolve revision %q: %w", rev, err)
+		return nil, resolveError(v.repo, rev, err)
 	}
 	commit, err := v.repo.CommitObject(*hash)
 	if err != nil {
@@ -208,7 +209,24 @@ func (r *Repo) ResolveRevision(ctx context.Context, rev string) (string, error) 
 	}
 	hash, err := r.repo.ResolveRevision(plumbing.Revision(rev))
 	if err != nil {
-		return "", fmt.Errorf("git: resolve revision %q: %w", rev, err)
+		return "", resolveError(r.repo, rev, err)
 	}
 	return hash.String(), nil
+}
+
+// resolveError wraps a failure to resolve a revision, saying so when the cause
+// is a shallow clone.
+//
+// `HEAD~20` in a `--depth 12` checkout fails with go-git's bare "object not
+// found", which reads as a damaged repository or a mistyped name. It is
+// neither, and the user can fix it with one command once told which. Only an
+// object that is missing in a repository with a recorded boundary is explained
+// this way; an unknown branch name is still just an unknown name.
+func resolveError(repo *gogit.Repository, rev string, err error) error {
+	if errors.Is(err, plumbing.ErrObjectNotFound) {
+		if boundary, serr := repo.Storer.Shallow(); serr == nil && len(boundary) > 0 {
+			return fmt.Errorf("git: resolve revision %q: %w", rev, ErrShallowHistory)
+		}
+	}
+	return fmt.Errorf("git: resolve revision %q: %w", rev, err)
 }

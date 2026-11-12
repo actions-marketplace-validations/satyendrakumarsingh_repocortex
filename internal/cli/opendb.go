@@ -53,6 +53,27 @@ func openReadOnly(ctx stdctx.Context, path string) (*store.DB, error) {
 	return db, nil
 }
 
+// openPlaceholder creates an empty, migrated schema at path, for a server
+// that has to exist before the project's index does. See serve_noindex.go.
+//
+// It is here, and not beside its one caller, because this file is the only
+// place in the package allowed to open the store: the schema version is
+// asserted at every door or it is asserted at none. The path is always in a
+// temporary directory the caller removes, never in the project. Unlike
+// openWritable it logs nothing, since "upgraded index schema" would describe
+// an index the user does not have.
+func openPlaceholder(ctx stdctx.Context, path string) (*store.DB, error) {
+	db, err := store.Open(ctx, store.Options{Path: path})
+	if err != nil {
+		return nil, err
+	}
+	if _, err := store.Migrate(ctx, db.DB, time.Now().Unix); err != nil {
+		_ = db.Close()
+		return nil, err
+	}
+	return db, nil
+}
+
 // stdSQLNamed is sql.Named, kept here so query commands bind a named
 // parameter without importing database/sql themselves: this file is the one
 // door to the store in this package.

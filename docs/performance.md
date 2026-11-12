@@ -172,6 +172,15 @@ turning the cheapest common case into the most expensive one. Hashing costs a
 read per file: that is what the ~0.9 s no-op run over 5,000 files is paying for,
 and it is roughly 180 µs per file including the walk.
 
+**Since 2026-11-12 an unchanged file is no longer read at all.** The hash is
+still the verdict, but a file whose size and times match the index, and are
+more than two seconds older than the previous run, is not opened; the rule and
+its limits are in [the CLI reference](CLI.md#index) and
+`internal/acquire/fs/trust.go`. The no-op and one-file figures in the table
+above predate that and were not re-measured on this corpus. On django the
+same change took a no-op from 2.5 s to 0.13 s; see
+[the re-measurement](#re-measured-after-the-update-path-was-fixed).
+
 ## Three real repositories
 
 Every other figure in this document comes from a synthetic corpus or from
@@ -291,6 +300,44 @@ follows the size of the repository, which is not what `repocortex index --help`
 says of it ("cost scales with your edits rather than repository size"). What
 that pass costs per file on an idle machine was not measured here.
 
+#### Re-measured after the update path was fixed
+
+The same day, the same machine and the same clone (`a0f2e29`, 7,100 tracked
+files, 7,090 discovered), with a binary built the same way from the tree before
+the fix and from the tree after it. The load average was 6 to 8 during the
+"before" run and 8 to 10 during the "after" run, so these are again ceilings
+and not idle figures. Each cell is every run, wall time from `/usr/bin/time`.
+
+| `repocortex index` on django | Before | After |
+|---|---|---|
+| Nothing changed | 2.54 / 2.68 / 2.67 s | 0.21 / 0.13 / 0.14 s |
+| Two files changed (one function appended to each) | 3.25 / 3.39 / 3.31 s | 1.06 / 1.03 / 0.83 s |
+| 200 files changed (one comment line appended to each) | 4.26 / 4.35 s | 1.98 / 2.26 s |
+| Peak RSS, nothing changed / two files / 200 files | 58 / 190 / 236 MB | 57 / 188 / 222 MB |
+| Cold `index` into an empty database, for scale | 18.82 s | 17.09 s |
+
+Two things were the floor, found with `pprof` on the unchanged-tree path:
+
+| Where an update that changed nothing spent its time | Share |
+|---|---|
+| Opening, reading and hashing every discovered file (`fs.hashFile`) | about half |
+| `git status` over every tracked file, to stamp the commit (`Repo.Info` computing a dirty flag nothing read) | about half |
+| Reading the previous run's file list, the SQLite open and the schema check | under 50 ms |
+
+Neither is paid now. The commit is read from the ref. A file is hashed only
+when it might have changed, by the rule in [the CLI reference](CLI.md#index):
+same size, same modification time, and both that and the inode change time more
+than two seconds older than the previous run. The hash is still the verdict for
+every file that fails that test, and `repocortex index --rehash` hashes
+everything as before (0.55 s on this tree, now that the status scan is gone).
+
+What still follows the size of the repository and not the edit, for a two-file
+change, from the same profile: one `lstat` per file (0.1 s of wall, on 14
+cores), and the reference resolution that runs after any change and passes over
+every file's references (about 0.35 s for django's 285,396). So the published
+2.5 s for two files is met, at 0.8 s to 1.1 s, and the help text no longer says
+the cost is independent of repository size, because it is not.
+
 `repocortex watch` has no one-shot mode, so the script starts it, waits for its
 "Watching" line, makes the same two-file edit and times how long watch takes to
 log the update. In run C that took 4.09 s, 2.38 s and 2.49 s, of which watch
@@ -315,6 +362,56 @@ every watched directory, one `open` at a time. On macOS that is one descriptor
 and one system call per file in the repository, it is not interruptible because
 `watch.New` takes no context, and nothing is printed while it runs. In run A the
 edits were made before the "Watching" line and were never reported.
+
+#### `repocortex watch`, re-measured after start-up was fixed
+
+Same day, machine, clone and build method as the update figures above; the
+"before" binary is the tree before the fix. The load average was 12 to 18 for
+the "before" runs and 14 to 20 for the "after" runs. Three starts each, every
+run shown. Each start made one edit 0.25 s after launch, one in-place append
+once watching, and one save by temporary file and rename.
+
+| `repocortex watch` on django, 7,100 files in 3,273 directories | Before | After |
+|---|---|---|
+| Start to the "Watching" line | 5.40 / 9.38 / 25.03 s | 1.63 / 1.71 / 1.63 s, and 2.93 / 2.51 / 1.52 s in a second set |
+| Open descriptors once watching (`lsof -p` lines) | 10,399 | 3,298 |
+| An edit made 0.25 s into start-up | picked up in 2 of 3 starts; never reported in the third | picked up before the banner, 6 of 6 |
+| Ctrl-C while still registering | 2 s in: exits 4.42 s later. 3 s in: 0.89 s later | 0.5 s in: 0.15 s later. 1.0 s in: 0.08 s later |
+| Ctrl-C once watching | 0.30 to 0.41 s | 0.07 to 0.26 s |
+| In-place append to logged update | 1.80 / 7.34 / 3.04 s | 1.03 / 1.42 / 2.24 s |
+| Save by rename to logged update | 3.51 / 6.47 / 2.37 s | 1.00 / 0.79 / 0.71 s |
+
+What changed, in the order it matters:
+
+- **No file is opened.** On macOS the watcher holds one descriptor per
+  directory (kqueue on the directory, which reports entries created, deleted
+  and renamed) and finds a file rewritten in place by a sweep of sizes and
+  modification times. fsnotify's kqueue backend, used before, opens every file,
+  and has no option not to. Linux and Windows already watched directories
+  only.
+- **The sweep is the price**, and it is why an in-place write is not instant on
+  macOS: it runs every two seconds, or less often when a sweep takes long, so
+  that it costs at most about a twentieth of one core. With the sweep listing
+  every directory an in-place append took 7.3 to 8.9 s to be reported on this
+  loaded machine; with the sweep reduced to one `lstat` per remembered file
+  (the kernel already reports changes to a listing) it took the 1.0 to 2.2 s in
+  the table.
+- **Registration takes a context and reports progress**, every two seconds on
+  standard error. None was printed here because no start took two seconds to
+  register.
+- **The reconcile runs after registration**, so an edit made during start-up
+  is in the index before the banner.
+- **Hidden tool directories are not watched**, by the same rule that keeps
+  them out of the index.
+
+What a descriptor per directory implies: the bound on a repository that can be
+watched on macOS is its directory count against the open-file limit
+(`kern.maxfilesperproc` was 92,160 on this machine and is 10,240 by default on
+older systems), where it was directories plus files. `watch` stops at 8,192
+directories with a named error before the kernel refuses.
+
+Not measured: an idle machine, the sweep's standing cost in CPU over a long
+session, and Linux or Windows, where nothing about the mechanism changed.
 
 ### Linux kernel, cold index
 
@@ -602,7 +699,8 @@ On RepoCortex's own source, identically across all three trials:
   References:  18429
   Resolved:    7880 (42.8%)
   Ambiguous:   903
-  Unresolved:  9646  (calls outside this repository)
+  Unresolved:  9646  (no definition of that name is indexed: code outside this
+               repository, or code in it that the index did not extract)
   Edges:       7708
   Data access: 329 statement(s), 320 bound to a declared table, 320 edges
 ```
@@ -615,7 +713,8 @@ Resolved pay2 (revision 1)
   References:  55
   Resolved:    16 (29.1%)
   Ambiguous:   10
-  Unresolved:  29  (calls outside this repository)
+  Unresolved:  29  (no definition of that name is indexed: code outside this
+               repository, or code in it that the index did not extract)
   Edges:       16
     high:    16
   Data access: 7 statement(s), 7 bound to a declared table, 7 edges

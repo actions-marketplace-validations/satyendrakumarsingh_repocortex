@@ -4,7 +4,7 @@
   "display_name": "RepoCortex",
   "version": "1.0.1",
   "description": "Deterministic code intelligence and change safety for AI coding agents, served from a local code graph.",
-  "long_description": "RepoCortex indexes a repository into a local SQLite code graph of symbols, references, APIs, database access, tests, configuration and Git history, and serves it to an AI agent over MCP. Every relationship carries a confidence level and the source location that justifies it.\n\nThis bundle runs `repocortex serve` over stdio against the repository you choose. The repository must already have an index: the server does not build one, and exits with an error when `.repocortex/index.db` is missing. Create it once from a terminal with `repocortex init`, `repocortex index` and `repocortex resolve`.",
+  "long_description": "RepoCortex indexes a repository into a local SQLite code graph of symbols, references, APIs, database access, tests, configuration and Git history, and serves it to an AI agent over MCP. Every relationship carries a confidence level and the source location that justifies it.\n\nThis bundle runs `repocortex serve` over stdio against the repository you choose. The server does not build an index. If the repository has none, it still starts, and every tool answers with the commands that build one and the directory to run them in: `repocortex init`, `repocortex index` and `repocortex resolve`, from a terminal. It answers from the index as soon as it exists, without a restart.",
   "author": {
     "name": "Satyendra Singh",
     "url": "https://github.com/satyendrakumarsingh"

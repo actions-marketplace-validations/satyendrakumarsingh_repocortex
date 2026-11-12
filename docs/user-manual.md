@@ -458,7 +458,8 @@ Resolved payment-platform (revision 1)
   References:  55
   Resolved:    16 (29.1%)
   Ambiguous:   10
-  Unresolved:  29  (calls outside this repository)
+  Unresolved:  29  (no definition of that name is indexed: code outside this
+               repository, or code in it that the index did not extract)
   Edges:       16
     high:    16
   Duration:    29ms
@@ -1842,6 +1843,53 @@ One asymmetry to understand: `index.include` **replaces** the default when
 non-empty; `index.exclude` **appends** to it. That is the point — a repository
 can add exclusions but can never un-exclude `.git` or `node_modules`. Negated
 exclude patterns (`!...`) are discarded rather than honoured.
+
+#### Hidden files and directories
+
+A name that begins with a dot is two different things. `.github/workflows/ci.yml`,
+`.eslintrc.js` and `.env.example` are configuration a project commits and
+reviews. `.venv/`, `.idea/`, `.DS_Store` and a `.syms.json` some tool left behind
+are state an editor or a tool keeps beside the code. The second kind is not
+indexed.
+
+| | Rule | Examples |
+|---|---|---|
+| Hidden directory | **Not indexed**, unless it is one that holds project automation or configuration | Indexed: `.github`, `.gitlab`, `.gitea`, `.forgejo`, `.circleci`, `.buildkite`, `.azuredevops`, `.azure-pipelines`, `.woodpecker`, `.tekton`, `.devcontainer`, `.husky`, `.cargo`, `.mvn`, `.config`, `.storybook`, `.changeset`, `.well-known`. Not indexed: `.venv`, `.idea`, `.vscode`, `.cache`, `.next`, `.tox`, `.gradle`, `.terraform`, `.claude`, and any other |
+| Hidden file | **Indexed**, unless it is recognisably scratch | Indexed: `.env`, `.env.production`, `.gitignore`, `.eslintrc.js`, `.eslintrc.json`, `.gitlab-ci.yml`, `.golangci.yml`, `.rustfmt.toml`, `.editorconfig`, `.mcp.json`. Not indexed: `.syms.json` and other hidden `.json`, `.jsonl`, `.log`, `.tmp`, `.bak`, `.swp`, `.pid`, `.lock`, `.db`, `.cache` files; editor leftovers `.#name`, `._name`, `.name~`; `.DS_Store`, `.coverage`, `.eslintcache` |
+| `.git`, `.repocortex` | **Never indexed**, at any depth, whatever the configuration says | |
+
+A hidden JSON file is kept when it is configuration: named like a run-control
+file (`.eslintrc.json`, `.babelrc.json`, `.c8rc.json`) or one of `.mcp.json`,
+`.cspell.json`, `.markdownlint.json`, `.devcontainer.json`, `.jscpd.json`,
+`.luarc.json`, `.release-please-manifest.json`. The lists are in
+`internal/acquire/fs/hidden.go`.
+
+The two halves lean opposite ways on purpose. Nearly every hidden directory is
+tool state, and descending one by mistake can double an index (a virtual
+environment, an agent's worktrees), so directories are opt-in. Hidden files are
+mostly configuration, and leaving out `.gitlab-ci.yml` or `.env.example` would
+silently empty `repocortex infra` and `repocortex config`, so files are opt-out.
+
+Both directions are yours to change in `.repocortex.yml`:
+
+```yaml
+index:
+  # Keep "**": setting include replaces the default list.
+  include: ["**", ".claude/**", ".syms.json", "**/.meta/*.json"]
+  exclude: [".github/**", ".*.yml"]
+```
+
+- `index.exclude` removes more, hidden or not.
+- `index.include` brings a hidden name back when a pattern component that
+  itself begins with a dot matches it. As in a shell, `*` and `**` do not match
+  a hidden name, so the default `**` does not undo the rule, and `.claude/**`
+  brings back `.claude` and what is visible inside it but not the hidden entries
+  further down. `.*` asks for every hidden name. Naming a hidden directory opens
+  it; the visible files inside are then matched against the whole include list.
+
+What this rule leaves out is not recorded in the index, in the same way
+`node_modules` is not. `repocortex watch` applies the same rule when it decides
+which directories to watch.
 
 `max_graph_depth` outside 1..10 is rejected with an explanation, because
 unbounded traversal is a denial-of-service on a large repository:
