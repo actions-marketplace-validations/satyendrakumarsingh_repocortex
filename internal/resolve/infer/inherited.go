@@ -134,6 +134,14 @@ type deferredRef struct {
 	// had already established that nothing else could. Without it the
 	// reference keeps the ambiguous outcome it was parked with.
 	orUnresolved bool
+
+	// named and overriders are set for a binding made by a receiver's name
+	// (override.go): named is the type the name pointed at, and overriders the
+	// other types that declare the same member. The drain asks whether any of
+	// them descends from named. receiver is then named, and fallback is the
+	// binding to emit.
+	named      string
+	overriders []string
 }
 
 // deferInherited parks a reference pass one refused, if ancestry could
@@ -316,8 +324,17 @@ func (r *Resolver) drainChunk(
 		if len(cands) == 0 {
 			continue
 		}
-		best, ok, ambiguous := inheritedBinding(d, cands, known)
-		fromAncestry := ok
+		var best candidate
+		var ok, ambiguous bool
+		fromAncestry := false
+		if d.named != "" {
+			// A binding the receiver's name made, held until the hierarchy
+			// could say whether a subtype overrides the member.
+			best, ok = settleOverride(d, known), true
+		} else {
+			best, ok, ambiguous = inheritedBinding(d, cands, known)
+			fromAncestry = ok
+		}
 		if d.static {
 			best, ok, ambiguous = settleStatic(d, best, ok, ambiguous)
 			fromAncestry = fromAncestry && ok
@@ -445,12 +462,13 @@ func (r *Resolver) ancestryClosure(ctx context.Context, chunk []deferredRef) (ma
 	// iteration.
 	var frontier []string
 	for _, d := range chunk {
-		key := d.receiver
-		if _, dup := visited[key]; dup {
-			continue
+		for _, key := range append([]string{d.receiver}, d.overriders...) {
+			if _, dup := visited[key]; dup {
+				continue
+			}
+			visited[key] = struct{}{}
+			frontier = append(frontier, key)
 		}
-		visited[key] = struct{}{}
-		frontier = append(frontier, d.receiver)
 	}
 
 	for depth := 0; depth < MaxAncestryDepth && len(frontier) > 0; depth++ {

@@ -1475,7 +1475,11 @@ func (r *Resolver) memberByName(c call, limit model.Confidence, stats *Stats) de
 			if o.overloaded() {
 				tier, reason = weaker(tier, model.ConfidenceLow), overloadedReason(ruleNamedAfterType, hint, o)
 			}
-			return bound(candidate{o.first, tier, reason})
+			best := candidate{o.first, tier, reason}
+			if r.deferOverride(c, best, members) {
+				return deferredCall
+			}
+			return bound(best)
 		}
 	}
 
