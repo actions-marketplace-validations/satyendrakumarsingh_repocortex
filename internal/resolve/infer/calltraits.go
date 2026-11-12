@@ -139,6 +139,13 @@ type CallTraits struct {
 	// calls to such candidates and were right 10 times in 31.
 	NoFreeFunctions bool
 
+	// ValuesAreCallable reports that a constant or a variable may hold a
+	// function, so that a call may name one: `export const parse =
+	// _parse(Err)` is called as `parse(x)`. ECMAScript only. The cost is a
+	// call that names a constant which holds something else, and the tier of
+	// every rule that reaches one is the one measured for the language.
+	ValuesAreCallable bool
+
 	// Overloads reports that one type may declare several different methods
 	// under one name, told apart by their parameters: Java, C#, C++. Where it
 	// holds, knowing the type and the name still leaves a choice, and unless
@@ -315,9 +322,9 @@ var callTraitsByLanguage = map[string]CallTraits{
 	"kotlin":     {CallConstructs: true, ImplicitSelf: true, Overloads: true, TypesAreCapitalised: true, Imports: ImportsNameClasses, ExternalRoots: []string{"java", "javax", "kotlin"}, Builtins: javaBuiltins},
 	"scala":      {CallConstructs: true, ImplicitSelf: true, Overloads: true, TypesAreCapitalised: true, Imports: ImportsNameClasses, ExternalRoots: []string{"java", "javax", "scala"}, Builtins: javaBuiltins},
 	"python":     {CallConstructs: true, TypesAreCapitalised: true, Imports: ImportsNameModules},
-	"javascript": {CallConstructs: true, TypesAreCapitalised: true, Imports: ImportsNameModules, Builtins: scriptBuiltins},
-	"typescript": {CallConstructs: true, TypesAreCapitalised: true, Imports: ImportsNameModules, Builtins: scriptBuiltins},
-	"tsx":        {CallConstructs: true, TypesAreCapitalised: true, Imports: ImportsNameModules, Builtins: scriptBuiltins},
+	"javascript": {CallConstructs: true, ValuesAreCallable: true, TypesAreCapitalised: true, Imports: ImportsNameModules, Builtins: scriptBuiltins},
+	"typescript": {CallConstructs: true, ValuesAreCallable: true, TypesAreCapitalised: true, Imports: ImportsNameModules, Builtins: scriptBuiltins},
+	"tsx":        {CallConstructs: true, ValuesAreCallable: true, TypesAreCapitalised: true, Imports: ImportsNameModules, Builtins: scriptBuiltins},
 	"vue":        {TypesAreCapitalised: true, Imports: ImportsNameModules, Builtins: scriptBuiltins},
 	"svelte":     {TypesAreCapitalised: true, Imports: ImportsNameModules, Builtins: scriptBuiltins},
 	"astro":      {TypesAreCapitalised: true, Imports: ImportsNameModules, Builtins: scriptBuiltins},
@@ -372,7 +379,8 @@ func (s LanguageSpec) canBind(c registry.SymbolIndexEntry, kind model.EdgeKind) 
 	}
 	switch kind {
 	case model.EdgeCalls:
-		return isCallableKind(c.Kind) || (isConstructibleKind(c.Kind) && s.Calls.CallConstructs)
+		return isCallableKind(c.Kind) || (isConstructibleKind(c.Kind) && s.Calls.CallConstructs) ||
+			(s.Calls.ValuesAreCallable && isValueKind(c.Kind))
 	case model.EdgeExtends, model.EdgeImplements:
 		return isTypeKind(c.Kind)
 	default:
@@ -383,6 +391,11 @@ func (s LanguageSpec) canBind(c registry.SymbolIndexEntry, kind model.EdgeKind) 
 // isCallableKind reports whether a symbol kind is something a call invokes.
 func isCallableKind(kind string) bool {
 	return kind == string(model.KindFunction) || kind == string(model.KindMethod)
+}
+
+// isValueKind reports whether a symbol kind is a constant or a variable.
+func isValueKind(kind string) bool {
+	return kind == string(model.KindConstant) || kind == string(model.KindVariable)
 }
 
 // isConstructibleKind reports whether calling a symbol of this kind constructs

@@ -19,3 +19,7 @@ export function load() {
 export class Store {
   get(key) { return key; }
 }
+
+const shared = build();
+const hiddenToo = build();
+export { shared };

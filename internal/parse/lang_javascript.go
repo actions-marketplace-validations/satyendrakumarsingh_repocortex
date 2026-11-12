@@ -82,6 +82,7 @@ import (
 //	const X = class {}                        class
 //	const Ctx = createContext(...)            constant
 //	export const MAX = 5                      constant  (export let/var: variable)
+//	const cva = build(); export { cva }       constant  (named in an export clause)
 //
 // A non-exported `const x = 5` is not a definition. The inferred function
 // patterns are untouched, and still find a local `const f = () => {}`.
@@ -109,13 +110,10 @@ const scriptDefinitions = `
       (variable_declarator name: (identifier) @name)) @definition.variable))
 (program
   (lexical_declaration
-    (variable_declarator name: (identifier) @name value: (call_expression))) @definition.constant)
+    (variable_declarator name: (identifier) @name)) @definition.constant)
 (program
   (variable_declaration
-    (variable_declarator name: (identifier) @name value: (call_expression))) @definition.variable)
-(program
-  (lexical_declaration
-    (variable_declarator name: (identifier) @name value: (class))) @definition.class)
+    (variable_declarator name: (identifier) @name)) @definition.variable)
 `
 
 // scriptNewReferences make `new Foo(...)` a call on Foo. The tagged node is
@@ -208,8 +206,10 @@ type scriptRefiner struct {
 	file string
 	root *ts.Node
 
-	// top holds the names the file declares at its top level.
-	top map[string]bool
+	// top holds the names the file declares at its top level, and listed the
+	// names an `export { a, b as c }` clause exports.
+	top    map[string]bool
+	listed map[string]bool
 }
 
 func (r *scriptRefiner) typ(n *ts.Node) string {
@@ -286,12 +286,29 @@ func (r *scriptRefiner) find(start, end uint32) (scriptNode, bool) {
 	return scriptNode{}, false
 }
 
-// collectTop records the names a file declares at its top level.
+// collectTop records the names a file declares at its top level, and the
+// names an `export { ... }` clause lists.
 func (r *scriptRefiner) collectTop() {
 	r.top = make(map[string]bool, 16)
+	r.listed = make(map[string]bool, 8)
 	for i := 0; i < r.root.NamedChildCount(); i++ {
 		stmt := r.root.NamedChild(i)
 		if r.typ(stmt) == "export_statement" {
+			if r.field(stmt, "source") == nil {
+				for j := 0; j < stmt.NamedChildCount(); j++ {
+					clause := stmt.NamedChild(j)
+					if r.typ(clause) != "export_clause" {
+						continue
+					}
+					for k := 0; k < clause.NamedChildCount(); k++ {
+						if spec := clause.NamedChild(k); r.typ(spec) == "export_specifier" {
+							if name := r.field(spec, "name"); name != nil {
+								r.listed[r.text(name)] = true
+							}
+						}
+					}
+				}
+			}
 			if d := r.field(stmt, "declaration"); d != nil {
 				stmt = d
 			}
@@ -427,6 +444,13 @@ func (r *scriptRefiner) isStyled(call *ts.Node) bool {
 	return rest == "" || rest[0] == '.' || rest[0] == '(' || rest[0] == '<'
 }
 
+// ensureTop collects the top-level names once.
+func (r *scriptRefiner) ensureTop() {
+	if r.top == nil {
+		r.collectTop()
+	}
+}
+
 // refineDeclaration decides what a top-level `const x = value` defines.
 func (r *scriptRefiner) refineDeclaration(sn scriptNode, tag ts.Tag, protoOwners map[string]bool) (definitionFix, bool) {
 	decl := sn.n
@@ -444,9 +468,10 @@ func (r *scriptRefiner) refineDeclaration(sn scriptNode, tag ts.Tag, protoOwners
 	if declarator == nil {
 		return definitionFix{}, false
 	}
+	r.ensureTop()
 	topLevel := len(sn.path) >= 2 && (r.typ(sn.path[len(sn.path)-2]) == "program" ||
 		(len(sn.path) >= 3 && r.typ(sn.path[len(sn.path)-2]) == "export_statement" && r.typ(sn.path[len(sn.path)-3]) == "program"))
-	exported := topLevel && r.typ(sn.path[len(sn.path)-2]) == "export_statement"
+	exported := topLevel && (r.typ(sn.path[len(sn.path)-2]) == "export_statement" || r.listed[tag.Name])
 	value := r.field(declarator, "value")
 	name := tag.Name
 
@@ -492,7 +517,6 @@ func refineScriptDefinitions(root *ts.Node, lang *ts.Language, file string, src 
 	// declarations are classes.
 	protoOwners := map[string]bool{}
 
-	needTop := false
 	for _, tag := range tags {
 		if !strings.HasPrefix(tag.Kind, "definition") {
 			continue
@@ -503,10 +527,7 @@ func refineScriptDefinitions(root *ts.Node, lang *ts.Language, file string, src 
 		}
 		switch r.typ(sn.n) {
 		case "assignment_expression":
-			if !needTop {
-				needTop = true
-				r.collectTop()
-			}
+			r.ensureTop()
 			fix := r.refineAssignment(sn, tag)
 			if !fix.drop && fix.owner != "" && strings.HasSuffix(strings.TrimSpace(string(src[sn.n.StartByte():tag.NameRange.StartByte])), ".prototype.") {
 				protoOwners[fix.owner] = true

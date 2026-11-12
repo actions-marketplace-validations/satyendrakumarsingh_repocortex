@@ -43,3 +43,4 @@ page.jsx	3	function	Page
 page.jsx	7	function	Shell
 widget/index.js	1	class	widget
 widget/index.js	2	method	render
+esm.js	23	constant	shared
