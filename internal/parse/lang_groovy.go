@@ -26,6 +26,12 @@ import "strings"
 // the top level of a script. A Spock feature method is named by its quoted
 // title, without the quotes.
 //
+// Recovery. The grammar fails on common Groovy (a one-line doc comment, a list as an
+// annotation argument, a map keyed by parenthesised expressions), and then reads a class as
+// loose tokens or closes it early. The patterns marked "recovery" below only match shapes that
+// a tree read properly does not have: a doc comment holding a class keyword, a class followed
+// by an ERROR and then members. See fixtures/langs/groovy/KNOWN_GAPS.md.
+//
 // Plain fields and script variables are not recorded: a misread constructor
 // leaves its parameters behind as declarations, so a field pattern would also
 // record parameters.
@@ -48,6 +54,18 @@ func init() {
 (source_file (identifier) @_k . (declaration . (identifier) @name @definition.interface . (identifier)) (#eq? @_k "trait"))
 (source_file (identifier) @_k . (declaration . (identifier) @name @definition.class . (identifier)) (#eq? @_k "enum"))
 
+; a trait or enum with type parameters or a supertype list: the name sits inside a
+; type_with_generics (trait Repo<D> implements Base<D> {, trait Two<T> extends Foo {)
+(source_file (identifier) @_k . (declaration . (type_with_generics . (identifier) @name @definition.interface) . (identifier)) (#eq? @_k "trait"))
+; a generic trait with no supertype is read as the call "trait" with a comparison and a closure
+; for its argument; the closure is its body
+(juxt_function_call (identifier) @_k (argument_list (binary_op (binary_op . (identifier) @name @definition.interface)))
+  (#eq? @_k "trait"))
+(juxt_function_call (identifier) @_k (argument_list (binary_op (closure (function_definition (identifier) @name . (parameter_list)) @definition.method)))
+  (#eq? @_k "trait"))
+(juxt_function_call (identifier) @_k (argument_list (binary_op (closure (declaration) @_d . (function_call (identifier) @name) @definition.method)))
+  (#eq? @_k "trait") (#not-match? @_d "="))
+
 ; functions at the top of a script, methods in a body
 (source_file (function_definition (identifier) @name . (parameter_list)) @definition.function)
 (class_definition (closure (function_definition (identifier) @name . (parameter_list)) @definition.method))
@@ -59,11 +77,33 @@ func init() {
 ; constructors, generic methods and bodiless methods with a class-typed parameter are read as a
 ; call, which has no other meaning directly in a class body
 (class_definition (closure (function_call (identifier) @name) @definition.method))
+; the same in a trait body, where the type before the name is the only thing that tells a method
+; from a statement: a method whose return type is a bare type variable (static D create() {) or
+; that has its own type parameters (static <T> T with(...) {) is read as a declaration of the
+; modifiers and the type followed by a call whose closure is the body. A declaration with an
+; initialiser is a field, not a return type.
+(source_file (closure (declaration) @_d . (function_call (identifier) @name) @definition.method)
+  (#not-match? @_d "="))
 
 ; a method with modifiers and no return type (private static name(a) {) is a declaration of
 ; the modifiers and the name, then the parameters as a parenthesised expression, then the body
 (class_definition (closure (declaration (identifier) @name .) @definition.method . (parenthesized_expression) . (closure)))
 (source_file (declaration (identifier) @name .) @definition.function . (parenthesized_expression) . (closure))
+
+; A class that the grammar closes early (a map literal with parenthesised keys does it) leaves
+; the rest of its members at the top of the file, after an ERROR. Those are methods. Neither
+; pattern can match in a tree without an ERROR at the top, so a script that really has a
+; function after a class keeps its kind.
+(source_file (class_definition) (ERROR) (function_definition (identifier) @name . (parameter_list)) @definition.method)
+(source_file (class_definition) (ERROR) (function_declaration (identifier) @name . (parameter_list)) @definition.method)
+(source_file (class_definition) (ERROR) (declaration (identifier) @name .) @definition.method . (parenthesized_expression) . (closure))
+(source_file (class_definition) (ERROR) (declaration [(access_modifier) (modifier)] .) . (function_call (identifier) @name (argument_list (closure) .)) @definition.method)
+
+; The class header itself when an error earlier in the file left the tokens loose under a doc
+; comment that never closed: "class", then the name (with its supertypes, in an ERROR).
+; A doc comment cannot hold a class keyword in a tree that was read properly.
+(groovy_doc "class" . (ERROR . (identifier) @name) @definition.class)
+(groovy_doc "class" . (identifier) @name @definition.class)
 
 ; closures assigned to a field or script variable
 (class_definition (closure (declaration name: (identifier) @name (closure)) @definition.method))
