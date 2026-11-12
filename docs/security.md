@@ -161,10 +161,11 @@ memory or wall time is enough.
 
 | Control | Value | Guards against |
 |---|---|---|
-| `fs.DefaultMaxFileSize` | 2 MiB | Hashing and buffering a huge committed blob |
-| `parse.MaxSourceBytes` | 256 KiB | Tree-sitter arenas scaling super-linearly with input |
-| `pipeline.DefaultInFlightBytes` | 32 MiB of source | Many workers each grabbing a large file simultaneously |
-| `parse.DefaultParseTimeout` | 5 s | A pathological file stalling the run. A file of 10,000 unbalanced braces took ~2 s in testing |
+| `config.DefaultMaxFileBytes` | 2 MiB | Hashing, buffering and parsing a huge committed blob. One limit for discovery and for the parser |
+| `index.max_file_bytes` in `.repocortex.yml` | 1 KiB to 8 MiB | The same, when a repository sets its own limit. The file arrives with the repository, so the value is bounded: outside the range is a configuration error |
+| `pipeline.DefaultInFlightBytes` | 32 MiB of source | Many workers each grabbing a large file simultaneously. A file over 512 KiB reserves eight times its size, so large files are parsed a few at a time |
+| The parser's work limits | per source byte | A pathological file stalling the run or exhausting memory. Iterations, nodes, stack depth and arena bytes are counted by the parser and it stops itself; what was read is indexed and the file is recorded as incomplete |
+| `parse.DefaultParseCeiling` | 60 s | A file that stays inside every work limit and still does not finish. A last resort: the parser polls it and stops |
 | `maxIgnoreFileBytes` | 1 MiB | A multi-gigabyte committed `.gitignore` |
 | `watch.DefaultMaxWatchDirs` | 8192 | Exhausting OS watch descriptors |
 | `config` `max_graph_depth` | 1..10 | Unbounded traversal on a large repository |
@@ -184,6 +185,10 @@ Two details worth noting:
 - **Failures are isolated to the file.** A file that cannot be parsed is recorded
   with `parse_status = 'failed'` and its error text. The run continues. A single
   unparseable file in a large repository must not cost the entire index.
+- **A stopped parse stops.** Parsing runs in the worker's own goroutine, and the
+  limits above are enforced by the parser from inside its loop, as is
+  cancellation. No parse is left running after the call that started it has
+  returned; a test counts goroutines to hold that.
 - **Panics are recovered.** `parser panicked: %v` is turned into a failed parse
   for that file rather than a crashed process. `Parser.Parse` is documented as
   never permitted to panic; the recover is the belt to that braces.

@@ -188,36 +188,83 @@ these docs described them and a reader may be looking for them:
 
 ### Files are missing from the index
 
-Check `repocortex status` for the skipped count, then query the `files` table for
-per-path reasons. The skip reasons and what each means:
+`repocortex status` says how many files were parsed, how many are text only, how
+many were over the size limit (naming the largest) and how many were skipped for
+each other reason. For every path, query the `files` table:
 
-| `skip_reason` | Cause | Fix |
+```bash
+repocortex query "SELECT path, size_bytes, parse_status, parse_error FROM files WHERE index_run_id = :run AND parse_status <> 'ok' ORDER BY size_bytes DESC"
+```
+
+The skip reasons and what each means:
+
+| `parse_error` starts with | Cause | Fix |
 |---|---|---|
-| `too_large` | Over 2 MiB, or grew past it during hashing | Exclude it, or accept the gap |
+| `too_large` | Over the size limit (2 MiB unless `index.max_file_bytes` sets another), or grew past it during hashing | Raise the limit, exclude the file, or accept the gap; see below |
 | `binary` | NUL byte in the first 8000 bytes (git's own heuristic) | Expected |
 | `symlink` | Symlinks are never followed, even inside the root | Expected; index the target directly |
 | `symlink_escapes_root` | The link resolves outside the repository | Expected, and deliberate — see [security.md](security.md#symlinks-are-never-followed) |
 | `irregular` | Socket, device or FIFO | Expected. Opening a FIFO would hang the indexer |
 | `unreadable` | Permission denied, broken link, unreadable directory | Fix permissions |
 
-Two more that appear as `parse_error` rather than a skip reason:
+Two more:
 
 - `no grammar for this file type` — the extension is not recognised by the
-  grammar registry.
-- `no tags query available for "markdown"` — the grammar exists but ships no tags
-  query, so no symbols can be extracted. Common for markup and data formats.
+  grammar registry. The file is recorded and not indexed. `status` counts it
+  under `Skipped` as `no_grammar`.
+- `text_only: no definition query for "markdown"; …` — the grammar exists but
+  ships no definition query, so no symbols can be extracted. The file's **text is
+  indexed**: `repocortex search` finds a name that appears in it, `repocortex
+  symbol` does not. 120 of the 206 grammars are in this group, including Perl,
+  Haskell, YAML, JSON, Markdown and Makefiles; `repocortex languages --verbose`
+  lists them.
 
-### `source is 300000 bytes, over the 262144 limit`
+### `too_large: 6902462 bytes, over the 2097152 byte limit (index.max_file_bytes)`
 
-**Cause.** The file exceeded `parse.MaxSourceBytes` (256 KiB). It was discovered,
-hashed and recorded — but not parsed. Tree-sitter's node arenas scale
-super-linearly with input; a 2 MiB cap measured 6,667 MB peak heap against 2,260
-MB at 256 KiB.
+**Cause.** The file is over the size limit. It is recorded with its size and is
+neither parsed nor text-indexed. `repocortex index` and `repocortex status` count
+these files and name the ten largest.
 
-**Fix.** Usually, exclude the generated tree — an excluded file is never read at
-all, while a skipped one has already been hashed. Raising the constant is a
-source change with a measured memory cost; see
-[performance.md](performance.md#tuning-for-a-large-monorepo).
+The limit is 2 MiB. Parsing costs memory in proportion to the source: a 2 MiB C
+file takes about 0.9 s and 300 MB of process memory while it is parsed (the
+measurements are in [performance.md](performance.md#the-size-limit)).
+
+**Fix.** If the file is source you want indexed, raise the limit for the
+repository, up to 8 MiB:
+
+```yaml
+# .repocortex.yml
+index:
+  max_file_bytes: 4194304
+```
+
+If it is generated or vendored, exclude it instead. An excluded file is never
+read and is not reported.
+
+An index written by an older version shows `source is 300000 bytes, over the
+262144 limit` for the same condition: the parser used to refuse anything over
+256 KiB. Re-indexing with this version parses those files.
+
+### `budget_exceeded: parser stopped at byte N of M (line L) on …`
+
+**Cause.** The parse was stopped before the end of the file. What was read is
+indexed (`parse_status = 'partial'`); definitions after line L are missing, and
+the index is `DEGRADED`. The text names the limit:
+
+- `its iteration limit`, `its node limit`, `its stack depth limit`, `its memory
+  budget`: the parser's own work limits, which are derived from the file's length
+  and counted by the parser. The same file gets the same verdict on every machine.
+- `the 1m0s wall-clock ceiling`: a last-resort safety net, for a file that stays
+  inside every work limit and still does not finish. This one depends on machine
+  speed, and the text says so.
+
+`stopped_early: …` is the same outcome when the parser gave up for a reason of
+its own. Before a file is recorded either way, it is parsed a second time by the
+parser's other error-recovery route, and the attempt that read further is kept.
+
+**Fix.** Nothing is required: the rest of the index is unaffected. If the file is
+generated, exclude it. If it is ordinary source, it is worth reporting with the
+file attached.
 
 ### `error: grammar "x" failed to load` / `tags query for "x" rejected: ...`
 
@@ -227,15 +274,34 @@ grammar degrades that language only.
 
 **Fix.** Not user-actionable. Report it with the language name.
 
-### `parser panicked: ...` or `parse exceeded 5s`
+### `parser panicked: ...`
 
-**Cause.** A pathological file. Both are contained to the file: the panic is
-recovered and the timeout enforced per file, and the run continues with
-`parse_status = 'failed'`.
+**Cause.** A pathological file. It is contained to the file: the panic is
+recovered and the run continues with `parse_status = 'failed'`.
 
 **Fix.** Nothing required — the index is still published, as `degraded` rather
 than `ready`. If the file is legitimate source you need indexed, it is worth
 reporting with the file attached.
+
+`parse exceeded 5s: context deadline exceeded` is what an older version recorded
+for a file that did not parse within five seconds of wall-clock time. That limit
+is gone: it made the result depend on how busy the machine was, and the parse it
+gave up on kept running. See `budget_exceeded` above for what replaced it.
+
+### `syntax_errors: N error nodes and M missing tokens, first at line L`
+
+**Cause.** Not a failure. The parser read the file to its end and recovered from
+input the grammar does not accept: `parse_status = 'partial'`, and the index is
+not degraded by it. An error node is text the parser could not fit into the
+grammar; a missing token is one it had to assume in order to continue.
+
+This is common in valid code. Grammars do not run the C preprocessor, so a macro
+call at file scope, a `#if` between the cases of a `switch` or a `#define` inside
+an initialiser all produce error nodes. In redis, 408 of 1,025 C files have at
+least one.
+
+**Fix.** Usually nothing. If a definition near line L cannot be found, this is
+why.
 
 ### `error: parse: CGO backend not compiled in; rebuild with -tags cgo_parser`
 
