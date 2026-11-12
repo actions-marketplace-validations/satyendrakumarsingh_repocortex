@@ -3,6 +3,7 @@ package move
 import (
 	"fmt"
 	"go/ast"
+	"go/format"
 	"go/scanner"
 	"go/token"
 	"sort"
@@ -21,7 +22,9 @@ import (
 //     declaration's;
 //   - the declaration's tokens in the target are the tokens cut from the
 //     source (with the group's keyword in front, for a member of a group);
-//   - no comment was lost or invented;
+//   - no comment was lost or invented. Where gofmt formats the declaration
+//     it may put its doc comment into standard form, so there the comments
+//     are compared as gofmt writes them;
 //
 // and that each file's imports are its old imports with exactly the planned
 // additions or removals. A failure here is a defect in this package, never
@@ -77,15 +80,29 @@ func selfCheck(req Request, src, dst *parsed, t *located, imp *importPlan, impor
 		return nil, internal(req.From, "a comment in the source would be lost or duplicated")
 	}
 
-	// The declaration as written into the target.
-	textCode, textComments := scanText(t.text)
+	// The declaration as assembled from the cut lines: every token and every
+	// comment of those lines, the group's keyword in front for a member.
+	asmCode, asmComments := scanText(t.assembled)
 	want := movedCode
 	if t.group != nil {
 		keyword, _ := scanText(t.tok.String())
 		want = append(keyword, movedCode...)
 	}
-	if !equal(textCode, want) || !sameSet(textComments, movedComments) {
+	if !equal(asmCode, want) || !sameSet(asmComments, movedComments) {
 		return nil, internal(req.From, "the declaration would not arrive as it left")
+	}
+	// The declaration as written: the same code, and the same comments once
+	// both are in gofmt's form.
+	textCode, textComments := scanText(t.text)
+	canonAsm, err1 := gofmtComments(t.assembled)
+	canonText, err2 := gofmtComments(t.text)
+	if err1 != nil || err2 != nil || !equal(textCode, asmCode) || !sameSet(canonAsm, canonText) {
+		return nil, internal(req.From, "the declaration would not be written as it was assembled")
+	}
+	// What arrives in the target: gofmt's form where the target is formatted
+	// after the edit, the text as written where it is not.
+	if formatted := (dst != nil && dst.clean) || (dst == nil && src.clean); formatted {
+		textComments = canonText
 	}
 
 	// The target: what was there, then the declaration.
@@ -175,6 +192,17 @@ func scan(p *parsed, keep func(off int) bool) (code, comments []string) {
 		}
 		return true
 	})
+}
+
+// gofmtComments returns the comments of a top-level declaration as gofmt
+// writes them: a doc comment in its standard form, the rest as they are.
+func gofmtComments(decl string) ([]string, error) {
+	out, err := format.Source([]byte("package p\n\n" + decl + "\n"))
+	if err != nil {
+		return nil, err
+	}
+	_, comments := scanText(string(out))
+	return comments, nil
 }
 
 func scanText(text string) (code, comments []string) {

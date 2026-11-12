@@ -712,6 +712,58 @@ func TestBuildConstraints(t *testing.T) {
 	})
 }
 
+// TestADocCommentIsPutInGofmtsFormWhereTheFileIsFormatted: a doc comment that
+// gofmt would rewrite — an empty last line, an unindented list — is left
+// alone inside a group, where it is not a top-level doc comment, and in a
+// file that was never formatted. Once the declaration stands at top level in
+// a formatted file, gofmt's form is the only one that keeps the file
+// formatted, and the planner's own check has to recognise it as the same
+// comment. (go/ast's own source is written this way.)
+func TestADocCommentIsPutInGofmtsFormWhereTheFileIsFormatted(t *testing.T) {
+	const grouped = `package app
+
+type (
+	// A Node is one of:
+	//   - a leaf
+	//   - a branch
+	//
+	Node struct {
+		Kids []Node // none for a leaf
+	}
+
+	// Other stays.
+	Other int
+)
+`
+	const wantDoc = "// A Node is one of:\n//   - a leaf\n//   - a branch\ntype Node struct {\n\tKids []Node // none for a leaf\n}\n"
+
+	t.Run("a group member into a new file", func(t *testing.T) {
+		source, target := mustApply(t, planOf(t, "Node", "a.go", "b.go", map[string]string{"a.go": grouped}, nil))
+		equalText(t, "b.go", target, "package app\n\n"+wantDoc)
+		equalText(t, "a.go", source, "package app\n\ntype (\n\t// Other stays.\n\tOther int\n)\n")
+	})
+	t.Run("a group member into a formatted file", func(t *testing.T) {
+		_, target := mustApply(t, planOf(t, "Node", "a.go", "b.go",
+			map[string]string{"a.go": grouped, "b.go": "package app\n\nvar B = 1\n"}, nil))
+		equalText(t, "b.go", target, "package app\n\nvar B = 1\n\n"+wantDoc)
+	})
+
+	// The same comment on a top-level declaration of a file that was not
+	// formatted: moved as it is into an unformatted file, in gofmt's form
+	// into a formatted one.
+	const loose = "package app\n\n// F does a thing.\n//\nfunc  F( )  { }\n\nfunc  G( )  { }\n"
+	t.Run("an unformatted declaration into an unformatted file", func(t *testing.T) {
+		_, target := mustApply(t, planOf(t, "F", "a.go", "b.go",
+			map[string]string{"a.go": loose, "b.go": "package app\n\nfunc  H( )  { }\n"}, nil))
+		equalText(t, "b.go", target, "package app\n\nfunc  H( )  { }\n\n// F does a thing.\n//\nfunc  F( )  { }\n")
+	})
+	t.Run("an unformatted declaration into a formatted file", func(t *testing.T) {
+		_, target := mustApply(t, planOf(t, "F", "a.go", "b.go",
+			map[string]string{"a.go": loose, "b.go": "package app\n\nfunc H() {}\n"}, nil))
+		equalText(t, "b.go", target, "package app\n\nfunc H() {}\n\n// F does a thing.\nfunc F() {}\n")
+	})
+}
+
 // TestKnownPlatformsMatchGoBuild: the two lists are copies of go/build's, and
 // a platform missing from them would make its file names look unconstrained.
 // go/build is asked directly: a name it refuses to build for an impossible

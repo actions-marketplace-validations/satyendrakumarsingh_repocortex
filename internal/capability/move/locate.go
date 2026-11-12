@@ -142,6 +142,10 @@ type located struct {
 	// text is the declaration as it is written into the target: complete,
 	// top-level, "\n" line endings, no final newline.
 	text string
+	// assembled is text before any formatting: the cut lines themselves,
+	// with the group's keyword in front for a member of a group. For a
+	// declaration that moves whole it is text.
+	assembled string
 	// values are a moved variable's initialisers; empty for anything else.
 	values []ast.Expr
 }
@@ -283,6 +287,7 @@ func locateFunc(src *parsed, fn *ast.FuncDecl) (*located, error) {
 		return nil, err
 	}
 	t.text = src.text(t.cut)
+	t.assembled = t.text
 	return t, nil
 }
 
@@ -318,6 +323,7 @@ func locateSpec(src *parsed, gen *ast.GenDecl, spec ast.Spec, name string) (*loc
 			return nil, err
 		}
 		t.text = src.text(t.cut)
+		t.assembled = t.text
 		return t, nil
 	}
 
@@ -342,7 +348,9 @@ func locateSpec(src *parsed, gen *ast.GenDecl, spec ast.Spec, name string) (*loc
 	// The member becomes a declaration of its own: its doc comment, then the
 	// group's keyword in front of the member exactly as written. It was
 	// indented one level inside the group; gofmt of this one declaration
-	// removes that and nothing else.
+	// removes that. gofmt also puts a doc comment that is now a top-level one
+	// into its standard form (a trailing empty "//" line goes, a list is
+	// re-indented), as it would the first time the file was formatted.
 	//
 	// A doc comment ends on the line above the member (that is what makes it
 	// one), and wholeLines has just established that nothing but white space
@@ -356,7 +364,8 @@ func locateSpec(src *parsed, gen *ast.GenDecl, spec ast.Spec, name string) (*loc
 	}
 	_, textEnd, _ := src.lineBounds(t.cut.last)
 	body := strings.ReplaceAll(string(src.src[specOff:textEnd]), "\r\n", "\n")
-	out, ferr := format.Source([]byte(doc + gen.Tok.String() + " " + body))
+	t.assembled = doc + gen.Tok.String() + " " + body
+	out, ferr := format.Source([]byte(t.assembled))
 	if ferr != nil {
 		return nil, refuse(src.path, src.line(spec.Pos()), "%s could not be rewritten as a declaration of its own (%v)", name, ferr)
 	}

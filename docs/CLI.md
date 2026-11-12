@@ -927,8 +927,10 @@ compiled by nobody.
 move each with `Type.Method`. A new file gets no licence or header comment.
 The declaration is appended to the target, not placed among related
 declarations. A file not gofmt-formatted is edited in place and left as it
-was; a formatted one stays formatted. The build check compiles for this
-machine's platform only. Moving to another package is not supported.
+was; a formatted one stays formatted. A declaration taken out of a group is
+always written in gofmt's form, its doc comment included (an empty last `//`
+line goes, as for any top-level doc comment). The build check compiles for
+this machine's platform only. Moving to another package is not supported.
 
 A dry run, an apply and a refusal on a small module:
 

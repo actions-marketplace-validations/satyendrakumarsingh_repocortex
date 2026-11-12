@@ -24,10 +24,17 @@ import (
 // every declaration the two held before, once. A refusal blaming the
 // planner's own check ("internal check failed") is a defect and fails the
 // test.
+//
+// REPOCORTEX_MOVE_SWEEP, a list of directories in the PATH syntax of the
+// platform, replaces the built-in ones: a way to run the planner over any Go
+// package before trusting it there.
 func TestRealPackagesPlanOrAreRefused(t *testing.T) {
 	dirs := []string{"../../edit", "../rename"}
 	if testing.Short() {
 		dirs = dirs[:1]
+	}
+	if extra := os.Getenv("REPOCORTEX_MOVE_SWEEP"); extra != "" {
+		dirs = filepath.SplitList(extra)
 	}
 	var planned, refused int
 	reasons := map[string]int{}
@@ -52,7 +59,8 @@ func TestRealPackagesPlanOrAreRefused(t *testing.T) {
 							if strings.Contains(r.Reason, "internal check failed") {
 								t.Errorf("%s: move %s from %s to %s: %s", dir, symbol, from, to, r.Reason)
 							}
-							reasons[strings.Join(strings.Fields(r.Reason)[:3], " ")]++
+							words := strings.Fields(r.Reason)
+							reasons[strings.Join(words[:min(4, len(words))], " ")]++
 						}
 						continue
 					}
