@@ -565,6 +565,9 @@ int checked(int a,
 // not code, and the second is the only place the definition is.
 func TestCondGuardRefusesAMaskThatDoesNotHelp(t *testing.T) {
 	src := "int keep_me(void) { return 1; }\n#ifdef FOO\nint x = ;\n#else\nint only_in_the_else(void) { return 2; }\n#endif\n"
+	if !wouldMask(t, "c", src) {
+		t.Fatal("the mask is not due for this input, so the test proves nothing")
+	}
 	res := parseSource(t, "c", "x.c", src)
 	if res.BranchesBlanked != 0 {
 		t.Errorf("a mask that lost a definition was kept: %d branches blanked", res.BranchesBlanked)
@@ -668,4 +671,65 @@ func TestOtherLanguagesAreNotMasked(t *testing.T) {
 	if res.BranchesBlanked != 0 {
 		t.Errorf("blanked %d branches in Go", res.BranchesBlanked)
 	}
+}
+
+// A mask that would blank most of what the plain parse found has to be paid
+// for by what it gains; here it gains nothing, so the plain result stands. The
+// shape is fmt's test/enum-test.cc, where `#if !FEATURE` holds a stub and the
+// `#else` holds the file.
+func TestCondGuardRefusesAMaskThatBlanksMostOfTheFile(t *testing.T) {
+	var b strings.Builder
+	b.WriteString("#ifndef FEATURE\nint stub(void) { return 0; }\n#else\n")
+	for _, n := range []string{"one", "two", "three", "four", "five", "six"} {
+		b.WriteString("int " + n + "(void) { return 1; }\n")
+	}
+	b.WriteString("#endif\nint broken( ;\n")
+	if !wouldMask(t, "c", b.String()) {
+		t.Fatal("the mask is not due for this input, so the test proves nothing")
+	}
+	res := parseSource(t, "c", "x.c", b.String())
+	if res.BranchesBlanked != 0 {
+		t.Errorf("%d branches blanked: the mask threw the file away", res.BranchesBlanked)
+	}
+	names := condSymbolNames(res)
+	for _, want := range []string{"stub", "one", "two", "three", "four", "five", "six"} {
+		if names[want] == 0 {
+			t.Errorf("%s is missing: %v", want, names)
+		}
+	}
+}
+
+// The same name in the branch that is blanked does not excuse a loss of every
+// copy of it: twenty-two `TEST` definitions are not one.
+func TestCondGuardCountsRepeatedNames(t *testing.T) {
+	var b strings.Builder
+	b.WriteString("#if !FEATURE\nint TEST(void) { return 0; }\n#else\n")
+	for i := 0; i < 8; i++ {
+		b.WriteString("int TEST(void) { return 1; }\n")
+	}
+	b.WriteString("#endif\nint broken( ;\n")
+	if !wouldMask(t, "c", b.String()) {
+		t.Fatal("the mask is not due for this input, so the test proves nothing")
+	}
+	res := parseSource(t, "c", "x.c", b.String())
+	if res.BranchesBlanked != 0 {
+		t.Errorf("%d branches blanked", res.BranchesBlanked)
+	}
+	if n := condSymbolNames(res)["TEST"]; n != 9 {
+		t.Errorf("TEST symbols = %d, want 9", n)
+	}
+}
+
+// wouldMask says whether the conditional mask is due for src: the plain tree
+// has an error that selects a group which has a branch to blank. A test of the
+// guard asserts it, so that it cannot pass because the mask was never tried.
+func wouldMask(t *testing.T, language, src string) bool {
+	t.Helper()
+	p := cppParser(t, language)
+	tree, _, err := p.parseOnce(context.Background(), []byte(src))
+	if err != nil {
+		t.Fatal(err)
+	}
+	plan := planCondMask([]byte(src), buildCondGroups(scanCondDirectives([]byte(src), language == "c_sharp")), leafErrorSpans(tree.RootNode()))
+	return !plan.empty() && plan.branches > 0
 }

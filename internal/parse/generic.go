@@ -845,6 +845,30 @@ func (p *genericParser) parseTree(ctx context.Context, src []byte) (*genericPars
 // microseconds. See probeMicros for why a first parse may be given less than
 // the ceiling.
 func (p *genericParser) parseTreeWithin(ctx context.Context, src []byte, micros uint64) (*genericParser, *ts.Tree, stopInfo, error) {
+	by, tree, stop, err := p.parseTreeRoutes(ctx, src, micros)
+	return by, tree, stop.settled(len(src)), err
+}
+
+// settled turns a stop that did not leave anything unread into no stop.
+//
+// The parser reports `accepted_prefix` when it accepted a tree before the end
+// of the input and left the rest outside the root. If it had read every token
+// to the end of the file, no budget ran out and nothing is unread: it is a file
+// the grammar could not make sense of at its tail, and that is a syntax error
+// (the tree carries the error flag and error nodes), not an incomplete parse.
+// Two 17-byte files of rack, `### TestFile ###`, were recorded as incomplete
+// this way, with 2 of 10,000 iterations used, and that alone made the index
+// degraded. It is applied after the other recovery route has had its chance:
+// a route that reads the file as a tree is better than one that gives up.
+func (s stopInfo) settled(srcLen int) stopInfo {
+	if s.early && s.reason == ts.ParseStopAcceptedPrefix && s.parsedBytes >= srcLen {
+		return stopInfo{}
+	}
+	return s
+}
+
+// parseTreeRoutes is parseTree's two attempts, before the verdict is settled.
+func (p *genericParser) parseTreeRoutes(ctx context.Context, src []byte, micros uint64) (*genericParser, *ts.Tree, stopInfo, error) {
 	tree, stop, err := p.parseOnceWithin(ctx, src, micros)
 	if err != nil || !stop.early || !stop.retryable() || ctx.Err() != nil {
 		return p, tree, stop, err
@@ -1027,19 +1051,6 @@ func (p *genericParser) parseOnceWithin(ctx context.Context, src []byte, micros 
 		}
 		if stop.parsedBytes > len(src) {
 			stop.parsedBytes = len(src)
-		}
-		if rt.StopReason == ts.ParseStopAcceptedPrefix && stop.parsedBytes >= len(src) {
-			// The parser accepted a prefix and left the rest outside the
-			// root, but it had read every token to the end of the file: no
-			// budget ran out and nothing was left unread, it is a file the
-			// grammar could not make sense of at its tail. That is a syntax
-			// error (the tree carries the error flag and error nodes), not
-			// an incomplete parse. Two 17-byte files of rack, `### TestFile
-			// ###`, were recorded as incomplete this way, with 2 of 10,000
-			// iterations used, and that alone made the index DEGRADED.
-			stop = stopInfo{}
-			reusable = true
-			return tree, stop, nil
 		}
 		// A parser that was stopped mid-file is not pooled. It is cheap to
 		// rebuild and its arena is sized to a file that was by definition

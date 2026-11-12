@@ -708,6 +708,10 @@ type maskedParse struct {
 	// conditional branches were blanked.
 	count    int
 	branches int
+	// lost is how many definitions of the plain parse were in blanked
+	// branches and have no counterpart in the masked parse: given up by
+	// design.
+	lost int
 }
 
 // retryMasked is the guarded second parse. plain is the parse already done;
@@ -767,10 +771,8 @@ func (p *genericParser) retryMaskedWithin(ctx context.Context, tree *ts.Tree, st
 	// their directives. Only a tree with errors, or one that stopped, is
 	// scanned.
 	var plan *condPlan
-	var plainErrs []condSpan
 	if condOK && root != nil && (stop.early || root.HasError()) {
 		if dirs := scanCondDirectives(src, lang == "c_sharp"); len(dirs) > 0 {
-			plainErrs = errorSpans(root)
 			errs := leafErrorSpans(root)
 			if stop.early {
 				// Everything from a little before the stop to the end was
@@ -802,6 +804,7 @@ func (p *genericParser) retryMaskedWithin(ctx context.Context, tree *ts.Tree, st
 	}
 
 	tree2, stop2, err := p.parseOnceWithin(ctx, masked, micros)
+	stop2 = stop2.settled(len(masked))
 	if err != nil || tree2 == nil || ctx.Err() != nil || stop2.early && !stop.early {
 		return nil
 	}
@@ -813,11 +816,8 @@ func (p *genericParser) retryMaskedWithin(ctx context.Context, tree *ts.Tree, st
 	if condDue || stop.early {
 		// A plain parse that stopped early is judged by how far each parse
 		// got, whichever mask was applied; see maskGuard.
-		if plainErrs == nil && root != nil {
-			plainErrs = errorSpans(root)
-		}
 		mc = &maskContext{
-			plan: plan, plainErrs: plainErrs, language: lang,
+			plan: plan, plainErrs: nearErrorSpans(src, root), language: lang,
 			plainEarly: stop.early, maskedEarly: stop2.early,
 			plainParsed: stop.parsedBytes, maskedParsed: stop2.parsedBytes,
 		}
@@ -829,7 +829,11 @@ func (p *genericParser) retryMaskedWithin(ctx context.Context, tree *ts.Tree, st
 	if condDue {
 		branches = plan.branches
 	}
-	return &maskedParse{by: p, tree: tree2, stop: stop2, src: masked, tags: tags2, implementers: implementers2, count: macros, branches: branches}
+	lost := 0
+	if mc != nil {
+		lost = mc.givenUp
+	}
+	return &maskedParse{by: p, tree: tree2, stop: stop2, src: masked, tags: tags2, implementers: implementers2, count: macros, branches: branches, lost: lost}
 }
 
 // errorSpans lists the byte ranges of the error and missing nodes of a tree.
@@ -873,17 +877,28 @@ type maskContext struct {
 	maskedEarly  bool
 	plainParsed  int
 	maskedParsed int
+	// givenUp is set by maskGuard: see maskedParse.lost.
+	givenUp int
 }
 
-// unreliable reports whether a definition of the plain parse may legitimately
-// be absent from the masked one: it was read inside an error node, where the
-// name is as likely to be wrong as right, or it sits in a branch that was
-// blanked on purpose.
-func (mc *maskContext) unreliable(t ts.Tag) bool {
-	pos := int(t.NameRange.StartByte)
-	if mc.plan.inBlanked(pos) {
-		return true
+// nearErrorSpans lists the error and missing nodes of a tree, each widened by
+// the line before and the line after. A parser that recovers from an error
+// leaves wrong definitions beside it as often as inside it: the parameter
+// `b` of a function whose parameter list was cut by an `#if` is recorded as
+// a function called `b`, on the line after the error.
+func nearErrorSpans(src []byte, root *ts.Node) []condSpan {
+	spans := errorSpans(root)
+	for i, s := range spans {
+		lo, hi := lineBounds(src, s.start, s.end)
+		spans[i] = condSpan{lo, hi}
 	}
+	return spans
+}
+
+// inError reports whether a definition of the plain parse was read inside or
+// next to an error node, where the name is as likely to be wrong as right.
+func (mc *maskContext) inError(t ts.Tag) bool {
+	pos := int(t.NameRange.StartByte)
 	for _, e := range mc.plainErrs {
 		if e.start <= pos && pos < e.end {
 			return true
@@ -1040,7 +1055,14 @@ func maskGuard(plainRoot *ts.Node, plain []ts.Tag, maskedRoot *ts.Node, masked [
 		have[t.Name]++
 		nMasked++
 	}
-	nPlain := 0
+	// A plain definition read inside an error node is unreliable only when
+	// the masked parse is a much better reading (at most half the error
+	// nodes) of a parse that ran to the end: then the names in the damaged
+	// regions were as likely wrong as right. Otherwise it is held to account
+	// like any other.
+	strong := mc != nil && !mc.plainEarly && maskedErrs*2 <= plainErrs
+	nPlain, givenUp := 0, 0
+	offset := map[string]int{}
 	for _, t := range plain {
 		if !isDefinitionTag(t.Kind) {
 			continue
@@ -1050,15 +1072,42 @@ func maskGuard(plainRoot *ts.Node, plain []ts.Tag, maskedRoot *ts.Node, masked [
 			// for a name; it is not one the mask can lose.
 			continue
 		}
-		if mc != nil && mc.unreliable(t) {
+		if keywords[t.Name] {
+			// `int` as the name of a function is the parser's mistake, not a
+			// definition the mask can lose.
 			continue
+		}
+		if mc != nil {
+			if mc.plan.inBlanked(int(t.NameRange.StartByte)) {
+				// Given up on purpose: another build's code. It has to be
+				// paid for by what the mask gained, below, and a name that
+				// survives elsewhere (the same function in the other
+				// branch) is not given up at all. It counts even when an
+				// error node held it: a branch that is most of a file is in
+				// an error node as often as not.
+				// A name offsets as many given-up definitions as the masked
+				// parse has definitions of it: twenty-two `TEST` in a branch
+				// that was blanked are not saved by one `TEST` outside it.
+				if offset[t.Name] < have[t.Name] {
+					offset[t.Name]++
+				} else {
+					givenUp++
+				}
+				continue
+			}
+			if strong && mc.inError(t) {
+				continue
+			}
 		}
 		nPlain++
 		if have[t.Name] == 0 {
 			return false
 		}
 	}
-	if nMasked < nPlain || moreDefs && nMasked <= nPlain {
+	if mc != nil {
+		mc.givenUp = givenUp
+	}
+	if nMasked < nPlain+givenUp || moreDefs && nMasked <= nPlain {
 		return false
 	}
 	return better || nMasked > nPlain
