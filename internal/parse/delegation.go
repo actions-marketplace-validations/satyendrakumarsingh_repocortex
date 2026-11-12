@@ -171,7 +171,7 @@ func lastTypeName(n *ts.Node, lang *ts.Language, src []byte) string {
 			if n.NamedChildCount() == 0 {
 				return ""
 			}
-			n = n.NamedChild(int(n.NamedChildCount()) - 1)
+			n = n.NamedChild(n.NamedChildCount() - 1)
 		default:
 			return ""
 		}
