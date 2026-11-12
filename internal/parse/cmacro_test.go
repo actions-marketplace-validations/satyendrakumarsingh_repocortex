@@ -49,6 +49,8 @@ func TestMacroCandidateForms(t *testing.T) {
 		{"annotation without arguments on a prototype", "c", "void die(int code) NORETURN;", []string{"NORETURN"}},
 		{"a macro loop after a condition is not an annotation", "c", "void f(void) {\n  if (x) FOREACH(a, b) {\n  }\n  while (y) EACH(c) {\n  }\n}", nil},
 
+		{"namespace macro alone on its line", "cpp", "FMT_BEGIN_NAMESPACE\nnamespace detail {\nint f();\n}\nFMT_END_NAMESPACE\n", []string{"FMT_BEGIN_NAMESPACE"}},
+
 		// What is not a candidate.
 		{"a pointer-returning function of a library type", "c", "FILE *open_it(void) { return 0; }", nil},
 		{"a variable of a library type", "c", "DWORD x;", nil},

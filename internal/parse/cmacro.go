@@ -483,6 +483,13 @@ func (s *candScan) declMacros(i int) []macroCandidate {
 		}
 		return nil
 	}
+	// A lone macro on a line of its own in front of the next declaration
+	// (`FMT_BEGIN_NAMESPACE`, `G_BEGIN_DECLS`): it takes no arguments, nothing
+	// else is on its line, and the next token starts a later one.
+	if len(found) == 1 && !hasParen && bytes.IndexByte(s.src[s.toks[j-1].end:s.toks[j].start], '\n') >= 0 &&
+		(lastFrom == 0 || bytes.IndexByte(s.src[s.toks[lastFrom-1].end:s.toks[lastFrom].start], '\n') >= 0) {
+		return found
+	}
 	if notDeclaration[s.word(j)] {
 		return nil
 	}
