@@ -303,10 +303,15 @@ func reindexOne(ctx context.Context, walker *fs.Walker, parsers parse.Registry, 
 		Content: src,
 	}
 
-	p := parsers.ForFile(relPath)
+	// Detected from the bytes just read, by the walker's own detector, so a
+	// re-indexed file cannot arrive at a different language than the full
+	// index gave it.
+	det := walker.Detect(relPath, src)
+	facts.File.DetectedBy = string(det.Method)
+	p := parsers.ForLanguage(det.Language)
 	if p == nil {
 		facts.File.ParseStatus = string(parse.StatusSkipped)
-		facts.File.ParseError = "no grammar for this file type"
+		facts.File.ParseError = noGrammarReason(det.Recognised)
 		// Mirrors the full path: no grammar does not mean nothing to learn.
 		// Configuration files and dependency manifests carry declarations that
 		// need text rather than a syntax tree.

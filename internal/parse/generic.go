@@ -10,6 +10,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/satyendrakumarsingh/repocortex/internal/langdetect"
 	"github.com/satyendrakumarsingh/repocortex/pkg/model"
 
 	ts "github.com/odvcencio/gotreesitter"
@@ -144,7 +145,14 @@ func NewRegistry(opts ...ParserOption) Registry {
 }
 
 func (r *registry) ForFile(path string) Parser {
-	entry := grammars.DetectLanguage(path)
+	return r.ForLanguage(langdetect.FromName(path))
+}
+
+func (r *registry) ForLanguage(language string) Parser {
+	if language == "" {
+		return nil
+	}
+	entry := grammars.DetectLanguageByName(language)
 	if entry == nil {
 		return nil
 	}

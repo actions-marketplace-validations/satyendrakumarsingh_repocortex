@@ -152,7 +152,8 @@ func (r *Registry) ReplaceFile(
 	}
 
 	res, err := st.file.ExecContext(ctx, runID, file.Path, file.Language, file.ContentHash,
-		file.SizeBytes, file.ModTimeUnix, defaultParseStatus(file.ParseStatus), nullString(file.ParseError))
+		file.SizeBytes, file.ModTimeUnix, defaultParseStatus(file.ParseStatus), nullString(file.ParseError),
+		file.DetectedBy)
 	if err != nil {
 		return fmt.Errorf("registry: ReplaceFile %q: insert file: %w", file.Path, err)
 	}

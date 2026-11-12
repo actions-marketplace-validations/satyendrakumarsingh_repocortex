@@ -37,8 +37,7 @@ import (
 	"sync"
 
 	"github.com/satyendrakumarsingh/repocortex/internal/config"
-
-	"github.com/odvcencio/gotreesitter/grammars"
+	"github.com/satyendrakumarsingh/repocortex/internal/langdetect"
 )
 
 // DefaultMaxFileSize is the largest file that will be hashed and offered to the
@@ -71,6 +70,16 @@ type Discovered struct {
 	// run of the same commit.
 	Path     string `json:"path"`
 	Language string `json:"language"` // "" when unrecognised
+
+	// DetectedBy is how Language was decided: one of the langdetect.Method
+	// values. "extension_ambiguous" marks a language that is a guess from an
+	// extension several languages share, which is the first thing to check
+	// when such a file then parses into nothing.
+	DetectedBy string `json:"detected_by,omitempty"`
+
+	// Recognised names what the content is when no grammar exists for it
+	// ("coq", "mumps"). Language is then empty and the file is not parsed.
+	Recognised string `json:"recognised,omitempty"`
 
 	// ContentHash is the hex sha256 of the file's bytes. Empty for skipped
 	// files: we deliberately do not read a file we have decided not to index,
@@ -124,6 +133,12 @@ type Walker struct {
 
 	include []pattern
 	exclude []pattern
+
+	// detector decides each file's language. It carries the repository's
+	// index.language_overrides, which is why it belongs to the walker rather
+	// than being a package-level function: the same file can be a different
+	// language in a different repository.
+	detector *langdetect.Detector
 
 	maxFileSize int64
 	workers     int
@@ -192,10 +207,67 @@ func NewWalker(root string, cfg config.Config, opts ...Option) (*Walker, error) 
 		w.exclude = append(w.exclude, p)
 	}
 
+	overrides := make([]langdetect.Override, 0, len(cfg.LanguageOverrides))
+	for _, o := range cfg.LanguageOverrides {
+		ov := langdetect.Override{Pattern: o.Pattern, Language: o.Language}
+		// Compiled by the matcher index.include and index.exclude use, so one
+		// glob dialect covers the whole file. A negated pattern has no meaning
+		// in a map from files to languages and is left unusable, which New
+		// reports.
+		if p, ok := compilePattern(o.Pattern, ""); ok && !p.negate {
+			ov.Match = func(rel string) bool { return p.match(rel, false) }
+		}
+		overrides = append(overrides, ov)
+	}
+	det, err := langdetect.New(overrides)
+	if err != nil {
+		return nil, fmt.Errorf("walker: %w", err)
+	}
+	w.detector = det
+
 	for _, opt := range opts {
 		opt(w)
 	}
 	return w, nil
+}
+
+// Detect decides the language of one file from its path and content, exactly
+// as Walk does for the same bytes.
+//
+// For callers that already hold a file's content: incremental re-indexing
+// reads a changed file once and must not arrive at a different language than
+// the full walk did. src may be the whole file; only its head is examined. The
+// directory is listed only for a header whose content settles nothing.
+func (w *Walker) Detect(rel string, src []byte) langdetect.Result {
+	head := src
+	if len(head) > langdetect.HeadBytes {
+		head = head[:langdetect.HeadBytes]
+	}
+	if head == nil {
+		head = []byte{}
+	}
+	return w.detector.Detect(rel, head, func() langdetect.Neighbours {
+		var n langdetect.Neighbours
+		dir := filepath.Join(w.root, filepath.FromSlash(path.Dir(rel)))
+		entries, err := os.ReadDir(dir)
+		if err != nil {
+			return n
+		}
+		observeNeighbours(&n, entries)
+		return n
+	})
+}
+
+// observeNeighbours summarises the files of one directory. Every entry that
+// is not a directory counts, ignored or not: what a header sits beside is a
+// fact about the directory, and the full walk and a single-file re-index must
+// see the same one.
+func observeNeighbours(n *langdetect.Neighbours, entries []iofs.DirEntry) {
+	for _, e := range entries {
+		if !e.IsDir() {
+			n.Observe(e.Name())
+		}
+	}
 }
 
 // Root reports the absolute, symlink-resolved repository root.
@@ -301,6 +373,21 @@ func (st *walkState) walkDir(dir, rel string, rules ruleSet) {
 
 	rules = loadDirRules(rules, dir, rel)
 
+	// Computed at most once per directory, and only if a header in it needs
+	// placing by what it sits beside. walkDir handles a directory's entries on
+	// one goroutine, so the memo needs no lock.
+	var (
+		neighbours     langdetect.Neighbours
+		haveNeighbours bool
+	)
+	siblings := func() langdetect.Neighbours {
+		if !haveNeighbours {
+			observeNeighbours(&neighbours, entries)
+			haveNeighbours = true
+		}
+		return neighbours
+	}
+
 	for _, entry := range entries {
 		if st.cancelled() {
 			st.fail(st.ctx.Err())
@@ -347,7 +434,7 @@ func (st *walkState) walkDir(dir, rel string, rules ruleSet) {
 		case entry.Type()&iofs.ModeSymlink != 0:
 			st.emit(st.symlink(childPath, childRel))
 		case entry.Type().IsRegular():
-			st.emit(st.w.inspect(childPath, childRel, entry))
+			st.emit(st.w.inspect(childPath, childRel, entry, siblings))
 		default:
 			// Sockets, devices and FIFOs. Opening a FIFO blocks until a writer
 			// appears, which would hang the indexer indefinitely on a
@@ -391,7 +478,8 @@ func (st *walkState) descend(dir, rel string, rules ruleSet) {
 // and git does not follow them either.
 func (st *walkState) symlink(full, rel string) Discovered {
 	d := Discovered{Path: rel, Skipped: true, SkipReason: SkipSymlink}
-	d.Language = languageOf(rel)
+	// A link is never opened, so its language is whatever the name says.
+	d.setDetection(st.w.detector.Detect(rel, nil, nil))
 
 	target, err := filepath.EvalSymlinks(full)
 	if err != nil {
@@ -416,12 +504,32 @@ func withinRoot(root, target string) bool {
 	return strings.HasPrefix(target, root+string(filepath.Separator))
 }
 
-// inspect stats, sizes, sniffs and hashes a regular file.
-func (w *Walker) inspect(full, rel string, entry iofs.DirEntry) Discovered {
-	d := Discovered{Path: rel, Language: languageOf(rel)}
+// setDetection records what language detection concluded.
+func (d *Discovered) setDetection(r langdetect.Result) {
+	d.Language = r.Language
+	d.DetectedBy = string(r.Method)
+	d.Recognised = r.Recognised
+}
+
+// headPool recycles the buffers that carry a file's first bytes from the
+// hashing loop to language detection. Only files whose extension is ambiguous
+// or unknown take one, and nothing keeps it past inspect.
+var headPool = sync.Pool{New: func() any {
+	b := make([]byte, 0, langdetect.HeadBytes)
+	return &b
+}}
+
+// inspect stats, sizes, sniffs, hashes and identifies a regular file.
+//
+// The language is decided from bytes the hashing loop has already read:
+// detection never opens a file a second time. A file that is skipped before or
+// during the read is identified by name alone.
+func (w *Walker) inspect(full, rel string, entry iofs.DirEntry, siblings func() langdetect.Neighbours) Discovered {
+	d := Discovered{Path: rel}
 
 	info, err := entry.Info()
 	if err != nil {
+		d.setDetection(w.detector.Detect(rel, nil, siblings))
 		d.Skipped, d.SkipReason = true, SkipUnreadable
 		return d
 	}
@@ -429,11 +537,19 @@ func (w *Walker) inspect(full, rel string, entry iofs.DirEntry) Discovered {
 	d.ModTimeUnix = info.ModTime().Unix()
 
 	if d.SizeBytes > w.maxFileSize {
+		d.setDetection(w.detector.Detect(rel, nil, siblings))
 		d.Skipped, d.SkipReason = true, SkipTooLarge
 		return d
 	}
 
-	sum, binary, err := hashFile(full, w.maxFileSize)
+	var head *[]byte
+	if w.detector.NeedsContent(rel) {
+		head = headPool.Get().(*[]byte) //nolint:errcheck,forcetypeassert // the pool only ever holds *[]byte
+		*head = (*head)[:0]
+		defer headPool.Put(head)
+	}
+
+	sum, binary, err := hashFileHead(full, w.maxFileSize, head)
 	switch {
 	case errors.Is(err, errTooLarge):
 		d.Skipped, d.SkipReason = true, SkipTooLarge
@@ -443,6 +559,12 @@ func (w *Walker) inspect(full, rel string, entry iofs.DirEntry) Discovered {
 		d.Skipped, d.SkipReason = true, SkipBinary
 	default:
 		d.ContentHash = sum
+	}
+
+	if head != nil && !d.Skipped {
+		d.setDetection(w.detector.Detect(rel, *head, siblings))
+	} else {
+		d.setDetection(w.detector.Detect(rel, nil, siblings))
 	}
 	return d
 }
@@ -461,6 +583,16 @@ var errTooLarge = errors.New("file exceeds size limit")
 // end. There is nothing to gain from the digest of a file we will not index,
 // and repositories that commit hundreds of megabytes of binaries are common.
 func hashFile(name string, limit int64) (sum string, binary bool, err error) {
+	return hashFileHead(name, limit, nil)
+}
+
+// hashFileHead is hashFile that also copies the first langdetect.HeadBytes of
+// the file into head, when head is not nil.
+//
+// Detection needs a few kilobytes of a file this loop is reading anyway.
+// Handing them over from here is what keeps "look at the content" from
+// meaning "read every ambiguous file twice".
+func hashFileHead(name string, limit int64, head *[]byte) (sum string, binary bool, err error) {
 	f, err := os.Open(name) //nolint:gosec // name comes from a walked directory entry
 	if err != nil {
 		return "", false, err
@@ -485,6 +617,13 @@ func hashFile(name string, limit int64) (sum string, binary bool, err error) {
 				}
 				sniffed += int64(len(window))
 			}
+			if head != nil && len(*head) < langdetect.HeadBytes {
+				take := chunk
+				if room := langdetect.HeadBytes - len(*head); len(take) > room {
+					take = take[:room]
+				}
+				*head = append(*head, take...)
+			}
 			total += int64(n)
 			if total > limit {
 				return "", false, errTooLarge
@@ -499,17 +638,6 @@ func hashFile(name string, limit int64) (sum string, binary bool, err error) {
 		}
 	}
 	return hex.EncodeToString(h.Sum(nil)), false, nil
-}
-
-// languageOf delegates to the grammar registry rather than keeping a local
-// extension table. It already resolves exact filenames (Dockerfile, Makefile)
-// ahead of suffixes, and a second table here would drift from the one the
-// parsers actually use.
-func languageOf(rel string) string {
-	if e := grammars.DetectLanguage(path.Base(rel)); e != nil {
-		return e.Name
-	}
-	return ""
 }
 
 // configExcluded reports whether a config Exclude glob covers the entry. For

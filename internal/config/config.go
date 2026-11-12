@@ -122,6 +122,19 @@ type RepoConfig struct {
 	Index struct {
 		Include []string `yaml:"include"`
 		Exclude []string `yaml:"exclude"`
+
+		// LanguageOverrides maps a glob to the language its files are written
+		// in, for the cases content heuristics cannot settle.
+		//
+		// SAFE IN UNTRUSTED CONFIG, for the reason architecture rules are: it
+		// is declarative data. A glob is matched by the hand-written matcher
+		// index.include uses, never compiled as a regular expression, and the
+		// value can only name a grammar that is already compiled in. The worst
+		// a hostile entry can do is route files to the wrong grammar, which
+		// costs symbols from those files and is bounded by the per-file parse
+		// timeout: the same reach a repository already has by committing a
+		// file with a misleading extension.
+		LanguageOverrides LanguageOverrides `yaml:"language_overrides"`
 	} `yaml:"index"`
 
 	Languages []string `yaml:"languages"`
@@ -174,6 +187,50 @@ type RepoConfig struct {
 	Architecture arch.Model `yaml:"architecture"`
 }
 
+// LanguageOverride routes the files a glob matches to one language.
+type LanguageOverride struct {
+	Pattern  string
+	Language string
+}
+
+// LanguageOverrides is index.language_overrides: a YAML mapping from glob to
+// language that keeps the order it was written in.
+//
+// Order matters because the last matching entry wins, as in .gitattributes: a
+// broad rule is written first and narrowed by the lines after it. A Go map
+// would lose that order, and with it the meaning of two overlapping globs, so
+// the mapping node is decoded by hand.
+type LanguageOverrides []LanguageOverride
+
+// MaxLanguageOverrides bounds the list. Every entry is matched against every
+// file in the repository, and this file is untrusted.
+const MaxLanguageOverrides = 256
+
+// UnmarshalYAML decodes the mapping in document order.
+func (o *LanguageOverrides) UnmarshalYAML(node *yaml.Node) error {
+	if node.Kind != yaml.MappingNode {
+		return fmt.Errorf("index.language_overrides: want a mapping from glob to language, such as %q",
+			`"*.h": cpp`)
+	}
+	if n := len(node.Content) / 2; n > MaxLanguageOverrides {
+		return fmt.Errorf("index.language_overrides has %d entries, over the %d limit", n, MaxLanguageOverrides)
+	}
+	out := make(LanguageOverrides, 0, len(node.Content)/2)
+	for i := 0; i+1 < len(node.Content); i += 2 {
+		key, val := node.Content[i], node.Content[i+1]
+		if key.Kind != yaml.ScalarNode || val.Kind != yaml.ScalarNode {
+			return fmt.Errorf("index.language_overrides line %d: want %q", key.Line, `"<glob>": <language>`)
+		}
+		pattern, language := strings.TrimSpace(key.Value), strings.TrimSpace(val.Value)
+		if pattern == "" || language == "" {
+			return fmt.Errorf("index.language_overrides line %d: the glob and the language must both be set", key.Line)
+		}
+		out = append(out, LanguageOverride{Pattern: pattern, Language: language})
+	}
+	*o = out
+	return nil
+}
+
 // UserConfig is the user-scoped configuration.
 //
 // The path is OS-dependent and comes from UserConfigPath -- NOT always
@@ -220,6 +277,11 @@ type Config struct {
 	Exclude      []string
 	Languages    []string
 	Capabilities []string
+
+	// LanguageOverrides is index.language_overrides, in file order. Language
+	// names are checked where the grammars are known: fs.NewWalker refuses a
+	// name no grammar exists for.
+	LanguageOverrides []LanguageOverride
 
 	MaxFiles      int
 	MaxSymbols    int
@@ -443,6 +505,9 @@ func applyRepo(cfg *Config, rc RepoConfig) {
 	}
 	if len(rc.Languages) > 0 {
 		cfg.Languages = rc.Languages
+	}
+	if len(rc.Index.LanguageOverrides) > 0 {
+		cfg.LanguageOverrides = rc.Index.LanguageOverrides
 	}
 	if len(rc.Capabilities) > 0 {
 		cfg.Capabilities = rc.Capabilities

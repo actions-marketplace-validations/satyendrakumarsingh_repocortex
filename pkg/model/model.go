@@ -159,6 +159,13 @@ type File struct {
 	ModTimeUnix int64  `json:"mod_time_unix"`
 	ParseStatus string `json:"parse_status"` // ok | partial | failed | skipped
 	ParseError  string `json:"parse_error,omitempty"`
+
+	// DetectedBy records how Language was decided: override | filename |
+	// extension | shebang | content | neighbours | extension_ambiguous, or
+	// empty when nothing was detected. "extension_ambiguous" means Language is
+	// the default for an extension several languages share and no content rule
+	// confirmed it, so it is a guess rather than a finding.
+	DetectedBy string `json:"detected_by,omitempty"`
 }
 
 // Arity is a parameter or argument count that MAY BE UNKNOWN.

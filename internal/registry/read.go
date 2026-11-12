@@ -93,7 +93,7 @@ func scanRun(row *sql.Row) (*model.IndexRun, error) {
 func (r *Registry) Files(ctx context.Context, runID int64) ([]model.File, error) {
 	rows, err := r.db.QueryContext(ctx, `
 		SELECT id, path, language, content_hash, size_bytes, mod_time_unix,
-		       parse_status, COALESCE(parse_error,'')
+		       parse_status, COALESCE(parse_error,''), detected_by
 		  FROM files WHERE index_run_id = ? ORDER BY path`, runID)
 	if err != nil {
 		return nil, fmt.Errorf("registry: list files: %w", err)
@@ -104,7 +104,7 @@ func (r *Registry) Files(ctx context.Context, runID int64) ([]model.File, error)
 	for rows.Next() {
 		var f model.File
 		if err := rows.Scan(&f.ID, &f.Path, &f.Language, &f.ContentHash, &f.SizeBytes,
-			&f.ModTimeUnix, &f.ParseStatus, &f.ParseError); err != nil {
+			&f.ModTimeUnix, &f.ParseStatus, &f.ParseError, &f.DetectedBy); err != nil {
 			return nil, fmt.Errorf("registry: list files: scan: %w", err)
 		}
 		out = append(out, f)

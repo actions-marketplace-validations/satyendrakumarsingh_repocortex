@@ -463,6 +463,18 @@ func (r *Runner) drainPools() {
 	parse.ReleasePooledMemory()
 }
 
+// noGrammarReason is the parse_error of a file no grammar applies to.
+//
+// When detection recognised the content as a language there is no grammar for,
+// the reason names it: "why was this .v file skipped" has the answer "it is
+// Coq", which is a different answer from "nobody knows what it is".
+func noGrammarReason(recognised string) string {
+	if recognised == "" {
+		return "no grammar for this file type"
+	}
+	return "no grammar for " + recognised
+}
+
 type outcome int
 
 const (
@@ -480,6 +492,7 @@ func (r *Runner) processFile(ctx context.Context, d fs.Discovered) (FileFacts, o
 			SizeBytes:   d.SizeBytes,
 			ModTimeUnix: d.ModTimeUnix,
 			ParseStatus: string(parse.StatusOK),
+			DetectedBy:  d.DetectedBy,
 		},
 	}
 
@@ -503,10 +516,13 @@ func (r *Runner) processFile(ctx context.Context, d fs.Discovered) (FileFacts, o
 		return facts, outcomeSkipped
 	}
 
-	p := r.parsers.ForFile(d.Path)
+	// The walker has already decided the language, from the file's content
+	// where the extension alone could not say. Asking the registry by path
+	// here would throw that away and read every `.m` as MATLAB again.
+	p := r.parsers.ForLanguage(d.Language)
 	if p == nil {
 		facts.File.ParseStatus = string(parse.StatusSkipped)
-		facts.File.ParseError = "no grammar for this file type"
+		facts.File.ParseError = noGrammarReason(d.Recognised)
 		// No grammar does not mean nothing to learn. Configuration files and
 		// dependency manifests carry declarations that need text rather than a
 		// syntax tree, and they are precisely the files no grammar claims —
