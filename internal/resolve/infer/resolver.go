@@ -122,6 +122,13 @@ type Stats struct {
 	CapExceeded int64
 	CapDropped  int64
 
+	// CapGuided is the part of CapExceeded that the source itself rescued: the
+	// name is over the cap, the first pass refused it, and a second look at the
+	// definitions in the files the source points to (the file, its directory,
+	// its imports, the receiver's type) bound it. CapExceeded minus CapDropped
+	// is what narrowByReceiver and this saved together. See guided.go.
+	CapGuided int64
+
 	// CrossLanguageDropped counts candidates refused because the two languages
 	// share no module system. Reported so the exclusion is visible rather than
 	// silent — the same reason CapDropped exists.
@@ -169,6 +176,16 @@ type Resolver struct {
 	// ResolveDeferred, so a chunk does not ask again what an earlier one
 	// learned. Nil outside a drain. See ancestryClosure.
 	supertypes map[string][]string
+
+	// guide is the candidate source's guided port, nil when it has none; gfiles
+	// is the run's file index built from it on first use. See guided.go.
+	guide  GuidedCandidates
+	gfiles *guidedFiles
+
+	// retrying is true while a reference is being looked at again over the
+	// candidates its source points to. Rules that exist only for that second
+	// look (pickNamedImport) and the refusal of uniqueness claims read it.
+	retrying bool
 }
 
 // New builds a Resolver over a preloaded symbol index.
@@ -185,7 +202,9 @@ func NewStreaming(c Candidates, opts Options) *Resolver {
 	if !opts.MinConfidence.Valid() {
 		opts.MinConfidence = model.ConfidenceLow
 	}
-	return &Resolver{candidates: c, ancestry: opts.Ancestry, layout: opts.Layout, opts: opts, specs: NewSpecs()}
+	r := &Resolver{candidates: c, ancestry: opts.Ancestry, layout: opts.Layout, opts: opts, specs: NewSpecs()}
+	r.guide, _ = c.(GuidedCandidates)
+	return r
 }
 
 // mapCandidates adapts a preloaded index to the Candidates port.
@@ -197,6 +216,43 @@ func (m mapCandidates) Candidates(_ context.Context, names []string) (map[string
 		if c := m[n]; len(c) > 0 {
 			out[n] = c
 		}
+	}
+	return out, nil
+}
+
+// PerNameLimit is zero: a preloaded index is never cut.
+func (m mapCandidates) PerNameLimit() int { return 0 }
+
+// Files lists the files the preloaded index mentions, for the guided lookups.
+func (m mapCandidates) Files(_ context.Context) ([]registry.FileRec, error) {
+	seen := map[int64]registry.FileRec{}
+	for _, cs := range m {
+		for _, c := range cs {
+			seen[c.FileID] = registry.FileRec{ID: c.FileID, Path: c.FilePath, Language: c.Language}
+		}
+	}
+	out := make([]registry.FileRec, 0, len(seen))
+	for _, f := range seen {
+		out = append(out, f)
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].ID < out[j].ID })
+	return out, nil
+}
+
+// InFiles filters the preloaded index to the files asked for.
+func (m mapCandidates) InFiles(_ context.Context, names []string, fileIDs []int64) (map[string][]registry.SymbolIndexEntry, error) {
+	want := make(map[int64]struct{}, len(fileIDs))
+	for _, id := range fileIDs {
+		want[id] = struct{}{}
+	}
+	out := map[string][]registry.SymbolIndexEntry{}
+	for _, n := range names {
+		for _, c := range m[n] {
+			if _, ok := want[c.FileID]; ok {
+				out[n] = append(out[n], c)
+			}
+		}
+		sort.Slice(out[n], func(i, j int) bool { return out[n][i].ID < out[n][j].ID })
 	}
 	return out, nil
 }
@@ -376,6 +432,14 @@ func (r *Resolver) ResolveFile(
 	// bind records a decided reference: the outcome always, and an edge when
 	// the call site sits inside a symbol that can be named as its source.
 	bind := func(ref registry.Reference, best candidate) {
+		if r.retrying && claimsRepositoryUniqueness(best.reason) {
+			// "The only one in the repository" is not something a set chosen by
+			// the source can show. Refused: the reference stays ambiguous.
+			stats.Ambiguous++
+			outcomes = append(outcomes, registry.RefOutcome{
+				RefID: ref.ID, Resolution: registry.ResolutionAmbiguous})
+			return
+		}
 		stats.Resolved++
 		if stats.ByConfidence == nil {
 			stats.ByConfidence = map[model.Confidence]int64{}
@@ -441,8 +505,10 @@ func (r *Resolver) ResolveFile(
 			RefID: ref.ID, Resolution: registry.ResolutionUnresolved, External: external})
 	}
 
-	for _, ref := range fr.Refs {
-		stats.References++
+	// resolveRef binds one reference and records the outcome. It is a closure so
+	// the guided second look (guided.go) can run the very same rules again over a
+	// different candidate set.
+	resolveRef := func(ref registry.Reference) {
 
 		// The type an impl block is written for rides in the receiver, which
 		// no tier below should read for a relation that has none.
@@ -515,10 +581,10 @@ func (r *Resolver) ResolveFile(
 			switch v {
 			case verdictExternal:
 				unresolved(ref, true)
-				continue
+				return
 			case verdictUnresolved:
 				unresolved(ref, false)
-				continue
+				return
 			}
 			cands = kept
 		}
@@ -528,7 +594,7 @@ func (r *Resolver) ResolveFile(
 		// bound to nothing.
 		if strings.HasSuffix(ref.Kind, indirectCallSuffix) {
 			unresolved(ref, false)
-			continue
+			return
 		}
 
 		// A call whose shape the parser recorded is bound by that shape, in
@@ -550,7 +616,7 @@ func (r *Resolver) ResolveFile(
 			default:
 				ambiguous(ref)
 			}
-			continue
+			return
 		}
 
 		// A receiver that is the local name of an import of something outside
@@ -559,7 +625,7 @@ func (r *Resolver) ResolveFile(
 		// `dumps`.
 		if spec.QualifiedMembers && edgeKind == model.EdgeCalls && r.qualifiedByOutsideModule(imports, ref) {
 			unresolved(ref, true)
-			continue
+			return
 		}
 
 		// The second exclusion, of the same kind: candidates the language's
@@ -576,7 +642,7 @@ func (r *Resolver) ResolveFile(
 			// it as unresolved keeps the gap visible instead of pretending the
 			// call site does not exist.
 			unresolved(ref, false)
-			continue
+			return
 		}
 
 		// A receiver whose class the source STATES is asked about that class
@@ -590,7 +656,7 @@ func (r *Resolver) ResolveFile(
 				} else {
 					ambiguous(ref)
 				}
-				continue
+				return
 			}
 		}
 		if static {
@@ -602,14 +668,14 @@ func (r *Resolver) ResolveFile(
 			fallback, has := r.fallbackByName(spec, fr, imports, ref, sr, cands, stats)
 			if r.deferStatic(spec, fr, ref, sr, fallback, has, stats) {
 				ambiguous(ref)
-				continue
+				return
 			}
 			if has {
 				bind(ref, fallback)
 			} else {
 				ambiguous(ref)
 			}
-			continue
+			return
 		}
 
 		best, ok := r.pickCapped(spec, fr, imports, ref, cands, stats)
@@ -631,9 +697,79 @@ func (r *Resolver) ResolveFile(
 			// change an answer pass one already gave.
 			r.deferInherited(spec, fr, ref, stats)
 			ambiguous(ref)
-			continue
+			return
 		}
 		bind(ref, best)
+	}
+
+	var guide *fileGuide
+	for _, ref := range fr.Refs {
+		stats.References++
+		snap, nOut, nDeferred := *stats, len(outcomes), len(r.deferred)
+		resolveRef(ref)
+
+		// A reference the rules refused, whose name is over the cap, is looked at
+		// again with the candidates the source points to. See guided.go. Only an
+		// AMBIGUOUS first pass is retried: nothing that bound, and nothing at or
+		// under the cap, takes any other path than it always did.
+		if r.guide == nil || len(symbols[ref.Name]) <= spec.MaxCandidates ||
+			len(outcomes) != nOut+1 || outcomes[nOut].Resolution != registry.ResolutionAmbiguous {
+			continue
+		}
+		if guide == nil {
+			g, err := r.newFileGuide(ctx, spec, fr, imports, symbols)
+			if err != nil {
+				return nil, nil, err
+			}
+			guide = g
+		}
+		ov, err := guide.overlay(ctx, ref, symbols)
+		if err != nil {
+			return nil, nil, err
+		}
+		if len(ov[ref.Name]) == 0 {
+			continue
+		}
+
+		// Set the first pass aside: its outcome, anything it parked for the
+		// inherited-dispatch pass, and its counters. The second look records
+		// the reference once, and if it does not bind it the first pass's
+		// record is put back exactly, so a reference guidance could not help is
+		// recorded, and parked, as it always was.
+		firstOutcome := outcomes[nOut]
+		firstParked := append([]deferredRef(nil), r.deferred[nDeferred:]...)
+		first := *stats
+		outcomes = outcomes[:nOut]
+		r.deferred = r.deferred[:nDeferred]
+		byConf := stats.ByConfidence
+		*stats = snap
+		stats.ByConfidence = byConf
+
+		saved := make(map[string][]registry.SymbolIndexEntry, len(ov))
+		for name, cs := range ov {
+			saved[name] = symbols[name]
+			symbols[name] = cs
+		}
+		r.retrying = true
+		resolveRef(ref)
+		r.retrying = false
+		for name, cs := range saved {
+			symbols[name] = cs
+		}
+
+		if len(outcomes) > nOut && outcomes[nOut].Resolution == registry.ResolutionResolved {
+			// CapExceeded counts the raw candidate set, whichever way the look
+			// went; CapGuided is the part guidance saved.
+			stats.CapExceeded = snap.CapExceeded + 1
+			stats.CapGuided++
+			stats.CapDropped = snap.CapDropped
+			continue
+		}
+		outcomes = append(outcomes[:nOut], firstOutcome)
+		r.deferred = append(r.deferred[:nDeferred], firstParked...)
+		byConf = stats.ByConfidence
+		*stats = first
+		stats.ByConfidence = byConf
 	}
 
 	return edges, outcomes, nil
@@ -913,6 +1049,11 @@ func (r *Resolver) pick(
 	//
 	// Inferred evidence must not outrank a declaration, except where the
 	// language makes proximity a declaration in itself.
+	if r.retrying {
+		if c, ok := r.pickNamedImport(fr, imports, ref, cands); ok {
+			return c, true
+		}
+	}
 	if spec.PackageIsDirectory {
 		if c, ok := r.pickSameDir(spec, fr, cands); ok {
 			return c, true

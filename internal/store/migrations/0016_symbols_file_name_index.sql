@@ -1,0 +1,14 @@
+-- Guided candidate lookup: "the definitions of NAME in these FILES".
+--
+-- The resolver reads at most a bounded number of definitions for a name, which
+-- is the right bound when nothing in the source says where the definition is.
+-- When something does (an import that names the module, the same file, the
+-- file that defines the receiver's type) the question is no longer "which of
+-- the 2,722 definitions of `get`" but "does THIS file define `get`", and that is
+-- a point lookup that the single-column indexes on symbols answer by scanning
+-- every symbol of the file or every symbol of the name.
+--
+-- (file_id, name) makes it a probe per file. The index is a plain B-tree and
+-- IF NOT EXISTS keeps the migration safe to re-run against a database that
+-- already has it.
+CREATE INDEX IF NOT EXISTS idx_symbols_file_name ON symbols (file_id, name);

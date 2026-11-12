@@ -81,6 +81,10 @@ type CandidateCache struct {
 	lru     *list.List // front = most recently used
 	rows    int
 
+	// files is the run's file list, read once on first use by the guided
+	// lookups. See guided.go.
+	files []FileRec
+
 	hits, misses, evictions int
 }
 
