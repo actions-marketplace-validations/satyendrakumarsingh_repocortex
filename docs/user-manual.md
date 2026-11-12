@@ -312,7 +312,8 @@ Resolved payment-platform (revision 1)
   References:  55
   Resolved:    16 (29.1%)
   Ambiguous:   10
-  Unresolved:  29  (calls outside this repository)
+  Unresolved:  29  (no definition of that name is indexed: code outside this
+               repository, or code in it that the index did not extract)
   Edges:       16
     high:    16
   Duration:    29ms

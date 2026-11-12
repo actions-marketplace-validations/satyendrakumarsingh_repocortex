@@ -504,14 +504,19 @@ facts only, which is exactly what you want after `repocortex scip import`.
   References:  55
   Resolved:    16 (29.1%)
   Ambiguous:   10
-  Unresolved:  29  (calls outside this repository)
+  Unresolved:  29  (no definition of that name is indexed: code outside this
+               repository, or code in it that the index did not extract)
 ```
 
 **Cause.** Usually correct, not broken.
 
-- **Unresolved** means the name matched nothing indexed — almost always a
-  standard-library or third-party call. On a Spring/JDBC codebase this is a large
-  share of every file and there is nothing to fix.
+- **Unresolved** means no definition with that name is in the index. Usually
+  that is a standard-library or third-party call; on a Spring/JDBC codebase it
+  is a large share of every file and there is nothing to fix. It is also what a
+  call to code in this repository looks like when the index holds no definition
+  for it: a language whose definitions are not extracted, a macro, a file that
+  failed to parse. `repocortex languages` and the parse failures in
+  `repocortex status` say which applies.
 - **Ambiguous** means the resolver refused to guess. A name matching more than 8
   symbols produces no edge at all, by design.
 

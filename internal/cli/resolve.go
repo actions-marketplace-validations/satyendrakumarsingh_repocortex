@@ -108,6 +108,15 @@ SCIP indexes.`,
 				scipOut = autoImportSCIP(ctx, g, reg, run.ID, cfg.RepoRoot)
 			}
 
+			// Counted from the table, after every pass above has written to
+			// it, so the edge figures describe the graph a query will now
+			// read. See registry.ReferenceEdgeTiers for why they are not the
+			// per-tier reference counts.
+			edgeTiers, edgeTotal, err := reg.ReferenceEdgeTiers(ctx, run.ID)
+			if err != nil {
+				return err
+			}
+
 			if g.JSON {
 				return emitJSON(cmd.OutOrStdout(), map[string]any{
 					"project": cfg.ProjectName, "index_run": run.ID,
@@ -123,9 +132,17 @@ SCIP indexes.`,
 					// why). ResolutionStats.Rate is deliberately absent: two
 					// rates in one payload is how a consumer ends up quoting
 					// the one this project does not stand behind.
+					//
+					// Two different things were published under "edges" and
+					// "by_confidence": the edges this pass wrote, and the
+					// REFERENCES this pass bound per tier. Both keys keep their
+					// meaning, and the graph's own figures are added beside
+					// them under names that say what they count.
 					"edges":    stats.Edges,
 					"bindable": rs.Bindable(), "binding_rate": rs.BindingRate(),
-					"by_confidence": stats.ByConfidence,
+					"by_confidence":       stats.ByConfidence,
+					"edges_total":         edgeTotal,
+					"edges_by_confidence": edgeTiers,
 					"table_accesses": map[string]any{
 						"total": access.Total, "bound": access.Bound,
 						"unbound": access.Unbound, "edges": access.Edges,
@@ -154,6 +171,28 @@ SCIP indexes.`,
 			// ResolutionStats.Bindable places on that denominator.
 			fmt.Fprintf(out, "  Resolved:    %d (%.1f%% of the %d that name something this index defines)\n",
 				rs.Resolved, rs.BindingRate()*100, rs.Bindable())
+			// The tiers of the REFERENCES this pass bound. They were printed
+			// under "Edges", where they summed to the resolved references and
+			// not to the edge count beside them: 2,564 / 367 / 1 under
+			// "Edges: 2342" on sinatra. A reference's tier is known only to the
+			// pass that binds it, so a later pass with nothing new to bind
+			// prints none.
+			var boundNow int64
+			for _, n := range stats.ByConfidence {
+				boundNow += n
+			}
+			if boundNow > 0 {
+				label := "by confidence:"
+				if boundNow != rs.Resolved {
+					label = fmt.Sprintf("%d bound in this pass, by confidence:", boundNow)
+				}
+				fmt.Fprintf(out, "    %s\n", label)
+				for _, c := range []model.Confidence{model.ConfidenceHigh, model.ConfidenceMedium, model.ConfidenceLow} {
+					if n := stats.ByConfidence[c]; n > 0 {
+						fmt.Fprintf(out, "      %-8s %d\n", string(c)+":", n)
+					}
+				}
+			}
 			fmt.Fprintf(out, "  Ambiguous:   %d\n", rs.Ambiguous)
 			// A8 — name the part of `Ambiguous` that is a cap drop. Without
 			// this a name with 200 definitions and a name with two are the
@@ -162,10 +201,30 @@ SCIP indexes.`,
 				fmt.Fprintf(out, "    %d had more candidates than the cap allows (%d reached the cap; the receiver rescued %d)\n",
 					stats.CapDropped, stats.CapExceeded, stats.CapExceeded-stats.CapDropped)
 			}
-			fmt.Fprintf(out, "  Unresolved:  %d  (calls outside this repository)\n", rs.Unresolved)
-			fmt.Fprintf(out, "  Edges:       %d\n", stats.Edges)
-			for _, c := range []model.Confidence{model.ConfidenceHigh, model.ConfidenceMedium, model.ConfidenceLow} {
-				if n := stats.ByConfidence[c]; n > 0 {
+			// What "unresolved" is, and only that. The resolver records it when
+			// no definition with that name is in the index. That covers calls
+			// into libraries, and it equally covers calls to code in this
+			// repository that the index holds no definition for: a language
+			// whose definitions are not extracted, a macro, a file that failed
+			// to parse. On redis at least 6,806 of the references labelled
+			// "calls outside this repository" were calls to its own functions.
+			fmt.Fprintf(out, "  Unresolved:  %d  (no definition of that name is indexed: code outside this\n", rs.Unresolved)
+			fmt.Fprintf(out, "               repository, or code in it that the index did not extract)\n")
+			// Edge rows, from the table. Fewer than the resolved references
+			// because references between the same two definitions share one.
+			fmt.Fprintf(out, "  Edges:       %d", edgeTotal)
+			switch {
+			case edgeTotal > 0 && stats.Edges == edgeTotal:
+				fmt.Fprintf(out, "  (one per caller and definition; references between the same pair share one)\n")
+			case edgeTotal > 0:
+				fmt.Fprintf(out, "  (%d written by this pass)\n", stats.Edges)
+			default:
+				fmt.Fprintln(out)
+			}
+			for _, c := range []model.Confidence{
+				model.ConfidenceExact, model.ConfidenceHigh, model.ConfidenceMedium, model.ConfidenceLow,
+			} {
+				if n := edgeTiers[c]; n > 0 {
 					fmt.Fprintf(out, "    %-8s %d\n", string(c)+":", n)
 				}
 			}

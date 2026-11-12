@@ -215,16 +215,53 @@ does not fail `resolve`. JSON output carries the same under `scip`.
 $ repocortex resolve
   References:  29506
   Resolved:    12062 (40.9%)
+    by confidence:
+      high:    9714
+      medium:  133
+      low:     2215
   Ambiguous:   2063
-  Unresolved:  15381  (calls outside this repository)
-  Edges:       11720
-    high:    9714
-    medium:  133
-    low:     2215
+  Unresolved:  15381  (no definition of that name is indexed: code outside this
+               repository, or code in it that the index did not extract)
+  Edges:       11720  (one per caller and definition; references between the same pair share one)
   Data access: 476 statement(s), 458 bound to a declared table, 450 edges
   Config:      32 read(s), 2 bound to a declared key, 2 edges
   Duration:    1260ms
 ```
+
+The summary counts two different things and keeps them apart. The tiers under
+`Resolved` are **references**: how many of the bound references were bound at
+each confidence. `Edges` is **edge rows** in the graph, counted from the table,
+with their own tiers beneath (omitted from the older sample above). There are
+fewer edges than resolved references because references between the same two
+definitions share one edge. On sinatra:
+
+```
+  Resolved:    2932 (35.9% of the 8178 that name something this index defines)
+    by confidence:
+      high:    2564
+      medium:  367
+      low:     1
+  Ambiguous:   5246
+  Unresolved:  6437  (no definition of that name is indexed: code outside this
+               repository, or code in it that the index did not extract)
+  Edges:       2342  (one per caller and definition; references between the same pair share one)
+    high:    2073
+    medium:  269
+```
+
+The one low-confidence reference has no edge of its own: a stronger reference
+between the same two definitions already made it. A second `resolve` with
+nothing new to bind prints no tiers under `Resolved`, because a reference's tier
+is known only to the pass that binds it, and still prints the edges that are in
+the graph ("0 written by this pass").
+
+**Unresolved** means no definition with that name is in the index. That is
+every call into a library, and it is equally every call to code in this
+repository that the index holds no definition for: a language whose definitions
+are not extracted, a macro, a file that failed to parse. It is not a count of
+external calls. `--json` carries `by_confidence` (references bound by this pass),
+`edges` (edges written by this pass), and `edges_total` with
+`edges_by_confidence` (the graph).
 
 ### `watch`
 

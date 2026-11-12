@@ -270,7 +270,8 @@ Resolved payment-platform (revision 4)
   References:  63
   Resolved:    21 (67.7% of the 31 that name something this index defines)
   Ambiguous:   10
-  Unresolved:  32  (calls outside this repository)
+  Unresolved:  32  (no definition of that name is indexed: code outside this
+               repository, or code in it that the index did not extract)
   Edges:       21
     high:    21
   Data access: 7 statement(s), 7 bound to a declared table, 7 edges

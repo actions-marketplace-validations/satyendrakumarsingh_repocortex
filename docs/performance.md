@@ -649,7 +649,8 @@ On RepoCortex's own source, identically across all three trials:
   References:  18429
   Resolved:    7880 (42.8%)
   Ambiguous:   903
-  Unresolved:  9646  (calls outside this repository)
+  Unresolved:  9646  (no definition of that name is indexed: code outside this
+               repository, or code in it that the index did not extract)
   Edges:       7708
   Data access: 329 statement(s), 320 bound to a declared table, 320 edges
 ```
@@ -662,7 +663,8 @@ Resolved pay2 (revision 1)
   References:  55
   Resolved:    16 (29.1%)
   Ambiguous:   10
-  Unresolved:  29  (calls outside this repository)
+  Unresolved:  29  (no definition of that name is indexed: code outside this
+               repository, or code in it that the index did not extract)
   Edges:       16
     high:    16
   Data access: 7 statement(s), 7 bound to a declared table, 7 edges
