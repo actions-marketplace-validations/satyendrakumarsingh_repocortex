@@ -1,0 +1,61 @@
+{
+  "manifest_version": "0.3",
+  "name": "repocortex",
+  "display_name": "RepoCortex",
+  "version": "1.0.1",
+  "description": "Deterministic code intelligence and change safety for AI coding agents, served from a local code graph.",
+  "long_description": "RepoCortex indexes a repository into a local SQLite code graph of symbols, references, APIs, database access, tests, configuration and Git history, and serves it to an AI agent over MCP. Every relationship carries a confidence level and the source location that justifies it.\n\nThis bundle runs `repocortex serve` over stdio against the repository you choose. The repository must already have an index: the server does not build one, and exits with an error when `.repocortex/index.db` is missing. Create it once from a terminal with `repocortex init`, `repocortex index` and `repocortex resolve`.",
+  "author": {
+    "name": "Satyendra Singh",
+    "url": "https://github.com/satyendrakumarsingh"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/satyendrakumarsingh/repocortex.git"
+  },
+  "homepage": "https://github.com/satyendrakumarsingh/repocortex",
+  "documentation": "https://github.com/satyendrakumarsingh/repocortex/tree/main/docs",
+  "support": "https://github.com/satyendrakumarsingh/repocortex/issues",
+  "server": {
+    "type": "binary",
+    "entry_point": "server/repocortex",
+    "mcp_config": {
+      "command": "${__dirname}/server/repocortex",
+      "args": [
+        "--project",
+        "${user_config.repository}",
+        "serve"
+      ],
+      "env": {},
+      "platform_overrides": {
+        "win32": {
+          "command": "${__dirname}/server/repocortex.exe"
+        }
+      }
+    }
+  },
+  "tools_generated": true,
+  "keywords": [
+    "code-intelligence",
+    "code-graph",
+    "impact-analysis",
+    "static-analysis",
+    "mcp"
+  ],
+  "license": "Apache-2.0",
+  "compatibility": {
+    "platforms": [
+      "darwin",
+      "win32",
+      "linux"
+    ]
+  },
+  "user_config": {
+    "repository": {
+      "type": "directory",
+      "title": "Repository",
+      "description": "The root of the repository to serve. It must already be indexed with `repocortex init` and `repocortex index`.",
+      "required": true
+    }
+  }
+}
