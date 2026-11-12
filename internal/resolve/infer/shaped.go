@@ -527,7 +527,7 @@ func (r *Resolver) callBare(c call, stats *Stats) decision {
 			continue
 		}
 		reach = append(reach, s)
-		if s.FileID == c.fr.FileID {
+		if s.FileID == c.fr.FileID && !c.spec.isObjectMember(s) {
 			local = append(local, s)
 		}
 	}
@@ -705,7 +705,24 @@ func (r *Resolver) bareByName(c call, reach []registry.SymbolIndexEntry, stats *
 		}
 	}
 
+	// Past the import, what a bare name denotes is a name in scope. A method
+	// or accessor written in an object literal is a property of that object,
+	// not a name: `vary(this.res, field)` inside `vary (field) {}` is the
+	// `vary` package, and `new URL(...)` is not the `get URL ()` of another
+	// file. See isObjectMember.
+	scoped := reach[:0:0]
+	for _, s := range reach {
+		if !c.spec.isObjectMember(s) {
+			scoped = append(scoped, s)
+		}
+	}
+	reach = scoped
 	if len(reach) == 0 {
+		if c.spec.isBuiltinType(c.ref.Name) {
+			// `new URL(...)` with nothing in the repository by that name is
+			// the language's own.
+			return externalCall
+		}
 		return unresolvedCall
 	}
 	if c.spec.PackageIsDirectory {

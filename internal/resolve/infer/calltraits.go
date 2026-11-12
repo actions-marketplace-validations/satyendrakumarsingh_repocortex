@@ -302,6 +302,21 @@ func (t ruleTiers) neighbour() model.Confidence {
 	return t.Neighbour
 }
 
+// isObjectMember reports that a candidate is a method or accessor no type
+// owns: in ECMAScript, one written in an object literal (`module.exports = {
+// vary (field) {} }`, `get URL () {}`), which the index qualifies by the file
+// alone. In a language with no implicit `this` such a member is a property of a
+// value, and a call written with no receiver cannot reach it: the bare name is
+// a function, a constant holding one, a class, or an import. Measured on koa,
+// where 5 of 30 `high` edges bound the `vary`, `fresh`, `accepts` and `URL` of
+// a package or of the platform to one of these.
+//
+// An import is different. `const { vary } = require('./response')` does bring a
+// module's exported member into scope, and bindInModule still sees it.
+func (s LanguageSpec) isObjectMember(c registry.SymbolIndexEntry) bool {
+	return !s.Calls.ImplicitSelf && !s.Calls.DynamicSelf && c.Kind == string(model.KindMethod) && isModuleLevel(c)
+}
+
 // isBuiltinType reports whether the language itself defines a type or
 // namespace of this name. Asked only after the repository was found not to.
 func (s LanguageSpec) isBuiltinType(name string) bool {
