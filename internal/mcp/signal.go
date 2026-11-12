@@ -184,6 +184,13 @@ type coverage struct {
 	// no reference for. Zero when the check was not made or found nothing.
 	Elsewhere capability.ValueUse
 
+	// Unlinked is non-empty when the index holds subtypes of the type that are
+	// not in the list: supertype references that became no edge, and lines that
+	// read as a declaration naming it and are recorded as nothing. It holds the
+	// sentence, and UnlinkedDetail the same finding at full length.
+	Unlinked       string
+	UnlinkedDetail string
+
 	// FloorEmpty is non-empty when the number of callers the answer shows is
 	// zero only because the confidence floor kept some out, and holds the
 	// sentence. A bare zero there reads as "nothing calls it".
@@ -299,7 +306,7 @@ func (c coverage) level() ReliabilityLevel {
 		return ReliabilityLow
 	case c.Misbound != "":
 		return ReliabilityUnverified
-	case c.Binding.Known && c.Binding.Unlisted() > 0, c.Structural != "", c.Elsewhere.Any(), c.FloorEmpty != "":
+	case c.Binding.Known && c.Binding.Unlisted() > 0, c.Structural != "", c.Elsewhere.Any(), c.FloorEmpty != "", c.Unlinked != "":
 		return ReliabilityIncomplete
 	default:
 		return ReliabilityGood
@@ -382,6 +389,9 @@ func (c coverage) lead() string {
 		} else if c.Structural != "" {
 			parts = append(parts, structuralLead(c.Language))
 		}
+		if c.Unlinked != "" {
+			parts = append(parts, c.Unlinked)
+		}
 		if c.FloorEmpty != "" {
 			parts = append(parts, c.FloorEmpty)
 		}
@@ -429,6 +439,9 @@ func (c coverage) caveat(subject string) []string {
 		}
 		if c.Structural != "" {
 			out = append(out, "INCOMPLETE FOR THIS TYPE — "+c.Structural)
+		}
+		if c.Unlinked != "" {
+			out = append(out, "INCOMPLETE FOR THIS TYPE — "+c.UnlinkedDetail)
 		}
 		if c.FloorEmpty != "" {
 			out = append(out, "INCOMPLETE — "+c.FloorEmpty)

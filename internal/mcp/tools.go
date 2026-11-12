@@ -464,7 +464,7 @@ func toolDescriptions() map[string]string {
 			"For the opposite direction use find_callers.",
 
 		"find_implementations": "List a type's hierarchy in both directions: what implements or extends " +
-			"it, and what it implements or extends itself. Use it before changing an interface, an " +
+			"it, directly or through other subtypes, and what it implements or extends itself. Use it before changing an interface, an " +
 			"abstract method or a base class, when the callers of the declaration are not the whole " +
 			"story because the work happens in the types built on it. Each row carries its confidence " +
 			"tier; exact means a compiler index proved the relationship. Only DECLARED relationships " +

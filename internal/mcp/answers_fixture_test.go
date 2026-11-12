@@ -53,6 +53,9 @@ type refDef struct {
 	// target is "path:name@line" of the definition a resolved reference is
 	// bound to; empty for an unbound one.
 	target string
+	// refKind is the tag the extractor gave it: "reference.call" when empty,
+	// "reference.implementation" or "reference.extends" for a supertype.
+	refKind string
 }
 
 type edgeDef struct {
@@ -61,6 +64,19 @@ type edgeDef struct {
 	conf     model.Confidence
 	evFile   string
 	evLine   int
+}
+
+func cmpOr(v, def string) string {
+	if v == "" {
+		return def
+	}
+	return v
+}
+
+// superRef records a reference that names a supertype, as `impl T for X` or
+// `class C(T)` does, with what resolution made of it.
+func (b *indexBuilder) superRef(path, name string, line int, kind string, outcome registry.Resolution, target string) {
+	b.refs = append(b.refs, refDef{path: path, name: name, line: line, outcome: outcome, target: target, refKind: kind})
 }
 
 func symKey(path, name string, line int) string { return fmt.Sprintf("%s:%s@%d", path, name, line) }
@@ -157,7 +173,7 @@ func (b *indexBuilder) seed(ctx context.Context, reg *registry.Registry, runID i
 	}
 	for _, r := range b.refs {
 		if err := w.AddReference(ctx, fileIDs[r.path], registry.Reference{
-			Name: r.name, Kind: "reference.call", Receiver: r.qualifier, ReceiverKind: r.kind, Line: r.line,
+			Name: r.name, Kind: cmpOr(r.refKind, "reference.call"), Receiver: r.qualifier, ReceiverKind: r.kind, Line: r.line,
 		}); err != nil {
 			panic(err)
 		}

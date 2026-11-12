@@ -187,7 +187,15 @@ func (s *Server) findCallees(ctx context.Context, req *sdk.CallToolRequest, args
 // hierarchyKinds are the edges that record a type relationship.
 var hierarchyKinds = []string{string(model.EdgeImplements), string(model.EdgeExtends)}
 
-func (s *Server) findImplementations(ctx context.Context, req *sdk.CallToolRequest, args relationArgs) (*sdk.CallToolResult, *Response, error) {
+// implementationArgs is find_implementations' arguments: the relationship
+// tools' and one more.
+type implementationArgs struct {
+	relationArgs
+
+	DirectOnly bool `json:"direct_only,omitempty" jsonschema:"List only the types that extend or implement it themselves. Default false: also the types that reach it through other subtypes, direct ones first."`
+}
+
+func (s *Server) findImplementations(ctx context.Context, req *sdk.CallToolRequest, args implementationArgs) (*sdk.CallToolResult, *Response, error) {
 	if strings.TrimSpace(args.Name) == "" {
 		return failWith("invalid_argument",
 			"Pass a non-empty name, then call find_implementations again.",
@@ -227,32 +235,36 @@ func (s *Server) findImplementations(ctx context.Context, req *sdk.CallToolReque
 	// because offset and limit run over the concatenation, "rows 51-100 of
 	// 136" means the same rows on every call. The two used to be capped
 	// separately at 25 each with no way to see the 26th.
+	//
+	// The subtypes are every type that reaches the target, direct ones first.
+	// They used to be the direct ones alone, so a base class with a hundred
+	// descendants answered "4 implementing it" for the four that name it.
 	filter := registry.EdgeFilter{MinConfidence: minConf, Kinds: hierarchyKinds}
 	up, upTotal, err := s.deps.Registry.EdgePage(ctx, sel.RunID, target.ID, false, page.Limit, page.Offset, filter)
 	if err != nil {
 		return failFrom(err, "relationship lookup failed: %v", err)
 	}
 	// Asked for even when the page is already full of supertypes, with a
-	// limit of one, because the total comes back with it.
+	// limit of one, because the counts come back with it.
 	downLimit, downOffset := page.Limit-len(up), max(page.Offset-upTotal, 0)
-	fetchOnlyTotal := downLimit <= 0
-	if fetchOnlyTotal {
+	fetchOnlyCounts := downLimit <= 0
+	if fetchOnlyCounts {
 		downLimit = 1
 	}
-	down, downTotal, err := s.deps.Registry.EdgePage(ctx, sel.RunID, target.ID, true, downLimit, downOffset, filter)
+	subs, err := s.deps.Registry.SubtypeClosure(ctx, sel.RunID, target.ID, filter, args.DirectOnly, downLimit, downOffset)
 	if err != nil {
 		return failFrom(err, "relationship lookup failed: %v", err)
 	}
-	if fetchOnlyTotal {
-		down = nil
+	if fetchOnlyCounts {
+		subs.Hits = nil
 	}
-	page.Total = upTotal + downTotal
+	page.Total = upTotal + subs.Total
 
 	resp := &Response{
 		IndexRevision: sel.RunID,
 		IndexStatus:   sel.Status,
-		Summary: fmt.Sprintf("%s (%s:%d): %d implementing or extending it, %d it implements or extends.",
-			target.Name, target.FilePath, target.StartLine, downTotal, upTotal),
+		Summary: fmt.Sprintf("%s (%s:%d): %s, %d it implements or extends.",
+			target.Name, target.FilePath, target.StartLine, subtypeCounts(subs, args.DirectOnly), upTotal),
 		Page: page,
 	}
 	proven := false
@@ -267,15 +279,8 @@ func (s *Server) findImplementations(ctx context.Context, req *sdk.CallToolReque
 		})
 		proven = proven || e.Confidence == string(model.ConfidenceExact)
 	}
-	for _, e := range down {
-		why := "implements or extends " + target.Name
-		if e.Detail != "" {
-			why += " — " + e.Detail
-		}
-		resp.Items = append(resp.Items, Item{
-			Kind: "subtype", Name: e.SrcName, Path: e.EvidenceFile, Line: e.EvidenceLine,
-			Confidence: e.Confidence, Source: e.Source, Why: why,
-		})
+	for _, e := range subs.Hits {
+		resp.Items = append(resp.Items, subtypeItem(e, target.Name))
 		proven = proven || e.Confidence == string(model.ConfidenceExact)
 	}
 
@@ -285,6 +290,11 @@ func (s *Server) findImplementations(ctx context.Context, req *sdk.CallToolReque
 		// A compiler-proven row means a compiler index was imported, and that
 		// index does see structural implementations.
 		cov.Structural = structuralTyping(target.Language, target.Kind)
+	}
+	if !cov.NoHierarchy {
+		if gap, gerr := s.subtypeGap(ctx, sel.RunID, target); gerr == nil {
+			cov.Unlinked, cov.UnlinkedDetail = gap.lead(target.Name), gap.detail(target.Name)
+		}
 	}
 	s.applyCoverage(resp, cov, "type hierarchy lookup")
 
@@ -297,6 +307,134 @@ func (s *Server) findImplementations(ctx context.Context, req *sdk.CallToolReque
 		resp.Notes = append(resp.Notes, n)
 	}
 	return s.reply(ctx, req, resp)
+}
+
+// subtypeCounts is the clause of the first line that says how many types extend
+// or implement the target, split into the ones that name it and the ones that
+// reach it through another type.
+func subtypeCounts(subs registry.Subtypes, directOnly bool) string {
+	floor := ""
+	if subs.Capped {
+		floor = "at least "
+	}
+	indirect := subs.All - subs.Direct
+	switch {
+	case directOnly && indirect > 0:
+		return fmt.Sprintf("%d implementing or extending it directly (%s%d more reach it through other types; "+
+			"direct_only=false lists them)", subs.Direct, floor, indirect)
+	case directOnly:
+		return fmt.Sprintf("%d implementing or extending it directly, and no others reach it through other types",
+			subs.Direct)
+	case indirect > 0:
+		return fmt.Sprintf("%s%d implementing or extending it (%d directly, %s%d through other types; "+
+			"direct_only=true lists the direct ones alone)", floor, subs.All, subs.Direct, floor, indirect)
+	default:
+		return fmt.Sprintf("%d implementing or extending it, all directly", subs.Direct)
+	}
+}
+
+// subtypeItem renders one subtype. A direct one says it names the target; a
+// deeper one says which type it names instead, how far down it is, and that its
+// confidence is the weakest link of the path.
+func subtypeItem(e registry.SubtypeHit, target string) Item {
+	it := Item{
+		Kind: "subtype", Name: e.SrcName, Path: e.EvidenceFile, Line: e.EvidenceLine,
+		Confidence: string(e.PathConfidence), Source: e.Source,
+	}
+	if e.Depth <= 1 {
+		it.Why = "implements or extends " + target
+		if e.Detail != "" {
+			it.Why += " — " + e.Detail
+		}
+		return it
+	}
+	it.Why = fmt.Sprintf("depth %d: %s %s, which reaches %s (confidence is the weakest link on the path)",
+		e.Depth, strings.ToLower(e.Kind), e.DstName, target)
+	return it
+}
+
+// subtypeGap is what the index holds about subtypes of the target that are not
+// in the list: supertype references that did not become an edge, and lines that
+// read as a declaration naming the target and are recorded as nothing.
+type subtypeGap struct {
+	refs registry.SupertypeRefs
+	text registry.UnrecordedMentions
+}
+
+func (s *Server) subtypeGap(ctx context.Context, runID int64, t registry.SymbolCandidate) (subtypeGap, error) {
+	var g subtypeGap
+	var err error
+	if g.refs, err = s.deps.Registry.SupertypeReferences(ctx, runID, t.ID, t.Name); err != nil {
+		return g, err
+	}
+	defs, err := s.deps.Registry.FindSymbolsByName(ctx, runID, t.Name, "", maxSelectRows)
+	if err != nil {
+		return g, err
+	}
+	spans := make([]registry.DefSpan, 0, len(defs))
+	for _, h := range defs {
+		spans = append(spans, registry.DefSpan{Path: h.FilePath, From: h.StartLine, To: max(h.EndLine, h.StartLine)})
+	}
+	g.text, err = s.deps.Registry.UnrecordedDeclarations(ctx, runID, t.Name, spans)
+	return g, err
+}
+
+// parts are the two findings as clauses, each with its own count.
+func (g subtypeGap) parts(name string) []string {
+	var out []string
+	if n := g.refs.Outstanding(); n > 0 {
+		var why []string
+		if g.refs.NoSource > 0 {
+			why = append(why, fmt.Sprintf("%d on a type this index does not define", g.refs.NoSource))
+		}
+		if g.refs.Unresolved > 0 {
+			why = append(why, fmt.Sprintf("%d unresolved", g.refs.Unresolved))
+		}
+		if g.refs.Ambiguous > 0 {
+			why = append(why, fmt.Sprintf("%d ambiguous", g.refs.Ambiguous))
+		}
+		if g.refs.Pending > 0 {
+			why = append(why, fmt.Sprintf("%d not yet resolved", g.refs.Pending))
+		}
+		out = append(out, fmt.Sprintf("%d of the %d supertype reference(s) spelled %q did not become a subtype below (%s)",
+			n, g.refs.References, name, strings.Join(why, ", ")))
+	}
+	if g.text.Known && g.text.Total > 0 {
+		floor := ""
+		if !g.text.Complete {
+			floor = "at least "
+		}
+		out = append(out, fmt.Sprintf("%s%d other line(s) read as a type declaration naming it and are not recorded as a "+
+			"subtype", floor, g.text.Total))
+	}
+	return out
+}
+
+// lead is the clause for the first line. Empty when nothing is outstanding.
+func (g subtypeGap) lead(name string) string {
+	parts := g.parts(name)
+	if len(parts) == 0 {
+		return ""
+	}
+	return strings.Join(parts, "; ") + ", so subtypes exist that this list does not carry."
+}
+
+// detail is the full-length account, with the sites, for a note.
+func (g subtypeGap) detail(name string) string {
+	parts := g.parts(name)
+	if len(parts) == 0 {
+		return ""
+	}
+	out := strings.Join(parts, ". Also, ") + ". Each of them may be a type that extends or implements " + name +
+		" and is missing from the list, so the count above is a floor"
+	if len(g.text.Sample) > 0 {
+		sites := make([]string, 0, len(g.text.Sample))
+		for _, p := range g.text.Sample {
+			sites = append(sites, fmt.Sprintf("%s:%d", p.Path, p.Line))
+		}
+		out += " (declaration-like lines: " + strings.Join(sites, ", ") + ")"
+	}
+	return out + ". Search for the name before concluding which types extend it."
 }
 
 // ---------------------------------------------------------------- trace_call_path
