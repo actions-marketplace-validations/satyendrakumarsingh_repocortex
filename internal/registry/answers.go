@@ -218,7 +218,7 @@ func (r *Registry) NameBinding(ctx context.Context, runID, symbolID int64, name 
 
 	rows, err := r.db.QueryContext(ctx, `
 		SELECT sr.resolution, COALESCE(sr.resolved_symbol_id, 0) = ?, COUNT(*)
-		  FROM symbol_references sr INDEXED BY idx_refs_run_name
+		  FROM symbol_references sr INDEXED BY idx_refs_name_binding
 		 WHERE sr.index_run_id = ? AND sr.name = ?
 		 GROUP BY 1, 2
 		 ORDER BY 1, 2`, symbolID, runID, name)
@@ -321,6 +321,20 @@ func (l LanguageBinding) ExtractsReferences() bool { return l.Total > 0 || l.Rel
 // edge, so a caller that needs this per request should memoise it by run id,
 // as it does ResolutionStats: a committed run never changes.
 func (r *Registry) LanguageBindings(ctx context.Context, runID int64) (map[string]LanguageBinding, error) {
+	// The figures depend on the index revision and on nothing the caller asked,
+	// so `resolve` stores them when it finishes (runstats.go). An index written
+	// by an older build, or changed since it was last summarised, has no valid
+	// stored copy and is computed here as it always was.
+	if out, ok, err := r.storedLanguageBindings(ctx, runID); err != nil {
+		return nil, err
+	} else if ok {
+		return out, nil
+	}
+	return r.computeLanguageBindings(ctx, runID)
+}
+
+// computeLanguageBindings is LanguageBindings read from the tables themselves.
+func (r *Registry) computeLanguageBindings(ctx context.Context, runID int64) (map[string]LanguageBinding, error) {
 	out := map[string]LanguageBinding{}
 	get := func(lang string) LanguageBinding {
 		l := out[lang]
@@ -509,7 +523,7 @@ func (r *Registry) BoundSites(ctx context.Context, runID, symbolID int64, limit 
 	}
 	rows, err := r.db.QueryContext(ctx, `
 		SELECT f.path, sr.start_line, sr.receiver, sr.receiver_kind
-		  FROM symbol_references sr
+		  FROM symbol_references sr INDEXED BY idx_refs_bound_sites
 		  JOIN files f ON f.id = sr.file_id
 		 WHERE sr.resolved_symbol_id = ? AND sr.index_run_id = ? AND sr.resolution = 'resolved'
 		 ORDER BY f.path, sr.start_line, sr.id

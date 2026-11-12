@@ -187,10 +187,15 @@ WITH unambiguous AS (
 truth AS (
     SELECT u.f, u.l, COALESCE(NULLIF(fl.language, ''), 'unknown') AS lang, u.dst,
            ts.name AS name
-      FROM unambiguous u
-      JOIN files fl ON fl.path = u.f AND fl.index_run_id = ?
-      JOIN symbols ts ON ts.id = u.dst
-     WHERE EXISTS (SELECT 1 FROM symbol_references r
+      -- CROSS JOIN and INDEXED BY pin the plan TestAccuracyQuery* asserts: the run's
+      -- files drive, the call sites are found by an automatic index, and each is
+      -- confirmed through idx_refs_file_line. Left to choose, the planner moved to
+      -- a covering index on the reference's NAME once migration 0018 added one, and
+      -- reordered the join with it.
+      FROM files fl
+     CROSS JOIN unambiguous u ON fl.path = u.f AND fl.index_run_id = ?
+     CROSS JOIN symbols ts ON ts.id = u.dst
+     WHERE EXISTS (SELECT 1 FROM symbol_references r INDEXED BY idx_refs_file_line
                     WHERE r.file_id = fl.id AND r.start_line = u.l
                       AND r.index_run_id = ? AND r.kind LIKE '%call%'
                       AND r.start_line > 0 AND r.name = ts.name)),

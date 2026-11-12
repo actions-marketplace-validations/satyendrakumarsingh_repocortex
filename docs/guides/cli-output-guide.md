@@ -323,7 +323,7 @@ Resolved payment-platform (revision 4)
 $ repocortex status
 Project:        payment-platform
 Index:          READY
-Schema:         v15
+Schema:         v18
 Revision:       eae0f8a662b912761434ed4a606c74d33f111471
 Files:          18
 Symbols:        105

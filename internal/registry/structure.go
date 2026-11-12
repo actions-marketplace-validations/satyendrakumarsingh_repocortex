@@ -82,14 +82,31 @@ var unreferencedKinds = []string{"function", "method", "class", "interface"}
 // more unreferenced definitions than one page. Read in key order, `s.id > ?`
 // is a seek, ORDER BY needs no sort and LIMIT stops the statement. CROSS JOIN
 // keeps symbols as the outer loop, which is what makes that true.
-func unreferencedSQL(n int) string {
+func unreferencedSQL(n int) string { return unreferencedSQLUnder(n, false) }
+
+// unreferencedSQLUnder is unreferencedSQL, optionally evaluating the three
+// per-definition probes only for definitions under a path prefix.
+//
+// The probes are correlated sub-queries and the most expensive part of a row,
+// and a caller that wants one directory of a large index discards every row
+// outside it before reading them. With under set, the leading
+// parameters are the prefix, twice per probe, and a row outside it
+// comes back with the three signals false. The ROWS returned are exactly the
+// same, so a caller counting what it examined counts the same thing.
+func unreferencedSQLUnder(n int, under bool) string {
+	guard := func(probe string) string {
+		if !under {
+			return probe
+		}
+		return `CASE WHEN substr(f.path, 1, length(?)) = ? THEN ` + probe + ` ELSE 0 END`
+	}
 	return `
 		SELECT s.id, s.kind, s.name, s.fqn, f.path, f.language,
 		       s.start_line, s.end_line, s.exported,
 		       f.parse_status <> 'ok',
-		       ` + nameUnboundProbe + `,
-		       ` + overridesProbe + `,
-		       ` + consumesEventProbe + `
+		       ` + guard(nameUnboundProbe) + `,
+		       ` + guard(overridesProbe) + `,
+		       ` + guard(consumesEventProbe) + `
 		  FROM symbols s NOT INDEXED
 		 CROSS JOIN files f ON f.id = s.file_id
 		 WHERE s.index_run_id = ?
@@ -113,7 +130,7 @@ const (
 		                      AND e.kind <> 'CONTAINS'
 		                      AND e.src_id <> s.id`
 
-	nameUnboundProbe = `EXISTS (SELECT 1 FROM symbol_references sr INDEXED BY idx_refs_run_name
+	nameUnboundProbe = `EXISTS (SELECT 1 FROM symbol_references sr INDEXED BY idx_refs_name_binding
 		                WHERE sr.index_run_id = s.index_run_id
 		                  AND sr.name = s.name
 		                  AND sr.resolution IN ('pending','ambiguous','unresolved'))`
@@ -155,19 +172,92 @@ func placeholders(n int) string {
 // the unbound-name check and idx_edges_src (index_run_id, src_id, kind) for
 // the two outgoing checks. None scans.
 func (r *Registry) UnreferencedSymbols(ctx context.Context, runID, afterID int64, limit int) ([]UnreferencedSymbol, error) {
+	return r.UnreferencedSymbolsUnder(ctx, runID, afterID, limit, "")
+}
+
+// UnreferencedSymbolsUnder is UnreferencedSymbols for a caller that will use
+// only the definitions whose file path begins with prefix. It returns the same
+// rows in the same order; for a row outside the prefix the three signals
+// (NameUnbound, Overrides, ConsumesEvent) are left false instead of being
+// worked out, because that caller discards the row. An empty prefix is
+// UnreferencedSymbols.
+func (r *Registry) UnreferencedSymbolsUnder(ctx context.Context, runID, afterID int64, limit int, prefix string) ([]UnreferencedSymbol, error) {
 	if limit <= 0 {
 		limit = 500
 	}
-	args := make([]any, 0, len(unreferencedKinds)+3)
+	under := prefix != ""
+	args := make([]any, 0, len(unreferencedKinds)+6)
+	if under {
+		// Three probes, each guarded by the same prefix, come before the WHERE
+		// clause's parameters in statement order.
+		for i := 0; i < 3; i++ {
+			args = append(args, prefix, prefix)
+		}
+	}
 	args = append(args, runID, afterID)
 	for _, k := range unreferencedKinds {
 		args = append(args, k)
 	}
 	args = append(args, limit)
 
-	rows, err := r.db.QueryContext(ctx, unreferencedSQL(len(unreferencedKinds)), args...)
+	rows, err := r.db.QueryContext(ctx, unreferencedSQLUnder(len(unreferencedKinds), under), args...)
 	if err != nil {
 		return nil, fmt.Errorf("registry: unreferenced symbols for run %d: %w", runID, err)
+	}
+	defer rows.Close()
+
+	var out []UnreferencedSymbol
+	for rows.Next() {
+		var u UnreferencedSymbol
+		if err := rows.Scan(&u.ID, &u.Kind, &u.Name, &u.FQN, &u.FilePath, &u.Language,
+			&u.StartLine, &u.EndLine, &u.Exported,
+			&u.PartialParse, &u.NameUnbound, &u.Overrides, &u.ConsumesEvent); err != nil {
+			return nil, fmt.Errorf("registry: scan unreferenced symbol: %w", err)
+		}
+		out = append(out, u)
+	}
+	return out, rows.Err()
+}
+
+// UnreferencedSymbolsIn is UnreferencedSymbols restricted to the definitions in
+// files whose path begins with prefix, reached through those files instead of
+// through every symbol of the run.
+//
+// For a caller that knows how many definitions a full scan would have
+// examined (StoredUnreferencedCount) and wants one directory of a large index:
+// it reads that directory's definitions and nothing else. The rows are the plain
+// form's rows for that prefix, in the same order, with the same signals.
+func (r *Registry) UnreferencedSymbolsIn(ctx context.Context, runID, afterID int64, limit int, prefix string) ([]UnreferencedSymbol, error) {
+	if limit <= 0 {
+		limit = 500
+	}
+	args := make([]any, 0, len(unreferencedKinds)+6)
+	args = append(args, runID, runID, prefix, prefix, afterID)
+	for _, k := range unreferencedKinds {
+		args = append(args, k)
+	}
+	args = append(args, limit)
+
+	rows, err := r.db.QueryContext(ctx, `
+		SELECT s.id, s.kind, s.name, s.fqn, f.path, f.language,
+		       s.start_line, s.end_line, s.exported,
+		       f.parse_status <> 'ok',
+		       `+nameUnboundProbe+`,
+		       `+overridesProbe+`,
+		       `+consumesEventProbe+`
+		  FROM files f
+		 CROSS JOIN symbols s INDEXED BY idx_symbols_file ON s.file_id = f.id
+		 WHERE f.index_run_id = ?
+		   AND s.index_run_id = ?
+		   AND substr(f.path, 1, length(?)) = ?
+		   AND s.id > ?
+		   AND s.kind IN (`+placeholders(len(unreferencedKinds))+`)
+		   AND NOT EXISTS (SELECT 1 FROM edges e INDEXED BY idx_edges_dst
+		                    WHERE `+incomingEdge+`)
+		 ORDER BY s.id
+		 LIMIT ?`, args...)
+	if err != nil {
+		return nil, fmt.Errorf("registry: unreferenced symbols under %q for run %d: %w", prefix, runID, err)
 	}
 	defer rows.Close()
 

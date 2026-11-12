@@ -144,6 +144,9 @@ Index first, resolve second, import third:
 				return err
 			}
 			elapsed := time.Since(start)
+			if err := reg.RefreshRunStats(ctx, run.ID); err != nil {
+				return err
+			}
 
 			g.Log().Info("scip import complete",
 				"tool", res.Ingest.Tool.String(),

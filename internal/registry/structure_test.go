@@ -266,7 +266,7 @@ func TestUnreferencedSymbolsUsesItsIndexes(t *testing.T) {
 		plan = append(plan, detail)
 	}
 	joined := strings.Join(plan, "\n")
-	for _, index := range []string{"idx_edges_dst", "idx_edges_src", "idx_refs_run_name"} {
+	for _, index := range []string{"idx_edges_dst", "idx_edges_src", "idx_refs_name_binding"} {
 		if !strings.Contains(joined, index) {
 			t.Errorf("the plan does not use %s:\n%s", index, joined)
 		}
@@ -400,4 +400,89 @@ func names(us []UnreferencedSymbol) []string {
 		out[i] = u.Name
 	}
 	return out
+}
+
+// TestUnreferencedSymbolsInIsThePlainFormRestrictedToTheDirectory: reading one
+// directory through its files returns the plain form's rows for that prefix,
+// in order, with the same signals, and the stored count is the number the plain
+// form returns for the whole run.
+func TestUnreferencedSymbolsInIsThePlainFormRestrictedToTheDirectory(t *testing.T) {
+	r, runID, _ := structureFixture(t)
+	ctx := context.Background()
+
+	all, err := r.UnreferencedSymbols(ctx, runID, 0, 100)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, stored, _ := r.StoredUnreferencedCount(ctx, runID); stored {
+		t.Fatal("a count was reported before anything stored it")
+	}
+	if err := r.RefreshRunStats(ctx, runID); err != nil {
+		t.Fatal(err)
+	}
+	n, stored, err := r.StoredUnreferencedCount(ctx, runID)
+	if err != nil || !stored || n != len(all) {
+		t.Fatalf("stored count = %d (stored %v, err %v), want %d", n, stored, err, len(all))
+	}
+
+	for _, prefix := range []string{"a/", "b/", "a/a.go", "nothing/"} {
+		var want []UnreferencedSymbol
+		for _, u := range all {
+			if strings.HasPrefix(u.FilePath, prefix) {
+				want = append(want, u)
+			}
+		}
+		got, err := r.UnreferencedSymbolsIn(ctx, runID, 0, 100, prefix)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !reflect.DeepEqual(got, want) {
+			t.Errorf("prefix %q:\n got  %+v\n want %+v", prefix, got, want)
+		}
+	}
+
+	// A write clears the stored count with the rest of the figures.
+	if _, err := r.db.ExecContext(ctx, `DELETE FROM edges`); err != nil {
+		t.Fatal(err)
+	}
+	if _, stored, _ := r.StoredUnreferencedCount(ctx, runID); stored {
+		t.Error("the stored count survived a write to edges")
+	}
+}
+
+// TestUnreferencedSymbolsUnderReturnsTheSameRows: the prefix form exists so a
+// caller that wants one directory does not pay for the probes of every row
+// outside it. The rows, their order and the signals of the rows inside the
+// prefix must be exactly what the plain form returns, because a caller that
+// counts what it examined counts the same thing either way.
+func TestUnreferencedSymbolsUnderReturnsTheSameRows(t *testing.T) {
+	r, runID, _ := structureFixture(t)
+	ctx := context.Background()
+
+	all, err := r.UnreferencedSymbols(ctx, runID, 0, 100)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, prefix := range []string{"a/", "b/", "a/a.go", "nothing/"} {
+		under, err := r.UnreferencedSymbolsUnder(ctx, runID, 0, 100, prefix)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(under) != len(all) {
+			t.Fatalf("prefix %q: %d rows, the plain form returns %d", prefix, len(under), len(all))
+		}
+		for i := range all {
+			a, u := all[i], under[i]
+			if a.ID != u.ID {
+				t.Fatalf("prefix %q: row %d is %d, want %d", prefix, i, u.ID, a.ID)
+			}
+			if strings.HasPrefix(a.FilePath, prefix) {
+				if a != u {
+					t.Errorf("prefix %q: a row inside the prefix differs:\n under %+v\n plain %+v", prefix, u, a)
+				}
+			} else if u.NameUnbound || u.Overrides || u.ConsumesEvent {
+				t.Errorf("prefix %q: %s is outside it and still carries a signal: %+v", prefix, u.Name, u)
+			}
+		}
+	}
 }

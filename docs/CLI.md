@@ -383,7 +383,7 @@ read from the registry; nothing is estimated. No flags beyond the global ones.
 $ repocortex status
 Project:        nj
 Index:          READY
-Schema:         v15
+Schema:         v18
 Revision:       52fa3aef1f2cadcd3a3f874251eddc98d3efbbaa
 Files:          1176
 Symbols:        10534

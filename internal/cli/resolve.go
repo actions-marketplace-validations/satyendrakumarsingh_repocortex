@@ -123,6 +123,12 @@ SCIP indexes.`,
 				return err
 			}
 
+			// Every pass above has written; store the figures every relationship
+			// answer opens with, so a question does not recompute them.
+			if err := reg.RefreshRunStats(ctx, run.ID); err != nil {
+				return err
+			}
+
 			if g.JSON {
 				return emitJSON(cmd.OutOrStdout(), map[string]any{
 					"project": cfg.ProjectName, "index_run": run.ID,

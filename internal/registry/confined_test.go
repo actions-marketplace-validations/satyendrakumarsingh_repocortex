@@ -235,7 +235,7 @@ func TestConfinedSymbolsUsesItsIndexes(t *testing.T) {
 	plan := queryPlan(t, db, confinedSQL(len(unreferencedKinds)), args...)
 	joined := strings.Join(plan, "\n")
 
-	for _, index := range []string{"idx_edges_dst", "idx_edges_src", "idx_refs_run_name"} {
+	for _, index := range []string{"idx_edges_dst", "idx_edges_src", "idx_refs_name_binding"} {
 		if !strings.Contains(joined, index) {
 			t.Errorf("the plan does not use %s:\n%s", index, joined)
 		}
