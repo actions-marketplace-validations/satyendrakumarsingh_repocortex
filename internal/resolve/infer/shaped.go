@@ -90,6 +90,7 @@ const (
 	ruleSameFileOtherType = "the only method of this name in the file; which object receives the call is decided at run time"
 	ruleRequiredOtherType = "a method of this name in a required file; which object receives the call is decided at run time"
 	ruleEnclosingType     = "declared on the enclosing type"
+	ruleNestedType        = "a type nested in the enclosing type"
 	ruleSamePackage       = "same package directory"
 	ruleImportedByName    = "imported by name from the module that defines it"
 	ruleReExported        = "imported by name from a package that re-exports it"
@@ -586,6 +587,11 @@ func (r *Resolver) callBare(c call, stats *Stats) decision {
 	// each type that one is nested in.
 	if c.spec.Calls.ImplicitSelf && c.class != "" {
 		for qual := c.class; qual != ""; qual = outerQual(qual) {
+			// `KeySet()` inside `LinkedHashTreeMap` constructs the type nested in
+			// it, which is nearer than any class of that name elsewhere.
+			if d, ok := c.nestedType(qual); ok {
+				return d
+			}
 			t := typeRef{name: lastQualSegment(qual), fileID: c.fr.FileID, filePath: c.fr.Path, qual: qual, strong: true}
 			if d, ok := c.bindMember(t, ruleEnclosingType); ok {
 				return d
@@ -609,6 +615,30 @@ func (r *Resolver) callBare(c call, stats *Stats) decision {
 		return r.bareBeyondType(c, reach, stats)
 	}
 	return r.bareByName(c, reach, stats)
+}
+
+// nestedType binds a constructing call to a type declared inside the type with
+// this qualified name, in the call's own file. Only where a bare call
+// constructs (CallTraits.CallConstructs): Kotlin's `Node()`, Scala's `Node()`.
+// Measured on moshi, where the nested LinkedHashTreeMap.Node was bound to a
+// Java test class of the same name and KeySet() and EntrySet() to nothing.
+func (c call) nestedType(qual string) (decision, bool) {
+	if !c.spec.Calls.CallConstructs {
+		return decision{}, false
+	}
+	var nested []registry.SymbolIndexEntry
+	for _, s := range c.cands {
+		if isConstructibleKind(s.Kind) && s.FileID == c.fr.FileID && ownerQual(s) == qual {
+			nested = append(nested, s)
+		}
+	}
+	if first, ok := firstDeclaration(nested); ok {
+		return bound(candidate{first, model.ConfidenceHigh, ruleNestedType + " (" + lastQualSegment(qual) + ")"}), true
+	}
+	if len(nested) > 1 {
+		return ambiguousCall, true
+	}
+	return decision{}, false
 }
 
 // bareBeyondType is what a bare name answers where a bare name may be a
