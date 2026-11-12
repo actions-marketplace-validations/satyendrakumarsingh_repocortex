@@ -36,3 +36,19 @@ conditional.cs	38	method	Count
 conditional.cs	40	method	Total
 conditional.cs	42	method	Matches
 conditional.cs	44	method	Greet
+# returns.cs: a method whose return type is a user type (plain, generic, nullable, wrapped, in an interface with and without conditional compilation) defines the method and never a method named after the type.
+returns.cs	3	interface	ILogger
+returns.cs	5	method	ForContext
+returns.cs	6	method	ForContext
+returns.cs	7	method	Maybe
+returns.cs	8	method	LaterAsync
+returns.cs	9	method	All
+returns.cs	12	method	Named
+returns.cs	20	method	Scoped
+returns.cs	23	class	Factory
+returns.cs	25	method	ForContext
+returns.cs	27	method	ForContext
+returns.cs	29	method	Maybe
+returns.cs	31	method	LaterAsync
+returns.cs	33	method	All
+returns.cs	35	method	Self
