@@ -1827,6 +1827,315 @@ any `@reference.` capture and so could not see the query being dropped.
 `super X -> ID` (a hierarchy edge to that definition, and to nothing else) and
 `nosuper X`.
 
+## C and C++: macros in declarations, measured, 13 November 2026
+
+Tree-sitter parses the text as written and nothing runs the preprocessor. A
+declaration behind a macro the grammar has never seen is therefore not a
+declaration to it: `class LEVELDB_EXPORT Comparator { ... };` is a class named
+`LEVELDB_EXPORT`, or a function called `Comparator` whose return type is a class
+and which has no error node at all. Every public class of leveldb is written
+that way, so `Comparator`, `Env`, `Iterator`, `Cache` and `DB` were not symbols
+and every subclass bound to an unrelated type of the same name (the "C++
+precision" paragraph above). This section is the change that fixes the
+declarations, what it did on four C and C++ projects and on one Objective-C
+file, and what it did not fix.
+
+### What it does
+
+`internal/parse/cmacro.go`, for C, C++ and Objective-C only. The source is
+scanned as text (comments, strings and preprocessor lines skipped) for the
+places an unknown macro is written in a declaration, and each one found is
+overwritten with spaces of the same byte length, newlines kept, so no offset and
+no line number moves. The forms:
+
+| Form | Example |
+|---|---|
+| between `class` / `struct` / `union` / `enum class` and the name, when `{`, `:`, `final` or (C++) `;` follows | `class LEVELDB_EXPORT Comparator {`, `struct API(dllexport) S : B`, two macros in a row |
+| after the name, before `{` or `:` | `struct node PACKED_ATTR {` |
+| in front of a function declaration or definition, with its storage words, with or without arguments, when what follows is a head that ends in `(` | `JK_STATIC_INLINE void f(`, `static REDIS_NO_SANITIZE("bounds") int f(`, `PY_LOCAL(int) f(`, `LEVELDB_EXPORT Status Destroy(` |
+| in the middle of a head, after its first word and before more of it | `void JEMALLOC_NOTHROW *JEMALLOC_ATTR(malloc) je_malloc(` |
+| after the parameter list of a function (not of `if`, `for`, `while`) | `void Compact() LOCKS_EXCLUDED(mu_) {` |
+| a single argument-less macro alone on its line in front of the next declaration, directive, `@` or `}` | `FMT_BEGIN_NAMESPACE`, `G_BEGIN_DECLS`, `NS_ASSUME_NONNULL_BEGIN` |
+
+A macro is an identifier of capitals, digits and underscores, at least two
+characters, optionally followed by a parenthesised argument list. The last two
+rows and the head forms were added because the projects below wrote them;
+that is the whole reason they are there. Not recognised: mixed-case macros
+(`Py_LOCAL_INLINE(int)`), a macro that is a statement (`FMT_CATCH(..) { }`,
+`TEST_F(a, b) { }`), and anything inside a function body.
+
+**The guard.** An upper-case identifier is often a type (`FILE *open(void)`,
+`BOOL WINAPI Foo(void)`, `DFA* Prog::Get(`, `DWORD x;`), an enum value or a macro
+call statement, so a mask is only ever tried and never trusted:
+
+1. The plain source is parsed first, and a file with no candidate costs nothing
+   more and is returned as it is.
+2. The masked source is parsed only if the plain parse shows trouble where a
+   candidate sits: an error or missing node overlapping one, a definition named
+   after one, or (new, and needed) no definition at the name the text says the
+   declaration defines. The last matters because the grammar parses `class
+   EXPORT Foo { };` as a function with no error node at all.
+3. The masked result replaces the plain one only if it has no more error nodes
+   (a missing token counts as one) and no fewer definitions, with at least one
+   of the two strictly better; no definition named after a masked token; and
+   every definition the plain parse had, except one named after a masked token,
+   still present. Otherwise the plain result stands, byte for byte.
+
+A file is parsed at most twice by this mechanism, the second parse goes through
+`parseOnce` and so has the same work limits, wall-clock ceiling and
+cancellation as any parse, and a stopped parse is never retried. The count is on
+`Result.MacrosMasked`, and a partial parse's stored error text ends "read with N
+macro tokens masked".
+
+The guard is all-or-nothing for a file, and that costs something: one wrong
+candidate vetoes the good ones beside it. Measured case: `redis/src/cluster_legacy.c`
+has one candidate, `REDIS_NO_SANITIZE("bounds")`; masking it moves the file's one
+syntax error from line 4089 to line 5222 and loses one definition, so the plain
+parse is kept and the file still has the error.
+
+### Two definition-query fixes in the same change
+
+`lang_c.go` and `lang_cpp.go` replace the query the library infers.
+
+- A forward declaration (`class Cache;`, `struct Foo;`, `typedef struct Foo
+  Foo_t;`) is not a definition. A class or struct is one only with a body. The
+  inferred query matched any `struct Foo` written anywhere, parameter types
+  included, which is why redis loses half of its "class" symbols (3,238 to
+  1,578); those were uses, not definitions.
+- A function-pointer typedef declares its own name and not its return type's:
+  `typedef Iterator* (*BlockFunction)(void*, const ReadOptions&);` was a
+  declaration of `Iterator` and now declares `BlockFunction`.
+- Checked first and found broken: a function returning a pointer (`char
+  *name(int a) { }`) and an out-of-line method (`void Table::Open(..) { }`)
+  matched nothing. Redis goes from 11,160 to 12,855 functions mostly from the
+  first; leveldb gains 257 methods and re2 389 from the second, each owned by its class
+  (`path:Table.Open`, and `ns::Table::Open` too). Out-of-line destructors,
+  operators and `using` aliases are still missed (`fixtures/langs/cpp/KNOWN_GAPS.md`).
+
+### Measured
+
+Tarballs of the default branches (not clones, so no commit is named) on 13 November 2026 (leveldb `main`, redis
+`unstable`, re2 `main`, fmt `main`); a binary built at `c7a6b45` and one built
+from this change; `init`, `index`, `resolve`. Files here are the C, C++ and
+Objective-C ones the index parsed. "Macro-named" counts class, function and
+method symbols whose name is capitals with an underscore.
+
+| Project | clean, before to after | with syntax errors | incomplete | symbols | files masked (tokens) | macro-named symbols |
+|---|---|---|---|---|---|---|
+| leveldb (C++) | 96 to 108 | 37 to 25 | 0 to 0 | 1,405 to 1,697 | 21 (127) | 210 to 178; `LEVELDB_EXPORT` itself 23 to 0 |
+| redis (C) | 448 to 464 | 408 to 392 | 0 to 0 | 14,398 to 14,434 | 43 (423) | 265 to 248 |
+| re2 (C++) | 54 to 54 | 23 to 23 | 1 to 1 | 954 to 1,360 | 3 (3) | 1 to 1 |
+| fmt (C++) | 32 to 34 | 40 to 38 | 2 to 2 | 1,544 to 1,672 | 17 (665) | 28 to 15 |
+| JSONKit.m (Objective-C) | 0 to 0 | 1 to 1 | 0 to 0 | 195 to 206 | 1 (20) | 0 to 0 |
+
+The macro-named symbols that remain are statements, not declarations:
+`TEST_F` (176 in leveldb), `TEST_BEGIN` (214 in redis), `FMT_CATCH`,
+`LOCKS_EXCLUDED` in the unmasked files. The most-masked tokens are fmt's
+`FMT_CONSTEXPR` (217 uses), then `GTEST_API_` (80), `FMT_API` (38) and
+`FMT_BEGIN_NAMESPACE` (32); redis's `JEMALLOC_ALWAYS_INLINE` (86),
+`JEMALLOC_EXPORT` (31), `REDISMODULE_API` (29), `CROARING_TARGET_AVX2` (13);
+leveldb's `LEVELDB_EXPORT` and `LOCKS_EXCLUDED(..)`.
+
+JSONKit.m: 45 functions to 56, 20 macro tokens masked. The 11 recovered are the
+`JK_STATIC_INLINE` functions. The file still reports a syntax error (unchanged).
+
+**Cost.** `index` wall time and user CPU, means of three runs, binaries
+alternated. A masked parse is a second parse of the whole file, and
+gotreesitter reads about 80 KB of C++ a second per core, so the cost is the size
+of the files that are retried.
+
+| Project | wall, before to after | user CPU | peak memory |
+|---|---|---|---|
+| leveldb | 1.33 s to 1.41 s | 2.36 s to 2.58 s | 290 MB to 336 MB |
+| re2 | 1.59 s to 1.99 s | 2.68 s to 3.67 s | 341 MB to 536 MB |
+| fmt | 2.53 s to 3.35 s | 4.99 s to 6.66 s | 673 MB to 929 MB |
+| JSONKit.m | 2.24 s to 4.42 s | 2.24 s to 4.38 s | 273 MB to 424 MB |
+| redis | 15.8 s to 18.3 s (runs 1 and 2) | 29.5 s to 34.2 s | 790 MB to 750 MB |
+
+Redis run 3 (29.95 s and 31.26 s) ran while other work was using the machine and
+is left out of the means. re2 retried 157 KB in three files, which is the whole
+of its 1 s; JSONKit.m is one 177 KB file parsed twice.
+
+### Definitions, by reading
+
+Five files per project chosen by a fixed rule: the five largest non-test
+sources or headers by bytes. The rule picks leveldb's five `.cc` files, which
+hold few export macros, so its five largest public headers (where they are) are
+read as a second set. "Expected" is every definition a developer would list:
+functions, methods, classes and structs with a body, typedef names. It started
+from a text enumerator that tracks braces and namespace and class nesting and
+does not use tree-sitter, and every name on which it and the index disagreed
+was then read in the source: 21 names the enumerator missed were real
+(function-local structs and their members such as `LogReporter::Corruption`,
+`static struct config { .. }` and `typedef enum X { .. }` in redis,
+function templates after a template header in fmt) and were added to
+"expected" and counted correct; the rest are as the enumerator said. Counts are
+distinct names. "Spurious" is an extracted name nothing in the file defines: a
+macro, a forward declaration, a type that is only used.
+
+| File | Expected | Correct, before to after | Spurious | Missing |
+|---|---|---|---|---|
+| leveldb `db/version_set.cc` | 79 | 37 to 76 | 0 to 0 | 42 to 3 |
+| leveldb `db/db_impl.cc` | 49 | 11 to 49 | 0 to 0 | 38 to 0 |
+| leveldb `util/env_posix.cc` | 60 | 4 to 4 | 0 to 0 | 56 to 56 |
+| leveldb `util/env_windows.cc` | 54 | 9 to 9 | 0 to 0 | 45 to 45 |
+| leveldb `util/crc32c.cc` | 4 | 3 to 4 | 0 to 0 | 1 to 0 |
+| **leveldb, five largest** | 246 | 64 to 142 | 0 to 0 | 182 to 104 |
+| leveldb `include/leveldb/env.h` | 27 | 6 to 6 | 2 to 0 | 21 to 21 |
+| leveldb `include/leveldb/c.h` | 16 | 16 to 16 | 0 to 0 | 0 to 0 |
+| leveldb `include/leveldb/options.h` | 4 | 1 to 4 | 7 to 0 | 3 to 0 |
+| leveldb `include/leveldb/db.h` | 3 | 2 to 3 | 5 to 0 | 1 to 0 |
+| leveldb `include/leveldb/cache.h` | 4 | 4 to 4 | 1 to 0 | 0 to 0 |
+| **leveldb, five largest headers** | 54 | 29 to 33 | 15 to 0 | 25 to 21 |
+| redis `src/module.c` | 661 | 516 to 661 | 8 to 0 | 145 to 0 |
+| redis `src/redis-cli.c` | 260 | 233 to 259 | 7 to 0 | 27 to 1 |
+| redis `src/server.c` | 257 | 237 to 256 | 18 to 0 | 20 to 1 |
+| redis `src/t_stream.c` | 147 | 134 to 147 | 0 to 0 | 13 to 0 |
+| redis `src/cluster_legacy.c` | 211 | 173 to 208 | 6 to 0 | 38 to 3 |
+| **redis, five largest** | 1,536 | 1,293 to 1,531 | 39 to 0 | 243 to 5 |
+| re2 `re2/unicode_groups.cc` | 0 | 0 to 0 | 0 to 0 | 0 to 0 |
+| re2 `re2/parse.cc` | 68 | 24 to 68 | 0 to 0 | 44 to 0 |
+| re2 `re2/dfa.cc` | 58 | 22 to 56 | 0 to 0 | 36 to 2 |
+| re2 `re2/re2.h` | 76 | 55 to 64 | 2 to 0 | 21 to 12 |
+| re2 `re2/re2.cc` | 42 | 9 to 40 | 0 to 0 | 33 to 2 |
+| **re2, five largest** | 244 | 110 to 228 | 2 to 0 | 134 to 16 |
+| fmt `include/fmt/format.h` | 214 | 13 to 13 | 0 to 0 | 201 to 201 |
+| fmt `include/fmt/core.h` | 88 | 0 to 0 | 0 to 0 | 88 to 88 |
+| fmt `include/fmt/format-inl.h` | 80 | 58 to 61 | 2 to 1 | 22 to 19 |
+| fmt `include/fmt/chrono.h` | 141 | 0 to 0 | 0 to 0 | 141 to 141 |
+| fmt `include/fmt/ranges.h` | 42 | 0 to 0 | 0 to 0 | 42 to 42 |
+| **fmt, five largest** | 565 | 71 to 74 | 2 to 1 | 494 to 491 |
+
+The remaining spurious name is `FMT_CATCH` in `format-inl.h`, a macro statement.
+Most of what is still missing is one cause, the `#if` problem below: both leveldb
+env files, `format.h`, `core.h`, `chrono.h` and `ranges.h` have a single error
+node over the whole file and extract close to nothing. The rest is out-of-line
+destructors and operators, which the query does not match.
+
+### Hierarchy on leveldb
+
+`EXTENDS` edges, all of them read against the declaration:
+
+| | Edges | `high` | `medium` | `low` | Right |
+|---|---|---|---|---|---|
+| before | 24 | 6 | 15 | 3 | 10 of 24 |
+| after, `medium` as it was | 44 | 5 | 15 | 24 | 34 of 44 (`high` 5 of 5, `medium` 5 of 15, `low` 24 of 24) |
+| after, C++ `medium` made `low` | 44 | 5 | 0 | 39 | 34 of 44 (`low` 29 of 39) |
+
+All of the 24 `low` edges are subclasses of the public classes, now bound to the
+class in `include/leveldb` (`WritableFile`, `FilterPolicy`, `Logger`, `DB`,
+`Snapshot`, ...). The 10 wrong `medium` ones are the ones the earlier section
+describes, and the cause is the same: a subclass beside a local `struct
+Comparator` in `skiplist_test.cc`, a local `Handler` in `db_test.cc` (for
+`WriteBatch::Handler`, whose qualifier is not carried) or `SkipList::Iterator` in
+`skiplist.h` (for `leveldb::Iterator`) is the only candidate in the same
+directory, and `pickSameDir` takes it at `medium`. With the real classes now in
+the index there are two candidates and the nearer one is still chosen.
+
+**Tier changed.** `medium` for a C++ base class found by the same-directory rule
+was 5 of 15, below the 60% floor, so in `pick()` in `resolver.go` that one case
+is `low` (the reason ends "C++ base class by name only"). It is C++ only, and
+only for `extends`; calls do not pass through it. The 15 edges become `low`; 5
+of them are right, 10 wrong, which is `low`'s lot.
+
+Recall on the five files of the earlier measurement (`db/db_impl.cc`,
+`db/version_set.cc`, `benchmarks/db_bench.cc`, `util/env_posix.cc`,
+`util/env_windows.cc`; 16 relationships): 2 of 16 before and 2 of 16 after. The
+change did not help here, for three reasons that are not macros:
+`env_posix.cc` and `env_windows.cc` (12 of the 16) are wrapped in one error node
+because of `#if` inside a constructor's initializer list, so their classes are
+not symbols; `class Version::LevelFileNumIterator : public Iterator` has a
+qualified name and no class symbol; and `CountComparator : public Comparator`
+in `db_bench.cc` is ambiguous (two files define `Comparator`, none is beside
+it), so it binds to nothing.
+
+### Calls on leveldb
+
+`CALLS` edges, `high` / `medium` / `low`: 1,442 / 78 / 508 (2,028) before and
+2,029 / 540 / 973 (3,542) after. 1,629 edges are new and 115 are gone (114 `low`,
+1 `high`); the gone ones are `env->RemoveFile` and the like bound to
+`VersionEdit::RemoveFile` as "the only member of this name", which is now an
+ambiguous name and, where the receiver is typed, a right one. No edge moved
+tier.
+
+Thirty of the 1,629 new edges, drawn at random (seed 42 over the new edges
+ordered by source, name, destination and line) and judged by reading the call
+and the target:
+
+| Tier | Sampled | Right | Wrong |
+|---|---|---|---|
+| `high` | 11 | 9 | 2 |
+| `medium` | 8 | 8 | 0 |
+| `low` | 11 | 8 | 3 |
+
+The 5 wrong: `iter_->key()` at `db_iter.cc` lines 123 and 216, bound at `high`
+to `Block::Iter::key` because the receiver `iter_` is "named after the type"
+`Iter`, when `iter_` is an `Iterator*` holding whatever the database was given;
+and `Lookup(..)` twice and `Insert(..)` once in `cache_test.cc`, calls to the
+test fixture's own methods, bound at `low` to `LRUCache::Lookup` and
+`::Insert` because the fixture class is not the enclosing symbol of a `TEST_F`.
+Two of 11 `high` edges wrong is a sample too small to move a tier, and the rule
+that made them (`receiver is named after the type that declares it`) is in the
+resolver, not in this change; it is reported here and not touched.
+
+### What the mask did not help with
+
+- **`#if` / `#else` through a declaration or an initializer list.**
+  `leveldb/util/env_posix.cc` and `env_windows.cc` (`#if !defined(NDEBUG)` inside
+  a constructor's initializer list), `env.h` and `fmt/core.h` (`#if` and `#undef`
+  around class members): the grammar wraps the whole file, or the rest of it,
+  in an error node, and every definition in it is lost. A reduction of the
+  first:
+
+  ```text
+  class Limiter { public: Limiter(int n) : a_(n),
+  #if !defined(NDEBUG)
+        max_(n),
+  #endif
+        x_(0) {} };
+  int after() { return 1; }
+
+  (translation_unit
+    (ERROR (ERROR (_class_name (type_identifier)) (_field_declaration_list_item (access_specifier))
+        (function_declarator (identifier) (parameter_list ..)) (field_initializer ..))
+      (unary_expression (preproc_defined (identifier))) .. (argument_list (number_literal)))
+    (compound_statement (ERROR)) (expression_statement)
+    (function_definition (primitive_type) (function_declarator (identifier) ..)))
+  ```
+
+  Only `after` is a symbol. Masking cannot remove a directive without choosing
+  a branch, so this is not attempted.
+- **A class with a qualified name.** `class Version::LevelFileNumIterator :
+  public Iterator { .. };` is
+  `(class_specifier (qualified_identifier (namespace_identifier) (type_identifier))
+  (base_class_clause ..) (field_declaration_list ..))`, a name that is not a
+  `type_identifier`, so there is no class symbol and no hierarchy edge.
+- **A function-like macro that opens a body.** `TEST_F(CacheTest, HitAndMiss) {
+  .. }` is `(function_definition (function_declarator (identifier)
+  (parameter_list (parameter_declaration (type_identifier)) ..)) (compound_statement ..))`:
+  a function named `TEST_F`, which is what the text says.
+- **The mask rejected by the guard.** `redis/src/cluster_legacy.c`, above.
+  `src/bio.c:189`, `src/acl.c:77` and `src/cluster.c:174` report errors in
+  function bodies and a table initialiser at no macro; they were not diagnosed.
+- **A clean parse that is wrong.** The grammar reads `class EXPORT Foo { };` as
+  a function with no error node; the mask handles that case by asking whether
+  the name the text says is defined is a definition. A clean wrong parse of some
+  other shape would not be noticed, and finding one needs a compiler.
+
+### Tests
+
+`internal/parse/cmacro_test.go`: each candidate form and each non-candidate (a
+library type, a macro call statement, an enum value, a comment, a string, a
+`#define` body, a macro loop after a condition); the same-length and
+newlines-kept property; the guard accepting a mask that helps and refusing one
+that does not (`FILE *`, `BOOL WINAPI`, an extra syntax error); a clean file
+untouched and not retried; a clean parse with a candidate not retried;
+cancellation; out-of-line method ownership; forward declarations and
+function-pointer typedefs. `fixtures/langs/c` and `fixtures/langs/cpp` are the
+conformance fixtures for the two queries, and `fixtures/receivers/cpp/exported.cc`
+pins a subclass of an export-macro class whose inherited `this->Fetch()` binds to
+the base's method and not to an unrelated class's.
+
 ## Reproducing
 
 The numbers above came from:
