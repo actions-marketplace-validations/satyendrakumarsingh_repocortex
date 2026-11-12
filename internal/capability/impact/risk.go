@@ -54,7 +54,11 @@ type Risk struct {
 	// left out and the count shown is zero. Level is then printed "or higher",
 	// for every level and not only for moderate and high: a low that stopped at
 	// a depth limit is as much a floor as a high is.
-	Partial string `json:"partial,omitempty"`
+	//
+	// Not in the JSON form, for the reason Plan.RiskPartial is not: the HTTP
+	// API's field contract is frozen and nothing renders it. Report.Risk.Level
+	// and the summaries carry it as "or higher".
+	Partial string `json:"-"`
 
 	// Factors are the inputs, in the order they were applied. Never empty.
 	Factors []Factor `json:"factors"`

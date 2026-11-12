@@ -73,7 +73,13 @@ Examples:
 			if g.JSON {
 				enc := json.NewEncoder(os.Stdout)
 				enc.SetIndent("", "  ")
-				return enc.Encode(plan)
+				// The two fields a Plan keeps out of its own JSON, so the command
+				// that prints the plan does not drop what the agent tool says.
+				return enc.Encode(struct {
+					*planchange.Plan
+					RiskPartial string              `json:"risk_partial,omitempty"`
+					ValueUse    capability.ValueUse `json:"value_use"`
+				}{plan, plan.RiskPartial, plan.ValueUse})
 			}
 
 			// Human readable output

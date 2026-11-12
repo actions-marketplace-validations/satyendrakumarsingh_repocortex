@@ -47,12 +47,16 @@ type Plan struct {
 	// RiskPartial is impact.Risk.Partial: why RiskLevel is a floor for a reason
 	// other than undetermined callers (a walk cut at a bound, a name that occurs
 	// where no call is recorded).
-	RiskPartial string `json:"risk_partial,omitempty"`
+	//
+	// Not in the JSON form: internal/web serialises a Plan under a frozen field
+	// contract that nothing renders these in yet. The plan-change command adds
+	// them to its own JSON.
+	RiskPartial string `json:"-"`
 
 	// ValueUse is the impact analysis's text check for a function passed as a
 	// value. When it has a finding the caller steps are the callers that were
 	// recorded, and the covering tests are the tests that were recorded.
-	ValueUse capability.ValueUse `json:"value_use"`
+	ValueUse capability.ValueUse `json:"-"`
 
 	// TestsUndetermined is tests.TestReport.Undetermined for the target.
 	TestsUndetermined string                  `json:"tests_undetermined,omitempty"`
