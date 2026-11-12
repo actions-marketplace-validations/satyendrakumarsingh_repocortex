@@ -505,12 +505,12 @@ survive. The numbers this project publishes, and how they were produced, are in
 ```
 $ repocortex languages
 TIER      COUNT  WHAT YOU GET
-typed     1      definitions, imports, receiver and arity discrimination — references can reach 'high'
-resolved  11     definitions and imports — references bind across files
-parsed    194    definitions and search only — no cross-file references claimed
+typed     4      definitions, imports, receiver discrimination by arity or class — references can reach 'high'
+resolved  10     definitions and imports — references bind across files
+parsed    192    definitions and search only — no cross-file references claimed
 ```
 
-The tiers are computed from the query set at run time, so this output cannot
+The tiers are computed from what the parser can do at run time, so this output cannot
 disagree with what the binary does. Read it before trusting an empty
 relationship result: a `parsed`-tier language never produces a caller, and the
 absence is a property of the tier, not of the code. `--verbose` lists the

@@ -465,6 +465,29 @@ candidates a tier has already accepted, and in Python those are the name-only
 bindings for an unknown receiver — and it got the same decision. The query, its
 dialect and the method bookkeeping were deleted.
 
+### The tier
+
+`repocortex languages` now lists Python as `typed`. The tier is derived, not
+listed (`internal/parse/tiers.go`), and until now the derivation had one route:
+import, receiver and arity queries. Python has no arity query, for the reason
+just given, so the derivation gained a second route — a scope analysis that
+states the receiver's class — and the tier's description changed from "receiver
+and arity discrimination" to "receiver discrimination by arity or class".
+
+That is a change to what the word means, made on these numbers:
+
+| | `high` precision | `high` recall |
+|---|---:|---:|
+| Python, four repositories, as indexed | 71.8 – 99.7% | 50.8 – 83.8% |
+| Python, four repositories, corrected | 98.3 – 100.0% | 67.3 – 83.8% |
+| Go (own source) | 98.6% | 60.4% |
+| TypeScript | 99.5% | 66.4% |
+| Java (spring-petclinic-rest) | 100.0% | 32.7% |
+
+If the correction is not accepted the as-indexed row is the one to read, and on
+it Python clears the 86.8% floor on three repositories of four and not on httpx.
+The promotion rests on the corrected row, and on the correction being checkable.
+
 ### Cost
 
 django, 2,788 Python files, `index --full` then `resolve`, the two binaries

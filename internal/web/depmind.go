@@ -585,7 +585,7 @@ func isLocalImport(path string) bool {
 func tierWhatYouGet(t parse.Tier) string {
 	switch t {
 	case parse.TierTyped:
-		return "definitions, imports, receiver and arity discrimination — references can reach the " +
+		return "definitions, imports, receiver discrimination by arity or class — references can reach the " +
 			tierWord(model.ConfidenceHigh) + " tier"
 	case parse.TierResolved:
 		return "definitions and imports — references bind across files"

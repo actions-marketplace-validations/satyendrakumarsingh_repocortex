@@ -1756,13 +1756,13 @@ with.
 ```console
 $ repocortex languages
 TIER      COUNT  WHAT YOU GET
-typed     3      definitions, imports, receiver and arity discrimination — references can reach 'high'
-resolved  11     definitions and imports — references bind across files
+typed     4      definitions, imports, receiver discrimination by arity or class — references can reach 'high'
+resolved  10     definitions and imports — references bind across files
 parsed    192    definitions and search only — no cross-file references claimed
 total     206    
 
-typed:    [go java typescript]
-resolved: [c c_sharp cpp javascript kotlin php python ruby rust scala tsx]
+typed:    [go java python typescript]
+resolved: [c c_sharp cpp javascript kotlin php ruby rust scala tsx]
 
 (192 parsed-tier languages not listed; pass --verbose)
 ```

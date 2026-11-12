@@ -28,14 +28,14 @@ func newLanguagesCmd(g *Global) *cobra.Command {
 		Short: "Report what RepoCortex can do for each language it parses",
 		Long: `Languages fall into three tiers.
 
-  typed     definitions, imports, receiver and arity discrimination.
-            References here can reach 'high' confidence.
+  typed     definitions, imports, and receiver discrimination by arity or
+            by class. References here can reach 'high' confidence.
   resolved  definitions and imports. References bind across files.
   parsed    definitions and full-text search only. No cross-file
             relationship is claimed for these.
 
-The tiers are derived from the query set at run time, not from a list, so
-this output always matches what the binary can actually do.`,
+The tiers are derived from what the parser can do at run time, not from a
+list, so this output always matches what the binary can actually do.`,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			rep := languageReport{
 				Typed:    parse.LanguagesInTier(parse.TierTyped),

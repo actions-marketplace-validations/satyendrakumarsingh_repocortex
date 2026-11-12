@@ -377,7 +377,7 @@ func (p *genericParser) Parse(ctx context.Context, path string, src []byte) (*Re
 	// definition's qualified name, and the names its imports bring in. Nil for
 	// every other language, and for a Python tree the walk could not finish.
 	// See pyscope.go.
-	py := p.analyzePython(tree, src)
+	py := p.analyzeScopes(tree, src)
 	if py != nil {
 		res.Imports = mergeMemberImports(res.Imports, py.members)
 	}

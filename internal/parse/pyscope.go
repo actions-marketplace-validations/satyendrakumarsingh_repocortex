@@ -200,10 +200,35 @@ type pyWalker struct {
 	facts *pyFacts
 }
 
+// scopeAnalysis walks one language's syntax tree for its scope-dependent facts.
+type scopeAnalysis func(lang *ts.Language, tree *ts.Tree, src []byte) *pyFacts
+
+// scopeAnalysisFor returns the scope walk for a language, or nil.
+//
+// The one place that says which languages have one. The parser calls what this
+// returns, and TierFor asks whether it returns anything, so the tier table
+// cannot claim a walk the parser does not run.
+func scopeAnalysisFor(language string) scopeAnalysis {
+	if language == "python" {
+		return analyzePython
+	}
+	return nil
+}
+
+// analyzeScopes runs the language's scope walk, or returns nil when it has
+// none.
+func (p *genericParser) analyzeScopes(tree *ts.Tree, src []byte) *pyFacts {
+	walk := scopeAnalysisFor(p.entry.Name)
+	if walk == nil {
+		return nil
+	}
+	return walk(p.lang, tree, src)
+}
+
 // analyzePython walks a Python tree and returns its scope-dependent facts, or
 // nil when there is nothing to analyse.
-func (p *genericParser) analyzePython(tree *ts.Tree, src []byte) (facts *pyFacts) {
-	if p.entry.Name != "python" || tree == nil {
+func analyzePython(lang *ts.Language, tree *ts.Tree, src []byte) (facts *pyFacts) {
+	if tree == nil {
 		return nil
 	}
 	defer func() {
@@ -219,7 +244,7 @@ func (p *genericParser) analyzePython(tree *ts.Tree, src []byte) (facts *pyFacts
 		return nil
 	}
 	w := &pyWalker{
-		lang: p.lang,
+		lang: lang,
 		src:  src,
 		facts: &pyFacts{
 			qualNames: make(map[callSite]string, 32),

@@ -34,7 +34,7 @@ are planned in, is in the [implementation plan](IMPLEMENTATION_PLAN.md).
 | Test discovery through interface dispatch | Planned | `untested_critical` misses tests that reach a method through an interface or a shared method name. It is reported, not gated, until this lands. |
 | Call binding by column, not line | Exploring | The compiler import only promotes a call when its line has one target, so `return r.Key()` beside a `Key` type stays unbound. |
 | Incremental re-binding of cross-file handlers | Planned | `repocortex resolve` binds route handlers declared in another file; an incremental update does not re-run that pass. |
-| Deeper resolution for more languages | Exploring | Go, Java and TypeScript are `typed`; 11 more languages are `resolved`; 192 are `parsed` (definitions and search only). See `repocortex languages`. |
+| Deeper resolution for more languages | Exploring | Go, Java, Python and TypeScript are `typed`; 10 more languages are `resolved`; 192 are `parsed` (definitions and search only). Python was promoted on a measurement against `scip-python` over four repositories ([accuracy.md](accuracy.md)); C#, Kotlin and Rust are next and have not been measured. See `repocortex languages`. |
 
 ## Known issues
 
