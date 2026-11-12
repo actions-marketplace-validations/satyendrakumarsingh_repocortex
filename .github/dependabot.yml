@@ -1,0 +1,12 @@
+# Third-party actions in the workflows are pinned to a commit, with the version
+# in a trailing comment. A pin that nobody moves is a pin on an old release, so
+# Dependabot proposes the new commit and rewrites the comment.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      actions:
+        patterns: ["*"]
