@@ -1,5 +1,5 @@
 # Go: every top-level declaration, each method, and each method an interface
-# declares. Struct fields are not listed.
+# declares. Struct fields are not listed. A var or const is a definition only at the package level; one declared inside a function is a local.
 sample.go	7	constant	Limit
 sample.go	9	variable	counter
 sample.go	12	variable	ErrEmpty

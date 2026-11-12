@@ -113,16 +113,89 @@ func (p *genericParser) importedBindings(tree *ts.Tree, src []byte) (out []Impor
 							continue
 						}
 						local := spec.ChildByFieldName("alias", lang)
+						original := spec.ChildByFieldName("name", lang)
 						if local == nil {
-							local = spec.ChildByFieldName("name", lang)
+							local = original
 						}
 						if local != nil {
 							add(path, memberAliasPrefix+local.Text(src), local)
+						}
+						// A renamed member also gets a row under the name the
+						// module exports it by. See renamedImports.
+						if local != nil && original != nil && local != original && original.Text(src) != "default" {
+							add(path, memberAliasPrefix+original.Text(src), original)
 						}
 					}
 				}
 			}
 		}
+	}
+	return out
+}
+
+// # A renamed import
+//
+//	import { Calendar as CalendarPrimitive } from "./cal"
+//	<CalendarPrimitive />
+//
+// binds the local name CalendarPrimitive to the export Calendar. The row for
+// the local name says that a receiver spelled CalendarPrimitive came from
+// "./cal", but a bare use of the name has no symbol of that name to reach: the
+// module exports Calendar. Two things make the use reach it, both made here and
+// neither needing the resolver to know about renames:
+//
+//   - a second member row, for the exported name (".Calendar"), so the
+//     resolver restricts a use of Calendar to that module, and
+//   - the reference itself is recorded under the exported name, since it IS a
+//     use of that export. renamedImports lists the pairs.
+//
+// A default import (`import X from`, `{ default as X }`) names the module's
+// default, whose declared name this file cannot see, and is not renamed.
+// A local variable of the same name as the exported one would be taken for the
+// import; a file that renames an import and also declares a binding by its
+// exported name is the one case this gets wrong.
+func (p *genericParser) renamedImports(tree *ts.Tree, src []byte) map[string]string {
+	if tree == nil || !importBindingLanguages[p.entry.Name] {
+		return nil
+	}
+	defer func() { _ = recover() }()
+	root := tree.RootNode()
+	if root == nil {
+		return nil
+	}
+	lang := p.lang
+	var out map[string]string
+	for i := 0; i < root.ChildCount(); i++ {
+		stmt := root.Child(i)
+		if stmt == nil || !stmt.IsNamed() || stmt.Type(lang) != "import_statement" {
+			continue
+		}
+		var walk func(n *ts.Node, depth int)
+		walk = func(n *ts.Node, depth int) {
+			if depth > 4 {
+				return
+			}
+			for j := 0; j < n.ChildCount(); j++ {
+				c := n.Child(j)
+				if c == nil || !c.IsNamed() {
+					continue
+				}
+				if c.Type(lang) != "import_specifier" {
+					walk(c, depth+1)
+					continue
+				}
+				original := c.ChildByFieldName("name", lang)
+				local := c.ChildByFieldName("alias", lang)
+				if original == nil || local == nil || original.Text(src) == "default" {
+					continue
+				}
+				if out == nil {
+					out = map[string]string{}
+				}
+				out[local.Text(src)] = original.Text(src)
+			}
+		}
+		walk(stmt, 0)
 	}
 	return out
 }

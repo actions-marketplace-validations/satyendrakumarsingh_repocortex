@@ -48,7 +48,81 @@ func init() {
 (instance_expression (stable_type_identifier (type_identifier) @name .) @reference.call.new)
 (instance_expression (generic_type type: (type_identifier) @name) @reference.call.new)
 (object_definition name: (identifier) @name) @definition.variable
+(function_definition . (operator_identifier) @name) @definition.function
+(function_declaration . (operator_identifier) @name) @definition.function
+(function_definition (modifiers) . (operator_identifier) @name) @definition.function
+(function_declaration (modifiers) . (operator_identifier) @name) @definition.function
+(type_definition . (type_identifier) @name) @definition.type_alias
+(type_definition (modifiers) . (type_identifier) @name) @definition.type_alias
 `, false)
+	definitionRefiners["scala"] = dropLocalDefinitions
+}
+
+// Operators, type members, and what is not a member.
+//
+// `def /(that: String): Path` is named by an operator_identifier, a node the
+// inferred pattern (which wants an identifier) never saw: os-lib declares its
+// whole path algebra that way. `type Segment = String` and the abstract
+// `type Self <: Path` are type_definition nodes and define a type alias, the
+// way a Go or Kotlin alias does.
+//
+// A def is a definition when it is a member of a class, trait, object or
+// enum, or sits at the top of a file (Scala 3). Two things were taken for
+// that and are not, 26 of them in os-lib's five files:
+//
+//	def run(a: Int) = { def helper(b: Int) = b + 1; helper(a) }    helper is local
+//	val r = new Runnable { def run(): Unit = () }                  an anonymous class's
+//
+// A local def cannot be named from outside its block, and the members of an
+// anonymous class are reached only through the type it extends, so neither
+// is a definition; both are dropped, not owned. A named class declared in a
+// block keeps its own members.
+func dropLocalDefinitions(root *ts.Node, lang *ts.Language, _ string, _ []byte, tags []ts.Tag) map[uint32]definitionFix {
+	var fixes map[uint32]definitionFix
+	for _, tag := range tags {
+		if !strings.HasPrefix(tag.Kind, "definition") {
+			continue
+		}
+		name := root.NamedDescendantForByteRange(tag.NameRange.StartByte, tag.NameRange.EndByte)
+		if name == nil {
+			continue
+		}
+		decl := name.Parent()
+		if decl == nil {
+			continue
+		}
+		switch decl.Type(lang) {
+		case "function_definition", "function_declaration", "type_definition":
+		default:
+			continue
+		}
+		if !isScalaMemberPosition(decl.Parent(), lang) {
+			if fixes == nil {
+				fixes = map[uint32]definitionFix{}
+			}
+			fixes[tag.NameRange.StartByte] = definitionFix{drop: true}
+		}
+	}
+	return fixes
+}
+
+// isScalaMemberPosition reports whether a declaration whose parent is p is a
+// member of a named type, or a top-level declaration.
+func isScalaMemberPosition(p *ts.Node, lang *ts.Language) bool {
+	if p == nil {
+		return true
+	}
+	switch p.Type(lang) {
+	case "template_body", "with_template_body":
+		// The body of an anonymous class belongs to an instance_expression.
+		if owner := p.Parent(); owner != nil && owner.Type(lang) == "instance_expression" {
+			return false
+		}
+		return true
+	case "compilation_unit", "package_clause", "enum_body", "extension_definition", "given_definition":
+		return true
+	}
+	return false
 }
 
 // scalaImports reads a file's import declarations as import rows with dotted

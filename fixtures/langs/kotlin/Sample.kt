@@ -33,3 +33,19 @@ fun main() {
     val c = Circle(2.0)
     println(c.area())
 }
+
+const val MAX_RETRIES = 3
+val NO_ANNOTATIONS = emptySet<String>()
+internal var counter: Int = 0
+val (first, second) = Pair(1, 2)
+
+internal class `-Reader`(private val source: String) {
+    fun peek(): Int = 1
+}
+
+fun adapter(): Runnable {
+    val tmp = 1
+    return object : Runnable {
+        override fun run() {}
+    }
+}

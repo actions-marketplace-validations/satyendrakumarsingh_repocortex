@@ -1,6 +1,10 @@
 package parse
 
-import "sort"
+import (
+	"sort"
+
+	ts "github.com/odvcencio/gotreesitter"
+)
 
 // Tags-query supplements.
 //
@@ -53,13 +57,20 @@ var supplements = map[string]string{
 	// general rule matches interfaces too, so the two compete and specificity
 	// decides — see kindSpecificity, where KindInterface outranks KindClass for
 	// exactly this reason.
+	//
+	// A const or var is a definition only at the package level, as a child of
+	// the file: `var local = 1` inside a function, a closure or a block is a
+	// local, and cobra had 13 of them indexed as variables in two files. The
+	// grouped form `var ( ... )` wraps its specs in a var_spec_list; a grouped
+	// const does not.
 	"go": `
 (type_spec name: (type_identifier) @name type: (struct_type)) @definition.class
 (type_spec name: (type_identifier) @name type: (interface_type)) @definition.interface
 (type_spec name: (type_identifier) @name) @definition.type
 (type_alias name: (type_identifier) @name) @definition.type_alias
-(const_spec name: (identifier) @name) @definition.constant
-(var_spec name: (identifier) @name) @definition.variable
+(source_file (const_declaration (const_spec name: (identifier) @name) @definition.constant))
+(source_file (var_declaration (var_spec name: (identifier) @name) @definition.variable))
+(source_file (var_declaration (var_spec_list (var_spec name: (identifier) @name) @definition.variable)))
 `,
 
 	// Interfaces, enums, records and fields are how Java expresses most
@@ -211,7 +222,8 @@ var supplements = map[string]string{
 	"ruby": `
 (class name: (constant) @name) @definition.class
 (module name: (constant) @name) @definition.module
-(call method: (identifier) @name) @reference.call
+(call receiver: (_) method: (identifier) @name) @reference.call
+(call !receiver method: (identifier) @name (#not-any-of? @name "include" "extend" "prepend")) @reference.call
 `,
 }
 
@@ -373,9 +385,17 @@ var inheritanceQueries = map[string]string{
 	// keyword arguments are a distinct node, so `class D(E, metaclass=M)`
 	// yields E and not M: a metaclass is not a base class, and reporting it as
 	// one would put a false edge on the graph.
+	//
+	// A base written with a subscript, `class C(ParamType[str])`, names ParamType
+	// (click: 17 of 30 declared supertypes were missing). `Generic[T]` and
+	// `Protocol[T]` are not bases of the program's own: they declare a type
+	// parameter list and a structural type, and are recorded for no form, plain
+	// or subscripted, bare or reached through typing, typing_extensions or t.
 	"python": `
-(class_definition superclasses: (argument_list (identifier) @name @reference.inherit))
-(class_definition superclasses: (argument_list (attribute attribute: (identifier) @name) @reference.inherit))
+(class_definition superclasses: (argument_list (identifier) @name @reference.inherit (#not-any-of? @name "Generic" "Protocol")))
+(class_definition superclasses: (argument_list (attribute object: (_) @_o attribute: (identifier) @name) @reference.inherit (#not-any-of? @_o "typing" "typing_extensions" "t")))
+(class_definition superclasses: (argument_list (subscript value: (identifier) @name @reference.inherit (#not-any-of? @name "Generic" "Protocol"))))
+(class_definition superclasses: (argument_list (subscript value: (attribute object: (_) @_o attribute: (identifier) @name) @reference.inherit (#not-any-of? @_o "typing" "typing_extensions" "t"))))
 `,
 
 	// C# writes one base_list after the colon and the grammar does not say which
@@ -820,7 +840,10 @@ func HasMeasuredReceivers(language string) bool { return receiverLanguages[langu
 // position without either query knowing about the other. See the callSite type
 // in generic.go for why the match is on line plus name and never on column.
 //
-// # Only Go is listed, and that is a measurement statement rather than a gap
+// # Python is not listed, and that is a measurement statement rather than a gap
+//
+// Kotlin, Scala, C# and C++ register theirs from arity_langs.go, with the rule
+// each one counts by.
 //
 // The counting itself is language-specific in a way that is easy to get subtly
 // wrong, and a wrong count is worse than no count:
@@ -918,6 +941,38 @@ type arityDialect struct {
 	// parameter — `func h(int, string)` declares two parameters and names
 	// neither.
 	group map[string]bool
+
+	// items, when non-nil, closes the dialect: the only named children of a
+	// list that count as one item each are these types, and any other named
+	// child (a default value the grammar writes beside its parameter, a
+	// `params` array it leaves bare) makes the whole list unknown. A nil items
+	// keeps the older, open behaviour of the Go, Java and TypeScript dialects,
+	// where every named child is one item.
+	items map[string]bool
+
+	// closedIn narrows items to the lists of these types, for a language whose
+	// argument lists hold any expression and so cannot be closed (C++'s
+	// parameter_list is closed, its argument_list is not). Empty means every
+	// list the dialect counts.
+	closedIn map[string]bool
+
+	// skip types are named children that are neither items nor a reason to
+	// give up: a modifier list that belongs to the next parameter, the type
+	// arguments of a call.
+	skip map[string]bool
+
+	// flatten types are wrappers whose own children are counted in their place
+	// (Kotlin's `value_arguments` inside a `call_suffix`).
+	flatten map[string]bool
+
+	// opaque reports an item whose presence makes the count unknown although
+	// it is a plain item by type: a C# parameter with a default value, or the
+	// `this` of an extension method.
+	opaque func(item *ts.Node, lang *ts.Language, src []byte) bool
+
+	// voidList reports a list that declares nothing although it has a child:
+	// C and C++ write `f(void)` for a function of no parameters.
+	voidList func(list *ts.Node, lang *ts.Language, src []byte) bool
 }
 
 // arityDialects is keyed by the same language names as the queries above. A

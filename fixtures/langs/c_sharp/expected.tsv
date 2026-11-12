@@ -1,0 +1,24 @@
+# C#: classes, structs, records and enums (listed as classes), interfaces, methods, constructors (listed as methods, named after the class),
+# properties and events (listed as fields; auto, full, init-only and expression-bodied alike). Not definitions: a field, an indexer (it has no name), a delegate,
+# a return type (`ILogger Logger()` defines Logger and no method called ILogger), a call, `new X(...)`, an `if` or `return` in a body.
+Sample.cs	6	interface	IRepository
+Sample.cs	8	method	Find
+Sample.cs	9	method	All
+Sample.cs	12	interface	ILogger
+Sample.cs	14	method	ForContext
+Sample.cs	16	method	Enrich
+Sample.cs	22	class	Order
+Sample.cs	24	field	Id
+Sample.cs	25	field	Name
+Sample.cs	26	field	Total
+Sample.cs	27	field	Changed
+Sample.cs	28	field	Closed
+Sample.cs	31	method	Order
+Sample.cs	32	method	Order
+Sample.cs	34	method	Logger
+Sample.cs	35	method	Create
+Sample.cs	37	method	Equals
+Sample.cs	39	method	Run
+Sample.cs	49	class	Point
+Sample.cs	50	class	Mode
+Sample.cs	51	class	Pair

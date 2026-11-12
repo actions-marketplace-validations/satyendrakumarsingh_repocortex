@@ -31,3 +31,17 @@ object Main {
     println(c.area())
   }
 }
+
+class Path(val s: String) {
+  type Segment = String
+  def /(that: String): Path = new Path(s)
+  def ++(that: Path): Path = this
+
+  def run(a: Int): Int = {
+    def helper(b: Int): Int = b + 1
+    val task = new Runnable { def run(): Unit = () }
+    helper(a)
+  }
+}
+
+type Table = Map[String, Int]

@@ -5,6 +5,7 @@
 #  - `obj.name = function` is the method name owned by obj only as a top-level statement on an object the same file declares at its top level; inside a function, on `this`, or on an undeclared object it is an assignment and defines nothing;
 #  - `export const/let/var x = value` is a constant (variable for let and var); createContext(...) is a constant, exported or not; a component built by memo, forwardRef, lazy, observer, defineComponent or styled is a function; `const X = class {}` is a class;
 #  - a constant that is not exported, a call result that is not one of those, and an assignment that aliases another name (`exports.alias = exports.parse`) are not definitions.
+#  - a private `#name` method is a method and a private `#name` class field a field, named with the `#`; a public class field is not a definition.
 commonjs.js	11	function	parse
 commonjs.js	14	function	render
 commonjs.js	15	function	fromArrow
@@ -44,3 +45,7 @@ page.jsx	7	function	Shell
 widget/index.js	1	class	widget
 widget/index.js	2	method	render
 esm.js	23	constant	shared
+esm.js	27	class	Vault
+esm.js	28	field	#secret
+esm.js	30	method	#check
+esm.js	31	method	read

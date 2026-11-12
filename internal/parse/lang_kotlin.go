@@ -1,6 +1,10 @@
 package parse
 
-import ts "github.com/odvcencio/gotreesitter"
+import (
+	"strings"
+
+	ts "github.com/odvcencio/gotreesitter"
+)
 
 // Kotlin calls and the types they reach. The inferred tags query for Kotlin
 // finds definitions and no call at all, so every "who calls this" answer for
@@ -37,7 +41,70 @@ func init() {
 (call_expression (navigation_expression (navigation_suffix (simple_identifier) @name .))) @reference.call
 (class_declaration "class" (type_identifier) @name) @definition.class
 (object_declaration (type_identifier) @name) @definition.variable
+(source_file (property_declaration (binding_pattern_kind) @_k (variable_declaration (simple_identifier) @name) (#eq? @_k "val")) @definition.constant)
+(source_file (property_declaration (binding_pattern_kind) @_k (variable_declaration (simple_identifier) @name) (#eq? @_k "var")) @definition.variable)
 `, false)
+	registerNameFix("kotlin", func(name string) string {
+		return strings.Trim(name, "`")
+	})
+	definitionRefiners["kotlin"] = dropAnonymousObjectMembers
+}
+
+// Top-level properties, anonymous objects and backticked names.
+//
+// A `val`, `const val` or `var` written at the top of a file is a constant or a
+// variable, in the sense Kotlin gives it: a `val` is read-only, so a constant
+// whether or not it is `const`; a `var` is a variable. moshi's nine misses were
+// all of this kind, and the calls in their initialisers
+//
+//	val NO_ANNOTATIONS = emptySet<Annotation>()
+//
+// had no caller, because no symbol enclosed them: with the property a symbol,
+// the call is written in it. A destructuring declaration (`val (a, b) = p`) has
+// no single name and is not a definition. A property of a class is not one
+// either, as before (see the fixture).
+//
+// The methods of an anonymous object (`object : Runnable { override fun run()
+// {} }`) are DROPPED, not owned. The object has no name, so no call can reach
+// its methods but through the supertype, where the interface's own declaration
+// is the target; extracted, they were free-standing methods with the names
+// `run` or `compareTo` that a bare call could bind to (moshi: three). A named
+// class or object declared inside one keeps its own members.
+//
+// A name written in backticks (“-JsonUtf8Reader“, “should parse“) is the name
+// without them: it is how the language escapes a name that is not an
+// identifier, not part of the name. The class symbol is -JsonUtf8Reader and its
+// methods are qualified by it; the backticks used to hide the class from the
+// scope walk and left every method of it unqualified.
+func dropAnonymousObjectMembers(root *ts.Node, lang *ts.Language, _ string, _ []byte, tags []ts.Tag) map[uint32]definitionFix {
+	var fixes map[uint32]definitionFix
+	for _, tag := range tags {
+		if !strings.HasPrefix(tag.Kind, "definition") {
+			continue
+		}
+		name := root.NamedDescendantForByteRange(tag.NameRange.StartByte, tag.NameRange.EndByte)
+		if name == nil || name.Type(lang) != "simple_identifier" {
+			continue
+		}
+		decl := name.Parent()
+		if decl == nil || decl.Type(lang) != "function_declaration" {
+			continue
+		}
+	climb:
+		for a := decl.Parent(); a != nil; a = a.Parent() {
+			switch a.Type(lang) {
+			case "object_literal":
+				if fixes == nil {
+					fixes = map[uint32]definitionFix{}
+				}
+				fixes[tag.NameRange.StartByte] = definitionFix{drop: true}
+				break climb
+			case "class_declaration", "object_declaration", "source_file":
+				break climb
+			}
+		}
+	}
+	return fixes
 }
 
 // kotlinField answers the field lookups the scope walk (shape.go) makes of a
