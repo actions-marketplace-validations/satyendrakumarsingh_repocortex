@@ -91,3 +91,7 @@ When a declaration form cannot be captured by a query at all (the grammar
 parses it as an error, or the name is not a node of its own), do not
 approximate it with a pattern that also matches other things. Write it in
 `KNOWN_GAPS.md` with the reason and the tree fragment that shows it.
+
+A language that was examined and found to declare nothing worth indexing has a
+directory with only a `KNOWN_GAPS.md` that says so, with the evidence, and no
+`expected.tsv`. It must not register a query.

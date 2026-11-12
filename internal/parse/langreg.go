@@ -48,8 +48,6 @@ var (
 // understands (function, method, constructor, class, struct, enum, interface,
 // trait, type_alias, module, namespace, constant, variable, field).
 // References are @reference.KIND with the same @name.
-//
-//nolint:unused // called from the init of each lang_<language>.go; the first of those has not landed yet
 func registerDefinitions(language, query string, replaceInferred bool) {
 	if _, dup := registeredDefinitions[language]; dup {
 		duplicateRegistrations = append(duplicateRegistrations, language)
@@ -88,4 +86,35 @@ func definitionQueryText(entry grammars.LangEntry) string {
 		parts = append(parts, reg.query)
 	}
 	return strings.TrimSpace(strings.Join(parts, "\n"))
+}
+
+// nameFixes holds, per language, a correction applied to every captured name.
+//
+// Some grammars lex a name together with a neighbouring character: Authzed
+// reads `relation admin: user` as the name "admin:". A query cannot trim a
+// capture, and a symbol with a wrong name is worse than a missing one, so the
+// correction is made here, on the text, after the query has matched.
+var nameFixes = map[string]func(string) string{}
+
+// registerNameFix registers the correction for a language's captured names.
+// Call it from init in the language's lang_<language>.go.
+func registerNameFix(language string, fix func(string) string) {
+	if _, dup := nameFixes[language]; dup {
+		duplicateRegistrations = append(duplicateRegistrations, language+" (name fix)")
+	}
+	nameFixes[language] = fix
+}
+
+// cleanName is the name a capture stands for: its text without surrounding
+// white space, then the language's own correction when it has one.
+//
+// The white space is trimmed for every language. No identifier begins or ends
+// with it, and a grammar that includes it in the token (Circom does, for the
+// name after `template`) would otherwise produce a symbol nothing can look up.
+func cleanName(language, name string) string {
+	name = strings.TrimSpace(name)
+	if fix := nameFixes[language]; fix != nil {
+		name = fix(name)
+	}
+	return name
 }

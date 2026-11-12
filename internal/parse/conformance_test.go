@@ -102,10 +102,38 @@ func languageFixtures(t *testing.T) []string {
 	return out
 }
 
+// declaresNothing reports whether a fixture directory records a language that
+// was examined and found to have nothing to extract: it holds a KNOWN_GAPS.md
+// that says why, and no expected.tsv.
+//
+// Angular's template grammar is the case this exists for. A template declares
+// nothing a developer searches a code index for, and the honest record of that
+// is the explanation, not an empty list a later reader would take for neglect.
+// A language in that state may not also register a query: that would be a
+// claim of support with no fixture behind it.
+func declaresNothing(t *testing.T, dir, language string) bool {
+	t.Helper()
+	if _, err := os.Stat(filepath.Join(dir, "expected.tsv")); err == nil {
+		return false
+	}
+	if _, err := os.Stat(filepath.Join(dir, "KNOWN_GAPS.md")); err != nil {
+		t.Fatalf("fixture directory %q needs an expected.tsv, or a KNOWN_GAPS.md saying why nothing is extracted", language)
+	}
+	for _, registered := range HandWrittenLanguages() {
+		if registered == language {
+			t.Fatalf("%s registers a definition query and has no expected.tsv", language)
+		}
+	}
+	return true
+}
+
 func TestLanguageConformance(t *testing.T) {
 	for _, language := range languageFixtures(t) {
 		t.Run(language, func(t *testing.T) {
 			dir := filepath.Join(langFixtureRoot, language)
+			if declaresNothing(t, dir, language) {
+				return
+			}
 			p, err := parserForLanguage(language)
 			if err != nil {
 				t.Fatalf("fixture directory %q: %v", language, err)

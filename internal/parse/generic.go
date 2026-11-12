@@ -903,7 +903,7 @@ func (p *genericParser) tagTree(tree *ts.Tree, src []byte) (tags []ts.Tag, err e
 		for _, c := range m.Captures {
 			switch {
 			case c.Name == "name":
-				tag.Name = c.Node.Text(src)
+				tag.Name = cleanName(p.entry.Name, c.Node.Text(src))
 				tag.NameRange = c.Node.Range()
 			case strings.HasPrefix(c.Name, "definition.") || strings.HasPrefix(c.Name, "reference."):
 				tag.Kind = c.Name
