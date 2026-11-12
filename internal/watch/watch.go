@@ -97,7 +97,25 @@ type Options struct {
 	// Context, when non-nil, shuts the watcher down on cancellation exactly as
 	// Close does. Close is still required to release the backend's resources
 	// and to learn whether that succeeded.
+	//
+	// It also interrupts New. Registering the tree is checked against it
+	// before every directory, and a cancelled start returns the context's
+	// error with nothing left running.
 	Context context.Context
+
+	// Progress, when non-nil, is called from New while the tree is being
+	// registered, with the number of directories watched so far, at most once
+	// per ProgressEvery (two seconds when zero). It is not called again after
+	// New returns.
+	Progress      func(watchedDirs int)
+	ProgressEvery time.Duration
+
+	// PollInterval is the shortest gap between two sweeps of the scanning
+	// backend, which is what notices a file rewritten in place on platforms
+	// where the kernel will not report that without the file held open. See
+	// scan.go. Defaults to DefaultPollInterval; ignored by backends that do
+	// not sweep.
+	PollInterval time.Duration
 
 	// backend is injected by tests. Nil means a real fsnotify watcher.
 	backend backend
@@ -156,7 +174,10 @@ type Watcher struct {
 // New starts watching root.
 //
 // The initial pass registers watches for the whole tree before returning, so a
-// change made after New returns cannot be missed. It does NOT emit changes for
+// change made after New returns cannot be missed. A change made WHILE it runs
+// can be: a directory is covered from the moment it is registered, not from
+// the moment New was called. A caller that needs the tree and the index to
+// agree must therefore reconcile after New returns, not before. It does NOT emit changes for
 // what already exists: the caller is expected to have indexed the tree, and
 // replaying it as a batch of creates would duplicate that work.
 //
@@ -204,11 +225,9 @@ func New(root string, opts Options) (*Watcher, error) {
 
 	b := opts.backend
 	if b == nil {
-		fsw, err := fsnotify.NewWatcher()
-		if err != nil {
-			return nil, fmt.Errorf("watch: create backend: %w", err)
+		if b, err = newDefaultBackend(opts.PollInterval); err != nil {
+			return nil, err
 		}
-		b = fsnotifyBackend{w: fsw}
 	}
 
 	w := &Watcher{
@@ -226,6 +245,16 @@ func New(root string, opts Options) (*Watcher, error) {
 	w.co = newCoalescer(debounce, w.exists)
 	if opts.Context != nil {
 		w.ctxDone = opts.Context.Done()
+		w.dirs.stop = opts.Context.Err
+	}
+	if opts.Progress != nil {
+		w.dirs.progress, w.dirs.progressEvery = opts.Progress, opts.ProgressEvery
+		if w.dirs.progressEvery <= 0 {
+			w.dirs.progressEvery = 2 * time.Second
+		}
+		// The first report comes one interval in, not at once: a start that
+		// finishes sooner than that has nothing worth saying.
+		w.dirs.lastProgress = time.Now()
 	}
 
 	// The drain starts BEFORE the initial walk, not after. That walk registers a
@@ -246,6 +275,10 @@ func New(root string, opts Options) (*Watcher, error) {
 		w.wg.Wait()
 		return nil, err
 	}
+	// Start-up is over. Directories that appear later are registered from the
+	// event loop, which must neither report progress nor be refused by a
+	// context whose cancellation the loop already handles itself.
+	w.dirs.progress, w.dirs.stop = nil, nil
 
 	w.wg.Add(1)
 	go w.run()

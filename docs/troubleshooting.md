@@ -412,8 +412,11 @@ so look for build output, caches and vendored SDKs.
 ### `watch "some/dir": no space left on device`
 
 **Cause.** The kernel refused the watch. On Linux this is
-`fs.inotify.max_user_watches` (or `max_user_instances`) exhausted; on macOS/BSD
-it is `RLIMIT_NOFILE`, because kqueue costs a file descriptor per directory.
+`fs.inotify.max_user_watches` (or `max_user_instances`) exhausted. On macOS it is
+the open-file limit, and the message is `out of file descriptors after N watched
+directories`: RepoCortex holds one descriptor per watched directory there and
+none per file. On the BSDs, where fsnotify's kqueue backend is used, it is a
+descriptor per directory and per file.
 
 This arrives on the `Errors()` channel as a warning and degrades coverage rather
 than ending the session.
@@ -431,6 +434,23 @@ raise the OS limit: `sudo sysctl fs.inotify.max_user_watches=524288` on Linux, o
 hash on every batch rather than trusting the event stream, so a dropped event for
 a file that is later touched is caught. If you suspect the index is stale after a
 storm of changes, `repocortex index` reconciles everything.
+
+### `watch` takes a long time to print "Watching", or an edit takes seconds to be noticed
+
+**Start-up.** `watch` prints `watching N directories...` to standard error every
+two seconds while it registers the tree, then reconciles, then prints
+`Watching <project>: N directories (revision R), ready in T`. Ctrl-C works
+throughout. Up to v1.0.1 start-up on macOS opened every file in the repository
+one at a time (17 s to over a minute on a 7,100-file repository on a loaded
+machine), printed nothing, could not be interrupted, and lost edits saved while
+it ran.
+
+**An edit that takes a couple of seconds on macOS.** A file rewritten in place
+(an append, some editors' default save) is found by a sweep of file sizes and
+times that runs every two seconds, or less often on a tree that takes long to
+sweep. A save made by writing a temporary file and renaming it, which is what
+most editors do, is reported by the kernel at once. Linux and Windows report
+both at once. See `watch` in the CLI reference for why.
 
 ### Edits are not picked up
 
@@ -452,7 +472,10 @@ Check in order:
    goes quiet" below. If you can still reproduce a loss here, it is a bug worth
    reporting.
 
-### A whole subdirectory goes quiet (macOS/BSD)
+### A whole subdirectory goes quiet (BSD; macOS up to v1.0.1)
+
+This is a fault in fsnotify's kqueue backend. RepoCortex no longer uses that
+backend on macOS, so it applies there only to v1.0.1 and earlier.
 
 **Symptom.** Edits anywhere else in the repository are picked up, but nothing
 inside one directory is ever reported. No error is logged, `Add` succeeded, and
@@ -488,8 +511,9 @@ reported rather than silent, unlike a kernel-side overflow.
 
 ### `error: initial reconcile: ...`
 
-**Cause.** The startup reconcile pass failed before watching began. Files change
-while the watcher is not running, so `watch` diffs first; a failure here is
+**Cause.** The start-up reconcile pass failed. Files change while the watcher is
+not running and while it is starting, so `watch` registers its watches and then
+diffs the tree against the index before it reports ready; a failure here is
 usually the same underlying problem `repocortex index` would report.
 
 **Fix.** Run `repocortex index` and read its error, which is not wrapped.

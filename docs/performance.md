@@ -363,6 +363,56 @@ and one system call per file in the repository, it is not interruptible because
 `watch.New` takes no context, and nothing is printed while it runs. In run A the
 edits were made before the "Watching" line and were never reported.
 
+#### `repocortex watch`, re-measured after start-up was fixed
+
+Same day, machine, clone and build method as the update figures above; the
+"before" binary is the tree before the fix. The load average was 12 to 18 for
+the "before" runs and 14 to 20 for the "after" runs. Three starts each, every
+run shown. Each start made one edit 0.25 s after launch, one in-place append
+once watching, and one save by temporary file and rename.
+
+| `repocortex watch` on django, 7,100 files in 3,273 directories | Before | After |
+|---|---|---|
+| Start to the "Watching" line | 5.40 / 9.38 / 25.03 s | 1.63 / 1.71 / 1.63 s, and 2.93 / 2.51 / 1.52 s in a second set |
+| Open descriptors once watching (`lsof -p` lines) | 10,399 | 3,298 |
+| An edit made 0.25 s into start-up | picked up in 2 of 3 starts; never reported in the third | picked up before the banner, 6 of 6 |
+| Ctrl-C while still registering | 2 s in: exits 4.42 s later. 3 s in: 0.89 s later | 0.5 s in: 0.15 s later. 1.0 s in: 0.08 s later |
+| Ctrl-C once watching | 0.30 to 0.41 s | 0.07 to 0.26 s |
+| In-place append to logged update | 1.80 / 7.34 / 3.04 s | 1.03 / 1.42 / 2.24 s |
+| Save by rename to logged update | 3.51 / 6.47 / 2.37 s | 1.00 / 0.79 / 0.71 s |
+
+What changed, in the order it matters:
+
+- **No file is opened.** On macOS the watcher holds one descriptor per
+  directory (kqueue on the directory, which reports entries created, deleted
+  and renamed) and finds a file rewritten in place by a sweep of sizes and
+  modification times. fsnotify's kqueue backend, used before, opens every file,
+  and has no option not to. Linux and Windows already watched directories
+  only.
+- **The sweep is the price**, and it is why an in-place write is not instant on
+  macOS: it runs every two seconds, or less often when a sweep takes long, so
+  that it costs at most about a twentieth of one core. With the sweep listing
+  every directory an in-place append took 7.3 to 8.9 s to be reported on this
+  loaded machine; with the sweep reduced to one `lstat` per remembered file
+  (the kernel already reports changes to a listing) it took the 1.0 to 2.2 s in
+  the table.
+- **Registration takes a context and reports progress**, every two seconds on
+  standard error. None was printed here because no start took two seconds to
+  register.
+- **The reconcile runs after registration**, so an edit made during start-up
+  is in the index before the banner.
+- **Hidden tool directories are not watched**, by the same rule that keeps
+  them out of the index.
+
+What a descriptor per directory implies: the bound on a repository that can be
+watched on macOS is its directory count against the open-file limit
+(`kern.maxfilesperproc` was 92,160 on this machine and is 10,240 by default on
+older systems), where it was directories plus files. `watch` stops at 8,192
+directories with a named error before the kernel refuses.
+
+Not measured: an idle machine, the sweep's standing cost in CPU over a long
+session, and Linux or Windows, where nothing about the mechanism changed.
+
 ### Linux kernel, cold index
 
 narsil publishes 45 s, codebase-memory-mcp 3 minutes, and codegraph under

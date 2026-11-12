@@ -276,6 +276,51 @@ coalesced. Each file updates in its own transaction, so an agent querying
 concurrently always sees a file either entirely before or entirely after a
 change.
 
+**Start-up.** `watch` registers every directory, then reconciles the index with
+the tree, then prints its banner:
+
+```
+$ repocortex watch
+Watching django: 3273 directories (revision 2), ready in 1.59s. Press Ctrl-C to stop.
+```
+
+When registration takes longer than two seconds, a `watching N directories...`
+line goes to standard error every two seconds until it is done, so a slow start
+says it is still starting. (It took 1.6 s on django, so none was printed there.)
+Ctrl-C during start-up stops it at the next directory. The reconcile runs after
+registration and not before, so an edit saved while `watch` was starting is
+picked up before the banner and not lost between the two.
+
+**What a watch costs, and what it can see.** One watch per directory, and none
+per file, on every platform:
+
+| Platform | Mechanism | A file rewritten in place | A file created, deleted or renamed (how most editors save) | Limit |
+|---|---|---|---|---|
+| Linux | inotify, through fsnotify | reported at once | reported at once | `fs.inotify.max_user_watches`, one per directory |
+| Windows | ReadDirectoryChangesW, through fsnotify | reported at once | reported at once | one handle per directory |
+| macOS | kqueue on each directory, plus a sweep | found by the next sweep | reported at once | one file descriptor per directory |
+
+macOS is the one with a trade in it. kqueue reports a write to a file only to a
+process holding that file open, so the usual approach (and fsnotify's) opens
+every file: 10,400 descriptors and as many `open` calls for django's 7,100 files
+and 3,273 directories, which is what made start-up take 17 s to over a minute
+and put a ceiling on the size of repository that could be watched at all.
+RepoCortex holds a descriptor per directory instead (3,298 on django). The
+kernel then reports every change to a directory's listing at once, and a file
+rewritten where it lies is found by a sweep that compares each file's size and
+modification time with what was last seen. The sweep runs every two seconds, or
+less often on a tree that takes long to sweep, so that it costs at most about a
+twentieth of one core; an in-place write is therefore noticed within one sweep
+interval and not instantly. On the BSDs fsnotify's kqueue backend is still
+used, with a descriptor per file.
+
+What the descriptor limit implies on macOS: the number of directories that can
+be watched is bounded by the process's open-file limit (`ulimit -n`; the
+per-process maximum is `sysctl kern.maxfilesperproc`, 10,240 by default on older
+systems). `watch` refuses more than 8,192 directories with a named error before
+that is reached. Hidden tool directories (`.venv`, `.idea`, `.claude` and the
+like) are not watched; see [index](#index).
+
 ### `status`
 
 **Answers:** what state is the index in, and how much is in it? All figures are
