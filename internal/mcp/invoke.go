@@ -73,9 +73,24 @@ type Invoker struct {
 	srv    *Server
 }
 
+// frontEndInfo describes an in-process session: which front end opened it and, on
+// a shared server, the name of the token it answers for.
+type frontEndInfo struct {
+	name      string
+	tokenName string
+}
+
 // NewInvoker connects an in-process client. frontEnd names the caller for the
 // audit log ("rest", "cli"). Close it when done.
 func (s *Server) NewInvoker(ctx context.Context, frontEnd string) (*Invoker, error) {
+	return s.NewInvokerAs(ctx, frontEnd, "")
+}
+
+// NewInvokerAs is NewInvoker for one named token of a shared server: every
+// call made through the returned Invoker is recorded in the audit log under
+// tokenName. The name is fixed here, by the process, and nothing a caller
+// sends can change it.
+func (s *Server) NewInvokerAs(ctx context.Context, frontEndName, tokenName string) (*Invoker, error) {
 	clientT, serverT := sdk.NewInMemoryTransports()
 
 	ss, err := s.sdk.Connect(ctx, serverT, nil)
@@ -84,9 +99,9 @@ func (s *Server) NewInvoker(ctx context.Context, frontEnd string) (*Invoker, err
 	}
 	// Registered before the client can send anything, so the first call is
 	// already stateless and already attributed.
-	s.frontEnds.Store(ss, frontEnd)
+	s.frontEnds.Store(ss, frontEndInfo{name: frontEndName, tokenName: tokenName})
 
-	client := sdk.NewClient(&sdk.Implementation{Name: "repocortex-" + frontEnd, Version: Version}, nil)
+	client := sdk.NewClient(&sdk.Implementation{Name: "repocortex-" + frontEndName, Version: Version}, nil)
 	cs, err := client.Connect(ctx, clientT, nil)
 	if err != nil {
 		s.frontEnds.Delete(ss)
@@ -141,6 +156,7 @@ func (i *Invoker) Tools(ctx context.Context) ([]ToolInfo, error) {
 func (i *Invoker) Call(ctx context.Context, name string, args json.RawMessage) (CallResult, error) {
 	canonical := name
 	if !i.srv.hasTool(canonical) {
+		i.srv.recordUnknownTool(i.server, name, args)
 		return CallResult{}, fmt.Errorf("%w %q", ErrUnknownTool, name)
 	}
 

@@ -615,9 +615,11 @@ func (s *Server) getSessionStats(ctx context.Context, req *sdk.CallToolRequest, 
 	stats.Transport = "mcp"
 	frontEnd := ""
 	if ss != nil {
-		if name, ok := s.frontEnds.Load(ss); ok {
-			frontEnd, _ = name.(string)
-			stats.Transport = frontEnd
+		if fe, ok := s.frontEnds.Load(ss); ok {
+			if f, ok := fe.(frontEndInfo); ok {
+				frontEnd = f.name
+				stats.Transport = frontEnd
+			}
 		}
 	}
 

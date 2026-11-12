@@ -23,6 +23,7 @@ func newServeCmd(g *Global) *cobra.Command {
 		allowRemote  bool
 		allowedHosts []string
 		auditLog     string
+		tokensFile   string
 	)
 
 	cmd := &cobra.Command{
@@ -53,6 +54,15 @@ The server listens on loopback only unless --allow-remote is given, and accepts
 Host and Origin values that name this machine or a host in --allowed-host, such
 as the hostname of a tunnel you run.
 
+To share one index with a team, give --tokens-file a file of named tokens, each
+with its own scope and optional expiry ('repocortex serve create-token' makes
+one). A token then works only as a bearer header, a tool outside its scope does
+not exist for it, and --audit-log records the token's name with every call:
+
+    repocortex serve --http 127.0.0.1:7788 --tokens-file team-tokens.jsonl
+
+The file is read once at start; restart to apply a change to it.
+
 The exposed tool set is governed by mcp.profile in .repocortex.yml
 (minimal | standard | full). The default is deliberately small: every tool's
 schema is injected into the agent's context on every request, so a large tool
@@ -66,6 +76,9 @@ someone other than you.`,
 			cfg := g.Config()
 			if httpAddr == "" && (allowRemote || len(allowedHosts) > 0) {
 				return errors.New("--allow-remote and --allowed-host apply only with --http")
+			}
+			if httpAddr == "" && tokensFile != "" {
+				return errors.New("--tokens-file applies only with --http")
 			}
 
 			srv, closeServer, err := openAgentServer(ctx, g, agentServerOptions{AuditPath: auditLog})
@@ -89,6 +102,16 @@ someone other than you.`,
 					fmt.Fprintf(cmd.OutOrStdout(), "  %s\n", t)
 				}
 				return nil
+			}
+
+			if httpAddr != "" && tokensFile != "" {
+				// Several named, scoped tokens instead of one. No token is
+				// generated and none is read from the environment.
+				return serveTeam(ctx, cmd, g, srv, httpServeOptions{
+					Addr:         httpAddr,
+					AllowRemote:  allowRemote,
+					AllowedHosts: allowedHosts,
+				}, tokensFile)
 			}
 
 			if httpAddr != "" {
@@ -168,6 +191,8 @@ someone other than you.`,
 	cmd.Flags().BoolVar(&allowRemote, "allow-remote", false, "with --http, allow listening on a non-loopback address")
 	cmd.Flags().StringSliceVar(&allowedHosts, "allowed-host", nil, "with --http, also accept this Host/Origin hostname (repeatable), e.g. a tunnel's hostname")
 	cmd.Flags().StringVar(&auditLog, "audit-log", "", "append one JSON line per tool call to this file (default: $"+auditLogEnv+"); records the call, never the answer")
+	cmd.Flags().StringVar(&tokensFile, "tokens-file", "", "with --http, accept the named, scoped tokens in this file instead of one token (see 'serve create-token')")
+	cmd.AddCommand(newServeCreateTokenCmd(g))
 	return cmd
 }
 

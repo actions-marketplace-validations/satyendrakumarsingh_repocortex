@@ -1923,6 +1923,8 @@ exposing the index to a coding agent.
 | `--http host:port` | serve MCP over Streamable HTTP at `/mcp` instead of stdio, for clients that only accept a remote server |
 | `--allow-remote` | with `--http`, allow a non-loopback listen address |
 | `--allowed-host name` | with `--http`, also accept this `Host`/`Origin` hostname, such as a tunnel's (repeatable) |
+| `--tokens-file FILE` | with `--http`, accept the named, scoped tokens in this file instead of one token; see [`serve create-token`](#serve-create-token) |
+| `--audit-log FILE` | append one JSON line per tool call (default: `$REPOCORTEX_AUDIT_LOG`); records the call, never the answer |
 
 ```bash
 claude mcp add repocortex -- repocortex --project /path/to/repo serve
@@ -1954,6 +1956,46 @@ MCP profile "minimal" exposes 7 tool(s):
 Responses are bounded and never contain whole files. Repository content is
 labelled as untrusted evidence, because indexed source may have been written by
 someone other than you.
+
+### `serve create-token`
+
+**Answers:** makes one named token for a server shared by a team, prints it
+once, and stores only its SHA-256 hash.
+
+| Flag | Effect |
+|---|---|
+| `--name NAME` | required. Who or what the token is for; the audit log records it. Lower-case letters, digits, `.`, `_`, `-` |
+| `--profile P` | the tools the token may use: `minimal` (default), `standard` or `full` |
+| `--tool NAME` | narrow the profile to this tool (repeatable). Default: the whole profile |
+| `--expires WHEN` | `2027-01-31` (works through that day, UTC) or an RFC 3339 time. Default: no expiry |
+| `--tokens-file FILE` | append the hashed entry to this file, created with mode 0600. Without it the entry is printed for you to add |
+
+```bash
+repocortex serve create-token --name ci --profile minimal --tokens-file team-tokens.jsonl
+repocortex serve --http 127.0.0.1:7788 --tokens-file team-tokens.jsonl --audit-log audit.jsonl
+```
+
+```
+$ repocortex serve create-token --name ci --profile minimal --tokens-file team-tokens.jsonl
+Token "ci" (profile minimal, no expiry):
+
+    rcx_<64 hexadecimal characters>
+
+This is the only time it is shown. RepoCortex keeps its SHA-256 hash, not the token.
+Appended the entry to team-tokens.jsonl. A running server reads the file at start: restart it to load this token.
+```
+
+`--json` prints `{name, token, entry, tokens_file, appended}`. The command needs
+no index. It refuses what the server would refuse (a duplicate name, a tool the
+profile does not expose, a tokens file that is already malformed) and an expiry
+that has already passed.
+
+With `--tokens-file`, `serve` takes a token only as `Authorization: Bearer`, a
+tool outside a token's scope does not exist for it, `REPOCORTEX_MCP_TOKEN` is
+ignored, and the file is read once at start: restart to add or revoke a token.
+A malformed file stops the server. Running it behind a reverse proxy, and what
+shared mode does not do (no SSO, no per-repository permissions, no user
+directory): [sharing one index with a team](guides/protocols.md#sharing-one-index-with-a-team).
 
 ### `ui`
 
