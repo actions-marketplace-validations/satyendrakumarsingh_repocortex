@@ -553,6 +553,17 @@ func toolDescriptions() map[string]string {
 			"CODEOWNERS may be absent. Names only; email addresses are never returned. Needs a git " +
 			"repository.",
 
+		"list_knowledge_risks": "List the directories where recent work is concentrated in the fewest " +
+			"people, most concentrated first. For each it gives the bus factor (the smallest number of " +
+			"people whose commits make up at least half of the recent commits there), the share held by " +
+			"the largest contributor and how long ago they last changed it. Use it to find code that one " +
+			"person carries before planning a handover, a review rota or a risky change, or pass 'path' " +
+			"to ask about one part of the repository. It counts who CHANGED the code in the commits " +
+			"read, not who understands it. People are the author names git recorded, never merged and " +
+			"never with an email address. A shallow clone or a squash-merge workflow distorts the " +
+			"figures, and directories with too few commits are counted but not measured: an empty list " +
+			"means nothing could be measured, not that knowledge is well spread. Needs a git repository.",
+
 		"find_callees": "List what a symbol calls: the definitions inside this repository that its body " +
 			"invokes, each with the file and line of the call and how the binding was established " +
 			"(exact, high, medium or low). Use it to read a function's dependencies without opening " +

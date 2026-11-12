@@ -49,8 +49,8 @@ type Deps struct {
 	// is also the truth for a directory that is not a git repository.
 	History hotspots.History
 
-	// Owners supplies recent commits with their authors for find_owners.
-	// Optional, like History, and for the same reason.
+	// Owners supplies recent commits with their authors for find_owners and
+	// list_knowledge_risks. Optional, like History, and for the same reason.
 	Owners ownership.History
 
 	// Judgeable reports whether the index binds cross-file references for a
@@ -182,6 +182,7 @@ func New(deps Deps) (*Server, error) {
 	s.registerStructure(profileTools(deps.Config.MCPProfile))
 	s.registerChange(profileTools(deps.Config.MCPProfile))
 	s.registerOwners(profileTools(deps.Config.MCPProfile))
+	s.registerKnowledge(profileTools(deps.Config.MCPProfile))
 	s.registerPrompts()
 
 	s.sdk.AddReceivingMiddleware(s.auditMiddleware)
@@ -263,6 +264,7 @@ func fullOnlyTools() []string {
 	return []string{
 		"analyze_change",
 		"find_owners",
+		"list_knowledge_risks",
 		"find_callees",
 		"find_implementations",
 		"trace_call_path",
