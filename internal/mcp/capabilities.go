@@ -301,9 +301,15 @@ func impactItems(rep impact.Report) ([]Item, reachCounts) {
 			continue
 		}
 		path, line := callSite(d)
+		why := "calls the target directly"
+		if d.Via == model.EdgeInstantiates {
+			// A constructor call is recorded against the type. It is a use of
+			// the type, and not a call to a function by that name.
+			why = "constructs the target directly"
+		}
 		items = append(items, Item{
 			Kind: kindDirect, Name: d.Name, Path: path, Line: line,
-			Confidence: string(d.Confidence), Why: "calls the target directly",
+			Confidence: string(d.Confidence), Why: why,
 		})
 		n.direct++
 	}

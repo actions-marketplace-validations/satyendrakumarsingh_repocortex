@@ -918,6 +918,43 @@ func TestCallsOnAValueAreSaidToRestOnTheName(t *testing.T) {
 	}
 }
 
+// ---------------------------------------------------------------- constructors
+
+// TestAClassOnlyEverConstructedIsNotReportedAsUnused: a constructor call is an
+// INSTANTIATES edge to the type, and find_callers reads CALLS only. Its first
+// line used to say "0 caller(s)" and nothing else, which reads as "nothing
+// uses this type" for a class that is constructed in two places.
+func TestAClassOnlyEverConstructedIsNotReportedAsUnused(t *testing.T) {
+	fs := serverFor(t, func(b *indexBuilder) {
+		b.file("lib/widget.py", "python", 30, typ("Widget", model.KindClass, 1, 10))
+		b.file("lib/factory.py", "python", 30, fn("make", 3, 6), fn("make_big", 8, 12))
+		target := symKey("lib/widget.py", "Widget", 1)
+		b.ref("lib/factory.py", "Widget", "", 5, registry.ResolutionResolved, target)
+		b.edge(symKey("lib/factory.py", "make", 3), target, model.EdgeInstantiates, model.ConfidenceHigh, "lib/factory.py", 5)
+		b.ref("lib/factory.py", "Widget", "", 10, registry.ResolutionResolved, target)
+		b.edge(symKey("lib/factory.py", "make_big", 8), target, model.EdgeInstantiates, model.ConfidenceHigh, "lib/factory.py", 10)
+		b.wellBound("python", ".py")
+	})
+	callers, _ := answer(t, fs.sess, "find_callers", map[string]any{"name": "Widget"})
+	if want := "2 construct it, which is not a call"; !strings.Contains(firstLine(callers), want) {
+		t.Errorf("first line = %q, want it to say %q", firstLine(callers), want)
+	}
+	if want := "all 2 construct it (INSTANTIATES)"; !strings.Contains(callers, want) {
+		t.Errorf("answer does not say %q:\n%s", want, callers)
+	}
+
+	// The tool that follows both kinds lists them under their own label, and the
+	// blast radius says what each row does.
+	refs, _ := answer(t, fs.sess, "find_references", map[string]any{"name": "Widget"})
+	if !strings.Contains(refs, "- instantiates make ") {
+		t.Errorf("find_references does not list the constructions as instantiates:\n%s", refs)
+	}
+	impact, _ := answer(t, fs.sess, "analyze_impact", map[string]any{"symbol": "Widget"})
+	if !strings.Contains(impact, "constructs the target directly") || strings.Contains(impact, "calls the target directly") {
+		t.Errorf("analyze_impact does not say the callers construct the type:\n%s", impact)
+	}
+}
+
 // ---------------------------------------------------------------- bounds
 
 // TestADisambiguationListStaysInsideTheSizeLimit: a name with hundreds of
