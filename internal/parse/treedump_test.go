@@ -78,7 +78,7 @@ func TestDumpTree(t *testing.T) {
 	}
 	fmt.Printf("\n== references: %d, imports: %d\n", len(res.References), len(res.Imports))
 	for _, r := range res.References {
-		fmt.Printf("%d\t%s\t%s\n", r.Range.Start.Line, r.Kind, r.Name)
+		fmt.Printf("%d\t%s\t%s\t%q %s\n", r.Range.Start.Line, r.Kind, r.Name, r.Receiver, r.ReceiverKind)
 	}
 }
 

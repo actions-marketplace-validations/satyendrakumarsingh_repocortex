@@ -700,6 +700,10 @@ func (p *genericParser) Parse(ctx context.Context, path string, src []byte) (*Re
 			}
 			if t, ok := implementers[tag.NameRange.StartByte]; ok && isSupertypeRef(tag.Kind) {
 				r.Receiver, r.ReceiverKind = t, model.ReceiverImplementer
+			} else if isSupertypeRef(tag.Kind) {
+				// The qualifier the supertype is written with, if any. See
+				// supertypeQualifier.
+				r.Receiver = supertypeQualifier(p.entry.Name, src, tag.NameRange.StartByte)
 			}
 			// A use of a renamed import is a use of the export. See
 			// renamedImports.

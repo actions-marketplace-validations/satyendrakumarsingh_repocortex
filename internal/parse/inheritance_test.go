@@ -485,7 +485,10 @@ func FuzzInheritanceCaptures(f *testing.F) {
 			if r.Name == "" {
 				t.Fatalf("supertype reference with an empty name in %s", file)
 			}
-			if r.Receiver != "" {
+			// A supertype's receiver is the qualifier it was written with:
+			// identifiers joined by dots, never anything else.
+			if strings.Trim(r.Receiver, "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_$.") != "" ||
+				strings.HasPrefix(r.Receiver, ".") || strings.HasSuffix(r.Receiver, ".") || strings.Contains(r.Receiver, "..") {
 				t.Fatalf("supertype reference %q carries receiver %q", r.Name, r.Receiver)
 			}
 			if r.Range.Start.Line < 1 {
