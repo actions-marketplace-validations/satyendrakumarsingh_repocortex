@@ -359,6 +359,16 @@ func (r *Resolver) typeNamed(c call, name string) (t typeRef, found, known bool)
 		}
 	}
 
+	// A name the platform defines (`Response`, `Request`, `Headers`, `URL`,
+	// `Map`, `Date`, `Error`) that the file neither declares, nor sits beside,
+	// nor imports is the platform's, whatever one type of the name some other
+	// directory of the repository declares. hono: `response.clone()` on a
+	// parameter typed `Response` in a test file was bound, at `high`, to the
+	// `clone` of a type reached through the client's own `Response` interface.
+	if c.spec.Calls.Imports == ImportsNameModules && c.spec.isBuiltinType(name) {
+		return typeRef{}, false, false
+	}
+
 	// One type of the name in the whole repository — or one directory's worth,
 	// which is one type declared in parts (a header and its source, a partial
 	// class).
