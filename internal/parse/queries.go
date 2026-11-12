@@ -433,6 +433,37 @@ var inheritanceQueries = map[string]string{
 (primary_constructor_base_type (qualified_name (generic_name . (identifier) @name @reference.extends) .))
 `,
 
+	// Rust has no classes; the hierarchy is traits.
+	//
+	//	trait A: B + C       -> (trait_item (trait_bounds (type_identifier) (type_identifier)))
+	//	trait A: ns::B<T>    -> (trait_bounds (generic_type (scoped_type_identifier ...)))
+	//
+	// A supertrait is EXTENDS, as an interface that extends another is in Java.
+	// Lifetimes (`'static`) are a different node and are not captured, and a
+	// `where Self: B` clause is not a supertrait list.
+	//
+	// The standard library's traits are not captured. A bound like `Debug +
+	// Send + Sync` is nearly always the prelude's, and the resolver binds by
+	// name: ripgrep's `trait Flag: Debug` was bound, at medium, to an unrelated
+	// struct called `Debug` in the next file of the same directory, because a
+	// sibling module is a same-directory candidate. The list is the prelude,
+	// the marker and operator traits, and the std::io, std::fmt and std::error
+	// ones that are written without a `std::` prefix. A repository that defines
+	// its own trait under one of these names loses that supertrait edge, which is
+	// the cheaper error.
+	//
+	// `impl Trait for Type` declares IMPLEMENTS from Type to Trait, but the
+	// reference would sit on the impl block, which is no symbol: the resolver
+	// attributes a reference to the innermost symbol on its line, so the edge
+	// would have no source. That is why no pattern for it is here; see the note
+	// in docs/accuracy.md.
+	"rust": `
+(trait_item (trait_bounds (type_identifier) @name @reference.extends (#not-match? @name "^(Debug|Display|Clone|Copy|Send|Sync|Sized|Unpin|Default|Eq|PartialEq|Ord|PartialOrd|Hash|Iterator|IntoIterator|DoubleEndedIterator|ExactSizeIterator|From|Into|TryFrom|TryInto|AsRef|AsMut|Borrow|ToString|ToOwned|Drop|Fn|FnMut|FnOnce|Deref|DerefMut|Any|Error|Read|Write|BufRead|Seek|UnwindSafe|RefUnwindSafe|Future|Extend|FromStr)$")))
+(trait_item (trait_bounds (generic_type type: (type_identifier) @name @reference.extends (#not-match? @name "^(Debug|Display|Clone|Copy|Send|Sync|Sized|Unpin|Default|Eq|PartialEq|Ord|PartialOrd|Hash|Iterator|IntoIterator|DoubleEndedIterator|ExactSizeIterator|From|Into|TryFrom|TryInto|AsRef|AsMut|Borrow|ToString|ToOwned|Drop|Fn|FnMut|FnOnce|Deref|DerefMut|Any|Error|Read|Write|BufRead|Seek|UnwindSafe|RefUnwindSafe|Future|Extend|FromStr)$"))))
+(trait_item (trait_bounds (scoped_type_identifier name: (type_identifier) @name @reference.extends (#not-match? @name "^(Debug|Display|Clone|Copy|Send|Sync|Sized|Unpin|Default|Eq|PartialEq|Ord|PartialOrd|Hash|Iterator|IntoIterator|DoubleEndedIterator|ExactSizeIterator|From|Into|TryFrom|TryInto|AsRef|AsMut|Borrow|ToString|ToOwned|Drop|Fn|FnMut|FnOnce|Deref|DerefMut|Any|Error|Read|Write|BufRead|Seek|UnwindSafe|RefUnwindSafe|Future|Extend|FromStr)$"))))
+(trait_item (trait_bounds (generic_type type: (scoped_type_identifier name: (type_identifier) @name @reference.extends (#not-match? @name "^(Debug|Display|Clone|Copy|Send|Sync|Sized|Unpin|Default|Eq|PartialEq|Ord|PartialOrd|Hash|Iterator|IntoIterator|DoubleEndedIterator|ExactSizeIterator|From|Into|TryFrom|TryInto|AsRef|AsMut|Borrow|ToString|ToOwned|Drop|Fn|FnMut|FnOnce|Deref|DerefMut|Any|Error|Read|Write|BufRead|Seek|UnwindSafe|RefUnwindSafe|Future|Extend|FromStr)$")))))
+`,
+
 	// Ruby: a single superclass and any number of mixins.
 	//
 	//	class A < B           -> (class (constant) (superclass (constant)))
