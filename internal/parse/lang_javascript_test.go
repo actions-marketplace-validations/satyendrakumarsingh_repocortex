@@ -2,7 +2,6 @@ package parse
 
 import (
 	"context"
-	"sort"
 	"strings"
 	"testing"
 )
@@ -23,13 +22,41 @@ func parseScript(t *testing.T, language, file, src string) *Result {
 	return res
 }
 
-func scriptSymbols(res *Result) []string {
-	var out []string
+// TestScriptOwners pins which object a method belongs to: the qualified name
+// is what the resolver reads an owner from.
+func TestScriptOwners(t *testing.T) {
+	src := `function Shape() {}
+Shape.prototype.area = function () { return 1; };
+var app = module.exports = {};
+app.init = function init() {};
+exports.parse = function (s) { return s; };
+other.thing = function () {};
+function wrapper() { app.late = function () {}; Gadget.prototype.spin = function () {}; }
+`
+	res := parseScript(t, "javascript", "lib/shape.js", src)
+	got := map[string]string{}
 	for _, s := range res.Symbols {
-		out = append(out, string(s.Kind)+" "+strings.TrimPrefix(s.FQN, "")+"|"+s.Name)
+		got[s.Name] = strings.TrimPrefix(s.FQN, "")
 	}
-	sort.Strings(out)
-	return out
+	for name, want := range map[string]string{
+		"area": "lib/shape.js:Shape.area",
+		"init": "lib/shape.js:app.init",
+		"spin": "lib/shape.js:Gadget.spin",
+	} {
+		if got[name] != want {
+			t.Errorf("%s has the qualified name %q, want %q", name, got[name], want)
+		}
+	}
+	for _, name := range []string{"parse", "Shape"} {
+		if q, ok := got[name]; ok && q != "" && strings.Contains(q, ".") {
+			t.Errorf("%s is at the top level of its file and has the qualified name %q", name, q)
+		}
+	}
+	for _, name := range []string{"thing", "late"} {
+		if _, ok := got[name]; ok {
+			t.Errorf("%s is an assignment and defines nothing", name)
+		}
+	}
 }
 
 // TestCommonJSImportBindings pins the rows a top-level `require` produces.

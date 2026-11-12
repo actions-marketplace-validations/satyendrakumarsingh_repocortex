@@ -87,9 +87,6 @@ import (
 // A non-exported `const x = 5` is not a definition. The inferred function
 // patterns are untouched, and still find a local `const f = () => {}`.
 
-// scriptLanguages are the grammars this file serves.
-var scriptLanguages = []string{"javascript", "typescript", "tsx"}
-
 // scriptDefinitions are the patterns every script grammar shares.
 const scriptDefinitions = `
 (assignment_expression
