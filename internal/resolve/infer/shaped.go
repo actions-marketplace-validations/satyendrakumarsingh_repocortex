@@ -778,6 +778,15 @@ func (r *Resolver) bareByName(c call, reach []registry.SymbolIndexEntry, stats *
 		}
 		return unresolvedCall
 	}
+	if c.spec.isCoreFunction(c.ref.Name) {
+		// What is left goes by the name: the package it shares, an import that
+		// defines something of that name, a neighbour, the only one there is.
+		// The name is the language's own (corefunctions.go), and a definition
+		// of it that is not in this file or named by an import says nothing
+		// about what the call reaches. Measured on moshi, where a private
+		// `require` of one class was bound to every stdlib `require(...)`.
+		return unresolvedCall
+	}
 	if c.spec.PackageIsDirectory {
 		dir := path.Dir(c.fr.Path)
 		var pkg []registry.SymbolIndexEntry
@@ -812,11 +821,6 @@ func (r *Resolver) bareByName(c call, reach []registry.SymbolIndexEntry, stats *
 	}
 	if best, ok := r.pickImported(c.imports, c.ref, reach); ok {
 		return bound(best)
-	}
-	if c.spec.isCoreFunction(c.ref.Name) {
-		// What is left are the rules that go by the name alone, and the name is
-		// the language's own (corefunctions.go).
-		return unresolvedCall
 	}
 	if !c.spec.PackageIsDirectory {
 		if best, ok := r.pickSameDir(c.spec, c.fr, reach); ok && !r.callsTestHelper(c, best.entry) {
@@ -1472,6 +1476,10 @@ func (r *Resolver) callPath(c call, stats *Stats) decision {
 		if m, ok := r.classImport(c.imports, head); ok && m.where == presenceExternal {
 			return externalCall
 		}
+	}
+
+	if d, ok := r.callInObject(c, segs); ok {
+		return d
 	}
 
 	// `a.b.Util.stat()`, `Outer.Inner.make()`: the tail names a type.

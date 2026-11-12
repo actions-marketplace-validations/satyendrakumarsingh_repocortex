@@ -87,3 +87,30 @@ func TestAnObjectCallInAnEnclosingObjectPrefersTheMember(t *testing.T) {
 		t.Errorf("bound as %+v, want the member write.write (2)", edges)
 	}
 }
+
+// TestACallThroughAPackageAndAnObjectNamesTheObjectsMember: os.read.bytes(p) is
+// the member of object read, not a method `bytes` of an unrelated type.
+func TestACallThroughAPackageAndAnObjectNamesTheObjectsMember(t *testing.T) {
+	file := "os/src/Use.scala"
+	idx := index(
+		def(1, "variable", "os/src/ReadWriteOps.scala", "read", 10),
+		def(2, "variable", "os/src/ReadWriteOps.scala", "read.bytes", 10),
+		def(3, "function", "os/src/SubProcess.scala", "SubProcess.OutputStream.bytes", 11),
+	)
+	layout := NewLayout([]string{"os/src/ReadWriteOps.scala", "os/src/SubProcess.scala", file}, nil)
+	r := New(idx, Options{Layout: layout})
+	edges, _, _ := resolveOne(t, r, registry.FileRefs{
+		FileID: 99, Path: file, Language: "scala", Symbols: within(90, file, "Use.run"),
+		Refs: []registry.Reference{
+			callRef(1, "bytes", model.ReceiverPath, "os.read", 5),
+			callRef(2, "missing", model.ReceiverPath, "os.read", 6),
+		},
+	})
+	got := edgesByLine(edges)
+	if got[5].dst != 2 || got[5].confidence != model.ConfidenceHigh {
+		t.Errorf("os.read.bytes bound as %+v, want the nested object (2) at high", got[5])
+	}
+	if _, bound := got[6]; bound {
+		t.Errorf("os.read.missing was bound: %+v", got[6])
+	}
+}

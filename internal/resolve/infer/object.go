@@ -151,9 +151,15 @@ func (r *Resolver) bindObjectOrFunction(c call, defs []registry.SymbolIndexEntry
 func (r *Resolver) applyOf(c call, obj registry.SymbolIndexEntry, rule string) decision {
 	qual, _ := qualOf(obj)
 	var applies []registry.SymbolIndexEntry
-	for _, s := range c.symbols["apply"] {
-		if s.FileID == obj.FileID && isCallableKind(s.Kind) && strings.HasPrefix(s.FQN, obj.FilePath+":"+qual+".") && ownerQual(s) == qual {
-			applies = append(applies, s)
+	// The candidates for a name are the first few the index holds (MaxCandidates
+	// of them), and every object has an `apply`. Past that cap the object's own
+	// overloads cannot all be seen, and naming one of them would be a guess the
+	// index cannot check: the call is bound to the object.
+	if len(c.symbols["apply"]) <= c.spec.MaxCandidates {
+		for _, s := range c.symbols["apply"] {
+			if s.FileID == obj.FileID && isCallableKind(s.Kind) && strings.HasPrefix(s.FQN, obj.FilePath+":"+qual+".") && ownerQual(s) == qual {
+				applies = append(applies, s)
+			}
 		}
 	}
 	if o, ok := oneDeclaration(c.spec, c.ref, applies); ok {
@@ -163,6 +169,43 @@ func (r *Resolver) applyOf(c call, obj registry.SymbolIndexEntry, rule string) d
 		return bound(candidate{o.first, model.ConfidenceHigh, rule + ", called through apply"})
 	}
 	return bound(candidate{obj, model.ConfidenceHigh, rule + ": the object is called, and its apply is not among the candidates"})
+}
+
+// callInObject binds `os.read.bytes(p)` and `os.move.matching { ... }`: a call
+// qualified by a package and then an object, naming a member of that object (a
+// function, a nested object, a nested case class). The object is found the way
+// callInPackage finds one, and the member is declared in the same file under
+// its qualified name. A qualified call that finds no such member binds to
+// nothing: `bytes` of some other type is not what `os.read.bytes` reaches.
+func (r *Resolver) callInObject(c call, segs []string) (decision, bool) {
+	if !c.spec.Calls.ObjectsAreCallable || len(segs) < 2 {
+		return decision{}, false
+	}
+	head := segs[0]
+	if _, found, known := r.typeNamed(c, head); found || known {
+		return decision{}, false
+	}
+	if !r.layout.Known() || !r.layout.HasDirNamed(head) {
+		return decision{}, false
+	}
+	owner := strings.Join(segs[1:], ".")
+	var members []registry.SymbolIndexEntry
+	for _, s := range c.symbols[c.ref.Name] {
+		if s.Language != "" && s.Language != c.spec.Name {
+			continue
+		}
+		if !hasPathSegment(s.FilePath, head) {
+			continue
+		}
+		if qual, ok := qualOf(s); ok && qual == owner+"."+c.ref.Name &&
+			(isCallableKind(s.Kind) || isConstructibleKind(s.Kind) || isObjectKind(s.Kind)) {
+			members = append(members, s)
+		}
+	}
+	if len(members) == 0 {
+		return unresolvedCall, true
+	}
+	return r.bindObjectOrFunction(c, members, "declared in the object the call is qualified by"), true
 }
 
 // hasPathSegment reports whether a file lies under a directory of this name.
