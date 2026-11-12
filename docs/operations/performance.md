@@ -220,6 +220,237 @@ at module top level, and 1,929 files yielded 364 functions. A reference outside
 any symbol has no source to hang an edge on, and inventing one would corrupt
 caller queries.
 
+## Figures other tools publish, measured here
+
+Three figures other code-graph tools publish and this project had not. They were
+measured on 2026-11-12 with the harnesses in `scripts/bench/`, and they are
+reported as measured. None of them flatters the tool, and the kernel run found
+three defects that are recorded below and not fixed.
+
+| | |
+|---|---|
+| Host | Apple M4 Pro, 14 cores (10 performance, 4 efficiency), 25,769,803,776 bytes (24 GiB), macOS 26.5.1: `sysctl -n machdep.cpu.brand_string hw.ncpu hw.memsize` |
+| Binary | `CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 go build -trimpath -o repocortex ./cmd/repocortex`, so `darwin/arm64` native, built by the Go 1.26.11 `darwin/amd64` toolchain |
+| Tree | commit `6fadd51` |
+| Date | 2026-11-12 |
+| Load | The machine was shared. Its one-minute load average on 14 cores was 10 to 33 from other engineers' builds and test suites and this session's own accuracy runs, and 35 to 55 while the kernel index below was running. An endpoint-security scanner was active throughout |
+
+**Read every time below as a ceiling for this machine, not as what the tool
+costs.** The same binary indexed and resolved nest in 16 s at a load of 20 and
+took between 31 s and 249 s to do it at 25 to 50. The lowest load any figure
+here was taken at is 10, so there is no idle figure to put beside these, and
+none is estimated.
+
+### Incremental update after two files change
+
+code-review-graph's README, read on 2026-11-12, gives about 2.5 s for a two-file
+edit in a project of about 3,000 files, which it names as django, and about 40 s
+for a cold build of a repository that size.
+
+```bash
+git clone --depth 1 https://github.com/django/django /tmp/bench/django     # 5d6d1f0
+scripts/bench/incremental.sh /tmp/bench/repocortex /tmp/bench/django \
+    django/utils/text.py django/db/models/query.py
+```
+
+The script indexes from empty, then three times appends one function to each of
+the two files and runs `repocortex index` and `repocortex resolve`. django at
+that commit has 7,100 tracked files, 2,943 of them Python. RepoCortex discovered
+7,090, indexed 2,475 and extracted 46,390 symbols and 285,396 references.
+
+Three runs of the script, at three loads. Wall time is `/usr/bin/time`;
+"printed" is the duration RepoCortex reports itself, which excludes process
+start.
+
+| | Run A: load 53, the kernel index running | Run B: load 21 | Run C: load 10 |
+|---|---|---|---|
+| Cold `index` into an empty database, wall | 126.01 s | 30.59 s | 21.52 s |
+| The same, as printed | 125,856 ms | 30,506 ms | 21,455 ms |
+| Its peak RSS | 593 MB | 695 MB | 722 MB |
+| Cold `resolve`, wall | 14.77 s | 9.51 s | 6.73 s |
+| `index`, nothing changed, wall | 8.75 s | 6.49 s | 3.03 s |
+| **`index` after a two-file edit**, three runs, wall | 23.83 / 10.93 / 8.42 s | 5.21 / 6.04 / 5.15 s | **4.14 / 5.45 / 4.84 s** |
+| The same, as printed | 18,264 / 10,199 / 8,106 ms | 5,161 / 5,987 / 5,113 ms | 4,098 / 5,396 / 4,799 ms |
+| Its peak RSS | 182 / 178 / 191 MB | 199 / 183 / 191 MB | 198 / 192 / 193 MB |
+| `resolve` after each, wall | 7.55 / 4.69 / 2.04 s | 0.68 / 0.71 / 0.66 s | 0.71 / 0.76 / 0.64 s |
+| The same, as printed | 2,037 / 1,834 / 1,805 ms | 630 / 671 / 631 ms | 669 / 727 / 607 ms |
+| `watch`: edit to logged update | never started watching | 3.51 / 4.17 / 6.97 s | 4.09 / 2.38 / 2.49 s |
+
+Run C is the quietest any of these measurements had, and it is still a shared
+machine. On it a two-file update is 4.14 s to 5.45 s, or 4.85 s to 6.21 s with the `resolve`
+that makes the new edges queryable, against the published 2.5 s. The cold build,
+`index` plus `resolve`, is 28.25 s against the published 40 s.
+
+**Most of an update is the pass over the whole tree.** With nothing changed,
+`index` took 3.03 s in run C and 6.49 s in run B, to find that out about 7,090
+files. Two changed files took 1.1 s to 2.4 s more than that in run C and no more
+at all in run B. nest, at 2,756 files and a load of 20, gave the same shape
+earlier in the day: 1.58 s with nothing changed and 1.97 / 1.83 / 1.61 s after a
+two-file edit, after a cold index of 13.58 s. So the floor under an update
+follows the size of the repository, which is not what `repocortex index --help`
+says of it ("cost scales with your edits rather than repository size"). What
+that pass costs per file on an idle machine was not measured here.
+
+`repocortex watch` has no one-shot mode, so the script starts it, waits for its
+"Watching" line, makes the same two-file edit and times how long watch takes to
+log the update. In run C that took 4.09 s, 2.38 s and 2.49 s, of which watch
+reported 3.69 s, 1.97 s and 2.08 s as its own update and 0.3 s is its debounce.
+In run B it took 3.51 s, 4.17 s and 6.97 s.
+
+Run A never got that far, and that is a finding about start-up, not about
+updates:
+
+| `repocortex watch` on django, 7,100 files | Measured |
+|---|---|
+| Start to the "Watching" line, at a load of 17 | 17.08 s |
+| The same, two further starts at a load near 25 | under 12 s, and over 60 s |
+| The same, while the kernel index was running | not printed after 900 s |
+| Ctrl-C once watching | exits in 0.04 s |
+| Ctrl-C 9 s into a start, before the line is printed | exits 51.24 s later |
+| Ctrl-C 15 minutes into the start that printed nothing | exits about 8 minutes later, 22 minutes after it started |
+
+A stack dump taken during a start that slow shows where it was:
+`watch.New` → `dirSet.addTree` → fsnotify's kqueue backend opening every file of
+every watched directory, one `open` at a time. On macOS that is one descriptor
+and one system call per file in the repository, it is not interruptible because
+`watch.New` takes no context, and nothing is printed while it runs. In run A the
+edits were made before the "Watching" line and were never reported.
+
+### Linux kernel, cold index
+
+narsil publishes 45 s, codebase-memory-mcp 3 minutes, and codegraph under
+12 minutes on 2 cores.
+
+```bash
+git clone --depth 1 https://github.com/torvalds/linux /tmp/bench/linux     # 9d66f26, 2026-11-11
+scripts/bench/cold-index.sh /tmp/bench/repocortex /tmp/bench/linux
+```
+
+One run. It took over two hours, so it was not repeated, and there is no
+quieter second figure. The script was started with a 90-minute limit per step;
+the `index` step was allowed to run past it, and `resolve` was then timed
+separately with the same `/usr/bin/time -l` wrapper.
+
+| Step | Wall | User CPU | System CPU | Peak RSS |
+|---|---|---|---|---|
+| `repocortex init` | 0.07 s | 0.04 s | 0.02 s | 37 MB |
+| `repocortex index` | 7,621.05 s (2 h 7 min) | 51,979.46 s | 3,053.76 s | 9,636 MB |
+| `repocortex resolve` | 232.66 s (3 min 53 s) | 172.33 s | 31.20 s | 253 MB |
+
+`/usr/bin/time -l` also reports a peak memory footprint of 32,683,990,704 bytes
+for the index step, on a machine with 24 GB. Resident memory moved between 2 GB
+and 10 GB while it ran.
+
+| | |
+|---|---|
+| Tracked files | 97,362, 1.8 GB |
+| Files discovered | 97,348. The volume is case-insensitive, and 13 pairs of kernel file names differ only in case, so 13 files are missing from the checkout |
+| Files indexed | 72,041: 59,155 parsed cleanly, 12,886 with syntax errors the parser recovered from |
+| Files skipped | 23,702: 17,193 in a language with no tags query (YAML, reStructuredText, Makefiles, assembly), 6,024 with no grammar, 280 over the 256 KiB parse limit, 58 over the 2 MiB read limit, 106 symlinks and 41 others |
+| **Parse failures** | **1,605, all C, all `parse exceeded 5s`** |
+| Symbols | 2,835,035 reported by `index`; `status` counts 2,992,164 |
+| References | 4,815,340, of which 2,433,528 name something the index defines |
+| References resolved | 971,304 (39.9%) |
+| Relationships | 882,603. The resolved references are 615,468 high, 304,551 medium and 51,285 low |
+| `index.db` | 3,177,115,648 bytes after `index`, 3,540,942,848 bytes after `resolve` |
+
+Progress through the tree, from the indexer's own log:
+
+| Files done | 10% | 20% | 30% | 40% | 50% | 60% | 70% | 80% | 90% | 100% |
+|---|---|---|---|---|---|---|---|---|---|---|
+| Elapsed | 2:12 | 2:42 | 3:51 | 17:45 | 31:01 | 56:06 | 1:38:57 | 1:50:41 | 2:02:56 | 2:06:22 |
+
+The first 31% of the files are `Documentation/` and `arch/`. `drivers/` is the
+next 39%, 38,199 files, and took about an hour and a half.
+
+**This is between 11 and 175 times the published figures, and the load on the
+machine does not account for it.** The load average was 19 when the run
+started and between 35 and 55 for most of it, and this session's own accuracy
+runs, a second index and a test suite overlapped with it. But the run itself was
+the largest consumer on the machine: it used 6.8 cores on average with a worker
+pool of four. Three things were measured, and none is fixed here.
+
+**1. A table after a macro call parses in at least quadratic time.** A C file with one
+macro call at file scope followed by an array of *n* literals, indexed alone:
+
+| *n* | 32 | 64 | 128 | 256 |
+|---|---|---|---|---|
+| With `MODULE_LICENSE("GPL");` above the array | 0.15 s | 0.33 s | 1.39 s | over 5 s, abandoned |
+| The array alone | | | | 0.14 s |
+
+```bash
+mkdir /tmp/table && cd /tmp/table
+{ echo 'MODULE_LICENSE("GPL");'; echo; echo 'const unsigned char table[256] = {'
+  for i in $(seq 0 255); do printf '0x%02x, ' "$i"; done; echo; echo '};'; } > table.c
+repocortex init && repocortex index
+repocortex query "SELECT parse_status, parse_error FROM files WHERE index_run_id = :run"
+# failed  parse exceeded 5s: context deadline exceeded
+```
+
+That is a 1.6 KB file. The kernel's own `lib/bitrev.c`, 1,893 bytes and a
+256-entry table, fails the same way with 4.85 s of CPU. The reproduction above
+failed again at a load of 9, with 5.10 s of CPU, so this one is not the load. A driver is a handful of
+`MODULE_*` macros and its tables, and 1,373 of the 1,605 failures are under
+`drivers/`. Two samples of the running process, 80 minutes apart, both found
+its time inside the parser's ambiguity handling
+(`gotreesitter.(*gssMainPreflight).canReach`,
+`(*Parser).rawStackEntryErrorCost`), not in SQLite.
+
+**2. A parse that times out is abandoned, not stopped.** `tagWithGuards` returns
+after `DefaultParseTimeout` (5 s) and leaves the parse running, because the
+parser has no cancellation hook. The worker takes the next file while the
+abandoned parse keeps its core and its memory. That is consistent with a pool of
+four using 6.8 cores, and it is the likely source of the 32 GB footprint. An
+abandoned parse also takes CPU from the live ones, which pushes them towards
+their own timeout.
+
+**3. The timeout is wall-clock, so the index depends on what else the machine is
+doing.** `drivers/staging/nvec/nvec-keytable.h`, 2,945 bytes, is one of the
+1,605 failures in this run. Indexed alone a few minutes later it parsed in
+2.3 s, with errors the parser recovered from. A file that fails has no symbols,
+so two runs over the same tree at different loads produce different indexes.
+
+Away from those files the parser is not unusually slow on C. Eleven kernel
+sources of 27 KB to 237 KB, each indexed alone on the loaded machine, took 0.8 s
+to 3.0 s, which is 7 to 28 ms per KB including process start. Seven Python, Go,
+Java and TypeScript files of 45 KB to 126 KB measured the same way took 5 to
+14 ms per KB.
+
+### Impact-analysis accuracy
+
+code-review-graph publishes F1 0.693. The measurement here asks a different and
+harder question, so the two are not comparable. The method, its bias, the full
+tables and what the run found are in `docs/BENCHMARKING.md`, section 6.
+
+```bash
+git clone --depth 400 https://github.com/pallets/flask /tmp/bench/flask
+go run -tags bench ./scripts/bench/impactaccuracy \
+    -repo /tmp/bench/flask -bin /tmp/bench/repocortex -n 1000 -budget 20m
+```
+
+For each commit that changed at least two source files, the harness indexes the
+parent, asks `analyze_impact` about the symbols the commit changed in one file,
+and compares the files in the answer with the other files the commit changed.
+One non-test seed file per commit, the default confidence floor, every row
+returned:
+
+| Repository | Language | Commits | Precision | Recall | F1 | Same-directory rule, F1 |
+|---|---|---|---|---|---|---|
+| RepoCortex | Go | 14 | 10.4% | 16.0% | 0.126 | 0.034 |
+| flask | Python | 74 | 15.9% | 15.4% | 0.156 | 0.149 |
+| gson | Java | 57 | 8.9% | 15.2% | 0.112 | 0.065 |
+| nest | TypeScript | 12 | 0.0% | 0.0% | 0.000 | 0.000 |
+| zod | TypeScript | 10 | 25.0% | 5.0% | 0.083 | 0.055 |
+
+The truth is what a developer changed, not what depends on what, so both
+precision and recall are understated: files that change together are not all
+dependents, and a commit does not touch every dependent. The last column is the
+control for that: predict the other source files in the seed's directory, with
+no index at all. The tool is ahead of it in this table, except on nest where
+both score nothing. It is behind it on flask, gson and zod when every changed
+file is taken as a seed in turn. Between 43% and 83% of the seeds on the four
+public repositories predicted no file at all.
+
 ## Migration 0005 — indexing the foreign keys that reference `symbols(id)`
 
 `internal/store/migrations/0005_fk_indexes.sql` adds indexes on the columns that
