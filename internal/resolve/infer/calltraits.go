@@ -130,6 +130,29 @@ type CallTraits struct {
 	// function's name.
 	CallConstructs bool
 
+	// NewConstructs reports that the language constructs with a keyword and
+	// the parser records each construction as a reference of kind
+	// reference.call.new whose name is the TYPE: Java's and PHP's
+	// `new Widget(3)`. Such a reference may bind to a class even though a bare
+	// call in the language never can (CallConstructs is false), and binds to
+	// nothing else. A language where a bare call constructs (Kotlin, Scala,
+	// Python) needs no flag for it, and records its `new` the same way.
+	NewConstructs bool
+
+	// ClassBodyCode reports that code may stand directly in a type's body, with
+	// no member around it: Kotlin's property initialisers and `init` blocks,
+	// Scala's statements in an object or class (`test("x") { ... }`,
+	// `val p = parser()`). The enclosing definition of such a call is the type
+	// itself, and a bare name in it denotes a member of that type.
+	ClassBodyCode bool
+
+	// ExtensionCalls reports that a function declared outside any type can be
+	// written as a call on a value: Kotlin's `fun String.shout()` called as
+	// `"x".shout()`. The index records neither that a function is an extension
+	// nor what it extends, so where no type declares a member of the called
+	// name, the one free function of that name is what the call reaches.
+	ExtensionCalls bool
+
 	// NoFreeFunctions reports that every function is a member of a type: Java
 	// and C#. A bare call there is a member of the enclosing type, an
 	// inherited member, or a static import — and a candidate that seems to
@@ -227,6 +250,17 @@ type ruleTiers struct {
 	// directory, though the language requires an import". Zero means medium.
 	// Low for C++, where it measured 6 of 12.
 	Neighbour model.Confidence
+
+	// Extension is the tier of "a method-style call, no type declares a member
+	// of that name, and exactly one free function has it". Zero means low.
+	Extension model.Confidence
+}
+
+func (t ruleTiers) extension() model.Confidence {
+	if t.Extension == "" {
+		return model.ConfidenceLow
+	}
+	return t.Extension
 }
 
 func (t ruleTiers) unknownReceiver() model.Confidence {
@@ -311,9 +345,9 @@ var (
 // capitalised, no import knowledge.
 var callTraitsByLanguage = map[string]CallTraits{
 	"go":         {Measured: ruleTiers{UnknownReceiver: model.ConfidenceHigh, NamedAfterType: model.ConfidenceHigh}, CallConstructs: true, OpenTypes: true, Imports: ImportsNameDirectories, Builtins: goBuiltins},
-	"java":       {NoFreeFunctions: true, Measured: ruleTiers{UnknownReceiver: model.ConfidenceMedium, NamedAfterType: model.ConfidenceHigh}, ImplicitSelf: true, Overloads: true, TypesAreCapitalised: true, Imports: ImportsNameClasses, ExternalRoots: []string{"java", "javax"}, Builtins: javaBuiltins},
-	"kotlin":     {CallConstructs: true, ImplicitSelf: true, Overloads: true, TypesAreCapitalised: true, Imports: ImportsNameClasses, ExternalRoots: []string{"java", "javax", "kotlin"}, Builtins: javaBuiltins},
-	"scala":      {CallConstructs: true, ImplicitSelf: true, Overloads: true, TypesAreCapitalised: true, Imports: ImportsNameClasses, ExternalRoots: []string{"java", "javax", "scala"}, Builtins: javaBuiltins},
+	"java":       {NewConstructs: true, NoFreeFunctions: true, Measured: ruleTiers{UnknownReceiver: model.ConfidenceMedium, NamedAfterType: model.ConfidenceHigh}, ImplicitSelf: true, Overloads: true, TypesAreCapitalised: true, Imports: ImportsNameClasses, ExternalRoots: []string{"java", "javax"}, Builtins: javaBuiltins},
+	"kotlin":     {Measured: ruleTiers{Extension: model.ConfidenceHigh}, ClassBodyCode: true, ExtensionCalls: true, CallConstructs: true, ImplicitSelf: true, Overloads: true, TypesAreCapitalised: true, Imports: ImportsNameClasses, ExternalRoots: []string{"java", "javax", "kotlin"}, Builtins: javaBuiltins},
+	"scala":      {Measured: ruleTiers{UnknownReceiver: model.ConfidenceMedium, NamedAfterType: model.ConfidenceHigh}, ClassBodyCode: true, CallConstructs: true, ImplicitSelf: true, Overloads: true, TypesAreCapitalised: true, Imports: ImportsNameClasses, ExternalRoots: []string{"java", "javax", "scala"}, Builtins: javaBuiltins},
 	"python":     {CallConstructs: true, TypesAreCapitalised: true, Imports: ImportsNameModules},
 	"javascript": {TypesAreCapitalised: true, Imports: ImportsNameModules, Builtins: scriptBuiltins},
 	"typescript": {TypesAreCapitalised: true, Imports: ImportsNameModules, Builtins: scriptBuiltins},
@@ -326,7 +360,7 @@ var callTraitsByLanguage = map[string]CallTraits{
 	"c_sharp":    {NoFreeFunctions: true, Measured: ruleTiers{UnknownReceiver: model.ConfidenceMedium, UniqueTypeName: model.ConfidenceHigh}, ImplicitSelf: true, Overloads: true, OpenTypes: true, TypesAreCapitalised: true, ExternalRoots: []string{"System", "Microsoft"}, Builtins: csharpBuiltins},
 	"cpp":        {Measured: ruleTiers{NamedAfterType: model.ConfidenceHigh, Neighbour: model.ConfidenceLow}, CallConstructs: true, ImplicitSelf: true, Overloads: true, OpenTypes: true, ScopeNamesModule: true, ExternalRoots: []string{"std"}},
 	"c":          {OpenTypes: true},
-	"php":        {OpenTypes: false, TypesAreCapitalised: true},
+	"php":        {Measured: ruleTiers{NamedAfterType: model.ConfidenceHigh, UniqueTypeName: model.ConfidenceHigh}, NewConstructs: true, TypesAreCapitalised: true, Imports: ImportsNameClasses},
 	"swift":      {CallConstructs: true, ImplicitSelf: true, Overloads: true, OpenTypes: true, TypesAreCapitalised: true},
 	"dart":       {CallConstructs: true, ImplicitSelf: true, TypesAreCapitalised: true},
 	"groovy":     {ImplicitSelf: true, Overloads: true, TypesAreCapitalised: true, Imports: ImportsNameClasses, ExternalRoots: []string{"java", "javax", "groovy"}, Builtins: javaBuiltins},
@@ -372,7 +406,7 @@ func (s LanguageSpec) canBind(c registry.SymbolIndexEntry, kind model.EdgeKind) 
 	}
 	switch kind {
 	case model.EdgeCalls:
-		return isCallableKind(c.Kind) || (isConstructibleKind(c.Kind) && s.Calls.CallConstructs)
+		return isCallableKind(c.Kind) || (isConstructibleKind(c.Kind) && (s.Calls.CallConstructs || s.Calls.NewConstructs))
 	case model.EdgeExtends, model.EdgeImplements:
 		return isTypeKind(c.Kind)
 	default:

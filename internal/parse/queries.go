@@ -523,6 +523,41 @@ var inheritanceQueries = map[string]string{
 (call !receiver method: (identifier) @_m arguments: (argument_list (constant) @name @reference.implementation) (#match? @_m "^(include|extend|prepend)$"))
 (call !receiver method: (identifier) @_m arguments: (argument_list (scope_resolution name: (constant) @name @reference.implementation)) (#match? @_m "^(include|extend|prepend)$"))
 `,
+
+	// PHP: `class A extends B implements C, D`, `interface I extends J, K`, and
+	// `use SomeTrait;` in a class body, which brings the trait's methods into
+	// the class the way a parent's are, so `$this->m()` reaches them. A name
+	// written with namespaces keeps its last segment, as in Java.
+	"php": `
+(class_declaration (base_clause (name) @name @reference.extends))
+(class_declaration (base_clause (qualified_name (name) @name @reference.extends .)))
+(class_declaration (class_interface_clause (name) @name @reference.implementation))
+(class_declaration (class_interface_clause (qualified_name (name) @name @reference.implementation .)))
+(interface_declaration (base_clause (name) @name @reference.extends))
+(interface_declaration (base_clause (qualified_name (name) @name @reference.extends .)))
+(use_declaration (name) @name @reference.inherit)
+(use_declaration (qualified_name (name) @name @reference.inherit .))
+`,
+
+	// Kotlin: the first supertype of `class A : B(), C` is written with a
+	// constructor call and is the superclass; the others are interfaces. A
+	// supertype may be qualified (`a.B`, last segment) or generic (`B<T>`).
+	"kotlin": `
+(class_declaration (delegation_specifier (constructor_invocation (user_type (type_identifier) @name @reference.extends .))))
+(class_declaration (delegation_specifier (constructor_invocation (user_type (type_identifier) @name @reference.extends . (type_arguments)))))
+(class_declaration (delegation_specifier (user_type (type_identifier) @name @reference.implementation .)))
+(class_declaration (delegation_specifier (user_type (type_identifier) @name @reference.implementation . (type_arguments))))
+`,
+
+	// Scala: `extends A with B with C`. The first is the superclass or a trait
+	// and the rest are traits, and all of them are what a call inside the class
+	// may reach, so all are EXTENDS. A parent may be qualified (`p.A`, last
+	// segment) or generic (`A[T]`).
+	"scala": `
+(extends_clause (type_identifier) @name @reference.extends)
+(extends_clause (generic_type type: (type_identifier) @name @reference.extends))
+(extends_clause (stable_type_identifier (type_identifier) @name @reference.extends .))
+`,
 }
 
 // InheritanceQuery returns the supertype-reference patterns for a language, or
@@ -648,10 +683,11 @@ var importQueries = map[string]string{
 
 	// PHP: `use` for namespace imports, plus require/include which take an
 	// expression rather than a bare string and are matched loosely.
+	//
+	// The `use` declarations are not here: they are read from the tree by
+	// phpUses (lang_php.go), which writes their paths with dots so the
+	// resolver can split them, and reads aliases and the group form.
 	"php": `
-(namespace_use_declaration
-  (namespace_use_clause (qualified_name) @path)) @import
-
 (expression_statement
   (require_expression (string) @path)) @import
 
@@ -669,33 +705,27 @@ var importQueries = map[string]string{
   (identifier) @path) @import
 `,
 
-	// Kotlin: a single import directive form. Kotlin already carries receiver
-	// and var-type queries, so this is the piece that makes them reachable.
+	// Kotlin: an import directive, with the alias of `import a.B as C`. The
+	// plain pattern also matches the aliased form, and dedupeImports keeps the
+	// row that carries the alias. A wildcard (`import a.*`) is the package
+	// itself.
 	"kotlin": `
 (import_header
   (identifier) @path) @import
+
+(import_header
+  (identifier) @path
+  (import_alias (type_identifier) @alias)) @import
 `,
 
-	// Scala: `import a.b.c`, `import a.b.{c, d}` and `import a.b._`. The
-	// stable capture across all three is the leading stable identifier.
-	//
-	// Probed against the grammar rather than assumed, like the brief's
-	// original guess (`stable_identifier`) which compiles — the symbol exists
-	// in this grammar — but never appears in an actual import_declaration, so
-	// it silently matched nothing. The real shape: every segment of the
-	// dotted path shares the `path` field on flat identifier siblings (no
-	// wrapping node spans the whole dotted name), so there is no single node
-	// whose text is the full "a.b.c". The anchored form below takes the
-	// trailing identifier when the import ends in one (`import a.b.C`),
-	// which is the imported symbol's own name; `{...}` selector imports
-	// (`import a.b.{C, D}`) and `_` wildcard imports are handled or skipped
-	// as noted below.
+	// Scala: the rows come from scalaImports (lang_scala.go), which reads the
+	// tree. A dotted path is spread over sibling identifiers with no node that
+	// spans it, so no query can capture `a.b.C` — the pattern that stood here
+	// captured the last identifier alone, which names no package, and renames
+	// and wildcards were not read at all. This pattern binds no @path and so
+	// adds no row; it is the statement that the language's imports are read.
 	"scala": `
-(import_declaration
-  path: (identifier) @path .) @import
-
-(namespace_selectors
-  (identifier) @path) @import
+(import_declaration) @import
 `,
 
 	"c": `
@@ -743,6 +773,7 @@ func SupplementedLanguages() []string {
 var receiverLanguages = map[string]bool{
 	"java": true, "go": true, "python": true, "typescript": true, "javascript": true,
 	"kotlin": true, "rust": true, "c_sharp": true, "cpp": true, "ruby": true,
+	"php": true, "scala": true,
 }
 
 // HasMeasuredReceivers reports whether a language's receiver handling is part

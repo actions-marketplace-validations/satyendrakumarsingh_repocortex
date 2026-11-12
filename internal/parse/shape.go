@@ -743,6 +743,7 @@ func classifyNodeType(language, typ string) shFlags {
 		}
 		return f
 	case typ == "type_spec", typ == "impl_item", typ == "object_declaration",
+		typ == "object_definition" && language == "scala",
 		typ == "module" && language == "ruby",
 		has("class", "struct", "interface", "trait_", "enum", "record", "protocol", "extension") &&
 			!has("_type", "constant", "member", "pattern", "_list", "parameter", "field"):
@@ -837,7 +838,12 @@ func (w *shWalker) push(s shScope) int {
 	return len(w.scopes) - 1
 }
 
-func (w *shWalker) field(n *ts.Node, name string) *ts.Node { return n.ChildByFieldName(name, w.lang) }
+func (w *shWalker) field(n *ts.Node, name string) *ts.Node {
+	if c := n.ChildByFieldName(name, w.lang); c != nil || w.language != "kotlin" {
+		return c
+	}
+	return w.kotlinField(n, name)
+}
 
 func (w *shWalker) text(n *ts.Node) string { return n.Text(w.src) }
 

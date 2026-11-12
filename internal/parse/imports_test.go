@@ -93,7 +93,8 @@ include 'config.php';
 
 class TransactionService {}
 `,
-			[]string{"App\\Repository\\TransactionRepository", "App\\Notification\\NotificationService", "bootstrap.php", "config.php"},
+			// `use` paths are written with dots, the form the resolver splits.
+			[]string{"App.Repository.TransactionRepository", "App.Notification.NotificationService", "bootstrap.php", "config.php"},
 		},
 		{
 			"Service.cs",
@@ -120,11 +121,9 @@ class TransactionService
 		},
 		{
 			// The scala grammar has no node spanning a whole dotted import
-			// path (see the comment on the scala entry in queries.go), so
-			// what is extractable is the trailing symbol name of a plain
-			// import and each name in a `{...}` selector import. A `_`
-			// wildcard import (pay.util._) yields nothing, which is the
-			// documented gap.
+			// path, so scalaImports (lang_scala.go) reads the siblings. A
+			// selector import is one row per name, and a `_` wildcard is the
+			// package.
 			"Service.scala",
 			`package pay
 
@@ -134,7 +133,7 @@ import pay.util._
 
 class TransactionService
 `,
-			[]string{"TransactionRepository", "NotificationService", "Alerter"},
+			[]string{"pay.repository.TransactionRepository", "pay.notification.NotificationService", "pay.notification.Alerter", "pay.util"},
 		},
 	}
 
