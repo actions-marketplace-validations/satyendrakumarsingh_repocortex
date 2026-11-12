@@ -30,6 +30,13 @@ func (w *Walker) IgnorePredicate() func(relPath string, isDir bool) bool {
 		if w.configExcluded(relPath, isDir) {
 			return true
 		}
+		// The hidden-file rule is not repo-supplied either, and it is the
+		// difference between watching a project and watching its virtual
+		// environment, its editor state and every copy of it an agent keeps
+		// under a hidden directory.
+		if w.hiddenPathExcluded(relPath, isDir) {
+			return true
+		}
 		// Include patterns apply to files only: a restrictive pattern such as
 		// "**/*.go" matches no directory, so testing directories against it
 		// would prune the tree at depth one.

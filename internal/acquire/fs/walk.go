@@ -131,6 +131,11 @@ type Walker struct {
 	include []pattern
 	exclude []pattern
 
+	// includeHidden is the subset of include whose globs name a hidden
+	// component, which is the only way to bring back something the hidden-file
+	// rule leaves out. See hidden.go.
+	includeHidden []pattern
+
 	maxFileSize int64
 	workers     int
 }
@@ -169,6 +174,9 @@ func NewWalker(root string, cfg config.Config, opts ...Option) (*Walker, error) 
 	for _, g := range include {
 		if p, ok := compilePattern(g, ""); ok {
 			w.include = append(w.include, p)
+			if !p.negate && namesHidden(g) {
+				w.includeHidden = append(w.includeHidden, p)
+			}
 		}
 	}
 	if len(w.include) == 0 {
@@ -342,6 +350,13 @@ func (st *walkState) walkDir(dir, rel string, rules ruleSet) {
 		// NewWalker. Checking them before the repo's own ignore rules also
 		// means a repo cannot make RepoCortex spend time inside node_modules.
 		if st.w.configExcluded(childRel, isDir) {
+			continue
+		}
+		// Hidden entries that are editor or tool state, by the rule in
+		// hidden.go. Checked here, before the symlink and ignore-file logic,
+		// for the same reason config exclusions are: nothing a repository
+		// commits should be able to make the walk enter `.git`.
+		if st.w.hiddenExcluded(childRel, name, isDir) {
 			continue
 		}
 

@@ -135,6 +135,17 @@ the second is not seen there; and a clock stepped backwards by more than two
 seconds between runs, or a network filesystem whose clock is that far behind,
 can hide a same-size edit that lands on the recorded second.
 
+**Hidden files.** Hidden configuration is indexed (`.github/workflows/*.yml`,
+`.eslintrc.js`, `.env.example`, `.gitlab-ci.yml`). Hidden editor and tool state
+is not: any hidden directory other than a short list of automation directories
+(`.github`, `.gitlab`, `.circleci`, `.devcontainer`, `.husky` and the like), and
+hidden data or temporary files such as `.syms.json`, `.DS_Store` and `.x.swp`.
+`.git` and `.repocortex` are never indexed at any depth. `index.exclude` in
+`.repocortex.yml` removes more, and an `index.include` pattern that names a
+hidden path with a dot of its own (`.claude/**`, `.syms.json`) brings it back.
+The full rule is in the
+[user manual](../user-manual.md#hidden-files-and-directories).
+
 `status` "Last indexed", and the `provenance.age_seconds` every tool answer
 carries, are the time of the latest run, full or incremental, including a run
 that found nothing to change.

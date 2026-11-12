@@ -200,6 +200,14 @@ per-path reasons. The skip reasons and what each means:
 | `irregular` | Socket, device or FIFO | Expected. Opening a FIFO would hang the indexer |
 | `unreadable` | Permission denied, broken link, unreadable directory | Fix permissions |
 
+A hidden file or directory that is absent has usually been left out by rule
+and has no row at all: hidden directories are not indexed unless they are one of
+a short list (`.github`, `.gitlab`, `.circleci`, `.devcontainer`, `.husky` and
+the like), and hidden data and temporary files (`.report.json`, `.x.swp`,
+`.DS_Store`) are not indexed. To index one, name it in `index.include` with its
+dot, keeping `**` in the list: `include: ["**", ".tooling/**"]`. The rule is in
+the user manual under "Hidden files and directories".
+
 Two more that appear as `parse_error` rather than a skip reason:
 
 - `no grammar for this file type` — the extension is not recognised by the
