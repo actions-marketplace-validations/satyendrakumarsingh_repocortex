@@ -59,7 +59,7 @@ func commandGroupOf() map[string]string {
 		"implementations": groupAsk, "path": groupAsk, "tests": groupAsk,
 		"outline": groupAsk, "api": groupAsk, "db": groupAsk,
 		"config": groupAsk, "deps": groupAsk, "events": groupAsk, "infra": groupAsk,
-		"query": groupAsk,
+		"communities": groupAsk, "query": groupAsk,
 
 		// Before and after a change.
 		"impact": groupChange, "plan-change": groupChange, "rename": groupChange,

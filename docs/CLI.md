@@ -1381,6 +1381,55 @@ repocortex hotspots --path internal/ --commits 1000
 
 Needs a git repository. Agent tool: `list_hotspots`.
 
+### `communities`
+
+Groups files into communities: sets of files whose calls and references run
+between each other more than they run outwards.
+
+```bash
+repocortex communities
+repocortex communities --path internal/ --limit 10
+repocortex communities --members 20 --min-confidence high
+```
+
+| Flag | Meaning |
+|---|---|
+| `--path PREFIX` | Only group files under this prefix; relationships leaving it are counted, not followed |
+| `-n`, `--limit N` | Most communities to list, largest first (default 20) |
+| `--members N` | Most files to list for each community (default 8; 0 lists none) |
+| `--min-confidence TIER` | Weakest relationship that links two files: `exact`, `high`, `medium` or `low` (default `medium`) |
+
+One community from `repocortex communities --members 3` on this repository:
+
+```text
+3. internal/web  (35 files)
+   NAMED FOR  the directory every member is under
+   ID         internal/web/accuracy.go
+   MOSTLY IN  internal/web (35)
+   INSIDE     467 relationship(s) between members
+   CROSSING   279 relationship(s) with a file outside
+   MEMBERS, most referenced by the others first
+     internal/web/web.go         220
+     internal/web/confidence.go  85
+     internal/web/omission.go    65
+     ... and 32 more; raise --members to list them
+```
+
+A community is named for the directory all its members share, or for its
+most-referenced file when they share none; `NAMED FOR` says which. `ID` is its
+first member in path order: a real file, and the same on every run over the same
+index. The number beside a member is how many relationships from the other
+members end in it.
+
+A community describes how the indexed code refers to itself. It is not a
+declared architecture, and it is computed only from relationships the index
+bound: a reference it could not bind is a missing link, so files that work
+together can be listed apart or in no community. Every answer prints how many
+references are unbound, how many low-confidence relationships were left out, and
+how many files are in no community. A graph of more than 250,000 file-to-file
+links is not partitioned; narrow it with `--path`. Agent tool:
+`find_communities`.
+
 ### `path <from> <to>`
 
 Shows the shortest routes from one symbol to another, each hop with its file,

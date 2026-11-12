@@ -133,6 +133,10 @@ func promptSpecs() []promptSpec {
 					steps = append(steps,
 						"Call list_hotspots and name the five files where change concentrates.")
 				}
+				if s.hasTool("find_communities") {
+					steps = append(steps,
+						"Call find_communities and say what each of the largest groups of files appears to be for.")
+				}
 				steps = append(steps,
 					"Call get_task_context with the task \"understand the main request flow\" and read what it returns.",
 					"Write a one-page orientation: what the system does, its main parts, the entry points, "+

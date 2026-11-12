@@ -215,6 +215,49 @@ Exposed only with `mcp: { profile: full }`, and always available through
 | `trace_call_path` | `from`, `to`, `from_path`, `to_path`, `max_depth` | Up to three shortest routes, one row per hop |
 | `list_dead_code` | `path`, `min_certainty`, `include_exported`, `limit` | Definitions nothing calls, graded `likely` or `possible` |
 | `list_hotspots` | `path`, `commits`, `limit`, `include_tests` | Files ranked by commits times size, each followed by the files that change with it |
+| `find_communities` | `path`, `limit`, `members`, `min_confidence` | Files grouped by how they refer to each other: one row per community, then its most-referenced files |
+
+### `find_communities`
+
+Groups the repository's files into communities: sets of files whose calls and
+references run between each other more than they run outwards. Use it to see how
+an unfamiliar repository divides, or to find the files that belong with the one
+about to change.
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `path` | string | no | Only group files under this path prefix. Relationships that leave the prefix are counted and not followed. |
+| `limit` | integer | no | Most communities to return, largest first. Default 8. |
+| `members` | integer | no | Most files to list for each community, most referenced first. Default 5. |
+| `min_confidence` | string | no | Weakest relationship that links two files: exact, high, medium or low. Default medium. |
+
+Each community is one `community` row followed by its `member` rows.
+
+| Part of the row | Meaning |
+|---|---|
+| Name | The label: the directory every member is under, or, when they share none, the most-referenced member. The row says which. |
+| Path | The community's id: its first member in path order. A real file, and the same on every call over the same index, whatever `limit` and `members` are. |
+| Reason | Size, the directory holding most of it, relationships inside against relationships crossing its boundary, and how many members are not listed. |
+
+What the answer does not claim, and says so each time:
+
+- A community describes how the indexed code refers to itself. It is not a
+  declared architecture.
+- Only relationships the index bound are counted. A reference it could not bind
+  is a missing link, so files that work together can be reported apart or in no
+  community. The answer states how many references are unbound.
+- Low-confidence relationships are left out by default, because one wrong name
+  match can merge unrelated groups. The answer counts what was left out;
+  `min_confidence: low` counts them.
+- Files in no community are counted, not listed. Unlinked is not unused.
+
+Bounds: a community and each listed member are one item each, and an answer
+holds at most 50, so `members` is reduced when `limit` is large and the answer
+says by how much. A file graph of more than 250,000 file-to-file links is not
+partitioned: the answer is empty, marked truncated, and asks for a `path`.
+
+The partition is deterministic label propagation over the file graph; no model
+and no randomness is involved. Command: `repocortex communities`.
 
 ## Names
 

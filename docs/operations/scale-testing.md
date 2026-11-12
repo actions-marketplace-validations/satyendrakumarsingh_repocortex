@@ -120,6 +120,16 @@ five samples moves a great deal under load, so take these on an idle machine.
 Every answer was under the 24 KB limit. The largest was `get_task_context` at
 18.3 KB.
 
+`find_communities` was added after that run and measured on its own, with other
+test suites running on the machine, so read both figures as upper bounds. On the
+same 250,000-symbol fixture it took 3.6 s and answered with a refusal: the
+synthetic graph links each file to about a hundred others, which puts it over
+the tool's bound of 250,000 file-to-file links, and past that bound it asks for
+a path instead of partitioning part of the graph. The time is the fold of every
+relationship into file-to-file links, which is linear in relationships. At
+50,000 symbols (226,730 relationships, 86,847 links) it partitioned the graph in
+0.64 s.
+
 Two of these were several times slower in the first run and were fixed by
 bounding their test probes: `plan_change` went from 4.4 s to 92 ms and
 `list_blindspots` from 5.5 s to 1.5 s.

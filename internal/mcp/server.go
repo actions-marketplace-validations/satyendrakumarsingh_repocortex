@@ -182,6 +182,7 @@ func New(deps Deps) (*Server, error) {
 	s.registerStructure(profileTools(deps.Config.MCPProfile))
 	s.registerChange(profileTools(deps.Config.MCPProfile))
 	s.registerOwners(profileTools(deps.Config.MCPProfile))
+	s.registerCommunities(profileTools(deps.Config.MCPProfile))
 	s.registerPrompts()
 
 	s.sdk.AddReceivingMiddleware(s.auditMiddleware)
@@ -268,6 +269,7 @@ func fullOnlyTools() []string {
 		"trace_call_path",
 		"list_dead_code",
 		"list_hotspots",
+		"find_communities",
 	}
 }
 

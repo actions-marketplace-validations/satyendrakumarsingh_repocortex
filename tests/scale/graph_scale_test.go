@@ -247,6 +247,9 @@ func TestEveryToolAnswerStaysBoundedAtScale(t *testing.T) {
 		"list_blindspots":         {},
 		"list_dead_code":          {"include_exported": true},
 		"list_hotspots":           {"include_tests": true},
+		// The widest call it accepts: every confidence counted, so every
+		// edge in the fixture becomes part of a link.
+		"find_communities": {"min_confidence": "low"},
 	}
 
 	tools, err := inv.Tools(ctx)
