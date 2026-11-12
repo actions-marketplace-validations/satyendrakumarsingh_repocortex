@@ -378,9 +378,17 @@ var inheritanceQueries = map[string]string{
 	// keyword arguments are a distinct node, so `class D(E, metaclass=M)`
 	// yields E and not M: a metaclass is not a base class, and reporting it as
 	// one would put a false edge on the graph.
+	//
+	// A base written with a subscript, `class C(ParamType[str])`, names ParamType
+	// (click: 17 of 30 declared supertypes were missing). `Generic[T]` and
+	// `Protocol[T]` are not bases of the program's own: they declare a type
+	// parameter list and a structural type, and are recorded for no form, plain
+	// or subscripted, bare or reached through typing, typing_extensions or t.
 	"python": `
-(class_definition superclasses: (argument_list (identifier) @name @reference.inherit))
-(class_definition superclasses: (argument_list (attribute attribute: (identifier) @name) @reference.inherit))
+(class_definition superclasses: (argument_list (identifier) @name @reference.inherit (#not-any-of? @name "Generic" "Protocol")))
+(class_definition superclasses: (argument_list (attribute object: (_) @_o attribute: (identifier) @name) @reference.inherit (#not-any-of? @_o "typing" "typing_extensions" "t")))
+(class_definition superclasses: (argument_list (subscript value: (identifier) @name @reference.inherit (#not-any-of? @name "Generic" "Protocol"))))
+(class_definition superclasses: (argument_list (subscript value: (attribute object: (_) @_o attribute: (identifier) @name) @reference.inherit (#not-any-of? @_o "typing" "typing_extensions" "t"))))
 `,
 
 	// C# writes one base_list after the colon and the grammar does not say which
