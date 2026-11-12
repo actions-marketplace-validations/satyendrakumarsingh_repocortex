@@ -2,6 +2,7 @@ package planchange
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"testing"
 
@@ -65,15 +66,7 @@ func TestPlanTargetPlansTheDefinitionGiven(t *testing.T) {
 	// choosing.
 	_, err = NewPlanner(deps).Plan(context.Background(), runID, "fromJson", DefaultOptions())
 	var amb *capability.AmbiguousTargetError
-	if !asAmbiguous(err, &amb) {
+	if !errors.As(err, &amb) {
 		t.Errorf("err = %v, want an ambiguity", err)
 	}
-}
-
-func asAmbiguous(err error, target **capability.AmbiguousTargetError) bool {
-	a, ok := err.(*capability.AmbiguousTargetError)
-	if ok {
-		*target = a
-	}
-	return ok
 }

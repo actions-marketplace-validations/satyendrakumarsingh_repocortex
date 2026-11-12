@@ -2,6 +2,7 @@ package capability_test
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -72,9 +73,12 @@ func TestTargetBindingIsAboutTheSymbolNotTheRun(t *testing.T) {
 // parser's tier table calls them resolved, and an index of them holds no
 // reference at all.
 func TestALanguageWithNoReferencesIsUndetermined(t *testing.T) {
-	deps, runID := captest.Build(t,
-		[]captest.Sym{captest.S(1, "emit", "okio/Sink.kt"), captest.S(2, "flush", "okio/Buffer.kt"), captest.S(3, "main", "cmd/main.go")},
-		nil, captest.Refs{Resolved: 5}) // the Go file has references; the Kotlin files have none
+	syms := []captest.Sym{captest.S(1, "emit", "okio/Sink.kt"), captest.S(2, "flush", "okio/Buffer.kt"), captest.S(3, "main", "cmd/main.go")}
+	for i := int64(0); i < 20; i++ {
+		syms = append(syms, captest.S(10+i, "op", "okio/Ops.kt").WithFQN(fmt.Sprintf("okio/Ops.kt#op%d", i)))
+	}
+	// The Go file has references; the Kotlin files have none.
+	deps, runID := captest.Build(t, syms, nil, captest.Refs{Resolved: 5})
 
 	b, err := deps.TargetBinding(context.Background(), runID, targetOf(t, deps, runID, "emit"))
 	if err != nil {
@@ -84,7 +88,7 @@ func TestALanguageWithNoReferencesIsUndetermined(t *testing.T) {
 		t.Fatalf("Kotlin is reported as yielding references: %+v", b)
 	}
 	reason, undetermined := b.Undetermined()
-	want := "RepoCortex does not extract calls from Kotlin: this index holds 2 Kotlin definition(s) and no reference from any of them"
+	want := "RepoCortex does not extract calls from Kotlin: this index holds 22 Kotlin definition(s) and no reference from any of them"
 	if !undetermined || !strings.Contains(reason, want) {
 		t.Errorf("Undetermined = %q, want it to say %q", reason, want)
 	}
@@ -135,6 +139,37 @@ func TestLanguageFamiliesAreJudgedTogetherAndJVMLanguagesAreNot(t *testing.T) {
 	}
 	if missing := capability.LanguageBindingFor(langs, "zig"); missing.Files != 0 || missing.Language != "zig" {
 		t.Errorf("an absent language = %+v", missing)
+	}
+}
+
+// TestAFewDefinitionsAreNotEvidenceAboutALanguage: the claim that a language's
+// calls are not extracted needs enough of the index behind it.
+func TestAFewDefinitionsAreNotEvidenceAboutALanguage(t *testing.T) {
+	few := capability.NoReferencesClause("c", 6)
+	if strings.Contains(few, "does not extract") || !strings.Contains(few, "no reference from any of its 6 C definition(s)") {
+		t.Errorf("6 definitions: %q", few)
+	}
+	many := capability.NoReferencesClause("kotlin", 4485)
+	if !strings.Contains(many, "RepoCortex does not extract calls from Kotlin") || !strings.Contains(many, "4485") {
+		t.Errorf("4485 definitions: %q", many)
+	}
+	if capability.GeneralisesToLanguage(capability.MinDefinitionsToGeneralise-1) ||
+		!capability.GeneralisesToLanguage(capability.MinDefinitionsToGeneralise) {
+		t.Error("the threshold is not where MinDefinitionsToGeneralise says it is")
+	}
+
+	// Undetermined either way: a small language with no references is still
+	// one whose callers cannot be concluded.
+	deps, runID := captest.Build(t,
+		[]captest.Sym{captest.S(1, "attach", "jni/glue.php"), captest.S(2, "main", "cmd/main.go")},
+		nil, captest.Refs{Resolved: 5})
+	b, err := deps.TargetBinding(context.Background(), runID, targetOf(t, deps, runID, "attach"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	reason, undetermined := b.Undetermined()
+	if !undetermined || strings.Contains(reason, "does not extract") {
+		t.Errorf("Undetermined = %q, %v", reason, undetermined)
 	}
 }
 

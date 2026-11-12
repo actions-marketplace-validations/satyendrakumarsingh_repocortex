@@ -107,9 +107,8 @@ func languageRows(langs map[string]registry.LanguageBinding) []Item {
 		var why string
 		switch {
 		case !l.ExtractsReferences():
-			why = fmt.Sprintf("%d definition(s) in %d file(s) and no reference or relationship from any of "+
-				"them: RepoCortex does not extract calls from %s, so nothing about callers in it can be concluded",
-				l.Definitions, l.Files, display)
+			why = fmt.Sprintf("%d file(s); %s, so nothing about callers in it can be concluded",
+				l.Files, capability.NoReferencesClause(name, l.Definitions))
 		case l.Total == 0:
 			why = fmt.Sprintf("%d definition(s) in %d file(s); %d relationship(s) recorded, none from "+
 				"reference resolution", l.Definitions, l.Files, l.Relationships)

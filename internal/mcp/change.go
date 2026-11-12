@@ -100,7 +100,7 @@ func (s *Server) analyzeChange(ctx context.Context, req *sdk.CallToolRequest, ar
 		IndexRevision: runID,
 		IndexStatus:   status,
 		Summary: fmt.Sprintf("%s..%s changes %d symbol(s) in %d file(s) and can reach %d more, %d of them tests. %s",
-			base, head, rep.SeedsFound, len(rep.ChangedFiles), rep.TotalReached(), tests, riskSentence(rep.Risk)),
+			base, head, rep.SeedsFound, len(rep.ChangedFiles), rep.TotalReached(), tests, riskSentence(rep.Risk, false)),
 	}
 
 	// Changed symbols first: they are what the reviewer reads the diff for.

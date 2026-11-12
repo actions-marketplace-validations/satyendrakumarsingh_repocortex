@@ -96,6 +96,10 @@ type symbolQuery struct {
 	// Rest is the caller's other arguments, as they should appear after the
 	// selector in the example call.
 	Rest string
+
+	// narrowed is set by selectSymbol: the selectors that were applied and
+	// still left several definitions.
+	narrowed string
 }
 
 // selection is a query that came down to one definition.
@@ -190,6 +194,9 @@ func (s *Server) selectSymbol(ctx context.Context, req *sdk.CallToolRequest, q s
 		sc, r := s.disambiguate(ctx, req, runID, status, q, reason, list, total)
 		return selection{}, sc, r
 	}
+	// narrowed says which of the caller's selectors were applied, for the
+	// sentence that says they were not enough.
+	var narrowed []string
 
 	cands := all
 	var how []string
@@ -210,6 +217,7 @@ func (s *Server) selectSymbol(ctx context.Context, req *sdk.CallToolRequest, q s
 			return fail(fmt.Sprintf("no definition of %q is in a file matching %s=%q", name, q.PathParam, q.Path), all)
 		}
 		how = append(how, fmt.Sprintf("by %s", q.PathParam))
+		narrowed = append(narrowed, fmt.Sprintf("%s=%s", q.PathParam, quoteArg(q.Path)))
 	}
 
 	if q.Line > 0 {
@@ -223,6 +231,7 @@ func (s *Server) selectSymbol(ctx context.Context, req *sdk.CallToolRequest, q s
 		}
 		cands = at
 		how = append(how, fmt.Sprintf("by %s", q.LineParam))
+		narrowed = append(narrowed, fmt.Sprintf("%s=%d", q.LineParam, q.Line))
 	}
 
 	// Kind is a preference, applied last and only to break a tie the caller's
@@ -237,6 +246,7 @@ func (s *Server) selectSymbol(ctx context.Context, req *sdk.CallToolRequest, q s
 	}
 
 	if len(cands) != 1 {
+		q.narrowed = strings.Join(narrowed, " ")
 		return fail("", cands)
 	}
 	if len(how) == 0 {
@@ -378,15 +388,25 @@ func (s *Server) disambiguate(ctx context.Context, req *sdk.CallToolRequest, run
 	q symbolQuery, reason string, cands []registry.SymbolCandidate, total int) (*sdk.CallToolResult, *Response) {
 	name := strings.TrimSpace(q.Name)
 
+	// matched is how many definitions the caller's own selectors left. With no
+	// selector it is every definition of the name, which is the counted total
+	// and not the number of rows read.
+	matched := len(cands)
 	var summary string
-	if reason != "" {
+	switch {
+	case reason != "":
 		summary = fmt.Sprintf("%s — %s, so %s answered for nothing. %d definition(s) have that name; "+
 			"pass the %s and %s of one row below.",
 			leadAmbiguous, reason, q.Tool, total, q.PathParam, q.LineParam)
-	} else {
+	case q.narrowed != "":
+		summary = fmt.Sprintf("%s — %d definitions of %q match %s and %s answered for none of them. "+
+			"Pass the %s and %s of one row below.",
+			leadAmbiguous, matched, name, q.narrowed, q.Tool, q.PathParam, q.LineParam)
+	default:
+		matched = max(total, len(cands))
 		summary = fmt.Sprintf("%s — %q names %d definitions and %s answered for none of them. "+
 			"Pass the %s and %s of one row below.",
-			leadAmbiguous, name, len(cands), q.Tool, q.PathParam, q.LineParam)
+			leadAmbiguous, name, matched, q.Tool, q.PathParam, q.LineParam)
 	}
 
 	resp := &Response{
@@ -416,10 +436,13 @@ func (s *Server) disambiguate(ctx context.Context, req *sdk.CallToolRequest, run
 		resp.Notes = append(resp.Notes,
 			"Each row is one definition. Repeat the call with the row's path and line, for example: "+example)
 	}
-	if rest := len(cands) - len(shown); rest > 0 || total > len(cands) && reason == "" {
+	if reason != "" {
+		matched = total
+	}
+	if len(shown) < matched {
 		resp.Notes = append(resp.Notes, fmt.Sprintf(
 			"%d definition(s) are listed of %d that match. Pass %s (a file or a directory) to narrow the list.",
-			len(shown), max(total, len(cands)), q.PathParam))
+			len(shown), matched, q.PathParam))
 	}
 	resp.Notes = append(resp.Notes,
 		"A qualified name does not select one: it is the file and the identifier, so overloads and "+

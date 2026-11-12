@@ -299,7 +299,14 @@ func (c coverage) level() ReliabilityLevel {
 // answer from. For a question about calls it is the sentence an agent most
 // needs verbatim; for a question about types it must not say "calls", because
 // a reader would conclude that types are a separate, working, matter.
+//
+// It is said of the LANGUAGE only when the index holds enough of it to say so
+// (capability.MinDefinitionsToGeneralise). A handful of definitions with no
+// reference among them is reported as exactly that.
 func (c coverage) notExtracted() string {
+	if !capability.GeneralisesToLanguage(c.Lang.Definitions) {
+		return fmt.Sprintf("found no reference in any %s file of this index", c.scope())
+	}
 	if c.About == aboutHierarchy {
 		return fmt.Sprintf("does not extract calls or type relationships from %s", c.scope())
 	}
@@ -439,6 +446,11 @@ func (c coverage) caveat(subject string) []string {
 		return []string{head + c.resolveAdvice() + doNot, capability.LowerBoundCaveat}
 	}
 }
+
+// saysWhyNothingIsKnown reports whether the lead already tells the reader that
+// nothing can be concluded, and why. A summary that follows it need not repeat
+// the reason.
+func (c coverage) saysWhyNothingIsKnown() bool { return c.level() == ReliabilityNone }
 
 // reliability is the value Server.reply grades and leads with.
 func (c coverage) reliability(subject string) *Reliability {

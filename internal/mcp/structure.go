@@ -491,6 +491,17 @@ func (s *Server) findDeadCode(ctx context.Context, req *sdk.CallToolRequest, arg
 			rep.ExportUnknown, displayLanguages(rep.ExportUnknownLangs)))
 	}
 	if rep.SkippedUnjudged > 0 {
+		// The first line says "N definitions have no caller", and N leaves
+		// these out. When they are all there is, the list is empty because
+		// nothing could be judged, and the first line must say that.
+		unjudged := fmt.Sprintf("%d definition(s) in %s were not judged, because this index holds no "+
+			"reference from that code and every one of them would look unused.",
+			rep.SkippedUnjudged, displayLanguages(rep.UnjudgedLangs))
+		if rep.Likely+rep.Possible == 0 {
+			resp.Reliability = &Reliability{Level: ReliabilityNone, Lead: unjudged}
+		} else {
+			resp.Summary += " " + unjudged
+		}
 		resp.Notes = append(resp.Notes, fmt.Sprintf(
 			"%d definition(s) in %s were not judged: this index holds no reference from those "+
 				"languages, so every definition in them would look unused.",

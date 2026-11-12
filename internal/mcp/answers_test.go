@@ -39,6 +39,13 @@ func kotlinWithoutReferences(b *indexBuilder) {
 		typ("Sink", model.KindInterface, 1, 20),
 		fn("emit", 30, 40))
 	b.file("okio/Buffer.kt", "kotlin", 40, fn("flushAll", 5, 15))
+	// Enough Kotlin that "no reference from any of it" is a statement about the
+	// language and not about one small file.
+	var more []symDef
+	for i := 0; i < 25; i++ {
+		more = append(more, fn(fmt.Sprintf("op%02d", i), 10+10*i, 15+10*i))
+	}
+	b.file("okio/Ops.kt", "kotlin", 300, more...)
 	b.file("samples/Sample.java", "java", 60,
 		typ("Sample", model.KindClass, 1, 60),
 		method("run", 5, 15, 0),
@@ -247,7 +254,7 @@ func TestRiskIsUnknownWhenCallersWereNeverBound(t *testing.T) {
 		{"references bound outside any function", topLevelCallers, "defineGetter",
 			[]string{"Risk unknown", "12 bound to it from outside any indexed function"}},
 		{"language yields no references", kotlinWithoutReferences, "emit",
-			[]string{"Risk unknown", "RepoCortex does not extract calls from Kotlin"}},
+			[]string{"Risk unknown.", "RepoCortex does not extract calls from Kotlin"}},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -718,7 +725,7 @@ func TestCoverageIsReportedForTheSymbolsOwnLanguage(t *testing.T) {
 	if want := "UNKNOWN — RepoCortex does not extract calls from Kotlin; nothing about callers can be concluded."; !strings.HasPrefix(first, want) {
 		t.Errorf("first line = %q, want it to open %q", first, want)
 	}
-	for _, want := range []string{"COVERAGE UNKNOWN", "3 Kotlin definition", "Running 'repocortex resolve' again will not change this"} {
+	for _, want := range []string{"COVERAGE UNKNOWN", "28 Kotlin definition", "Running 'repocortex resolve' again will not change this"} {
 		if !strings.Contains(text, want) {
 			t.Errorf("answer does not say %q:\n%s", want, text)
 		}
@@ -882,5 +889,83 @@ func TestSelectionReadsEveryDefinitionOfACommonName(t *testing.T) {
 	text, _ := answer(t, fs.sess, "find_callers", map[string]any{"name": "get", "path": last})
 	if !strings.Contains(firstLine(text), "("+last+":5)") {
 		t.Errorf("a path beyond the first %d definitions did not select its definition: %q", maxSelectRows, firstLine(text))
+	}
+	// The count in the first line is the count, not the number of rows read.
+	bare, _ := answer(t, fs.sess, "find_callers", map[string]any{"name": "get"})
+	if want := fmt.Sprintf("\"get\" names %d definitions", maxSelectRows+20); !strings.Contains(firstLine(bare), want) {
+		t.Errorf("first line = %q, want it to say %s", firstLine(bare), want)
+	}
+}
+
+// TestAFewDefinitionsWithNoReferencesDoNotIndictTheLanguage: two small C files
+// with six functions and no call between them are not evidence that RepoCortex
+// cannot read C. The answer says what the index holds, concludes nothing about
+// callers, and does not say the language is unsupported.
+func TestAFewDefinitionsWithNoReferencesDoNotIndictTheLanguage(t *testing.T) {
+	fs := serverFor(t, func(b *indexBuilder) {
+		b.file("jni/glue.c", "c", 40, fn("attach", 5, 10), fn("detach", 15, 20))
+		b.wellBound("go", ".go")
+	})
+	text, _ := answer(t, fs.sess, "find_callers", map[string]any{"name": "attach"})
+	first := firstLine(text)
+	if !strings.HasPrefix(first, leadUnknown+" — RepoCortex found no reference in any C file of this index; nothing about callers can be concluded.") {
+		t.Errorf("first line = %q", first)
+	}
+	if strings.Contains(text, "does not extract calls from C") {
+		t.Errorf("two definitions were taken as proof about the language:\n%s", text)
+	}
+	coverage, _ := answer(t, fs.sess, "get_resolution_coverage", nil)
+	if strings.Contains(coverage, "does not extract calls from C") ||
+		!strings.Contains(coverage, "this index holds no reference from any of its 2 C definition(s)") {
+		t.Errorf("the coverage row for C overstates or omits what the index holds:\n%s", coverage)
+	}
+}
+
+// TestDeadCodeSaysWhenNothingCouldBeJudged: on a PHP repository every
+// definition is unjudged, and "0 definition(s) have no caller" was the first
+// line.
+func TestDeadCodeSaysWhenNothingCouldBeJudged(t *testing.T) {
+	fs := serverFor(t, func(b *indexBuilder) {
+		var syms []symDef
+		for i := 0; i < 30; i++ {
+			syms = append(syms, fn(fmt.Sprintf("handler%02d", i), 10+10*i, 15+10*i))
+		}
+		b.file("src/Handlers.php", "php", 400, syms...)
+	})
+	text, _ := answer(t, fs.sess, "list_dead_code", nil)
+	first := firstLine(text)
+	if !strings.HasPrefix(first, leadUnknown+" — 30 definition(s) in PHP were not judged") {
+		t.Errorf("first line = %q; it must not read as 'nothing is unused'", first)
+	}
+}
+
+// TestSelectorsThatLeaveSeveralSaySo: a path that narrows four namesakes to
+// three overloads in one file is progress, and the answer says what was
+// applied and what is still needed.
+func TestSelectorsThatLeaveSeveralSaySo(t *testing.T) {
+	fs := serverFor(t, overloads)
+	text, _ := answer(t, fs.sess, "analyze_impact", map[string]any{"symbol": "fromJson", "path": "src/Gson.java"})
+	first := firstLine(text)
+	if !strings.HasPrefix(first, leadAmbiguous+" — 3 definitions of \"fromJson\" match path=src/Gson.java") {
+		t.Errorf("first line = %q", first)
+	}
+	if rowCount(text) != 3 || strings.Contains(text, "src/Adapter.java") {
+		t.Errorf("the list is not the three definitions the path left:\n%s", text)
+	}
+}
+
+// TestTheFirstLineGivesItsReasonOnce: when the lead already says nothing can
+// be concluded and why, the sentence after it does not say it again.
+func TestTheFirstLineGivesItsReasonOnce(t *testing.T) {
+	fs := serverFor(t, kotlinWithoutReferences)
+	for _, tool := range []string{"analyze_impact", "find_tests", "plan_change"} {
+		text, _ := answer(t, fs.sess, tool, map[string]any{"symbol": "emit"})
+		first := firstLine(text)
+		if n := strings.Count(first, "does not extract calls from Kotlin"); n != 1 {
+			t.Errorf("%s: the first line gives its reason %d times: %q", tool, n, first)
+		}
+		if !strings.Contains(strings.ToUpper(first), "UNKNOWN") {
+			t.Errorf("%s: first line = %q", tool, first)
+		}
 	}
 }

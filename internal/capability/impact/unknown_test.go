@@ -3,6 +3,7 @@ package impact
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -14,6 +15,16 @@ import (
 // goRefs is enough bound Go references that the language is seen to yield
 // them, with nothing spelled like the symbols a test asks about.
 var goRefs = captest.Refs{Resolved: 8, Unresolved: 2}
+
+// phpSymbols is a PHP codebase large enough that "no reference from any of
+// it" says something about the language: chooseHandler and two dozen others.
+func phpSymbols() []captest.Sym {
+	syms := []captest.Sym{captest.S(1, "chooseHandler", "src/Utils.php")}
+	for i := int64(0); i < 24; i++ {
+		syms = append(syms, captest.S(10+i, "method", "src/Client.php").WithFQN(fmt.Sprintf("src/Client.php#m%d", i)))
+	}
+	return syms
+}
 
 func namedRefs(base captest.Refs, named ...captest.NamedRef) captest.Refs {
 	base.Named = named
@@ -65,7 +76,7 @@ func TestRiskIsUnknownWhenTheCallersCouldNotBeBound(t *testing.T) {
 		},
 		{
 			name: "the language yields no references at all",
-			syms: []captest.Sym{captest.S(1, "chooseHandler", "src/Utils.php"), captest.S(2, "other", "src/Client.php")},
+			syms: phpSymbols(),
 			refs: goRefs, // Go references exist; PHP has none
 			want: "RepoCortex does not extract calls from PHP",
 		},

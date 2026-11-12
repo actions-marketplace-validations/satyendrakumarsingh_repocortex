@@ -115,9 +115,8 @@ func (b TargetBinding) Undetermined() (reason string, undetermined bool) {
 	lang := DisplayLanguage(b.Language)
 	switch {
 	case !b.LanguageExtracts && b.LanguageDefinitions > 0:
-		return fmt.Sprintf("RepoCortex does not extract calls from %s: this index holds %d %s "+
-			"definition(s) and no reference from any of them, so nothing about callers can be concluded",
-			lang, b.LanguageDefinitions, lang), true
+		return NoReferencesClause(b.Language, b.LanguageDefinitions) +
+			", so nothing about callers can be concluded", true
 	case b.LanguageStats.Total > 0 && b.LanguageStats.Pending == b.LanguageStats.Total:
 		return fmt.Sprintf("none of the %d %s reference(s) in this index has been resolved yet "+
 			"(run 'repocortex resolve')", b.LanguageStats.Total, lang), true
@@ -125,6 +124,39 @@ func (b TargetBinding) Undetermined() (reason string, undetermined bool) {
 		return b.unlistedSentence(), true
 	}
 	return "", false
+}
+
+// MinDefinitionsToGeneralise is how many definitions a language must have in
+// an index, with no reference from any of them, before an answer says
+// RepoCortex does not extract that language's calls.
+//
+// The claim is an inference from the index, and it needs enough of the index
+// behind it. Thousands of Kotlin definitions and not one Kotlin reference is a
+// parser that does not read Kotlin's calls. Six C definitions in two files and
+// no reference is two small files, and saying "RepoCortex does not extract
+// calls from C" on that evidence would be a false statement about a language
+// whose calls it does extract. Below the threshold the answer states what the
+// index holds and stops there. Either way nothing about callers follows.
+const MinDefinitionsToGeneralise = 20
+
+// GeneralisesToLanguage reports whether definitions with no reference among
+// them are enough to say the language's calls are not extracted at all.
+func GeneralisesToLanguage(definitions int64) bool {
+	return definitions >= MinDefinitionsToGeneralise
+}
+
+// NoReferencesClause states that a language yields no references in this
+// index, as strongly as the evidence allows and no more.
+func NoReferencesClause(language string, definitions int64) string {
+	lang := DisplayLanguage(language)
+	if lang == "" {
+		lang = "this language"
+	}
+	if GeneralisesToLanguage(definitions) {
+		return fmt.Sprintf("RepoCortex does not extract calls from %s: this index holds %d %s "+
+			"definition(s) and no reference from any of them", lang, definitions, lang)
+	}
+	return fmt.Sprintf("this index holds no reference from any of its %d %s definition(s)", definitions, lang)
 }
 
 // UnlistedSentence states how many references to the target's name exist and

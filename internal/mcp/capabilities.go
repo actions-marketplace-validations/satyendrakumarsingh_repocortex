@@ -138,14 +138,6 @@ func (s *Server) impactAnalysis(ctx stdctx.Context, req *sdk.CallToolRequest, ar
 
 	items, reach := impactItems(rep)
 
-	resp := &Response{
-		IndexRevision: runID,
-		IndexStatus:   status,
-		Summary: fmt.Sprintf("%s (%s:%d): %s. %s",
-			rep.Target.Name, rep.Target.FilePath, rep.Target.Line, reach.summary(), riskSentence(rep.Risk)),
-	}
-	paginate(resp, page, items)
-
 	// The gate goes ahead of the risk breakdown, the factors and the unknowns.
 	// A risk score computed over a graph RepoCortex could barely resolve is a
 	// precise-looking number built on absent evidence, and its precision is
@@ -154,6 +146,15 @@ func (s *Server) impactAnalysis(ctx stdctx.Context, req *sdk.CallToolRequest, ar
 	// It is judged from the report's own Binding rather than a second query:
 	// the evidence shown must be the evidence the analysis used.
 	cov := s.coverageFor(ctx, runID, rep.Target.Language, rep.Target.FilePath, rep.Binding, aboutCallers)
+
+	resp := &Response{
+		IndexRevision: runID,
+		IndexStatus:   status,
+		Summary: fmt.Sprintf("%s (%s:%d): %s. %s",
+			rep.Target.Name, rep.Target.FilePath, rep.Target.Line, reach.summary(),
+			riskSentence(rep.Risk, cov.saysWhyNothingIsKnown())),
+	}
+	paginate(resp, page, items)
 	s.applyCoverage(resp, cov, "impact")
 
 	// What the dispatch rows mean, and what was folded into a stronger claim.
@@ -206,8 +207,13 @@ func (s *Server) impactAnalysis(ctx stdctx.Context, req *sdk.CallToolRequest, ar
 //
 // The portal reads the word after "Risk" out of this sentence; keep that word
 // a single token.
-func riskSentence(r impact.Risk) string {
+//
+// reasonAlreadyGiven is true when the line this sentence sits on has already
+// said why nothing is known, in the lead; the reason is then not said twice.
+func riskSentence(r impact.Risk, reasonAlreadyGiven bool) string {
 	switch {
+	case r.Level == impact.LevelUnknown && reasonAlreadyGiven:
+		return "Risk unknown."
 	case r.Level == impact.LevelUnknown:
 		return fmt.Sprintf("Risk unknown: %s.", strings.TrimSuffix(r.Undetermined, "."))
 	case r.Undetermined != "":
@@ -490,9 +496,17 @@ func (s *Server) findTests(ctx stdctx.Context, req *sdk.CallToolRequest, args ta
 		return failFrom(err, "test discovery: %v", err)
 	}
 
+	// "Untested" is the strongest claim this tool makes, and the one a low
+	// resolution rate most easily fabricates: a test that calls the symbol
+	// through an unresolved reference is a test RepoCortex cannot see. Coverage
+	// is judged before that claim is worded, not after.
+	cov := s.coverageFor(ctx, runID, rep.Target.Language, rep.Target.FilePath, rep.Binding, aboutTests)
+
 	resp := &Response{IndexRevision: runID, IndexStatus: status}
 	where := fmt.Sprintf("%s (%s:%d)", rep.Target.Name, rep.Target.FilePath, rep.Target.Line)
 	switch {
+	case rep.Untested && rep.Undetermined != "" && cov.saysWhyNothingIsKnown():
+		resp.Summary = fmt.Sprintf("%s: no test found, and whether one reaches it is UNKNOWN.", where)
 	case rep.Untested && rep.Undetermined != "":
 		// Not "0 tests". The search that would have found a calling test could
 		// not see one, so the count is of what was visible, and the first line
@@ -521,11 +535,6 @@ func (s *Server) findTests(ctx stdctx.Context, req *sdk.CallToolRequest, args ta
 	}
 	paginate(resp, page, items)
 
-	// "Untested" is the strongest claim this tool makes, and the one a low
-	// resolution rate most easily fabricates: a test that calls the symbol
-	// through an unresolved reference is a test RepoCortex cannot see. The gate
-	// runs before that claim is stated, not after.
-	cov := s.coverageFor(ctx, runID, rep.Target.Language, rep.Target.FilePath, rep.Binding, aboutTests)
 	s.applyCoverage(resp, cov, "test discovery")
 
 	// Ahead of the "untested" claim below, not after it: a floor is one more
@@ -616,9 +625,18 @@ func (s *Server) planChange(ctx stdctx.Context, req *sdk.CallToolRequest, args t
 		return failFrom(err, "plan change for %q: %v", args.Symbol, err)
 	}
 
+	binding, err := s.capDeps.TargetBinding(ctx, runID, plan.Target)
+	if err != nil {
+		return failFrom(err, "plan change for %q: %v", args.Symbol, err)
+	}
+	cov := s.coverageFor(ctx, runID, sel.Target.Language, sel.Target.FilePath, binding, aboutCallers)
+
 	where := fmt.Sprintf("%s (%s:%d)", plan.Target.Name, plan.Target.FilePath, plan.Target.Line)
 	resp := &Response{IndexRevision: runID, IndexStatus: status}
 	switch {
+	case plan.RiskLevel == impact.LevelUnknown && cov.saysWhyNothingIsKnown():
+		resp.Summary = fmt.Sprintf("Change plan for %s: Risk UNKNOWN, and the caller steps below are only "+
+			"the %d caller(s) that could be bound.", where, plan.DirectCallers)
 	case plan.RiskLevel == impact.LevelUnknown:
 		// The plan lists the callers that were FOUND. With the callers
 		// undetermined, a plan that says "0 direct callers, risk LOW" is a plan
@@ -664,11 +682,6 @@ func (s *Server) planChange(ctx stdctx.Context, req *sdk.CallToolRequest, args t
 	}
 	paginate(resp, page, items)
 
-	binding, err := s.capDeps.TargetBinding(ctx, runID, plan.Target)
-	if err != nil {
-		return failFrom(err, "plan change for %q: %v", args.Symbol, err)
-	}
-	cov := s.coverageFor(ctx, runID, sel.Target.Language, sel.Target.FilePath, binding, aboutCallers)
 	s.applyCoverage(resp, cov, "the change plan")
 
 	if len(plan.AffectedTests) > 0 {

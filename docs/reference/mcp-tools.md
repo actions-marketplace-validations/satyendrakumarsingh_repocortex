@@ -347,7 +347,9 @@ The first line under `SYSTEM METADATA` is the summary. It is written to be safe 
 
 A first line with none of these words has no known problem. It is still a lower bound: static analysis does not see reflection, dependency injection or code in other repositories.
 
-Coverage is judged for the language of the symbol asked about, not for the whole repository. A Kotlin symbol in a repository with a few Java files is described by the Kotlin files. When a language yields no references at all the answer says so in these words: "RepoCortex does not extract calls from Kotlin; nothing about callers can be concluded." `repocortex resolve` is named as a remedy only when references are still pending.
+Coverage is judged for the language of the symbol asked about, not for the whole repository. A Kotlin symbol in a repository with a few Java files is described by the Kotlin files. When a language yields no references at all the answer says so in these words: "RepoCortex does not extract calls from Kotlin; nothing about callers can be concluded." That is said of the language when the index holds at least 20 definitions in it and no reference from any of them. With fewer, the answer says only that the index holds no reference from those files; nothing about callers follows either way. `repocortex resolve` is named as a remedy only when references are still pending.
+
+`get_resolution_coverage` lists the same figures for each language in the index.
 
 ### The verdict
 
@@ -421,7 +423,7 @@ An answer that does not carry every row says how many exist and what to pass nex
 truncated: showing rows 1-50 of 195 caller(s), so 145 are not shown here. Pass offset=50 to read on (limit accepts up to 200)
 ```
 
-An answer is also limited to 24 KB, so a page can hold fewer rows than `limit`. `page.returned` and `page.next_offset` say how many it holds. `search_code` and `list_dead_code` take `limit` with their own defaults.
+An answer is also limited to 24 KB, so a page can hold fewer rows than `limit`. `page.returned` and `page.next_offset` say how many it holds. `search_code`, `list_dead_code`, `list_hotspots` and `find_owners` take `limit` with their own defaults and no `offset`.
 
 ## What an answer will not state as fact
 
