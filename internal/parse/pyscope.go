@@ -4,6 +4,8 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/satyendrakumarsingh/repocortex/pkg/model"
+
 	ts "github.com/odvcencio/gotreesitter"
 )
 
@@ -110,8 +112,12 @@ const pySuper = "super"
 //
 // Not a valid identifier in any language this package parses, so it can never
 // collide with a real receiver, and short enough to fall under every
-// LanguageSpec's MinTypeNameLength. Only pyscope.go writes it today.
-const OpaqueReceiver = "?"
+// LanguageSpec's MinTypeNameLength.
+//
+// This walk wrote it first. shape.go now writes the same marker for every
+// other language, and both record beside it the kind of receiver it stands
+// for (model.ReceiverExpr), so the one representation serves all of them.
+const OpaqueReceiver = model.OpaqueReceiver
 
 // pyMaxDepth bounds the walk's recursion.
 //
@@ -150,15 +156,21 @@ type pyFacts struct {
 	// is a bare call, and that absence is the point: see OpaqueReceiver.
 	receivers map[pySite]string
 
+	// kinds says what each entry of receivers is, in the vocabulary every
+	// language shares: a stated type, the enclosing instance, the superclass,
+	// a local value, a dotted path, a name, or an expression. See
+	// model.ReceiverBare and its siblings.
+	kinds map[pySite]string
+
 	// indirect holds the bare calls whose callee is a local value.
 	indirect map[pySite]bool
 
 	// notCalls holds the positions the tags query reports as a call that are
 	// not one: the OBJECT of `row.save()` is tagged as a call to `row`, at the
-	// same position as the real call to `save`. Where `row` is a local value it
-	// is neither a call nor a use of anything indexed, and the reference is
-	// dropped. Where it is not local — a module, a class, a module-level name —
-	// the reference is left as it always was.
+	// same position as the real call to `save`. It is the receiver, and the
+	// reference is dropped — for a local value, and equally for a module or a
+	// class, which used to be kept and then bound as if `json` in
+	// `json.dumps()` were itself a call.
 	notCalls map[pySite]bool
 
 	// members are the names imported from a module by `from M import N`.
@@ -251,6 +263,7 @@ func analyzePython(lang *ts.Language, tree *ts.Tree, src []byte) (facts *pyFacts
 			receivers: make(map[pySite]string, 64),
 			indirect:  make(map[pySite]bool, 8),
 			notCalls:  make(map[pySite]bool, 32),
+			kinds:     make(map[pySite]string, 64),
 		},
 	}
 	w.visit(root, &pyScope{kind: pyModule}, 0)
@@ -571,25 +584,32 @@ func (w *pyWalker) recordCall(call *ts.Node, scope *pyScope) {
 	}
 	site := siteOf(call, w.text(attr))
 
-	recv := OpaqueReceiver
+	recv, kind := OpaqueReceiver, model.ReceiverExpr
 	switch w.typeOf(object) {
 	case "identifier":
 		// The class the scope states for this name, or failing that the name:
 		// a variable the resolver may still recognise as a module or a class.
 		name := w.text(object)
-		recv = name
-		if class := w.classOf(name, scope); class != "" {
-			recv = class
+		recv, kind = name, model.ReceiverName
+		local := w.isLocalValue(name, scope)
+		switch class := w.classOf(name, scope); {
+		case class != "":
+			recv, kind = class, model.ReceiverType
+		case name == "self" || name == "cls":
+			kind = model.ReceiverSelf
+		case local:
+			kind = model.ReceiverValue
 		}
-		if w.isLocalValue(name, scope) {
-			w.facts.notCalls[siteOf(call, name)] = true
-		}
+		// The object of a method call is tagged as a call to that name, at the
+		// position of the real call. It is the receiver, and a receiver is not
+		// a call — whether it is a local value, a module or a class.
+		w.facts.notCalls[siteOf(call, name)] = true
 	case "call":
 		// `super().method()`. An argument list is allowed — `super(C, self)` is
 		// the same dispatch spelled out — but only the bare name `super`.
 		if callee := w.field(object, "function"); callee != nil &&
 			w.typeOf(callee) == "identifier" && w.text(callee) == pySuper {
-			recv = pySuper
+			recv, kind = pySuper, model.ReceiverSuper
 		}
 	}
 
@@ -598,9 +618,19 @@ func (w *pyWalker) recordCall(call *ts.Node, scope *pyScope) {
 	// which reference is which, so both are recorded as made on something
 	// unnamed — which is true of one and loses only a hint for the other.
 	if prev, seen := w.facts.receivers[site]; seen && prev != recv {
-		recv = OpaqueReceiver
+		recv, kind = OpaqueReceiver, model.ReceiverExpr
 	}
 	w.facts.receivers[site] = recv
+	w.facts.kinds[site] = kind
+}
+
+// receiverKind reports what the call at a site was made on. A call the walk
+// recorded no receiver for is a bare call.
+func (f *pyFacts) receiverKind(at pySite) string {
+	if kind, ok := f.kinds[at]; ok {
+		return kind
+	}
+	return model.ReceiverBare
 }
 
 // annotationClass reads the class out of a type annotation, or "".

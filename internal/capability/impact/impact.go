@@ -170,6 +170,9 @@ const DefaultMinConfidence = model.ConfidenceMedium
 // and useless.
 var DefaultKinds = []model.EdgeKind{
 	model.EdgeCalls,
+	// Constructing a type depends on it exactly as calling a function does: a
+	// change to the type reaches everything that creates one.
+	model.EdgeInstantiates,
 	model.EdgeReferences,
 	model.EdgeImplements,
 	model.EdgeExtends,
@@ -1029,7 +1032,7 @@ func collectUnknowns(
 			// proven to.
 			sr, err := deps.Graph.Traverse(ctx, graph.Query{
 				Roots:     []int64{s.SymbolID},
-				Kinds:     []model.EdgeKind{model.EdgeCalls, model.EdgeReferences},
+				Kinds:     []model.EdgeKind{model.EdgeCalls, model.EdgeInstantiates, model.EdgeReferences},
 				MaxDepth:  1,
 				MaxNodes:  opts.MaxDirect,
 				Direction: graph.Incoming,

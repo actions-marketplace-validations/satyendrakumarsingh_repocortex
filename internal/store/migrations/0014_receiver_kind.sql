@@ -1,0 +1,55 @@
+-- 0014_receiver_kind: record WHAT a call was made on, and whether a call that
+-- binds to nothing was shown to leave the repository.
+--
+-- WHAT WAS WRONG. symbol_references.receiver held the identifier in front of a
+-- call where one query per language could capture it, and '' otherwise. '' was
+-- doing three jobs: the source wrote a bare call `f()`; the source wrote a
+-- receiver the query could not express (`s.repo.Save()`, `make().run()`,
+-- `a::b::f()`); and the language had no receiver query at all. A resolver that
+-- cannot tell those apart binds `errors.New(...)` to the package's own `New`,
+-- because the name matches and nothing says the call was qualified. Hand-checked
+-- on eight public projects (docs/verification/2026-11-12) that one confusion was
+-- the largest source of wrong `high` edges in every language measured.
+--
+-- receiver_kind states the shape, in a closed vocabulary written by
+-- internal/parse and read by internal/resolve/infer:
+--
+--   ''       not recorded: a row written before this migration, or a reference
+--            that is not a call (a supertype has no receiver)
+--   'bare'   `f()` — the source wrote no receiver
+--   'name'   `x.f()` — one identifier, held in `receiver` as written
+--   'path'   `a.b.f()` — a chain of identifiers joined by the member operator,
+--            held in `receiver` as written
+--   'scope'  `a::f()`, `a::b::f()` — qualified through the language's scope
+--            operator, which names a module or a type and never a value
+--   'self'   `self.f()`, `this.f()` — the instance or type the call is written in
+--   'super'  `super.f()`, `super().f()`, `base.f()` — the superclass
+--   'type'   `x.f()` where the source states x's type; `receiver` holds the TYPE
+--   'value'  `x.f()` where x is a local variable or parameter declared with no
+--            stated type: a value, so never an import, a module or a type
+--   'expr'   a call on an expression with no name (`g().f()`, `a[i].f()`);
+--            `receiver` holds '?'
+--
+-- WHY A COLUMN AND NOT MORE MARKERS IN `receiver`. The Python scope analysis
+-- already wrote two in-band markers, '?' and 'super', and read a capital first
+-- letter as "this is a class". That works for one language whose classes are
+-- capitalised by convention. Go's unexported types are lower case, a Java
+-- variable may be upper case, and `super` is an ordinary module path segment in
+-- Rust. The shape is a separate fact from the text and is stored as one.
+--
+-- external marks a call that binds to nothing BECAUSE its qualifier names
+-- something outside the repository: an import of the standard library or of a
+-- third-party package, or a type imported from one. It is set only on positive
+-- evidence. `resolution` stays 'unresolved' for these rows — the CHECK on that
+-- column is part of 0002 and a shipped migration is immutable — so every reader
+-- that counts unresolved references still counts them, and a reader that wants
+-- to separate "left the repository" from "found nothing" now can.
+--
+-- NOT BACK-FILLED, for 0008's reason. A row written by an earlier build did not
+-- record its shape, and '' says exactly that. The resolver treats '' as the
+-- least it can know and binds such a call at `low` at most; the producer stamp
+-- (0008) already makes the next `repocortex index` re-parse every file of an
+-- index written by another build, which is what upgrades these rows.
+
+ALTER TABLE symbol_references ADD COLUMN receiver_kind TEXT NOT NULL DEFAULT '';
+ALTER TABLE symbol_references ADD COLUMN external INTEGER NOT NULL DEFAULT 0 CHECK (external IN (0,1));

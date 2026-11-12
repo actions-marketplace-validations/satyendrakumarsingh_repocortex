@@ -57,6 +57,15 @@ type Reference struct {
 	// unqualified. The resolver uses it to infer a target type.
 	Receiver string
 
+	// ReceiverKind says what Receiver is — nothing (a bare call), a name, a
+	// path, the enclosing instance, the superclass, a stated type, a local
+	// value, or an expression with no name. One of the model.Receiver*
+	// constants for every call reference; empty for a reference that is not a
+	// call. An empty Receiver therefore means "the source wrote none" only
+	// when ReceiverKind is model.ReceiverBare — the distinction A18 in
+	// internal/resolve/infer was reverted for lacking.
+	ReceiverKind string
+
 	// ArgCount is how many arguments this call site passes, where the parser
 	// could determine that. model.ArityUnknown for every reference that is not
 	// a call, for a call spreading a slice or a sequence, and for every
@@ -93,6 +102,11 @@ type Result struct {
 	Symbols    []model.Symbol
 	References []Reference
 	Imports    []Import
+
+	// Qualifiers counts the tagged identifiers that were dropped because they
+	// are the receiver or qualifier of a call, not a call: `reader` in
+	// `reader.peek()`. Reported so the drop is counted rather than silent.
+	Qualifiers int
 
 	// Err explains a partial or failed parse. It is diagnostic text for the
 	// file's record, never a reason to abort the indexing run.

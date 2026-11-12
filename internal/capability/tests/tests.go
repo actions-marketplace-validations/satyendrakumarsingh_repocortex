@@ -251,6 +251,9 @@ func (o Options) withDefaults() Options {
 // best evidence available.
 var graphKinds = []model.EdgeKind{
 	model.EdgeCalls,
+	// A test that constructs a type reaches it; before constructor calls had a
+	// kind of their own they were CALLS edges and were traversed as such.
+	model.EdgeInstantiates,
 	model.EdgeReferences,
 	model.EdgeTestedBy,
 }

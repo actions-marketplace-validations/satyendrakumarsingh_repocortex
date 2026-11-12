@@ -520,12 +520,13 @@ func writeIncrementalReferences(
 	refs := make([]registry.Reference, 0, len(facts.References))
 	for _, ref := range facts.References {
 		refs = append(refs, registry.Reference{
-			Name:     ref.Name,
-			Kind:     ref.Kind,
-			Receiver: ref.Receiver,
-			ArgCount: ref.ArgCount,
-			Line:     ref.Range.Start.Line,
-			Col:      ref.Range.Start.Col,
+			Name:         ref.Name,
+			Kind:         ref.Kind,
+			Receiver:     ref.Receiver,
+			ReceiverKind: ref.ReceiverKind,
+			ArgCount:     ref.ArgCount,
+			Line:         ref.Range.Start.Line,
+			Col:          ref.Range.Start.Col,
 		})
 	}
 	imports := make([]registry.Import, 0, len(facts.Imports))

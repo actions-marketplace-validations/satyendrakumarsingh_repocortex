@@ -15,9 +15,14 @@ import (
 // `path:name`. This file is what resolution can do when the parser says more —
 // when a qualified name states the class a definition belongs to and whether it
 // is local to a function, when an empty receiver means the source wrote none,
-// and when an import row names the member it brought in. Today that is Python
-// (internal/parse/pyscope.go), and everything here is reached only where
-// LanguageSpec.QualifiedMembers holds.
+// and when an import row names the member it brought in. That began with
+// Python (internal/parse/pyscope.go), and the rules in this file are still
+// reached only where LanguageSpec.QualifiedMembers holds.
+//
+// Their ideas are no longer Python's alone: internal/parse/shape.go
+// writes the same qualified names and the same receiver shapes for every
+// language, and shaped.go binds by them using the readers defined here
+// (memberOwner, isModuleLevel, visibleFrom, innermost, firstDeclaration).
 //
 // Three things change, and each replaces a guess with something the source
 // states.
@@ -523,30 +528,65 @@ func (r *Resolver) pickQualified(
 		return nameOnly(c, "the file does not import this name"), true
 	}
 
-	// The receiver names a module.
-	if c, ok := pickModuleMember(spec, imports, ref, cands); ok {
-		return c, true
-	}
-	if c, ok := r.pickAliased(imports, ref, cands); ok {
-		return c, true
-	}
-	var byReceiver []registry.SymbolIndexEntry
-	for _, c := range cands {
-		if receiverMatches(spec, ref.Receiver, c) {
-			byReceiver = append(byReceiver, c)
+	// The receiver names a module — unless the parser saw it declared as a
+	// local value, in which case it is a parameter or a variable that merely
+	// shares a module's name. `auth.login()` on a fixture called `auth` is not
+	// a call into auth.py, and reading it as one bound a test helper to a view
+	// at `high`.
+	if ref.ReceiverKind != model.ReceiverValue {
+		if c, ok := pickModuleMember(spec, imports, ref, cands); ok {
+			return c, true
 		}
-	}
-	if first, ok := firstDeclaration(byReceiver); ok {
-		return candidate{first, model.ConfidenceHigh, "receiver type matches"}, true
+		if c, ok := r.pickAliased(imports, ref, cands); ok {
+			return c, true
+		}
+		var byReceiver []registry.SymbolIndexEntry
+		for _, c := range cands {
+			if receiverMatches(spec, ref.Receiver, c) {
+				byReceiver = append(byReceiver, c)
+			}
+		}
+		if first, ok := firstDeclaration(byReceiver); ok {
+			return candidate{first, model.ConfidenceHigh, "receiver type matches"}, true
+		}
 	}
 
 	// The receiver's class is unknown. Whatever the name-only tiers answer is
-	// an answer about the NAME.
-	c, ok := r.pickByName(spec, fr, imports, ref, cands)
+	// an answer about the NAME — and two things the name alone could reach are
+	// ruled out first, because the call's shape rules them out.
+	//
+	// The function the call is written in. `current_app.url_for(...)` inside
+	// `url_for` is a wrapper delegating to another object, and binding it to
+	// the wrapper was the largest group of wrong edges this tier produced on
+	// flask: 10 wrong of 12 sampled under "defined in the same file".
+	//
+	// A module-level function, where the receiver is a value or an expression.
+	// A method called on an object is an attribute of that object; a function
+	// defined at the top of some file is not, whatever it is called.
+	within, _ := enclosing(fr.Symbols, ref.Line)
+	onObject := ref.ReceiverKind == model.ReceiverValue || ref.ReceiverKind == model.ReceiverExpr
+	kept := cands[:0:0]
+	for _, c := range cands {
+		if c.ID == within || (onObject && isModuleLevel(c)) {
+			continue
+		}
+		kept = append(kept, c)
+	}
+	c, ok := r.pickByName(spec, fr, imports, ref, kept)
 	if !ok {
 		return candidate{}, false
 	}
-	return nameOnly(c, "the receiver's class is not known"), true
+	sameFile := c.reason == "defined in the same file"
+	c = nameOnly(c, "the receiver's class is not known")
+	if sameFile {
+		// The weakest of the name-only answers, and labelled as that. One
+		// definition of the name in the file is strong evidence for a bare
+		// call and almost none for a call on an object of unknown class:
+		// measured on flask it was right 2 times in 12 before the two
+		// exclusions above, and 1 in 7 of what they left.
+		c.confidence = model.ConfidenceLow
+	}
+	return c, true
 }
 
 // pickByName is the tiers that weigh a name with no evidence about what it was
@@ -774,9 +814,76 @@ func (s importSet) locate(e importEntry, extra, fileSegs []string) (isModule, is
 		return false, false
 	}
 	if commonSuffixLen(want, fileSegs) == len(want) {
+		// An absolute import does not reach into a package: see insidePackage.
+		if s.layout.Known() && s.spec.PackageInitStem != "" && len(fileSegs) > len(want) &&
+			s.layout.IsPackageDir(fileSegs[:len(fileSegs)-len(want)]) {
+			return false, false
+		}
 		return true, false
 	}
 	return false, liesBeneath(want, fileSegs)
+}
+
+// qualifiedByOutsideModule reports whether a call's receiver is the local name
+// of an import that names nothing in the repository: an alias (`import json as
+// _json`), a module imported whole (`import os`), or a name imported from one
+// (`from os import path`).
+//
+// It answers true only where the layout shows the module is absent — no
+// directory ends with its path and no file carries its name — and every
+// import that could bind the name agrees. `from os import path` is read as
+// binding `os` as well as `path`: the import row does not say which form was
+// written, and a file that uses `os.` without importing it does not run. A relative import is in the repository by
+// construction, and with no layout nothing is external.
+func (r *Resolver) qualifiedByOutsideModule(imports importSet, ref registry.Reference) bool {
+	if !r.layout.Known() || ref.Receiver == "" {
+		return false
+	}
+	switch ref.ReceiverKind {
+	case model.ReceiverName, model.ReceiverPath:
+	default:
+		return false
+	}
+	name := ref.Receiver
+	if i := strings.IndexByte(name, '.'); i > 0 {
+		name = name[:i]
+	}
+	bound, outside := 0, 0
+	consider := func(e importEntry) {
+		bound++
+		if e.relative == 0 && !r.pythonModulePresent(e.segments) {
+			outside++
+		}
+	}
+	for _, e := range imports.imports {
+		switch {
+		case e.alias != "" && e.alias == name:
+			consider(e)
+		case e.alias == "" && e.relative == 0 && len(e.segments) > 0 && e.raw != "" &&
+			strings.SplitN(e.raw, ".", 2)[0] == name:
+			consider(e)
+		}
+	}
+	for _, i := range imports.members[name] {
+		consider(imports.imports[i])
+	}
+	return bound > 0 && outside == bound
+}
+
+// pythonModulePresent reports whether a dotted module path could name
+// something in the repository: a package directory that is not itself inside
+// a package, or a file of that name.
+func (r *Resolver) pythonModulePresent(segs []string) bool {
+	if len(segs) == 0 {
+		return true
+	}
+	if r.layout.HasTopLevelDir(segs) {
+		return true
+	}
+	if !r.layout.HasStem(segs[len(segs)-1]) {
+		return false
+	}
+	return len(segs) == 1 || r.layout.HasDirEnding(segs[:len(segs)-1])
 }
 
 // liesBeneath reports whether a file sits somewhere under the package an import

@@ -83,6 +83,10 @@ SCIP indexes.`,
 			if err != nil {
 				return err
 			}
+			external, err := reg.ExternalReferences(ctx, run.ID)
+			if err != nil {
+				return err
+			}
 
 			// Table accesses bind in the same pass, for the same reason
 			// references do: the table a query names may be declared by a file
@@ -113,6 +117,11 @@ SCIP indexes.`,
 					"project": cfg.ProjectName, "index_run": run.ID,
 					"references": rs.Total, "resolved": rs.Resolved,
 					"ambiguous": rs.Ambiguous, "unresolved": rs.Unresolved,
+					// external is the part of unresolved that was shown to
+					// leave the repository; instantiations the part of
+					// resolved recorded as INSTANTIATES rather than CALLS.
+					"external":       external,
+					"instantiations": stats.Instantiations,
 					// A8 — how much of `ambiguous` is "too common to weigh"
 					// rather than "two candidates and no evidence". See
 					// infer.Stats.
@@ -162,7 +171,19 @@ SCIP indexes.`,
 				fmt.Fprintf(out, "    %d had more candidates than the cap allows (%d reached the cap; the receiver rescued %d)\n",
 					stats.CapDropped, stats.CapExceeded, stats.CapExceeded-stats.CapDropped)
 			}
-			fmt.Fprintf(out, "  Unresolved:  %d  (calls outside this repository)\n", rs.Unresolved)
+			// "Unresolved" used to be captioned "calls outside this
+			// repository", which was a guess about all of them. The resolver
+			// now says which ones it can SHOW leave the repository — a call
+			// qualified by the standard library, a declared dependency, or a
+			// type imported from one — and the rest are bound to nothing for a
+			// reason this line does not know.
+			fmt.Fprintf(out, "  Unresolved:  %d\n", rs.Unresolved)
+			if external > 0 {
+				fmt.Fprintf(out, "    %d shown to leave this repository (a standard-library or dependency call)\n", external)
+			}
+			if stats.Instantiations > 0 {
+				fmt.Fprintf(out, "  Constructs:  %d of the resolved calls create a type (INSTANTIATES, not CALLS)\n", stats.Instantiations)
+			}
 			fmt.Fprintf(out, "  Edges:       %d\n", stats.Edges)
 			for _, c := range []model.Confidence{model.ConfidenceHigh, model.ConfidenceMedium, model.ConfidenceLow} {
 				if n := stats.ByConfidence[c]; n > 0 {

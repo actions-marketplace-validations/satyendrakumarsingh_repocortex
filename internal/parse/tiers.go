@@ -81,7 +81,7 @@ func (t Tier) Description() string {
 // not know the language we certainly cannot resolve it.
 func TierFor(language string) Tier {
 	hasImports := ImportQuery(language) != ""
-	hasReceiver := ReceiverQuery(language) != ""
+	hasReceiver := HasMeasuredReceivers(language)
 	_, hasArity := arityDialectFor(language)
 
 	switch {

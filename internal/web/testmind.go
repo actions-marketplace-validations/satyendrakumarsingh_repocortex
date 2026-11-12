@@ -321,9 +321,10 @@ func recognisedTest(kind, filePath string) bool {
 // three capability/tests traverses, restated here because this scan is the
 // depth-1 projection of that traversal and the two must not diverge.
 var testGraphKinds = map[model.EdgeKind]struct{}{
-	model.EdgeCalls:      {},
-	model.EdgeReferences: {},
-	model.EdgeTestedBy:   {},
+	model.EdgeCalls:        {},
+	model.EdgeInstantiates: {},
+	model.EdgeReferences:   {},
+	model.EdgeTestedBy:     {},
 }
 
 func (s *Server) handleTests(w http.ResponseWriter, r *http.Request) {

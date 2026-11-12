@@ -111,7 +111,8 @@ func TestSameFileWinsWithHighConfidence(t *testing.T) {
 	edges, _, st := resolveOne(t, r, registry.FileRefs{
 		FileID: 10, Path: "a.go",
 		Symbols: enclose(99, "Caller"),
-		Refs:    []registry.Reference{{ID: 1, Name: "save", Kind: "reference.call", Line: 5}},
+		Refs: []registry.Reference{{ID: 1, Name: "save", Kind: "reference.call",
+			ReceiverKind: model.ReceiverBare, Line: 5}},
 	})
 
 	if st.Resolved != 1 {
@@ -181,10 +182,17 @@ func TestUnknownNameIsUnresolvedNotDropped(t *testing.T) {
 	}
 }
 
+// TestReceiverDisambiguates: two types declare `updateStatus` and the call is
+// made on a variable named for one of them. The name chooses between the two.
+//
+// It is a naming convention and not a declaration, and its tier is the one it
+// measured rather than the one it sounds like: 54 right of 55 across Go, Java,
+// C++, Rust and Ruby (docs/accuracy.md), which is `high` in those languages
+// and `medium` in every language nobody has measured it in.
 func TestReceiverDisambiguates(t *testing.T) {
 	idx := index(
-		sym(1, "updateStatus", "com.pay.TransactionService.updateStatus", "svc/Transaction.java", 10, true),
-		sym(2, "updateStatus", "com.pay.OrderService.updateStatus", "svc/Order.java", 11, true),
+		sym(1, "updateStatus", "svc/Transaction.java:TransactionService.updateStatus", "svc/Transaction.java", 10, true),
+		sym(2, "updateStatus", "svc/Order.java:OrderService.updateStatus", "svc/Order.java", 11, true),
 	)
 	r := New(idx, Options{})
 
@@ -192,7 +200,8 @@ func TestReceiverDisambiguates(t *testing.T) {
 		FileID: 50, Path: "api/Controller.java",
 		Symbols: enclose(60, "handleCallback"),
 		Refs: []registry.Reference{
-			{ID: 1, Name: "updateStatus", Kind: "reference.call", Receiver: "transactionService", Line: 5},
+			{ID: 1, Name: "updateStatus", Kind: "reference.call", Receiver: "transactionService",
+				ReceiverKind: model.ReceiverValue, Line: 5},
 		},
 	})
 	if len(edges) != 1 {
@@ -202,7 +211,24 @@ func TestReceiverDisambiguates(t *testing.T) {
 		t.Errorf("bound to %d, want TransactionService.updateStatus (1)", edges[0].DstID)
 	}
 	if edges[0].Confidence != model.ConfidenceHigh {
-		t.Errorf("confidence = %s, want high — the receiver constrained both name and type", edges[0].Confidence)
+		t.Errorf("confidence = %s, want high — the tier this rule measured in Java", edges[0].Confidence)
+	}
+
+	// The same call in a language the rule was never measured in.
+	idx = index(
+		sym(1, "updateStatus", "svc/transaction.ts:TransactionService.updateStatus", "svc/transaction.ts", 10, true),
+		sym(2, "updateStatus", "svc/order.ts:OrderService.updateStatus", "svc/order.ts", 11, true),
+	)
+	edges, _, _ = resolveOne(t, New(idx, Options{}), registry.FileRefs{
+		FileID: 50, Path: "api/controller.ts", Language: "typescript",
+		Symbols: enclose(60, "handleCallback"),
+		Refs: []registry.Reference{
+			{ID: 1, Name: "updateStatus", Kind: "reference.call", Receiver: "transactionService",
+				ReceiverKind: model.ReceiverValue, Line: 5},
+		},
+	})
+	if len(edges) != 1 || edges[0].Confidence != model.ConfidenceMedium {
+		t.Errorf("in an unmeasured language the rule produced %+v, want one edge at medium", edges)
 	}
 }
 

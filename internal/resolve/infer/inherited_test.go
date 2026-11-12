@@ -368,8 +368,12 @@ func TestBoundReferencesAreNeverParked(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(edges) != 1 || edges[0].DstID != 10 || edges[0].Confidence != model.ConfidenceHigh {
-		t.Fatalf("first pass produced %+v, want a high-confidence edge to symbol 10", edges)
+	// callOn builds a reference with no recorded receiver kind — the shape of
+	// a row from an index written before migration 0014 — so the first pass
+	// binds it through the name tiers and may claim no more than `low` for it.
+	// What this test pins is unchanged: it IS bound, so it is not parked.
+	if len(edges) != 1 || edges[0].DstID != 10 || edges[0].Confidence != model.ConfidenceLow {
+		t.Fatalf("first pass produced %+v, want one edge to symbol 10, capped at low", edges)
 	}
 	if r.Deferred() != 0 {
 		t.Errorf("parked a reference the first pass already bound")

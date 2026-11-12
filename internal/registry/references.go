@@ -18,8 +18,15 @@ type Reference struct {
 	Name     string
 	Kind     string
 	Receiver string
-	Line     int
-	Col      int
+
+	// ReceiverKind says what Receiver IS: no receiver at all, a name, a path,
+	// the enclosing instance, the superclass, a stated type, or an expression
+	// with no name. One of the model.Receiver* constants; "" for a row that
+	// did not record it. See migration 0014_receiver_kind.
+	ReceiverKind string
+
+	Line int
+	Col  int
 
 	// ArgCount is how many arguments this call site passes, or
 	// model.ArityUnknown when the parser could not say. See migration
@@ -57,9 +64,9 @@ func (w *Writer) AddReference(ctx context.Context, fileID int64, r Reference) er
 	}
 	if _, err := w.tx.ExecContext(ctx, `
 		INSERT INTO symbol_references
-			(index_run_id, file_id, name, kind, receiver, start_line, start_col, arg_count, resolution)
-		VALUES (?,?,?,?,?,?,?,?, 'pending')`,
-		w.runID, fileID, r.Name, r.Kind, r.Receiver, r.Line, r.Col, int(r.ArgCount),
+			(index_run_id, file_id, name, kind, receiver, receiver_kind, start_line, start_col, arg_count, resolution)
+		VALUES (?,?,?,?,?,?,?,?,?, 'pending')`,
+		w.runID, fileID, r.Name, r.Kind, r.Receiver, r.ReceiverKind, r.Line, r.Col, int(r.ArgCount),
 	); err != nil {
 		return w.fail(fmt.Errorf("registry: add reference %q: %w", r.Name, err))
 	}
@@ -98,9 +105,9 @@ func (r *Registry) ReplaceFileReferences(
 	for _, ref := range refs {
 		if _, err := tx.ExecContext(ctx, `
 			INSERT INTO symbol_references
-				(index_run_id, file_id, name, kind, receiver, start_line, start_col, arg_count, resolution)
-			VALUES (?,?,?,?,?,?,?,?, 'pending')`,
-			runID, fileID, ref.Name, ref.Kind, ref.Receiver, ref.Line, ref.Col, int(ref.ArgCount),
+				(index_run_id, file_id, name, kind, receiver, receiver_kind, start_line, start_col, arg_count, resolution)
+			VALUES (?,?,?,?,?,?,?,?,?, 'pending')`,
+			runID, fileID, ref.Name, ref.Kind, ref.Receiver, ref.ReceiverKind, ref.Line, ref.Col, int(ref.ArgCount),
 		); err != nil {
 			return fmt.Errorf("registry: re-add reference %q: %w", ref.Name, err)
 		}
@@ -315,7 +322,7 @@ func (r *Registry) importsForFile(ctx context.Context, fileID int64) ([]Import, 
 
 func (r *Registry) refsForFile(ctx context.Context, fileID int64) ([]Reference, error) {
 	rows, err := r.db.QueryContext(ctx, `
-		SELECT id, name, kind, receiver, start_line, start_col, arg_count
+		SELECT id, name, kind, receiver, receiver_kind, start_line, start_col, arg_count
 		  FROM symbol_references
 		 WHERE file_id = ? AND resolution = 'pending'
 		 ORDER BY start_line, start_col, name`, fileID)
@@ -328,7 +335,8 @@ func (r *Registry) refsForFile(ctx context.Context, fileID int64) ([]Reference, 
 	for rows.Next() {
 		ref := Reference{FileID: fileID}
 		var argCount int
-		if err := rows.Scan(&ref.ID, &ref.Name, &ref.Kind, &ref.Receiver, &ref.Line, &ref.Col, &argCount); err != nil {
+		if err := rows.Scan(&ref.ID, &ref.Name, &ref.Kind, &ref.Receiver, &ref.ReceiverKind,
+			&ref.Line, &ref.Col, &argCount); err != nil {
 			return nil, err
 		}
 		ref.ArgCount = model.Arity(argCount)
@@ -349,6 +357,13 @@ type SymbolIndexEntry struct {
 	FileID   int64
 	FilePath string
 	Exported bool
+
+	// Language is the language of the file that defines the symbol, as the
+	// indexer detected it. The resolver refuses a binding between two
+	// languages that share no way of calling each other, and it has to ask the
+	// index rather than guess from a file extension: a `.h` file may be C or
+	// C++, and a manifest or a schema has no extension the guess knows.
+	Language string
 
 	// ParamCount is how many parameters this symbol declares, or
 	// model.ArityUnknown. Carried here because A4 compares it against a
@@ -372,7 +387,8 @@ type SymbolIndexEntry struct {
 // distinct strings and holding one per symbol.
 func (r *Registry) LoadSymbolIndex(ctx context.Context, runID int64) (map[string][]SymbolIndexEntry, error) {
 	rows, err := r.db.QueryContext(ctx, `
-		SELECT s.id, s.name, s.fqn, s.kind, s.file_id, f.path, s.exported, s.param_count
+		SELECT s.id, s.name, s.fqn, s.kind, s.file_id, f.path, s.exported, s.param_count,
+		       f.language
 		  FROM symbols s
 		  JOIN files f ON f.id = s.file_id
 		 WHERE s.index_run_id = ?`, runID)
@@ -395,13 +411,14 @@ func (r *Registry) LoadSymbolIndex(ctx context.Context, runID int64) (map[string
 		var e SymbolIndexEntry
 		var exported, paramCount int
 		if err := rows.Scan(&e.ID, &e.Name, &e.FQN, &e.Kind, &e.FileID, &e.FilePath,
-			&exported, &paramCount); err != nil {
+			&exported, &paramCount, &e.Language); err != nil {
 			return nil, err
 		}
 		e.Exported = exported == 1
 		e.ParamCount = model.Arity(paramCount)
 		e.FilePath = intern(paths, e.FilePath)
 		e.Kind = intern(kinds, e.Kind)
+		e.Language = intern(kinds, e.Language)
 		// The name is already this bucket's key; reuse that copy rather than
 		// keeping one more per candidate.
 		if bucket, ok := index[e.Name]; ok {
@@ -455,7 +472,7 @@ func (r *Registry) MarkResolutions(ctx context.Context, results []RefOutcome) er
 	}
 	defer func() { _ = tx.Rollback() }()
 
-	args := make([]any, 0, markChunk*3)
+	args := make([]any, 0, markChunk*4)
 	apply := func(stmt *sql.Stmt, batch []RefOutcome) error {
 		if err := ctx.Err(); err != nil {
 			return err
@@ -468,7 +485,11 @@ func (r *Registry) MarkResolutions(ctx context.Context, results []RefOutcome) er
 			if o.SymbolID != 0 {
 				target = o.SymbolID
 			}
-			args = append(args, o.RefID, target, string(o.Resolution))
+			external := 0
+			if o.External {
+				external = 1
+			}
+			args = append(args, o.RefID, target, string(o.Resolution), external)
 		}
 		if _, err := stmt.ExecContext(ctx, args...); err != nil {
 			return fmt.Errorf("registry: mark resolutions for refs %d..%d: %w",
@@ -510,15 +531,15 @@ func (r *Registry) MarkResolutions(ctx context.Context, results []RefOutcome) er
 func markResolutionsSQL(n int) string {
 	var b strings.Builder
 	b.Grow(96 + n*10)
-	b.WriteString("WITH v(rid, sid, res) AS (VALUES ")
+	b.WriteString("WITH v(rid, sid, res, ext) AS (VALUES ")
 	for i := 0; i < n; i++ {
 		if i > 0 {
 			b.WriteByte(',')
 		}
-		b.WriteString("(?,?,?)")
+		b.WriteString("(?,?,?,?)")
 	}
 	b.WriteString(`) UPDATE symbol_references
-		   SET resolved_symbol_id = v.sid, resolution = v.res
+		   SET resolved_symbol_id = v.sid, resolution = v.res, external = v.ext
 		  FROM v
 		 WHERE symbol_references.id = v.rid`)
 	return b.String()
@@ -532,6 +553,11 @@ type RefOutcome struct {
 	RefID      int64
 	SymbolID   int64
 	Resolution Resolution
+
+	// External marks an unresolved call whose qualifier was shown to name
+	// something outside the repository. Only meaningful with
+	// ResolutionUnresolved. See migration 0014_receiver_kind.
+	External bool
 }
 
 // ResolutionStats reports how much of a run could actually be resolved.
@@ -628,6 +654,25 @@ func (r *Registry) ResolutionStats(ctx context.Context, runID int64) (Resolution
 		}
 	}
 	return s, rows.Err()
+}
+
+// ExternalReferences counts the unresolved references that were shown to leave
+// the repository: a call qualified by an import of the standard library or of
+// a third-party package, or made on a type imported from one.
+//
+// A subset of ResolutionStats.Unresolved, never added to it. It is a method of
+// its own rather than a field of ResolutionStats because that struct is part
+// of the portal's frozen response contract, and this number is a property of
+// the resolver's evidence that only `repocortex resolve` reports.
+func (r *Registry) ExternalReferences(ctx context.Context, runID int64) (int64, error) {
+	var n int64
+	if err := r.db.QueryRowContext(ctx,
+		`SELECT COUNT(*) FROM symbol_references
+		  WHERE index_run_id = ? AND resolution = 'unresolved' AND external = 1`, runID).
+		Scan(&n); err != nil {
+		return 0, fmt.Errorf("registry: external references: %w", err)
+	}
+	return n, nil
 }
 
 // ReferenceResolution is one recorded reference and what resolution did with

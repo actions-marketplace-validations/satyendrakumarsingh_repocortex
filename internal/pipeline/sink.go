@@ -175,12 +175,13 @@ func (s *RegistrySink) writeFileRows(ctx context.Context, facts FileFacts) error
 
 	for _, ref := range facts.References {
 		if err := s.writer.AddReference(ctx, fileID, registry.Reference{
-			Name:     ref.Name,
-			Kind:     ref.Kind,
-			Receiver: ref.Receiver,
-			ArgCount: ref.ArgCount,
-			Line:     ref.Range.Start.Line,
-			Col:      ref.Range.Start.Col,
+			Name:         ref.Name,
+			Kind:         ref.Kind,
+			Receiver:     ref.Receiver,
+			ReceiverKind: ref.ReceiverKind,
+			ArgCount:     ref.ArgCount,
+			Line:         ref.Range.Start.Line,
+			Col:          ref.Range.Start.Col,
 		}); err != nil {
 			return fmt.Errorf("add reference %s in %s: %w", ref.Name, f.Path, err)
 		}

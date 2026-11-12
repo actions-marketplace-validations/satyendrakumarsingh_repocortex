@@ -76,15 +76,20 @@ func TestReceiverMustMatchAWholeOwnerSegment(t *testing.T) {
 	}
 }
 
-// TestUnconfirmedReceiverFallsThroughRatherThanExcluding pins the half that is
-// easy to get wrong, and that A18 DID get wrong (see "Why candidates are not
-// filtered before the tiers" in resolver.go).
+// TestCallOnAValueNeverBindsToAFreeFunction replaces a test that pinned the
+// opposite, and the reversal is the point of the change it belongs to.
 //
-// Failing to confirm an owner means "no evidence about this candidate", never
-// "the source says the owner is something else". A tighter tier 2 must
-// therefore leave the later tiers exactly as it found them — here the Go
-// same-package tier, which still answers with high confidence.
-func TestUnconfirmedReceiverFallsThroughRatherThanExcluding(t *testing.T) {
+// The old test was called TestUnconfirmedReceiverFallsThroughRatherThanExcluding
+// and required `db.Save()` to bind, at high, to a free function `Save` in the
+// same package: the receiver could not be confirmed, so it was ignored and the
+// name decided. That is the defect docs/verification/2026-11-12 measured as
+// the largest source of wrong high-confidence edges in every language: a Go
+// `errors.New(...)` bound to the repository's own `New`, `w.Header().Get` to a
+// package variable. A18's lesson is kept, in the form it was actually about:
+// an EMPTY receiver may not be read as "no receiver" unless the parser says
+// so. Here it says the call was made on a value, and a call made on a value
+// cannot reach a function that belongs to no type.
+func TestCallOnAValueNeverBindsToAFreeFunction(t *testing.T) {
 	idx := index(
 		sym(1, "Save", "internal/pay/store.go:Save", "internal/pay/store.go", 10, true),
 		sym(2, "Save", "internal/other/store.go:Save", "internal/other/store.go", 11, true),
@@ -95,15 +100,17 @@ func TestUnconfirmedReceiverFallsThroughRatherThanExcluding(t *testing.T) {
 		FileID: 50, Path: "internal/pay/service.go", Language: "go",
 		Symbols: enclose(60, "Process"),
 		Refs: []registry.Reference{
-			{ID: 1, Name: "Save", Kind: "reference.call", Receiver: "db", Line: 5},
+			{ID: 1, Name: "Save", Kind: "reference.call", Receiver: "db",
+				ReceiverKind: model.ReceiverValue, Line: 5},
+			{ID: 2, Name: "Save", Kind: "reference.call", ReceiverKind: model.ReceiverBare, Line: 6},
 		},
 	})
 	if len(edges) != 1 {
-		t.Fatalf("an unconfirmed receiver suppressed the same-package tier as well: %+v", edges)
+		t.Fatalf("want one edge, for the bare call alone: %+v", edges)
 	}
-	if edges[0].DstID != 1 || edges[0].Confidence != model.ConfidenceHigh {
-		t.Errorf("bound to %d at %s; the same-package definition is still the answer",
-			edges[0].DstID, edges[0].Confidence)
+	if edges[0].Evidence.Range.Start.Line != 6 || edges[0].DstID != 1 || edges[0].Confidence != model.ConfidenceHigh {
+		t.Errorf("bound line %d to %d at %s; only the bare `Save()` reaches the package's free function",
+			edges[0].Evidence.Range.Start.Line, edges[0].DstID, edges[0].Confidence)
 	}
 }
 
@@ -131,7 +138,8 @@ func TestImportAliasResolvesAPackageQualifiedReference(t *testing.T) {
 		},
 		Symbols: enclose(60, "main"),
 		Refs: []registry.Reference{
-			{ID: 1, Name: "Process", Kind: "reference.call", Receiver: "pay", Line: 5},
+			{ID: 1, Name: "Process", Kind: "reference.call", Receiver: "pay",
+				ReceiverKind: model.ReceiverName, Line: 5},
 		},
 	})
 	if len(edges) != 1 {

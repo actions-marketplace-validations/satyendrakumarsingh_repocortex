@@ -238,8 +238,13 @@ func TestPythonObjectOfACallIsNotACall(t *testing.T) {
 	}
 
 	res = parsePython(t, "import logging\nlogger = logging.getLogger()\ndef f():\n    logger.warning('x')\n")
-	if n, _ := count(res, "logger"); n != 1 {
-		t.Errorf("a module-level name used as a receiver: %d references, want the 1 there always was", n)
+	// A module-level name in receiver position used to be kept as a "call" to
+	// that name, on the grounds that it was a use of something the index
+	// holds. It is not a call, and binding it produced an edge from the
+	// function to the VARIABLE — 30% of flask's call edges before the scope
+	// walk, and still every `bp.route(...)` after it.
+	if n, _ := count(res, "logger"); n != 0 {
+		t.Errorf("a module-level name used as a receiver is recorded as %d call(s) to itself", n)
 	}
 
 	res = parsePython(t, "def f():\n    run = CrawlerRun()\n    run.run()\n")
