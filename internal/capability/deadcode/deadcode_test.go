@@ -60,11 +60,15 @@ func row(id int64, name string) registry.UnreferencedSymbol {
 	}
 }
 
-// deps returns real capability deps over an empty committed run: Find reads
-// resolution stats through them for its completeness block.
+// deps returns real capability deps over a committed run holding one Go
+// definition and one bound Go reference: Find reads resolution stats through
+// them for its completeness block, and reads whether each language yields
+// references at all. A run with Go definitions and no Go reference is the
+// "calls are not extracted" case, which TestLanguagesWithoutReferencesAreNotJudged
+// builds on purpose and no other test should build by accident.
 func deps(t *testing.T) (capability.Deps, int64) {
 	t.Helper()
-	return captest.Build(t, []captest.Sym{captest.S(1, "seed", "seed.go")}, nil, captest.Refs{})
+	return captest.Build(t, []captest.Sym{captest.S(1, "seed", "seed.go")}, nil, captest.Refs{Resolved: 1})
 }
 
 func find(t *testing.T, src Source, opts Options) *Report {

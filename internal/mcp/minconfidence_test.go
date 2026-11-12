@@ -4,10 +4,13 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
+	"path/filepath"
 	"sort"
 	"strings"
 	"testing"
 
+	"github.com/satyendrakumarsingh/repocortex/internal/capability/impact"
 	"github.com/satyendrakumarsingh/repocortex/internal/registry"
 	"github.com/satyendrakumarsingh/repocortex/pkg/model"
 
@@ -59,13 +62,15 @@ var minConfidenceSurface = map[string]bool{
 // minimalArgsFor is the smallest valid argument set for each tool, so a call
 // exercises the parameter rather than the empty-argument guard.
 var minimalArgsFor = map[string]map[string]any{
-	"get_project_overview":    {},
-	"search_code":             {"query": "Login"},
-	"find_symbol":             {"name": "Login"},
+	"get_project_overview": {},
+	"search_code":          {"query": "Login"},
+	"find_symbol":          {"name": "Login"},
+	// Two definitions share the name Login in this fixture, and no tool
+	// answers for one of several: the path selects auth's.
 	"get_symbol":              {"name": "Login"},
-	"find_references":         {"name": "Login"},
-	"find_callers":            {"name": "Login"},
-	"plan_rename":             {"name": "Login", "new_name": "SignIn"},
+	"find_references":         {"name": "Login", "path": "auth/Login.java"},
+	"find_callers":            {"name": "Login", "path": "auth/Login.java"},
+	"plan_rename":             {"name": "Login", "new_name": "SignIn", "path": "auth/Login.java"},
 	"list_api_endpoints":      {},
 	"list_db_tables":          {},
 	"get_config_key":          {"key": "DATABASE_URL"},
@@ -500,8 +505,70 @@ func TestMinConfidenceParameterDescriptions(t *testing.T) {
 		if !ok {
 			t.Fatalf("%s should have min_confidence property", tool.Name)
 		}
+		// analyze_impact is the one tool whose floor defaults to medium, and it
+		// says so in its own words: see TestImpactFloorIsDocumentedAsItBehaves.
+		if tool.Name == "analyze_impact" {
+			continue
+		}
 		if prop.Description != wantDesc {
 			t.Errorf("%s min_confidence description = %q, want %q", tool.Name, prop.Description, wantDesc)
 		}
+	}
+}
+
+// TestImpactFloorIsDocumentedAsItBehaves holds the schema, the reference page
+// and the code to one default.
+//
+// The schema and docs/reference/mcp-tools.md both said analyze_impact's
+// min_confidence "Default low", copied from the description every other tool
+// shares, while the walk has always run at impact.DefaultMinConfidence. An
+// agent that read the schema believed it was seeing name-only relationships
+// and was not.
+func TestImpactFloorIsDocumentedAsItBehaves(t *testing.T) {
+	want := "Default " + string(impact.DefaultMinConfidence)
+
+	sess := newGraphTestServer(t, seedMixedConfidence)
+	res, err := sess.ListTools(context.Background(), nil)
+	if err != nil {
+		t.Fatalf("list tools: %v", err)
+	}
+	var schemaText string
+	for _, tool := range res.Tools {
+		if tool.Name != "analyze_impact" {
+			continue
+		}
+		b, err := json.Marshal(tool.InputSchema)
+		if err != nil {
+			t.Fatal(err)
+		}
+		schemaText = string(b)
+	}
+	if !strings.Contains(schemaText, want) {
+		t.Errorf("analyze_impact's schema does not say %q; it walks at that floor when none is passed:\n%s",
+			want, schemaText)
+	}
+
+	page, err := os.ReadFile(filepath.Join("..", "..", "docs", "reference", "mcp-tools.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	section := string(page)
+	start := strings.Index(section, "### `analyze_impact`")
+	if start < 0 {
+		t.Fatal("docs/reference/mcp-tools.md has no analyze_impact section")
+	}
+	section = section[start:]
+	if end := strings.Index(section[1:], "\n### "); end > 0 {
+		section = section[:end+1]
+	}
+	var row string
+	for _, line := range strings.Split(section, "\n") {
+		if strings.HasPrefix(line, "| `min_confidence`") {
+			row = line
+		}
+	}
+	if !strings.Contains(row, want) {
+		t.Errorf("docs/reference/mcp-tools.md documents analyze_impact min_confidence as %q, want it to say %q",
+			row, want)
 	}
 }

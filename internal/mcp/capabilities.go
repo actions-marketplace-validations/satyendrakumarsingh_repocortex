@@ -2,7 +2,6 @@ package mcp
 
 import (
 	stdctx "context"
-	"errors"
 	"fmt"
 	"strings"
 
@@ -16,11 +15,16 @@ import (
 	sdk "github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
+// targetArgs names the symbol a capability tool is asked about, with the
+// selectors that choose between definitions sharing its name.
 type targetArgs struct {
 	Symbol string `json:"symbol" jsonschema:"The symbol you are about to change, e.g. 'updateStatus' or 'TransactionService'."`
+	Path   string `json:"path,omitempty" jsonschema:"File (or directory) the definition is in, to choose between several symbols that share the name. Matched exactly when it names a file."`
+	lineArg
 
 	minConfidenceArg
 	hubDegreeLimitArg
+	pageArg
 }
 
 // impactArgs takes its own min_confidence wording, and that is the ONE place
@@ -30,16 +34,36 @@ type targetArgs struct {
 // not low, and it must keep doing so when the parameter is absent: dropping
 // the floor to low would widen every existing caller's blast radius and weaken
 // the risk score computed from it. Embedding minConfidenceArg here would
-// advertise "Default low (everything)" on a tool whose default is medium,
-// which is the advertised-schema-versus-reality lie this whole task exists to
-// remove. The wording differs exactly where the behaviour differs; the
-// decoding is still parseMinConfidence's, via parseImpactFloor.
+// advertise "Default low" on a tool whose default is medium — and for a while
+// this struct did exactly that with a copied description, so the schema and
+// docs/reference/mcp-tools.md said low while the code walked at medium. The
+// wording differs exactly where the behaviour differs, and
+// TestImpactFloorIsDocumentedAsItBehaves holds the two together; the decoding
+// is still parseMinConfidence's, via parseImpactFloor.
 type impactArgs struct {
 	Symbol string `json:"symbol" jsonschema:"The symbol you are about to change, e.g. 'updateStatus' or 'TransactionService'."`
+	Path   string `json:"path,omitempty" jsonschema:"File (or directory) the definition is in, to choose between several symbols that share the name. Matched exactly when it names a file."`
+	lineArg
 
-	MinConfidence string `json:"min_confidence,omitempty" jsonschema:"Lowest confidence to return: exact, high, medium or low. Default low. Recommended: 'high' for safe automated code changes and blast radius analysis to filter out heuristic false positives."`
+	MinConfidence string `json:"min_confidence,omitempty" jsonschema:"Lowest confidence to follow: exact, high, medium or low. Default medium, so name-only (low) relationships are left out and counted; pass 'low' to walk them too, or 'high' when the result will gate an automated change."`
 
 	hubDegreeLimitArg
+	pageArg
+}
+
+// targetQuery is the selection request for a tool that takes `symbol`.
+func targetQuery(tool, symbol, path string, line int) symbolQuery {
+	return symbolQuery{Tool: tool, Param: "symbol", PathParam: "path", LineParam: "line",
+		Name: symbol, Path: path, Line: line}
+}
+
+// paginate hands a response the rows from offset on and records the page, so
+// Bound trims to the limit and says in offsets what it left out. For a tool
+// that holds its whole result in memory; the edge tools page in the store.
+func paginate(resp *Response, page *Page, items []Item) {
+	page.Total = len(items)
+	resp.Page = page
+	resp.Items = items[min(page.Offset, len(items)):]
 }
 
 // registerCapabilities adds the graph-backed analysis tools.
@@ -81,7 +105,7 @@ func (s *Server) impactAnalysis(ctx stdctx.Context, req *sdk.CallToolRequest, ar
 			"Pass a non-empty symbol name, then call analyze_impact again.",
 			"symbol must not be empty")
 	}
-	// Zero value when absent, so AnalyzeWith applies its own default. See
+	// Zero value when absent, so AnalyzeTarget applies its own default. See
 	// parseImpactFloor.
 	minConf, err := parseImpactFloor(args.MinConfidence)
 	if err != nil {
@@ -90,27 +114,25 @@ func (s *Server) impactAnalysis(ctx stdctx.Context, req *sdk.CallToolRequest, ar
 	if err := parseHubDegreeLimit(args.HubDegreeLimit); err != nil {
 		return failFrom(err, "%v", err)
 	}
-	runID, status, err := s.currentRun(ctx)
+	page, err := s.page(args.pageArg, "impacted symbol(s)")
 	if err != nil {
-		return s.noRun(ctx, req, err)
+		return failWith("invalid_argument", "Pass limit and offset as non-negative numbers, or omit them.", "%v", err)
 	}
+	q := targetQuery("analyze_impact", args.Symbol, args.Path, args.Line)
+	sel, sc, scResp := s.selectSymbol(ctx, req, q)
+	if sc != nil {
+		return sc, scResp, nil
+	}
+	runID, status := sel.RunID, sel.Status
 
-	deps := s.capDeps
 	// No floorNote here: the report already names what its floor kept out, as
 	// a "NOT VISIBLE (below_confidence_floor)" unknown rendered below. Saying
 	// it twice would spend the item budget on a repeat.
-	rep, err := impact.AnalyzeWith(ctx, deps, runID, args.Symbol, impact.Options{
-		MinConfidence:  minConf,
-		HubDegreeLimit: args.HubDegreeLimit,
-	})
+	rep, err := impact.AnalyzeTarget(ctx, s.capDeps, runID, capability.TargetFromCandidate(args.Symbol, sel.Target),
+		impact.Options{MinConfidence: minConf, HubDegreeLimit: args.HubDegreeLimit})
 	if err != nil {
-		// "That symbol is not in the index" is a fact about the repository, not
-		// a malfunction of the analyser. Everything else here is: a traversal
-		// that errored produced no report, and an agent must not read that as
-		// "nothing depends on this symbol".
-		if errors.Is(err, capability.ErrTargetNotFound) {
-			return s.missingSymbol(ctx, req, runID, status, args.Symbol)
-		}
+		// A traversal that errored produced no report, and an agent must not
+		// read that as "nothing depends on this symbol".
 		return failFrom(err, "impact analysis: %v", err)
 	}
 
@@ -119,22 +141,20 @@ func (s *Server) impactAnalysis(ctx stdctx.Context, req *sdk.CallToolRequest, ar
 	resp := &Response{
 		IndexRevision: runID,
 		IndexStatus:   status,
-		Summary: fmt.Sprintf("%s: %s. Risk %s (score %d).",
-			args.Symbol, reach.summary(), rep.Risk.Level, rep.Risk.Score),
-		Items: items,
+		Summary: fmt.Sprintf("%s (%s:%d): %s. %s",
+			rep.Target.Name, rep.Target.FilePath, rep.Target.Line, reach.summary(), riskSentence(rep.Risk)),
 	}
+	paginate(resp, page, items)
 
 	// The gate goes ahead of the risk breakdown, the factors and the unknowns.
 	// A risk score computed over a graph RepoCortex could barely resolve is a
 	// precise-looking number built on absent evidence, and its precision is
 	// exactly what makes it dangerous to read without this sentence first.
 	//
-	// The stats come from the report's own Completeness block rather than a
-	// second query: the number shown must be the number the analysis actually
-	// used.
-	if gate := coverageOf(rep.Completeness.Resolution, rep.Target.FilePath).caveat("impact"); gate != nil {
-		resp.Notes = append(resp.Notes, gate...)
-	}
+	// It is judged from the report's own Binding rather than a second query:
+	// the evidence shown must be the evidence the analysis used.
+	cov := s.coverageFor(ctx, runID, rep.Target.Language, rep.Target.FilePath, rep.Binding, aboutCallers)
+	s.applyCoverage(resp, cov, "impact")
 
 	// What the dispatch rows mean, and what was folded into a stronger claim.
 	// Both are stated once per response rather than once per row: the per-row
@@ -154,7 +174,7 @@ func (s *Server) impactAnalysis(ctx stdctx.Context, req *sdk.CallToolRequest, ar
 		resp.Notes = append(resp.Notes,
 			fmt.Sprintf("Certainty %s — %s. Certainty is a SEPARATE axis from risk: "+
 				"how much could break, and how much to trust that, are different questions.",
-				rep.Risk.Certainty, rep.Risk.CertaintyReason))
+				rep.Risk.Certainty, strings.TrimSuffix(rep.Risk.CertaintyReason, ".")))
 	}
 
 	// The unknowns are the most important part of an impact report. A caller
@@ -164,14 +184,37 @@ func (s *Server) impactAnalysis(ctx stdctx.Context, req *sdk.CallToolRequest, ar
 		resp.Notes = append(resp.Notes, fmt.Sprintf("NOT VISIBLE (%s): %s", u.Kind, u.Detail))
 	}
 	if rep.Truncated {
-		resp.Truncated = true
-		resp.TruncatedReason = rep.TruncatedReason
+		resp.markTruncated(rep.TruncatedReason)
+	}
+	if n := sel.note(q); n != "" {
+		resp.Notes = append(resp.Notes, n)
 	}
 	resp.Notes = append(resp.Notes,
 		"This is a LOWER BOUND. Static analysis cannot see reflection, dynamic dispatch "+
 			"or runtime wiring, and unresolved references are listed above. Do not treat an "+
 			"empty result as proof that nothing breaks.")
 	return s.reply(ctx, req, resp)
+}
+
+// riskSentence renders a risk for a summary line.
+//
+// THE UNKNOWN CASE PRINTS NO SCORE. The score is the sum of what the index
+// bound, and when the callers could not be determined that sum is a number
+// about missing evidence: "Risk low (score 20)" was printed for a method with
+// 792 references spelled like it, none of them bound. The level is the word a
+// reader acts on, so it is the word that changes, and the reason follows it.
+//
+// The portal reads the word after "Risk" out of this sentence; keep that word
+// a single token.
+func riskSentence(r impact.Risk) string {
+	switch {
+	case r.Level == impact.LevelUnknown:
+		return fmt.Sprintf("Risk unknown: %s.", strings.TrimSuffix(r.Undetermined, "."))
+	case r.Undetermined != "":
+		return fmt.Sprintf("Risk %s or higher (score %d counts only the callers that were bound).", r.Level, r.Score)
+	default:
+		return fmt.Sprintf("Risk %s (score %d).", r.Level, r.Score)
+	}
 }
 
 // Item kinds an impact report can carry.
@@ -424,38 +467,50 @@ func (s *Server) findTests(ctx stdctx.Context, req *sdk.CallToolRequest, args ta
 	if err := parseHubDegreeLimit(args.HubDegreeLimit); err != nil {
 		return failFrom(err, "%v", err)
 	}
-	runID, status, err := s.currentRun(ctx)
+	page, err := s.page(args.pageArg, "test(s)")
 	if err != nil {
-		return s.noRun(ctx, req, err)
+		return failWith("invalid_argument", "Pass limit and offset as non-negative numbers, or omit them.", "%v", err)
 	}
+	q := targetQuery("find_tests", args.Symbol, args.Path, args.Line)
+	sel, sc, scResp := s.selectSymbol(ctx, req, q)
+	if sc != nil {
+		return sc, scResp, nil
+	}
+	runID, status := sel.RunID, sel.Status
+	tgt := capability.TargetFromCandidate(args.Symbol, sel.Target)
 
 	deps := s.capDeps
 	// Only the floor and the hub bound are set; every other bound stays at
 	// Options.withDefaults, which is exactly what FindTests would have applied.
-	rep, err := tests.FindTestsWith(ctx, deps, runID, args.Symbol, tests.Options{
+	rep, err := tests.FindTestsForTarget(ctx, deps, runID, tgt, tests.Options{
 		MinConfidence:  minConf,
 		HubDegreeLimit: args.HubDegreeLimit,
 	})
 	if err != nil {
-		if errors.Is(err, capability.ErrTargetNotFound) {
-			return s.missingSymbol(ctx, req, runID, status, args.Symbol)
-		}
 		return failFrom(err, "test discovery: %v", err)
 	}
 
-	resp := &Response{
-		IndexRevision: runID,
-		IndexStatus:   status,
-		Summary: fmt.Sprintf("%s: %d test(s), %d proven by a call edge.",
-			args.Symbol, len(rep.Tests), rep.ProvenByGraph),
+	resp := &Response{IndexRevision: runID, IndexStatus: status}
+	where := fmt.Sprintf("%s (%s:%d)", rep.Target.Name, rep.Target.FilePath, rep.Target.Line)
+	switch {
+	case rep.Untested && rep.Undetermined != "":
+		// Not "0 tests". The search that would have found a calling test could
+		// not see one, so the count is of what was visible, and the first line
+		// says which.
+		resp.Summary = fmt.Sprintf("%s: no test found, and whether one reaches it is UNKNOWN: %s.",
+			where, strings.TrimSuffix(rep.Undetermined, "."))
+	default:
+		resp.Summary = fmt.Sprintf("%s: %d test(s), %d proven by a call edge.",
+			where, len(rep.Tests), rep.ProvenByGraph)
 	}
 
+	items := make([]Item, 0, len(rep.Tests))
 	for _, t := range rep.Tests {
 		var sigs []string
 		for _, s := range t.Signals {
 			sigs = append(sigs, string(s.Signal))
 		}
-		resp.Items = append(resp.Items, Item{
+		items = append(items, Item{
 			Kind: "test", Name: t.Name, Path: t.FilePath,
 			Confidence: string(t.Confidence),
 			// Naming the signal matters: "found by a proven call edge" and
@@ -464,33 +519,33 @@ func (s *Server) findTests(ctx stdctx.Context, req *sdk.CallToolRequest, args ta
 			Why: "found by " + strings.Join(sigs, ", "),
 		})
 	}
+	paginate(resp, page, items)
 
 	// "Untested" is the strongest claim this tool makes, and the one a low
 	// resolution rate most easily fabricates: a test that calls the symbol
 	// through an unresolved reference is a test RepoCortex cannot see. The gate
 	// runs before that claim is stated, not after.
-	if gate := coverageOf(rep.Completeness.Resolution, rep.Target.FilePath).caveat("test discovery"); gate != nil {
-		resp.Notes = append(resp.Notes, gate...)
-	}
+	cov := s.coverageFor(ctx, runID, rep.Target.Language, rep.Target.FilePath, rep.Binding, aboutTests)
+	s.applyCoverage(resp, cov, "test discovery")
+
 	// Ahead of the "untested" claim below, not after it: a floor is one more
 	// reason a symbol can look untested when it is not.
 	//
-	// dropped can't come from a count already in rep: FindTestsWith applies
-	// the floor inside the graph traversal (naming and co-location signals
-	// are never confidence-scoped — see tests.go), so a test the floor
-	// removed from the graph signal can still be present in rep.Tests via one
-	// of those, and rep carries no count of what the floor alone excluded.
-	// Re-running the unfiltered discovery and diffing the symbol sets is the
-	// only way to answer "did the floor actually remove anything a caller
-	// would have seen" from within this package — paid only when a floor was
-	// actually requested, not on the default (low) path every other caller
-	// takes.
+	// dropped can't come from a count already in rep: the floor is applied
+	// inside the graph traversal (naming and co-location signals are never
+	// confidence-scoped — see tests.go), so a test the floor removed from the
+	// graph signal can still be present in rep.Tests via one of those, and rep
+	// carries no count of what the floor alone excluded. Re-running the
+	// unfiltered discovery and diffing the symbol sets is the only way to
+	// answer "did the floor actually remove anything a caller would have seen"
+	// from within this package — paid only when a floor was actually
+	// requested, not on the default (low) path every other caller takes.
 	dropped := 0
 	if minConf != "" && minConf != model.ConfidenceLow {
 		// The hub bound is carried over: this walk must differ from the one
 		// above in exactly one respect, or a test the HUB CUT removed would be
 		// counted as removed by the floor.
-		unfiltered, uerr := tests.FindTestsWith(ctx, deps, runID, args.Symbol,
+		unfiltered, uerr := tests.FindTestsForTarget(ctx, deps, runID, tgt,
 			tests.Options{HubDegreeLimit: args.HubDegreeLimit})
 		if uerr == nil {
 			dropped = testsMissingFrom(unfiltered.Tests, rep.Tests)
@@ -500,17 +555,29 @@ func (s *Server) findTests(ctx stdctx.Context, req *sdk.CallToolRequest, args ta
 		resp.Notes = append(resp.Notes, note)
 	}
 
-	if rep.Untested {
+	switch {
+	case rep.Untested && rep.Undetermined != "":
+		resp.Notes = append(resp.Notes,
+			"No test was found by a call edge, a naming convention or a sibling test file. The call-edge "+
+				"search could not have found one: "+strings.TrimSuffix(rep.Undetermined, ".")+
+				". This says nothing about whether the symbol is tested. Search for the name in the test files.")
+	case rep.Untested:
 		resp.Notes = append(resp.Notes,
 			"No tests found for this symbol. That is a positive finding — but it is bounded "+
 				"by what the index resolved, so confirm before concluding the code is untested.")
+	case rep.Undetermined != "":
+		resp.Notes = append(resp.Notes,
+			"None of the tests listed is proven to call the symbol; they were matched by name or by file. "+
+				"Whether a test calls it could not be determined: "+strings.TrimSuffix(rep.Undetermined, ".")+".")
 	}
 	for _, s := range tests.SuggestMissingScenarios(rep.Target, rep) {
 		resp.Notes = append(resp.Notes, "Possible gap: "+s.Scenario+" — "+s.Why)
 	}
 	if rep.Truncated {
-		resp.Truncated = true
-		resp.TruncatedReason = rep.TruncatedReason
+		resp.markTruncated(rep.TruncatedReason)
+	}
+	if n := sel.note(q); n != "" {
+		resp.Notes = append(resp.Notes, n)
 	}
 	return s.reply(ctx, req, resp)
 }
@@ -528,43 +595,66 @@ func (s *Server) planChange(ctx stdctx.Context, req *sdk.CallToolRequest, args t
 	if err := parseHubDegreeLimit(args.HubDegreeLimit); err != nil {
 		return failFrom(err, "%v", err)
 	}
-	runID, status, err := s.currentRun(ctx)
+	page, err := s.page(args.pageArg, "plan row(s)")
 	if err != nil {
-		return s.noRun(ctx, req, err)
+		return failWith("invalid_argument", "Pass limit and offset as non-negative numbers, or omit them.", "%v", err)
 	}
+	q := targetQuery("plan_change", args.Symbol, args.Path, args.Line)
+	sel, sc, scResp := s.selectSymbol(ctx, req, q)
+	if sc != nil {
+		return sc, scResp, nil
+	}
+	runID, status := sel.RunID, sel.Status
+	tgt := capability.TargetFromCandidate(args.Symbol, sel.Target)
 
 	planner := planchange.NewPlanner(s.capDeps)
-	plan, err := planner.Plan(ctx, runID, args.Symbol, planchange.Options{
+	plan, err := planner.PlanTarget(ctx, runID, tgt, planchange.Options{
 		MinConfidence:  minConf,
 		HubDegreeLimit: args.HubDegreeLimit,
 	})
 	if err != nil {
-		if errors.Is(err, capability.ErrTargetNotFound) {
-			return s.missingSymbol(ctx, req, runID, status, args.Symbol)
-		}
 		return failFrom(err, "plan change for %q: %v", args.Symbol, err)
 	}
 
-	resp := &Response{
-		IndexRevision: runID,
-		IndexStatus:   status,
-		Summary: fmt.Sprintf("Change plan for %s: Risk %s (%d/100), %d direct caller(s), %d total affected.",
-			plan.Target.Name, strings.ToUpper(plan.RiskLevel), plan.RiskScore, plan.DirectCallers, plan.TotalCallers),
-		Items: []Item{
-			{
-				Kind:       "target",
-				Name:       plan.Target.Name,
-				FQN:        plan.Target.FQN,
-				Path:       plan.Target.FilePath,
-				Line:       plan.Target.Line,
-				Confidence: string(plan.Target.Confidence),
-				Why:        fmt.Sprintf("target symbol to modify (risk score: %d/100, level: %s)", plan.RiskScore, plan.RiskLevel),
-			},
-		},
+	where := fmt.Sprintf("%s (%s:%d)", plan.Target.Name, plan.Target.FilePath, plan.Target.Line)
+	resp := &Response{IndexRevision: runID, IndexStatus: status}
+	switch {
+	case plan.RiskLevel == impact.LevelUnknown:
+		// The plan lists the callers that were FOUND. With the callers
+		// undetermined, a plan that says "0 direct callers, risk LOW" is a plan
+		// to change a signature without updating anything.
+		resp.Summary = fmt.Sprintf("Change plan for %s: Risk UNKNOWN, and the caller steps below are only "+
+			"the %d caller(s) that could be bound: %s.",
+			where, plan.DirectCallers, strings.TrimSuffix(plan.RiskUndetermined, "."))
+	case plan.RiskUndetermined != "":
+		resp.Summary = fmt.Sprintf("Change plan for %s: Risk %s or higher (%d/100 counts only the callers "+
+			"that were bound), %d direct caller(s) found, %d total reached.",
+			where, strings.ToUpper(plan.RiskLevel), plan.RiskScore, plan.DirectCallers, plan.TotalCallers)
+	default:
+		resp.Summary = fmt.Sprintf("Change plan for %s: Risk %s (%d/100), %d direct caller(s), %d total affected.",
+			where, strings.ToUpper(plan.RiskLevel), plan.RiskScore, plan.DirectCallers, plan.TotalCallers)
 	}
 
+	// The target row carries NO confidence tier. It used to carry the tier the
+	// DEFINITION was extracted at, and Server.reply graded that one row into
+	// "verdict: strong ... Act on these" over a plan with no caller in it.
+	targetWhy := "target symbol to modify"
+	if plan.RiskLevel != impact.LevelUnknown {
+		targetWhy += fmt.Sprintf(" (risk score: %d/100, level: %s)", plan.RiskScore, plan.RiskLevel)
+	}
+	if plan.Target.Confidence != "" {
+		targetWhy += fmt.Sprintf("; definition extracted at %s confidence", plan.Target.Confidence)
+	}
+	items := []Item{{
+		Kind: "target",
+		Name: plan.Target.Name,
+		FQN:  plan.Target.FQN,
+		Path: plan.Target.FilePath,
+		Line: plan.Target.Line,
+		Why:  targetWhy,
+	}}
 	for _, step := range plan.Steps {
-		resp.Items = append(resp.Items, Item{
+		items = append(items, Item{
 			Kind: "plan_step",
 			Name: fmt.Sprintf("Step %d: %s", step.Order, step.Kind),
 			Path: step.Path,
@@ -572,11 +662,26 @@ func (s *Server) planChange(ctx stdctx.Context, req *sdk.CallToolRequest, args t
 			Why:  step.Description,
 		})
 	}
+	paginate(resp, page, items)
+
+	binding, err := s.capDeps.TargetBinding(ctx, runID, plan.Target)
+	if err != nil {
+		return failFrom(err, "plan change for %q: %v", args.Symbol, err)
+	}
+	cov := s.coverageFor(ctx, runID, sel.Target.Language, sel.Target.FilePath, binding, aboutCallers)
+	s.applyCoverage(resp, cov, "the change plan")
 
 	if len(plan.AffectedTests) > 0 {
 		resp.Notes = append(resp.Notes, fmt.Sprintf("Covering tests to execute: %s", strings.Join(plan.AffectedTests, ", ")))
 	}
-
+	if plan.TestsUndetermined != "" {
+		resp.Notes = append(resp.Notes,
+			"Whether a test calls the target could not be determined, so the test list above is not "+
+				"the set to rely on: "+strings.TrimSuffix(plan.TestsUndetermined, ".")+".")
+	}
+	if n := sel.note(q); n != "" {
+		resp.Notes = append(resp.Notes, n)
+	}
 	return s.reply(ctx, req, resp)
 }
 

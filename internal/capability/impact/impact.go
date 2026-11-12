@@ -353,6 +353,13 @@ const (
 	// than dropped.
 	UnknownBelowConfidenceFloor UnknownKind = "below_confidence_floor"
 
+	// UnknownUnboundName: references spelled like the target exist and are not
+	// among its callers, or the target's language yields no references at all.
+	// Unlike UnknownUnresolvedReferences, which bounds the whole run, this one
+	// is about the symbol asked about, and it is the one that turns a low risk
+	// into an undetermined one.
+	UnknownUnboundName UnknownKind = "unbound_references_to_name"
+
 	// UnknownStaleIndex: the index run being queried was not built at either
 	// end of the range being analysed, or the two could not be compared. Every
 	// count in the report is then about code that is not the code in the diff —
@@ -445,6 +452,13 @@ type Report struct {
 	// Completeness is the mandatory honesty block.
 	Completeness capability.Completeness `json:"completeness"`
 
+	// Binding is what the index did with the references spelled like THIS
+	// target, and whether the target's language yields references at all.
+	// Completeness describes the run; this describes the symbol, and it is
+	// what decides whether an empty Direct means "nothing calls it" or
+	// "nothing that calls it could be bound". See Risk.Level's unknown value.
+	Binding capability.TargetBinding `json:"binding"`
+
 	// Truncated and TruncatedReason mirror the traversal's own bound reporting
 	// so a consumer does not have to dig into Completeness to find it.
 	Truncated       bool   `json:"truncated"`
@@ -512,6 +526,23 @@ func AnalyzeWith(ctx context.Context, deps capability.Deps, runID int64, target 
 		return Report{}, err
 	}
 	return analyzeTarget(ctx, deps, runID, tgt, opts)
+}
+
+// AnalyzeTarget is AnalyzeWith for a caller that has already chosen the
+// definition.
+//
+// It exists because a name is not always enough to choose one. Overloads share
+// a qualified name, so no string a caller can pass to AnalyzeWith selects the
+// third `fromJson` in a file; a caller that resolved it by file and line passes
+// the resolved Target here instead.
+func AnalyzeTarget(ctx context.Context, deps capability.Deps, runID int64, tgt capability.Target, opts Options) (Report, error) {
+	if err := deps.Validate(); err != nil {
+		return Report{}, err
+	}
+	if tgt.SymbolID == 0 {
+		return Report{}, fmt.Errorf("impact: %w: the target carries no symbol id", capability.ErrTargetNotFound)
+	}
+	return analyzeTarget(ctx, deps, runID, tgt, opts.withDefaults())
 }
 
 // analyzeTarget is AnalyzeWith once the subject is already a resolved symbol.
@@ -667,6 +698,25 @@ func analyzeTarget(ctx context.Context, deps capability.Deps, runID int64,
 		// section means. It is added exactly when there is a dispatch section to
 		// explain.
 		rep.Completeness.Caveats = append(rep.Completeness.Caveats, capability.DispatchExpansionCaveat)
+	}
+
+	// The binding evidence for THIS symbol, read before the score because the
+	// score depends on it: zero callers is a low risk only when the references
+	// that could have been callers were actually bound.
+	rep.Binding, err = deps.TargetBinding(ctx, runID, tgt)
+	if err != nil {
+		return Report{}, err
+	}
+	if rep.Target.Language == "" {
+		rep.Target.Language = rep.Binding.Language
+	}
+	if reason, ok := rep.Binding.Undetermined(); ok {
+		rep.Unknown = append(rep.Unknown, Unknown{
+			Kind:   UnknownUnboundName,
+			Detail: reason + ".",
+			Count:  rep.Binding.Unlisted(),
+		})
+		rep.Completeness.Caveats = append(rep.Completeness.Caveats, reason+".")
 	}
 	rep.Risk = scoreRisk(rep)
 	return rep, nil
@@ -1141,11 +1191,12 @@ func belowFloorUnknown(floor model.Confidence, hidden int, bounded bool) Unknown
 		Kind: UnknownBelowConfidenceFloor,
 		Detail: fmt.Sprintf(
 			"%d further symbol(s) reach the target only through edges weaker than %q, and are excluded "+
-				"from the counts above. They are still in the index: re-run with MinConfidence=low "+
-				"(--min-confidence low) to see them. They are excluded by default because heuristic `low` "+
-				"edges are measured at 0.0-2.8%% precision (docs/accuracy.md), so most of them describe a "+
-				"relationship that does not exist — most, not all, which is why this number is reported "+
-				"rather than the edges quietly dropped.",
+				"from the counts above. They are still in the index: re-run with min_confidence=low "+
+				"(--min-confidence low) to see them. They are excluded by default because a `low` edge is "+
+				"a name match with nothing to confirm it. How often one is right varies by language and "+
+				"by project, so no figure is quoted here: docs/accuracy.md says how it was measured and "+
+				"'repocortex accuracy' measures it on this repository. Some of them are real, which is "+
+				"why this number is reported rather than the edges quietly dropped.",
 			hidden, floor),
 		Count:             int64(hidden),
 		CountIsLowerBound: bounded,

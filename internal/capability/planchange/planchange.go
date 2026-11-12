@@ -34,16 +34,25 @@ type Step struct {
 
 // Plan is a complete, topologically ordered refactoring and verification blueprint.
 type Plan struct {
-	Target         capability.Target       `json:"target"`
-	RiskScore      int                     `json:"risk_score"`
-	RiskLevel      string                  `json:"risk_level"`
-	TotalCallers   int                     `json:"total_callers"`
-	DirectCallers  int                     `json:"direct_callers"`
-	Steps          []Step                  `json:"steps"`
-	AffectedTests  []string                `json:"affected_tests"`
-	Preconditions  []string                `json:"preconditions"`
-	Postconditions []string                `json:"postconditions"`
-	Completeness   capability.Completeness `json:"completeness"`
+	Target    capability.Target `json:"target"`
+	RiskScore int               `json:"risk_score"`
+	RiskLevel string            `json:"risk_level"`
+
+	// RiskUndetermined is impact.Risk.Undetermined: non-empty when the callers
+	// of the target could not be determined. RiskLevel is then "unknown"
+	// wherever it would have been "low", RiskScore is not a risk estimate, and
+	// the caller steps below are the callers that were found, not the callers.
+	RiskUndetermined string `json:"risk_undetermined,omitempty"`
+
+	// TestsUndetermined is tests.TestReport.Undetermined for the target.
+	TestsUndetermined string                  `json:"tests_undetermined,omitempty"`
+	TotalCallers      int                     `json:"total_callers"`
+	DirectCallers     int                     `json:"direct_callers"`
+	Steps             []Step                  `json:"steps"`
+	AffectedTests     []string                `json:"affected_tests"`
+	Preconditions     []string                `json:"preconditions"`
+	Postconditions    []string                `json:"postconditions"`
+	Completeness      capability.Completeness `json:"completeness"`
 }
 
 // Options controls change plan generation.
@@ -78,8 +87,18 @@ func (p *Planner) Plan(ctx context.Context, runID int64, targetSymbol string, op
 		return nil, fmt.Errorf("target symbol must not be empty")
 	}
 
+	tgt, err := capability.ResolveTarget(ctx, p.deps, runID, targetSymbol)
+	if err != nil {
+		return nil, err
+	}
+	return p.PlanTarget(ctx, runID, tgt, opts)
+}
+
+// PlanTarget is Plan for a caller that has already chosen the definition. See
+// impact.AnalyzeTarget for why a name is not always enough to choose one.
+func (p *Planner) PlanTarget(ctx context.Context, runID int64, tgt capability.Target, opts Options) (*Plan, error) {
 	// 1. Run impact analysis to find direct callers, indirect callers, and risk score.
-	imp, err := impact.AnalyzeWith(ctx, p.deps, runID, targetSymbol, impact.Options{
+	imp, err := impact.AnalyzeTarget(ctx, p.deps, runID, tgt, impact.Options{
 		MinConfidence:  opts.MinConfidence,
 		HubDegreeLimit: opts.HubDegreeLimit,
 	})
@@ -88,11 +107,17 @@ func (p *Planner) Plan(ctx context.Context, runID int64, targetSymbol string, op
 	}
 
 	// 2. Discover covering tests for the target.
+	//
+	// By the resolved target, not by its qualified name. Overloads share one
+	// qualified name, so re-resolving by it found the first overload's tests
+	// for whichever overload was being planned.
 	var testCmds []string
 	testNames := make(map[string]bool)
+	var testsUndetermined string
 
-	testHit, err := tests.FindTestsWith(ctx, p.deps, runID, imp.Target.FQN, tests.Options{})
+	testHit, err := tests.FindTestsForTarget(ctx, p.deps, runID, imp.Target, tests.Options{})
 	if err == nil {
+		testsUndetermined = testHit.Undetermined
 		for _, th := range testHit.Tests {
 			if !testNames[th.FilePath] {
 				testNames[th.FilePath] = true
@@ -122,13 +147,16 @@ func (p *Planner) Plan(ctx context.Context, runID int64, targetSymbol string, op
 	}
 
 	plan := &Plan{
-		Target:        imp.Target,
-		RiskScore:     imp.Risk.Score,
-		RiskLevel:     imp.Risk.Level,
-		TotalCallers:  imp.TotalReached(),
-		DirectCallers: len(imp.Direct),
-		AffectedTests: testCmds,
-		Completeness:  imp.Completeness,
+		Target:    imp.Target,
+		RiskScore: imp.Risk.Score,
+		RiskLevel: imp.Risk.Level,
+
+		RiskUndetermined:  imp.Risk.Undetermined,
+		TestsUndetermined: testsUndetermined,
+		TotalCallers:      imp.TotalReached(),
+		DirectCallers:     len(imp.Direct),
+		AffectedTests:     testCmds,
+		Completeness:      imp.Completeness,
 		Preconditions: []string{
 			"Target symbol exists and index resolution is current.",
 			"Existing test suite passes cleanly before code modifications.",

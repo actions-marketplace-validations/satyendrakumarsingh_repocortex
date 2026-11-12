@@ -23,6 +23,7 @@ import (
 
 	sdk "github.com/modelcontextprotocol/go-sdk/mcp"
 
+	"github.com/satyendrakumarsingh/repocortex/internal/capability"
 	"github.com/satyendrakumarsingh/repocortex/internal/registry"
 	"github.com/satyendrakumarsingh/repocortex/pkg/model"
 )
@@ -137,81 +138,67 @@ func partitionEdits(edits []RenameEdit) RenamePlan {
 }
 
 // refLookup is the success-path result of referencesFor: everything a caller
-// needs to finish building its own response (set Summary, Verdict, reply).
-// relationshipQuery consumes Target, RunID and Status; planRename discards
-// them — a struct lets it do that by construction instead of a run of blank
-// identifiers at the call site.
+// needs to finish building its own response (set Summary, reply).
+// relationshipQuery consumes Target and RunID; planRename discards them — a
+// struct lets it do that by construction instead of a run of blank identifiers
+// at the call site.
 type refLookup struct {
 	Items  []Item
 	Resp   *Response
-	Target registry.SymbolHit
+	Target registry.SymbolCandidate
 	RunID  int64
 	Status string
 }
 
-// referencesFor resolves a symbol by name and fetches everything that points
-// at it, filtered to minConf and, if kinds is non-nil, restricted to those
-// edge kinds. It is the ONE reference-lookup implementation shared by
+// referencesFor selects a definition and fetches one page of what points at
+// it, filtered to minConf and, if kinds is non-nil, restricted to those edge
+// kinds. It is the ONE reference-lookup implementation shared by
 // relationshipQuery (find_references / find_callers) and planRename — neither
 // duplicates the registry/graph calls the other makes.
 //
 // The kind predicate is pushed into the registry query (EdgeFilter.Kinds)
-// rather than applied to the results afterward, for the same reason
-// relationshipQuery originally did: s.limits.MaxItems is a LIMIT on the SQL
+// rather than applied to the results afterward: the page is a LIMIT on the SQL
 // query, and filtering in Go after that LIMIT would let a flood of
 // same-or-higher-confidence edges of an excluded kind crowd a wanted edge out
-// of the capped fetch before a Go-side filter ever saw it.
+// of the page before a Go-side filter ever saw it.
 //
-// When the run or the symbol cannot be resolved, or the lookup itself fails,
-// shortCircuit is the fully-formed result the caller should return
-// immediately, unchanged, as its own (result, response, error) — the crafted
-// result IS the answer, including for a missing index, where it carries the
-// "Run 'repocortex index'" guidance rather than a bare protocol error. That is
-// why referencesFor never returns an error itself: the go-sdk's
-// ToolHandlerFor wrapper discards a handler's result whenever the handler
-// also returns a non-nil error, substituting its own bare errRes.SetError(err)
-// — which would silently strip this framing on every call site. shortCircuit
-// is nil only on the success path, where the caller still has work to do
-// (set Summary, Verdict, and reply) before handing the response back.
+// When the run or the symbol cannot be resolved, the name is ambiguous, or the
+// lookup itself fails, shortCircuit is the fully-formed result the caller
+// should return immediately, unchanged — the crafted result IS the answer,
+// including for a missing index, where it carries the "Run 'repocortex index'"
+// guidance rather than a bare protocol error. That is why referencesFor never
+// returns an error itself: the go-sdk's ToolHandlerFor wrapper discards a
+// handler's result whenever the handler also returns a non-nil error.
+// shortCircuit is nil only on the success path, where the caller still has
+// work to do (set Summary and reply) before handing the response back.
 func (s *Server) referencesFor(
 	ctx context.Context,
 	req *sdk.CallToolRequest,
-	name, path string,
+	q symbolQuery,
 	minConf model.Confidence,
 	kinds []string,
+	page *Page,
 ) (refLookup, *sdk.CallToolResult) {
-	runID, status, rerr := s.currentRun(ctx)
-	if rerr != nil {
-		sc, r, _ := s.noRun(ctx, req, rerr)
-		return refLookup{Resp: r, RunID: runID, Status: status}, sc
+	sel, sc, scResp := s.selectSymbol(ctx, req, q)
+	if sc != nil {
+		return refLookup{Resp: scResp}, sc
 	}
-
-	syms, serr := s.deps.Registry.FindSymbolsByName(ctx, runID, name, "", 5)
-	if serr != nil {
-		sc, r, _ := failFrom(serr, "symbol lookup failed: %v", serr)
-		return refLookup{Resp: r, RunID: runID, Status: status}, sc
-	}
-	if len(syms) == 0 {
-		sc, r, _ := s.missingSymbol(ctx, req, runID, status, name)
-		return refLookup{Resp: r, RunID: runID, Status: status}, sc
-	}
-
-	target := syms[0]
-	for _, sym := range syms {
-		if path != "" && strings.Contains(sym.FilePath, path) {
-			target = sym
-			break
-		}
-	}
+	runID, status, target := sel.RunID, sel.Status, sel.Target
 
 	filter := registry.EdgeFilter{MinConfidence: minConf, Kinds: kinds}
-	incoming, ierr := s.deps.Registry.IncomingEdges(ctx, runID, target.ID, s.limits.MaxItems, filter)
+	incoming, total, ierr := s.deps.Registry.EdgePage(ctx, runID, target.ID, true, page.Limit, page.Offset, filter)
 	if ierr != nil {
 		sc, r, _ := failFrom(ierr, "relationship lookup failed: %v", ierr)
 		return refLookup{Resp: r, Target: target, RunID: runID, Status: status}, sc
 	}
+	page.Total = total
 
-	resp := &Response{IndexRevision: runID, IndexStatus: status}
+	// How each bound call is WRITTEN, read back so a row can show it. The
+	// binding matched a name; the text in front of that name is evidence about
+	// whether it matched the right one, and it was being thrown away.
+	sites := s.boundSites(ctx, runID, target)
+
+	resp := &Response{IndexRevision: runID, IndexStatus: status, Page: page}
 	for _, e := range incoming {
 		resp.Items = append(resp.Items, Item{
 			Kind:       strings.ToLower(e.Kind),
@@ -220,7 +207,7 @@ func (s *Server) referencesFor(
 			Line:       e.EvidenceLine,
 			Confidence: e.Confidence,
 			Source:     e.Source,
-			Why:        e.Detail,
+			Why:        joinWhy(sites.writtenAs(e.EvidenceFile, e.EvidenceLine), e.Detail),
 		})
 	}
 
@@ -229,74 +216,246 @@ func (s *Server) referencesFor(
 	// is never mistaken for "nothing further exists". The sentence itself is
 	// floorNote's, shared with every other tool that takes a floor.
 	//
-	// dropped has to be an exact COUNT(*), not len(incoming) short of the
-	// floor: incoming is already capped at s.limits.MaxItems, so subtracting
-	// its length from an unfiltered total would blame the floor for rows the
-	// LIMIT excluded on its own. Two indexed counts — matching the kind
-	// filter with and without the confidence floor — isolate what the floor
-	// alone removed, the same pattern find_callers already uses for notCalls
-	// below.
+	// dropped is an exact COUNT(*): the same kind filter without the
+	// confidence floor, less what passed with it.
 	var dropped int
 	if minConf != "" && minConf != model.ConfidenceLow {
-		total, terr := s.deps.Registry.IncomingEdgeCount(ctx, runID, target.ID,
+		unfiltered, terr := s.deps.Registry.IncomingEdgeCount(ctx, runID, target.ID,
 			registry.EdgeFilter{Kinds: kinds}, nil)
-		passing, perr := s.deps.Registry.IncomingEdgeCount(ctx, runID, target.ID, filter, nil)
-		if terr == nil && perr == nil {
-			dropped = total - passing
+		if terr == nil {
+			dropped = unfiltered - total
 		}
 	}
 	if note := floorNote(minConf, dropped); note != "" {
 		resp.Notes = append(resp.Notes, note)
 	}
 
-	// The registry LIMIT is spent entirely on rows that pass both filters, so
-	// hitting it exactly means real results may still have been left out.
-	if len(incoming) == s.limits.MaxItems {
-		resp.markTruncated(fmt.Sprintf(
-			"the item cap (%d) was reached after filtering; more results may exist beyond it — "+
-				"narrow the query (a path, or a stricter min_confidence) for a complete answer",
-			s.limits.MaxItems))
+	// What the index did with the references spelled like THIS name. The
+	// run-wide figure used to stand in for it ("5748 references repository-wide
+	// are unresolved or ambiguous, so this list may be incomplete"), which is
+	// true of every symbol in the repository and so says nothing about this
+	// one.
+	binding, berr := s.capDeps.TargetBinding(ctx, runID, capability.TargetFromCandidate(q.Name, target))
+	if berr != nil {
+		sc, r, _ := failFrom(berr, "relationship lookup failed: %v", berr)
+		return refLookup{Resp: r, Target: target, RunID: runID, Status: status}, sc
 	}
+	cov := s.coverageFor(ctx, runID, target.Language, target.FilePath, binding, aboutCallers)
+	cov.Misbound = sites.conflict(target)
 
-	rs, rserr := s.deps.Registry.ResolutionStats(ctx, runID)
+	// THE GATE COMES FIRST, AHEAD OF EVERY OTHER NOTE: whether the answer can
+	// be trusted at all outranks the detail below it. Reliability is the same
+	// judgement in the form the verdict and the first line are derived from.
+	resp.Reliability = cov.reliability("relationship lookup")
+	resp.Notes = append(cov.caveat("relationship lookup"), resp.Notes...)
 
-	// THE GATE COMES FIRST, AHEAD OF EVERY OTHER NOTE. See relationshipQuery's
-	// original comment: a verdict on whether the answer can be trusted at all
-	// outranks the detail notes below it.
-	if rserr == nil {
-		if gate := coverageOf(rs, target.FilePath).caveat("relationship lookup"); gate != nil {
-			resp.Notes = append(gate, resp.Notes...)
-		}
+	if note := bindingNote(binding, total); note != "" {
+		resp.Notes = append(resp.Notes, note)
 	}
-
-	if rserr == nil && rs.Total > 0 {
-		if len(resp.Items) == 0 {
-			resp.Notes = append(resp.Notes, fmt.Sprintf(
-				"No results found — but this is a LOWER BOUND, not proof there are none. "+
-					"%d of %d references in this repository are unresolved or ambiguous, "+
-					"so a real reference may exist that RepoCortex could not bind. Do not treat this "+
-					"as evidence the symbol is unused.",
-				rs.Unresolved+rs.Ambiguous, rs.Total))
-		} else if rs.Unresolved+rs.Ambiguous > 0 {
-			resp.Notes = append(resp.Notes, fmt.Sprintf(
-				"%d references repository-wide are unresolved or ambiguous, so this list may be incomplete.",
-				rs.Unresolved+rs.Ambiguous))
-		}
+	if note := sites.note(target.Name); note != "" {
+		resp.Notes = append(resp.Notes, note)
+	}
+	if note := sel.note(q); note != "" {
+		resp.Notes = append(resp.Notes, note)
 	}
 
 	return refLookup{Items: resp.Items, Resp: resp, Target: target, RunID: runID, Status: status}, nil
 }
 
+// bindingNote states, in one sentence, what the index did with every reference
+// spelled like the symbol. listed is how many relationships the answer found.
+//
+// An empty answer leads with the old warning, because it is the case an agent
+// most needs it for, and then says the one thing that warning never could:
+// whether references to this name exist at all.
+func bindingNote(b capability.TargetBinding, listed int) string {
+	if !b.Known {
+		if listed == 0 {
+			return "No results found — but this is a LOWER BOUND, not proof there are none. " +
+				"Do not treat this as evidence the symbol is unused."
+		}
+		return ""
+	}
+
+	var account string
+	if b.References == 0 {
+		account = fmt.Sprintf("No reference spelled %q was recorded anywhere in this index. That rules out "+
+			"an unbound call by this name; it does not rule out a call the parser did not extract, "+
+			"reflection, a call through another name, or a file the index skipped.", b.Name)
+	} else {
+		parts := []string{fmt.Sprintf("%d bound to this definition", b.BoundHere)}
+		if b.WithoutEdge > 0 {
+			parts[0] += fmt.Sprintf(" (%d of them from outside any indexed function, so bound but not listed)", b.WithoutEdge)
+		}
+		if b.BoundElsewhere > 0 {
+			parts = append(parts, fmt.Sprintf("%d bound to other definitions of the name", b.BoundElsewhere))
+		}
+		if b.Ambiguous > 0 {
+			parts = append(parts, fmt.Sprintf("%d ambiguous", b.Ambiguous))
+		}
+		if b.Unresolved > 0 {
+			parts = append(parts, fmt.Sprintf("%d unresolved", b.Unresolved))
+		}
+		if b.Pending > 0 {
+			parts = append(parts, fmt.Sprintf("%d not yet resolved", b.Pending))
+		}
+		account = fmt.Sprintf("References spelled %q in this index: %d. %s.",
+			b.Name, b.References, strings.Join(parts, ", "))
+	}
+	if listed == 0 {
+		return "No results found — but this is a LOWER BOUND, not proof there are none. " + account +
+			" Do not treat this as evidence the symbol is unused."
+	}
+	return account
+}
+
+// maxBoundSites bounds how many bound references are read to learn how each
+// call is written. A symbol with more than this has its busiest rows
+// annotated and the rest not, which the qualifier note says.
+const maxBoundSites = 2000
+
+// maxQualifiersNamed bounds the qualifiers a note lists.
+const maxQualifiersNamed = 5
+
+// boundSiteSet is how the references bound to one definition are written.
+type boundSiteSet struct {
+	name string
+	// at maps "path:line" to the qualifier written there. A site with two
+	// references to the name on one line keeps the first.
+	at map[string]string
+	// counts is occurrences per qualifier, "" for an unqualified call.
+	counts map[string]int
+	// capped is true when the read stopped at maxBoundSites.
+	capped bool
+}
+
+// boundSites reads how the references bound to target are written. A read that
+// fails yields an empty set: the rows are still correct without the
+// annotation, and it is not worth failing an answer over.
+func (s *Server) boundSites(ctx context.Context, runID int64, target registry.SymbolCandidate) boundSiteSet {
+	set := boundSiteSet{name: target.Name, at: map[string]string{}, counts: map[string]int{}}
+	sites, err := s.deps.Registry.BoundSites(ctx, runID, target.ID, maxBoundSites)
+	if err != nil {
+		return set
+	}
+	set.capped = len(sites) == maxBoundSites
+	for _, b := range sites {
+		key := fmt.Sprintf("%s:%d", b.Path, b.Line)
+		if _, seen := set.at[key]; !seen {
+			set.at[key] = b.Qualifier
+		}
+		set.counts[b.Qualifier]++
+	}
+	return set
+}
+
+// writtenAs is "written as errors.New" for a site whose call carries a
+// qualifier, and "" for an unqualified call or an unknown site.
+func (b boundSiteSet) writtenAs(path string, line int) string {
+	q := b.at[fmt.Sprintf("%s:%d", path, line)]
+	if q == "" {
+		return ""
+	}
+	return fmt.Sprintf("written as %s.%s", clip(q, 60), b.name)
+}
+
+// qualifiers returns the distinct non-empty qualifiers, most frequent first.
+func (b boundSiteSet) qualifiers() []nameCount {
+	return sortedCounts(withoutKey(b.counts, ""))
+}
+
+func withoutKey(m map[string]int, key string) map[string]int {
+	out := make(map[string]int, len(m))
+	for k, v := range m {
+		if k != key {
+			out[k] = v
+		}
+	}
+	return out
+}
+
+// note lists how the bound calls are written, when they are not all written
+// the same way. Silent otherwise: one spelling is nothing to report.
+func (b boundSiteSet) note(name string) string {
+	quals := b.qualifiers()
+	if len(quals) == 0 || len(quals) == 1 && b.counts[""] == 0 {
+		return ""
+	}
+	var parts []string
+	if n := b.counts[""]; n > 0 {
+		parts = append(parts, fmt.Sprintf("%s ×%d", name, n))
+	}
+	for i, q := range quals {
+		if i == maxQualifiersNamed {
+			parts = append(parts, fmt.Sprintf("and %d more qualifier(s)", len(quals)-maxQualifiersNamed))
+			break
+		}
+		parts = append(parts, fmt.Sprintf("%s.%s ×%d", clip(q.name, 60), name, q.count))
+	}
+	out := "How the calls bound to this definition are written: " + strings.Join(parts, ", ") +
+		". The binding matched the NAME. It does not show that the qualifier in front of it refers to " +
+		"this definition, so a row qualified by another package, module or object is probably not a call to it."
+	if b.capped {
+		out += fmt.Sprintf(" Only the first %d bound references were read for this.", maxBoundSites)
+	}
+	return out
+}
+
+// conflict reports qualifiers that cannot all name the target, for the one
+// case where that is provable from syntax alone.
+//
+// A Go package-level function is called by its bare name inside its package
+// and as `pkg.Name` outside it, so every qualified call to it carries the same
+// qualifier (an import alias aside). Two different qualifiers on calls bound
+// to one such function therefore mean at least one row is a call to something
+// else: `errors.New` and `template.New` bound to this repository's `New`.
+//
+// It is deliberately not applied to methods, or to other languages. There the
+// qualifier is a variable or an expression, different at every correct call
+// site, and reading that as a conflict would mark every method unverified.
+func (b boundSiteSet) conflict(target registry.SymbolCandidate) string {
+	if strings.ToLower(target.Language) != "go" || target.Kind != "function" {
+		return ""
+	}
+	quals := b.qualifiers()
+	if len(quals) < 2 {
+		return ""
+	}
+	names := make([]string, 0, maxQualifiersNamed)
+	for i, q := range quals {
+		if i == maxQualifiersNamed {
+			break
+		}
+		names = append(names, clip(q.name, 60)+"."+b.name)
+	}
+	return fmt.Sprintf("the calls bound to this Go function are written with %d different package "+
+		"qualifiers (%s), and at most one of them can be this package.",
+		len(quals), strings.Join(names, ", "))
+}
+
+// joinWhy joins the non-empty parts of a row's explanation.
+func joinWhy(parts ...string) string {
+	var kept []string
+	for _, p := range parts {
+		if p != "" {
+			kept = append(kept, p)
+		}
+	}
+	return strings.Join(kept, "; ")
+}
+
 type renameArgs struct {
 	Name    string `json:"name" jsonschema:"Symbol to rename."`
 	NewName string `json:"new_name" jsonschema:"The replacement identifier. Used only to render the plan; nothing is written."`
-	Path    string `json:"path,omitempty" jsonschema:"Optional file path to disambiguate when several symbols share a name."`
+	Path    string `json:"path,omitempty" jsonschema:"File (or directory) the definition is in, to choose between several symbols that share the name. Matched exactly when it names a file."`
+	lineArg
 
 	// A floor here narrows the REVIEW half of the plan. The apply half is
 	// already 'exact' by construction, so min_confidence=exact returns the
 	// proven edits alone — the plan an agent can act on without reading a
 	// single line by hand.
 	minConfidenceArg
+	pageArg
 }
 
 // planRename answers plan_rename. It writes nothing: no file is opened for
@@ -327,7 +486,14 @@ func (s *Server) planRename(ctx context.Context, req *sdk.CallToolRequest, args 
 	// kinds is explicitly nil: plan_rename wants every edge kind, not a
 	// pushed-down subset, so "no kind filter" is stated rather than left to
 	// an empty variadic call.
-	lookup, shortCircuit := s.referencesFor(ctx, req, args.Name, args.Path, minConf, nil)
+	page, err := s.page(args.pageArg, "site(s)")
+	if err != nil {
+		return failWith("invalid_argument", "Pass limit and offset as non-negative numbers, or omit them.", "%v", err)
+	}
+	q := symbolQuery{Tool: "plan_rename", Param: "name", PathParam: "path", LineParam: "line",
+		Name: args.Name, Path: args.Path, Line: args.Line,
+		Rest: " new_name=" + quoteArg(args.NewName)}
+	lookup, shortCircuit := s.referencesFor(ctx, req, q, minConf, nil, page)
 	if shortCircuit != nil {
 		return shortCircuit, lookup.Resp, nil
 	}
@@ -345,8 +511,8 @@ func (s *Server) planRename(ctx context.Context, req *sdk.CallToolRequest, args 
 
 	plan := partitionEdits(edits)
 	resp.Summary = fmt.Sprintf(
-		"Rename %q to %q: %d proven site(s) to change, %d to review by hand. Each entry is a file and a line; locate the identifier on it. The plan is not complete.",
-		args.Name, args.NewName, len(plan.Apply), len(plan.Review))
+		"Rename %q (%s:%d) to %q: %d proven site(s) to change, %d to review by hand. Each entry is a file and a line; locate the identifier on it. The plan is not complete.",
+		args.Name, lookup.Target.FilePath, lookup.Target.StartLine, args.NewName, len(plan.Apply), len(plan.Review))
 	// Verdict is NOT set here. Server.reply grades every response once, after
 	// bounding — see Response.Verdict.
 	resp.Notes = append(resp.Notes, plan.Warning)

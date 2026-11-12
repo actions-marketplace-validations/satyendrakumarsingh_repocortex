@@ -460,6 +460,7 @@ BlastResponse.risk.formula
 BlastResponse.risk.level
 BlastResponse.risk.lower_bound
 BlastResponse.risk.score
+BlastResponse.risk.undetermined
 BlastResponse.status
 BlastResponse.tables_read
 BlastResponse.tables_read.confidence
@@ -489,6 +490,7 @@ BlastResponse.target.exported
 BlastResponse.target.file_path
 BlastResponse.target.fqn
 BlastResponse.target.kind
+BlastResponse.target.language
 BlastResponse.target.line
 BlastResponse.target.name
 BlastResponse.target.query
@@ -2488,6 +2490,7 @@ OwnershipResponse.target.exported
 OwnershipResponse.target.file_path
 OwnershipResponse.target.fqn
 OwnershipResponse.target.kind
+OwnershipResponse.target.language
 OwnershipResponse.target.line
 OwnershipResponse.target.name
 OwnershipResponse.target.query
@@ -2528,6 +2531,7 @@ Plan.postconditions
 Plan.preconditions
 Plan.risk_level
 Plan.risk_score
+Plan.risk_undetermined
 Plan.steps
 Plan.steps.command
 Plan.steps.description
@@ -2542,11 +2546,13 @@ Plan.target.exported
 Plan.target.file_path
 Plan.target.fqn
 Plan.target.kind
+Plan.target.language
 Plan.target.line
 Plan.target.name
 Plan.target.query
 Plan.target.source
 Plan.target.symbol_id
+Plan.tests_undetermined
 Plan.total_callers
 Report.blindspots
 Report.blindspots.description
@@ -2884,6 +2890,7 @@ TestsResponse.symbol.target.exported
 TestsResponse.symbol.target.file_path
 TestsResponse.symbol.target.fqn
 TestsResponse.symbol.target.kind
+TestsResponse.symbol.target.language
 TestsResponse.symbol.target.line
 TestsResponse.symbol.target.name
 TestsResponse.symbol.target.query

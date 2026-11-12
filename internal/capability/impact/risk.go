@@ -26,11 +26,26 @@ import (
 // same finding, and collapsing them into one word would lose the distinction
 // this whole package exists to preserve.
 type Risk struct {
-	// Level is low | moderate | high. Derived from Score by Formula.
+	// Level is low | moderate | high | unknown. Derived from Score by Formula,
+	// except that a level which would be low is LevelUnknown when the callers
+	// of the target could not be determined: see Undetermined.
 	Level string `json:"level"`
 
-	// Score is the sum of Factors, clamped to 0..100.
+	// Score is the sum of Factors, clamped to 0..100. It is computed from what
+	// the index bound. When Level is LevelUnknown it is NOT a risk estimate and
+	// must not be printed as one: it is the score of an evidence set known to
+	// be missing the callers.
 	Score int `json:"score"`
+
+	// Undetermined is non-empty when the index cannot say who calls the
+	// target: its language yields no references, or references spelled like it
+	// exist and were not bound to it. It states which, with the counts.
+	//
+	// A level of moderate or high stays as scored when this is set, because
+	// those are floors and a floor survives missing evidence. A level of low
+	// does not: "few callers were found" and "few callers exist" are different
+	// claims, and only the first is supported. That one becomes LevelUnknown.
+	Undetermined string `json:"undetermined,omitempty"`
 
 	// Factors are the inputs, in the order they were applied. Never empty.
 	Factors []Factor `json:"factors"`
@@ -93,12 +108,39 @@ const (
 	riskHighAt     = 60 // Score >= this is high
 )
 
+// Risk levels. LevelUnknown is a first-class outcome, not an error: it is what
+// a score computed without the target's callers is called.
+const (
+	LevelLow      = "low"
+	LevelModerate = "moderate"
+	LevelHigh     = "high"
+	LevelUnknown  = "unknown"
+)
+
+// LevelRank orders levels for "which of these is the riskiest". Unknown sits
+// above low and below moderate: an undetermined symbol is a better candidate
+// for a reader's attention than one known to be low, and a worse one than a
+// symbol with evidence of real reach.
+func LevelRank(level string) int {
+	switch level {
+	case LevelHigh:
+		return 3
+	case LevelModerate:
+		return 2
+	case LevelUnknown:
+		return 1
+	default:
+		return 0
+	}
+}
+
 // riskFormula is the one statement of how Level follows from Score. Shared by
 // the report-level and the symbol-level scorer so the two cannot drift into
 // meaning different things by the same word.
 func riskFormula() string {
 	return fmt.Sprintf(
-		"score = sum(factors), clamped to 0..100; level = low below %d, moderate below %d, high at or above %d",
+		"score = sum(factors), clamped to 0..100; level = low below %d, moderate below %d, high at or above %d; "+
+			"a level that would be low is reported as unknown when the callers could not be determined",
 		riskModerateAt, riskHighAt, riskHighAt)
 }
 
@@ -114,11 +156,57 @@ func finishRisk(risk *Risk) {
 	}
 	switch {
 	case risk.Score >= riskHighAt:
-		risk.Level = "high"
+		risk.Level = LevelHigh
 	case risk.Score >= riskModerateAt:
-		risk.Level = "moderate"
+		risk.Level = LevelModerate
 	default:
-		risk.Level = "low"
+		risk.Level = LevelLow
+	}
+}
+
+// markUndetermined records that the callers could not be determined and
+// withdraws a low level, which is the one level that claim would be read as
+// reassurance from.
+func markUndetermined(risk *Risk, reason string) {
+	risk.Undetermined = reason
+	if risk.Level == LevelLow {
+		risk.Level = LevelUnknown
+	}
+}
+
+// exportFactor is the public-API input, or the admission that the index does
+// not know it.
+//
+// The index's exported flag is trusted in the languages listed by
+// capability.ExportedKnown and nowhere else. Outside them, stating "unexported,
+// so its blast radius is bounded by this repository" would turn a guess about
+// the first letter of a name into a claim that no external caller exists.
+func exportFactor(subject, fqn, kind, language, filePath string, exported bool) Factor {
+	if !capability.ExportedKnown(language, filePath) {
+		lang := capability.DisplayLanguage(language)
+		if lang == "" {
+			lang = "this language"
+		}
+		return Factor{
+			Name: "public_api", Points: 0,
+			Detail: fmt.Sprintf("Whether the %s is exported is UNKNOWN. The index does not read the visibility "+
+				"rules of %s, so it cannot say whether callers outside this repository exist. No points are "+
+				"added, and none should be read as subtracted.", subject, lang),
+			Evidence: fmt.Sprintf("the exported flag is not trusted for %s", lang),
+		}
+	}
+	if exported {
+		return Factor{
+			Name: "public_api", Points: pointsExported,
+			Detail: fmt.Sprintf("The %s is exported. Callers outside this repository are not indexed, "+
+				"so the reported blast radius excludes them entirely.", subject),
+			Evidence: fmt.Sprintf("%s is exported (%s)", fqn, kind),
+		}
+	}
+	return Factor{
+		Name: "public_api", Points: 0,
+		Detail:   fmt.Sprintf("The %s is unexported, so its blast radius is bounded by this repository.", subject),
+		Evidence: fmt.Sprintf("%s is not exported", fqn),
 	}
 }
 
@@ -130,21 +218,14 @@ func finishRisk(risk *Risk) {
 func scoreRisk(r Report) Risk {
 	risk := Risk{LowerBound: true, Formula: riskFormula()}
 
+	// What the index could not determine about the target's callers, if
+	// anything. Read first because two factors below change their wording on
+	// it, and the level changes on it at the end.
+	undetermined, isUndetermined := r.Binding.Undetermined()
+
 	// 1. Public API.
-	if r.Target.Exported {
-		risk.Factors = append(risk.Factors, Factor{
-			Name: "public_api", Points: pointsExported,
-			Detail: "Target is exported. Callers outside this repository are not indexed, " +
-				"so the reported blast radius excludes them entirely.",
-			Evidence: fmt.Sprintf("%s is exported (%s)", r.Target.FQN, r.Target.Kind),
-		})
-	} else {
-		risk.Factors = append(risk.Factors, Factor{
-			Name: "public_api", Points: 0,
-			Detail:   "Target is unexported, so its blast radius is bounded by this repository.",
-			Evidence: fmt.Sprintf("%s is not exported", r.Target.FQN),
-		})
-	}
+	risk.Factors = append(risk.Factors, exportFactor("target", r.Target.FQN, r.Target.Kind,
+		r.Target.Language, r.Target.FilePath, r.Target.Exported))
 
 	// 2. Direct callers.
 	direct := len(r.Direct)
@@ -184,12 +265,24 @@ func scoreRisk(r Report) Risk {
 				"partly guarded. This is reachability, not a coverage measurement.", tests),
 			Evidence: "e.g. " + example,
 		})
+	} else if isUndetermined {
+		// Not "no test reaches it". A test that calls the target through a
+		// reference the index could not bind is a test this walk cannot see,
+		// and the same gap that hides the callers hides the tests among them.
+		risk.Factors = append(risk.Factors, Factor{
+			Name: "observed_tests", Points: 0,
+			Detail: "Whether any test reaches this target could NOT be determined: the callers themselves " +
+				"could not be (see unbound_references). No points are added for missing tests, because " +
+				"none were shown to be missing.",
+			Evidence: "0 impacted symbols classified as tests, among callers that could not be determined",
+		})
 	} else {
 		risk.Factors = append(risk.Factors, Factor{
 			Name: "observed_tests", Points: pointsNoTests,
-			Detail: "No test symbol reaches this target in the indexed graph. Either it is untested, " +
-				"or its tests are invisible to static analysis (table-driven dispatch, generated tests, " +
-				"a separate test repository).",
+			Detail: "No test symbol was found reaching this target through the relationships this index " +
+				"bound. Either it is untested, or its tests reach it in a way the index does not record " +
+				"(an unresolved call, interface or trait dispatch, table-driven or generated tests, a " +
+				"separate test repository).",
 			Evidence: "0 impacted symbols classified as tests",
 		})
 	}
@@ -229,7 +322,24 @@ func scoreRisk(r Report) Risk {
 		})
 	}
 
+	// 8. Callers that could not be determined. Listed with zero points like
+	// every considered input, and acted on below: it does not move the score,
+	// it withdraws the claim a low score would make.
+	if isUndetermined {
+		risk.Factors = append(risk.Factors, Factor{
+			Name: "unbound_references", Points: 0,
+			Detail: "The callers of this target could not be determined (the NOT VISIBLE note " +
+				"unbound_references_to_name says why). The score is computed without them, which is why " +
+				"a level that would be low is reported as unknown.",
+			Evidence: fmt.Sprintf("%d reference(s) spelled %q; %d bound to this definition",
+				r.Binding.References, r.Target.Name, r.Binding.BoundHere),
+		})
+	}
+
 	finishRisk(&risk)
+	if isUndetermined {
+		markUndetermined(&risk, undetermined)
+	}
 	risk.Certainty, risk.CertaintyReason = certainty(r)
 	return risk
 }
@@ -311,20 +421,8 @@ type ReachedSymbol struct {
 func ScoreReachedSymbol(in ReachedSymbol) Risk {
 	risk := Risk{LowerBound: true, Formula: riskFormula()}
 
-	if in.Symbol.Exported {
-		risk.Factors = append(risk.Factors, Factor{
-			Name: "public_api", Points: pointsExported,
-			Detail: "Symbol is exported, so its own callers may live outside this repository and " +
-				"outside this index.",
-			Evidence: fmt.Sprintf("%s is exported (%s)", in.Symbol.FQN, in.Symbol.Kind),
-		})
-	} else {
-		risk.Factors = append(risk.Factors, Factor{
-			Name: "public_api", Points: 0,
-			Detail:   "Symbol is unexported, so what it affects is bounded by this repository.",
-			Evidence: fmt.Sprintf("%s is not exported", in.Symbol.FQN),
-		})
-	}
+	risk.Factors = append(risk.Factors, exportFactor("symbol", in.Symbol.FQN, in.Symbol.Kind,
+		"", in.Symbol.FilePath, in.Symbol.Exported))
 
 	// Proximity. Depth 1 is worth the same as the report-level cap on direct
 	// callers, and each further hop divides it, because a longer path is a
@@ -441,17 +539,23 @@ func certainty(r Report) (string, string) {
 		return "low", "No impacted symbols were found, but the traversal was truncated — absence of results " +
 			"here is not evidence of absence of impact."
 	case total == 0:
+		if _, ok := r.Binding.Undetermined(); ok {
+			return "low", "No impacted symbols were found, and that is not evidence of none: the callers " +
+				"of this target could not be determined."
+		}
+		rate, scope := bindingRateOf(r)
 		return "low", fmt.Sprintf(
-			"No impacted symbols were found. With %.1f%% of this run's bindable references "+
+			"No impacted symbols were found. With %.1f%% of %s bindable references "+
 				"bound, an empty result is as likely to mean 'not indexed' as 'not used'.",
-			100*r.Completeness.BindingRate)
+			100*rate, scope)
 	}
 
+	rate, scope := bindingRateOf(r)
 	reason := fmt.Sprintf(
 		"%d of %d impacted symbols were reached along a path whose weakest edge is high or exact; "+
-			"%d were reached only through medium- or low-confidence edges. Reference resolution for this run: "+
+			"%d were reached only through medium- or low-confidence edges. Reference resolution for %s: "+
 			"%.1f%% of the references that name something this index defines.",
-		strong, total, weak, 100*r.Completeness.BindingRate)
+		strong, total, weak, strings.TrimSuffix(scope, "'s"), 100*rate)
 	if r.Truncated {
 		reason += " The traversal was also truncated, so this mix describes only the part that was explored."
 	}
@@ -466,11 +570,26 @@ func certainty(r Report) (string, string) {
 	// however perfectly it bound its own, so the gate was partly a measure of
 	// dependency surface. Over bindable references it is the intended test, and
 	// the constant is unchanged so the intent is visible in the diff.
-	case strong == total && r.Completeness.BindingRate >= 0.8:
+	case strong == total && rate >= 0.8:
 		return "high", reason
 	default:
 		return "medium", reason
 	}
+}
+
+// bindingRateOf is the binding rate the report's certainty is judged against,
+// and the words naming what it covers.
+//
+// The target's own language when the index could say, because that is the
+// population its callers are drawn from: a Kotlin symbol in a repository with a
+// few Java samples was being described by the Java files' rate. The run-wide
+// rate otherwise.
+func bindingRateOf(r Report) (rate float64, scope string) {
+	if r.Binding.Known && r.Binding.LanguageStats.Bindable() > 0 {
+		return r.Binding.LanguageStats.BindingRate(),
+			capability.DisplayLanguage(r.Binding.Language) + "'s"
+	}
+	return r.Completeness.BindingRate, "this run's"
 }
 
 func countTests(r Report) (int, string) {

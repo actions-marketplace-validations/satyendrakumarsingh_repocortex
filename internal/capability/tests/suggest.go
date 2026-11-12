@@ -72,7 +72,11 @@ func SuggestMissingScenarios(target capability.Target, report TestReport) []Sugg
 	// 1. Exported symbol with nothing covering it. The export flag is a parsed
 	//    fact and the absence is the report's own finding, so both halves are
 	//    visible to the reader.
-	if target.Exported && len(report.Tests) == 0 {
+	//    Only where the flag can be trusted (capability.ExportedKnown), and
+	//    only where the search could have seen a test: a suggestion built on a
+	//    guessed export status or on a blinded search is the fabricated kind.
+	if target.Exported && len(report.Tests) == 0 && report.Undetermined == "" &&
+		capability.ExportedKnown(target.Language, target.FilePath) {
 		out = append(out, Suggestion{
 			Kind: GapPublicAPIUntested,
 			Scenario: fmt.Sprintf("A test that calls %s directly and asserts its result for at least one "+

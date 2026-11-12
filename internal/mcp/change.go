@@ -7,6 +7,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/satyendrakumarsingh/repocortex/internal/capability"
 	"github.com/satyendrakumarsingh/repocortex/internal/capability/impact"
 
 	sdk "github.com/modelcontextprotocol/go-sdk/mcp"
@@ -98,8 +99,8 @@ func (s *Server) analyzeChange(ctx context.Context, req *sdk.CallToolRequest, ar
 	resp := &Response{
 		IndexRevision: runID,
 		IndexStatus:   status,
-		Summary: fmt.Sprintf("%s..%s changes %d symbol(s) in %d file(s) and can reach %d more, %d of them tests. Risk %s (score %d).",
-			base, head, rep.SeedsFound, len(rep.ChangedFiles), rep.TotalReached(), tests, rep.Risk.Level, rep.Risk.Score),
+		Summary: fmt.Sprintf("%s..%s changes %d symbol(s) in %d file(s) and can reach %d more, %d of them tests. %s",
+			base, head, rep.SeedsFound, len(rep.ChangedFiles), rep.TotalReached(), tests, riskSentence(rep.Risk)),
 	}
 
 	// Changed symbols first: they are what the reviewer reads the diff for.
@@ -139,9 +140,11 @@ func (s *Server) analyzeChange(ctx context.Context, req *sdk.CallToolRequest, ar
 		}
 	}
 
-	if gate := coverageOf(rep.Completeness.Resolution, "").caveat("change analysis"); gate != nil {
-		resp.Notes = append(resp.Notes, gate...)
-	}
+	// Judged over the run: a range of commits spans whatever languages it
+	// touched. What could not be determined for individual changed symbols
+	// arrives as an unbound_references_to_name unknown below.
+	cov := s.coverageFor(ctx, runID, "", "", capability.TargetBinding{}, "what the change reaches")
+	s.applyCoverage(resp, cov, "change analysis")
 	if !rep.RevisionMatchesRange && rep.IndexedRevision != "" {
 		resp.Notes = append(resp.Notes, fmt.Sprintf(
 			"The index was built at %.12s, which is not the head of this range. Symbols added or moved "+

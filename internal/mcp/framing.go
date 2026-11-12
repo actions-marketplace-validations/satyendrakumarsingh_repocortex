@@ -134,6 +134,186 @@ type Response struct {
 	// not that, and does not attempt to be. Omitted when this response sets
 	// no such claim.
 	Basis Basis `json:"basis,omitempty"`
+
+	// Reliability is how far the index supports this answer: good, incomplete,
+	// low or none, with the sentence that says why. Set by every tool whose
+	// answer is a claim about relationships, and absent otherwise.
+	//
+	// It is the INPUT to two things Server.reply derives and no tool may set
+	// for itself: Verdict, which can never be stronger than this allows (see
+	// OverallSignal), and the opening words of Summary, so that an answer that
+	// is not reliable says so on its first line.
+	Reliability *Reliability `json:"reliability,omitempty"`
+
+	// Page says which slice of the whole result this answer carries, on tools
+	// that take `limit` and `offset`. Absent on tools that do not page.
+	Page *Page `json:"page,omitempty"`
+
+	// itemCap overrides Limits.MaxItems for a tool with a `limit` of its own
+	// and no total to page against (search_code). Zero means no override.
+	itemCap int
+
+	// Outcome names a result that is not the answer to the question asked, so
+	// a client can branch on it without reading prose. The one value today is
+	// "ambiguous_name": the name matched several definitions, nothing was
+	// analysed, and Items lists the candidates. Empty on an ordinary answer.
+	Outcome string `json:"outcome,omitempty"`
+}
+
+// Page is the position of a list answer within the full result.
+//
+// It exists because "the item cap was reached; more results may exist" left an
+// agent with no way to see them and no way to know how many there were. Total
+// is a count, taken separately from the rows, and NextOffset is the argument to
+// pass to read on.
+type Page struct {
+	// Offset is how many rows were skipped; Limit how many were asked for.
+	Offset int `json:"offset"`
+	Limit  int `json:"limit"`
+
+	// Total is how many rows exist. Counted, never inferred from a full page.
+	Total int `json:"total"`
+
+	// Returned is how many rows this answer carries after every bound, the
+	// response size limit included, so it can be smaller than Limit.
+	Returned int `json:"returned"`
+
+	// NextOffset is the offset that continues after these rows. Zero when this
+	// answer reaches the end.
+	NextOffset int `json:"next_offset,omitempty"`
+
+	// noun is what one row is, for the sentence: "caller(s)". max is the
+	// largest limit the server accepts, which the sentence quotes.
+	noun string
+	max  int
+
+	// held records whether the response was already marked truncated for a
+	// reason of its own before paging looked at it, so syncPage can clear the
+	// flag it set without clearing someone else's.
+	held, heldSet bool
+}
+
+// DefaultMaxPageItems is the most rows one answer returns, whatever `limit`
+// asks for, unless Limits says otherwise.
+//
+// A server maximum rather than "as many as fit" so the advertised bound is a
+// number an agent can plan with. The response size limit still applies beneath
+// it: two hundred long rows do not fit in one answer, and Page.Returned says
+// how many did.
+const DefaultMaxPageItems = 200
+
+// pageReasonPrefix identifies the sentence syncPage owns inside
+// TruncatedReason, so a recompute replaces it instead of stacking another.
+const pageReasonPrefix = "showing rows "
+
+// syncPage brings Page, Truncated and the paging sentence into line with the
+// rows the response currently holds.
+//
+// ABSOLUTE, like recordOmission and for the same reason: Bound runs more than
+// once per response and drops rows as it goes, so this must compute the same
+// answer from the same state however many times it is called.
+func (r *Response) syncPage() {
+	p := r.Page
+	if p == nil {
+		return
+	}
+	if !p.heldSet {
+		p.held, p.heldSet = r.Truncated, true
+	}
+
+	// Drop the sentence written last time.
+	var kept []string
+	if r.TruncatedReason != "" {
+		for _, part := range strings.Split(r.TruncatedReason, "; ") {
+			if !strings.HasPrefix(part, pageReasonPrefix) {
+				kept = append(kept, part)
+			}
+		}
+	}
+
+	p.Returned = len(r.Items)
+	p.NextOffset = 0
+	end := p.Offset + p.Returned
+	if end < p.Total {
+		p.NextOffset = end
+		kept = append([]string{pageSentence(p)}, kept...)
+	}
+	r.TruncatedReason = strings.Join(kept, "; ")
+	r.Truncated = p.held || p.NextOffset > 0
+}
+
+// pageSentence says which rows are shown, how many are not, and the exact
+// argument that reads on. It contains no "; " — syncPage splits on that.
+func pageSentence(p *Page) string {
+	noun := p.noun
+	if noun == "" {
+		noun = "row(s)"
+	}
+	if p.Returned == 0 {
+		return fmt.Sprintf("%s0 of %d %s (offset %d). Pass a smaller offset",
+			pageReasonPrefix, p.Total, noun, p.Offset)
+	}
+	limitMax := p.max
+	if limitMax <= 0 {
+		limitMax = DefaultMaxPageItems
+	}
+	return fmt.Sprintf("%s%d-%d of %d %s, so %d are not shown here. Pass offset=%d to read on "+
+		"(limit accepts up to %d)",
+		pageReasonPrefix, p.Offset+1, p.Offset+p.Returned, p.Total, noun,
+		p.Total-p.Returned, p.NextOffset, limitMax)
+}
+
+// rowsWithheld reports whether rows exist that this answer does not carry, and
+// says how many in a clause for the first line.
+func (r *Response) rowsWithheld() (string, bool) {
+	if p := r.Page; p != nil && p.NextOffset > 0 {
+		return fmt.Sprintf("rows %d-%d of %d are shown", p.Offset+1, p.Offset+p.Returned, p.Total), true
+	}
+	if om := r.Omitted; om != nil && om.Count > 0 {
+		return fmt.Sprintf("%d result(s) were cut from this answer", om.Count), true
+	}
+	return "", false
+}
+
+// lead is what the first line of the answer opens with, or "" when nothing the
+// index knows undermines it.
+//
+// AN AGENT READS THE FIRST LINE AND ACTS. Every caveat below it is read by a
+// careful model and skipped by a hurried one, so the one thing that must not
+// be left to the notes is whether the answer is one at all. The word comes
+// from Reliability, which is also what the verdict is graded from, so the
+// first line and the verdict cannot say different things.
+func (r *Response) lead() string {
+	var word string
+	var clauses []string
+	if rel := r.Reliability; rel != nil {
+		switch rel.Level {
+		case ReliabilityNone:
+			word = leadUnknown
+		case ReliabilityLow:
+			word = leadUnreliable
+		case ReliabilityUnverified:
+			word = leadUnverified
+		case ReliabilityIncomplete:
+			word = leadIncomplete
+		}
+		if word != "" && rel.Lead != "" {
+			clauses = append(clauses, strings.TrimSuffix(rel.Lead, "."))
+		}
+	}
+	if clause, ok := r.rowsWithheld(); ok {
+		if word == "" {
+			word = leadIncomplete
+		}
+		clauses = append(clauses, clause)
+	}
+	if word == "" {
+		return ""
+	}
+	if len(clauses) == 0 {
+		return word + " — "
+	}
+	return word + " — " + strings.Join(clauses, "; ") + ". "
 }
 
 // Item is one result with the provenance needed to judge it.
@@ -176,7 +356,11 @@ type Item struct {
 // answer it can act on, not a corpus; if it needs more it can ask a narrower
 // question, which is cheaper than paying for breadth it did not use.
 type Limits struct {
+	// MaxItems is how many rows an answer carries when the caller does not
+	// say. MaxPageItems is the most a caller may ask for with `limit`; zero
+	// means MaxItems, so a server built with a small cap keeps it.
 	MaxItems        int
+	MaxPageItems    int
 	MaxExcerptLines int
 	MaxExcerptBytes int
 
@@ -222,6 +406,7 @@ type Limits struct {
 func DefaultLimits() Limits {
 	return Limits{
 		MaxItems:        50,
+		MaxPageItems:    DefaultMaxPageItems,
 		MaxExcerptLines: 20,
 		MaxExcerptBytes: 2000,
 		MaxNameBytes:    160,
@@ -293,11 +478,22 @@ func (r *Response) Bound(l Limits) {
 	all := r.Items
 	prior := r.Omitted
 
-	if l.MaxItems > 0 && len(r.Items) > l.MaxItems {
-		dropped := len(r.Items) - l.MaxItems
-		r.Items = r.Items[:l.MaxItems]
-		r.markTruncated(fmt.Sprintf("showing %d of %d results; narrow the query to see the rest",
-			l.MaxItems, l.MaxItems+dropped))
+	// A paged answer is capped at the page the caller asked for, and says what
+	// it left out in terms of offsets rather than "narrow the query".
+	maxItems := l.MaxItems
+	if r.itemCap > 0 {
+		maxItems = r.itemCap
+	}
+	if r.Page != nil && r.Page.Limit > 0 {
+		maxItems = r.Page.Limit
+	}
+	if maxItems > 0 && len(r.Items) > maxItems {
+		dropped := len(r.Items) - maxItems
+		r.Items = r.Items[:maxItems]
+		if r.Page == nil {
+			r.markTruncated(fmt.Sprintf("showing %d of %d results; narrow the query to see the rest",
+				maxItems, maxItems+dropped))
+		}
 	}
 
 	for i := range r.Items {
@@ -323,6 +519,7 @@ func (r *Response) Bound(l Limits) {
 	}
 
 	r.recordOmission(prior, all)
+	r.syncPage()
 
 	if l.MaxTotalBytes <= 0 {
 		return
@@ -534,6 +731,12 @@ func (r *Response) markTruncated(reason string) {
 // an optimisation, the measurement is the guarantee.
 func (r *Response) boundRendered(budget int) {
 	truncate := func() {
+		if r.Page != nil {
+			// The paging sentence already says which rows are shown and how to
+			// read on; recompute it for the rows that are left.
+			r.syncPage()
+			return
+		}
 		r.markTruncated(byteTruncationReason)
 	}
 
@@ -591,6 +794,9 @@ func (r *Response) hasExcerpt() bool {
 func (r *Response) overheadLen() int {
 	n := len("=== "+sectionMetadata+" ===\n") + len(r.Summary) + 1
 	n += len(fmt.Sprintf("index_revision: %d  status: %s\n", r.IndexRevision, r.IndexStatus))
+	if r.Outcome != "" {
+		n += len("outcome: ") + len(r.Outcome) + 1
+	}
 	for _, note := range r.Notes {
 		n += len("note: ") + len(note) + 1
 	}
@@ -923,6 +1129,9 @@ func (r *Response) RenderText() string {
 	b.WriteString("=== " + sectionMetadata + " ===\n")
 	fmt.Fprintf(&b, "%s\n", r.Summary)
 	fmt.Fprintf(&b, "index_revision: %d  status: %s\n", r.IndexRevision, r.IndexStatus)
+	if r.Outcome != "" {
+		fmt.Fprintf(&b, "outcome: %s\n", r.Outcome)
+	}
 	if r.Truncated {
 		fmt.Fprintf(&b, "truncated: %s\n", r.TruncatedReason)
 	}

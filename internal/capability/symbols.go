@@ -185,6 +185,27 @@ type symbolCache struct {
 	statsRun int64
 	stats    registry.ResolutionStats
 	statsOK  bool
+
+	langsRun int64
+	langs    map[string]registry.LanguageBinding
+	langsOK  bool
+}
+
+// getLanguages memoises the run's per-language binding outcomes, for the same
+// reason getStats exists: it is two full scans (references and edges) to
+// recompute a table that cannot change once the run is committed.
+func (c *symbolCache) getLanguages(runID int64, load func() (map[string]registry.LanguageBinding, error)) (map[string]registry.LanguageBinding, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.langsOK && c.langsRun == runID {
+		return c.langs, nil
+	}
+	langs, err := load()
+	if err != nil {
+		return nil, err
+	}
+	c.langsRun, c.langs, c.langsOK = runID, langs, true
+	return langs, nil
 }
 
 func newSymbolCache() *symbolCache { return &symbolCache{} }

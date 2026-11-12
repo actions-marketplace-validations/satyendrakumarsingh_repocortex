@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"path"
 	"path/filepath"
 	"strings"
 
@@ -36,131 +35,7 @@ import (
 // MCP-side trigger for that same mechanism, not a second one: the caveat text
 // it emits is capability.LowerBoundCaveat verbatim, so the two cannot drift.
 
-// coverageFloor is the binding rate below which a relationship answer stops
-// being an answer.
-//
-// It is capability.CoverageFloor, not a number of its own. This gate used to
-// carry its own 0.5 against ResolutionStats.Rate while get_resolution_coverage
-// used 0.6 against BindingRate, so the two tools reported different coverage
-// for one index in one session — see capability.CoverageFloor for the whole
-// argument and for why BindingRate is the published rate.
-//
-// The number is a judgement rather than a measurement, which is exactly why
-// the response states the RATE and its denominator as well as the verdict: a
-// reader who would draw the line elsewhere can see the input and decide for
-// himself.
-const coverageFloor = capability.CoverageFloor
-
-// coverage is what the server knows about how far to trust the graph for a
-// relationship question about one symbol.
-type coverage struct {
-	// Language is the target's language, named because coverage is uneven
-	// across them: a repository can resolve Go almost completely and Kotlin
-	// barely at all, and "22% of references are bound" is only actionable when
-	// the reader knows which half of his repository it describes.
-	Language string
-
-	// Rate is registry.ResolutionStats.BindingRate: resolved over the
-	// references that name something this index defines. See
-	// capability.CoverageFloor for why this rate and not Rate().
-	Rate float64
-
-	// Bindable is Rate's denominator, and Unresolved and Ambiguous are what
-	// that denominator leaves out. All three are carried so the caveat can
-	// state them beside the percentage, which is the condition
-	// ResolutionStats.Bindable places on excluding them.
-	Bindable   int64
-	Unresolved int64
-	Ambiguous  int64
-	Total      int64
-
-	// Known is false when the run holds no resolution outcomes to judge — no
-	// references at all, or none resolved yet. Distinct from a LOW rate: one
-	// says RepoCortex looked and found little, the other says it never looked,
-	// and only the second is fixed by running 'repocortex resolve'.
-	Known    bool
-	Reliable bool
-}
-
-func coverageOf(rs registry.ResolutionStats, filePath string) coverage {
-	c := coverage{
-		Language:   languageOf(filePath),
-		Rate:       rs.BindingRate(),
-		Bindable:   rs.Bindable(),
-		Unresolved: rs.Unresolved,
-		Ambiguous:  rs.Ambiguous,
-		Total:      rs.Total,
-	}
-	c.Known = rs.Total > 0 && rs.Pending < rs.Total
-	c.Reliable = c.Known && c.Rate >= coverageFloor
-	return c
-}
-
-// scope names the code the rate describes, for the caveat sentence.
-func (c coverage) scope() string {
-	if c.Language == "" {
-		return "this repository"
-	}
-	return c.Language
-}
-
-// caveat is what a low-coverage answer must carry, ahead of its own results.
-//
-// Empty when coverage clears the floor — silence is the reward for a
-// well-resolved index, and paying tokens to say "coverage is fine" on every
-// call would be the same waste this server exists to remove.
-func (c coverage) caveat(subject string) []string {
-	if c.Reliable {
-		return nil
-	}
-	var head string
-	switch {
-	case c.Total == 0:
-		head = fmt.Sprintf("COVERAGE UNKNOWN — %s for %s cannot be judged: this index recorded "+
-			"no reference resolution at all.", subject, c.scope())
-	case !c.Known:
-		head = fmt.Sprintf("COVERAGE UNKNOWN — %s for %s cannot be judged: all %d references are "+
-			"still pending, so the call graph has not been built. Run 'repocortex resolve'.",
-			subject, c.scope(), c.Total)
-	default:
-		// The unresolved and ambiguous counts are printed BESIDE the rate,
-		// never instead of it: the rate's denominator excludes references
-		// that matched no definition here, and ResolutionStats.Bindable
-		// permits that exclusion only on condition they are still reported.
-		head = fmt.Sprintf("COVERAGE TOO LOW — %s for %s is unreliable here: %.0f%% of the %d "+
-			"references that name something this index defines are bound to a definition "+
-			"(%d ambiguous; a further %d matched no definition here at all, out of %d "+
-			"references in total). Run 'repocortex resolve' to raise it.",
-			subject, c.scope(), 100*c.Rate, c.Bindable, c.Ambiguous, c.Unresolved, c.Total)
-	}
-	return []string{
-		head + " Do not present what follows as an answer to the question asked.",
-		capability.LowerBoundCaveat,
-	}
-}
-
-// extLanguage maps file extensions to the language names RepoCortex indexes.
-//
-// Deliberately local and deliberately small. It exists to name a language in
-// one caveat sentence; wiring the MCP boundary to the parser registry (or to
-// the telemetry layer, which keeps its own table for the same reason) to
-// answer "what is .kt" would buy a dependency far larger than the question.
-// An extension missing here degrades to "this repository", which is accurate.
-var extLanguage = map[string]string{
-	".go":   "Go",
-	".java": "Java",
-	".kt":   "Kotlin", ".kts": "Kotlin",
-	".ts": "TypeScript", ".tsx": "TypeScript",
-	".js": "JavaScript", ".jsx": "JavaScript", ".mjs": "JavaScript", ".cjs": "JavaScript",
-	".py": "Python", ".pyi": "Python",
-	".rb": "Ruby", ".rs": "Rust", ".cs": "C#",
-	".php": "PHP", ".swift": "Swift", ".scala": "Scala",
-	".c": "C", ".h": "C", ".cc": "C++", ".cpp": "C++", ".hpp": "C++",
-}
-
-func languageOf(filePath string) string {
-	return extLanguage[strings.ToLower(path.Ext(filePath))]
-}
+// The gate itself is in signal.go: coverage, Reliability and OverallSignal.
 
 // Tool argument types.
 //
@@ -180,11 +55,6 @@ type minimizeDiffArgs struct {
 	Diff string `json:"diff" jsonschema:"Unified diff text (e.g. git diff output) to compress into a structured, token-efficient representation."`
 }
 
-type searchArgs struct {
-	Query string `json:"query" jsonschema:"Search terms. Matches identifiers and code text; camelCase identifiers are searchable by their parts, so 'callback' finds handleCallback."`
-	Limit int    `json:"limit,omitempty" jsonschema:"Maximum results (default 20)."`
-}
-
 type symbolArgs struct {
 	Name string `json:"name" jsonschema:"Symbol name to find, e.g. 'TransactionService' or 'updateStatus'. Exact match on the name, not a substring."`
 	Kind string `json:"kind,omitempty" jsonschema:"Optional filter: class, interface, function, method, field, constant, type_alias."`
@@ -192,11 +62,25 @@ type symbolArgs struct {
 	minConfidenceArg
 }
 
+// symbolRefArgs selects one definition: by name, and by path and line when the
+// name is shared.
 type symbolRefArgs struct {
-	Name string `json:"name" jsonschema:"Symbol name whose references or callers you want."`
-	Path string `json:"path,omitempty" jsonschema:"Optional file path to disambiguate when several symbols share a name."`
+	Name string `json:"name" jsonschema:"Symbol name, e.g. 'updateStatus' or 'TransactionService'."`
+	Path string `json:"path,omitempty" jsonschema:"File (or directory) the definition is in, to choose between several symbols that share the name. Matched exactly when it names a file."`
+	lineArg
 
 	minConfidenceArg
+}
+
+// relationArgs is symbolRefArgs for a tool that lists the relationships of the
+// selected definition, and so can be paged.
+type relationArgs struct {
+	Name string `json:"name" jsonschema:"Symbol name whose relationships you want, e.g. 'updateStatus' or 'TransactionService'."`
+	Path string `json:"path,omitempty" jsonschema:"File (or directory) the definition is in, to choose between several symbols that share the name. Matched exactly when it names a file."`
+	lineArg
+
+	minConfidenceArg
+	pageArg
 }
 
 // minConfidenceArg carries the confidence floor every confidence-bearing tool
@@ -410,27 +294,33 @@ func toolDescriptions() map[string]string {
 			"guess at coverage — this tool states it.",
 
 		"search_code": "Full-text search across indexed source. Prefer this over your own grep: it " +
-			"searches the index, returns file paths and matching lines rather than whole files, and " +
-			"costs a fraction of the context. Use it when you know roughly what you are looking for " +
-			"but not where it lives, and use it to confirm any relationship result that came back " +
-			"empty or low-confidence.",
+			"searches the index and returns the paths of the matching files, best match first, " +
+			"which costs a fraction of the context. Use it when you know roughly what you are looking " +
+			"for but not where it lives, and to confirm any relationship result that came back empty, " +
+			"incomplete or low-confidence. Punctuation is fine: 'errors.New' and 'Utils::parse' search " +
+			"for those words side by side.",
 
 		"find_symbol": "Locate a symbol's definition by name. Faster and more precise than searching " +
-			"when you already know the identifier. If several symbols share the name, pass `path` to " +
-			"disambiguate. If this returns nothing, the symbol may still exist under a different name " +
-			"or in an unindexed file — fall back to search_code rather than concluding it is absent.",
+			"when you already know the identifier. Every definition of the name is listed with its " +
+			"file and line; when there are several, pass one row's `path` and `line` to the other " +
+			"tools to choose it. If this returns nothing, the symbol may still exist under a different " +
+			"name or in an unindexed file — fall back to search_code rather than concluding it is absent.",
 
 		"get_symbol": "Get a symbol's definition with a bounded source excerpt and its immediate " +
 			"relationships. Call this after find_symbol instead of reading the whole file. The excerpt " +
 			"is bounded and may be truncated; the response says so explicitly when it is, so check " +
-			"that flag rather than assuming you have the full body.",
+			"that flag rather than assuming you have the full body. Several definitions sharing the " +
+			"name are all shown; pass `path` and `line` for one.",
 
 		"find_references": "Find where a symbol is used. Every result carries a confidence tier: " +
 			"'exact' means a compiler proved the binding, 'high' and 'medium' and 'low' mean RepoCortex " +
 			"inferred it and may be wrong. Pass min_confidence='high' when a wrong result costs more " +
 			"than a missing one. CRITICAL: an EMPTY result is ambiguous — it may mean nothing " +
 			"references this symbol, or that RepoCortex could not resolve the references that exist. " +
-			"Never conclude a symbol is unused from an empty result; confirm with search_code.",
+			"Never conclude a symbol is unused from an empty result; confirm with search_code. The " +
+			"first line says UNKNOWN, UNRELIABLE or INCOMPLETE when the answer is; a name shared by " +
+			"several definitions returns them to choose from (`path`, `line`), and `limit`/`offset` " +
+			"page a long list.",
 
 		"find_callers": "Find the functions and methods that call a symbol — the callers, not merely " +
 			"the files mentioning it. Use before changing a signature or behaviour. Every result " +
@@ -439,7 +329,9 @@ func toolDescriptions() map[string]string {
 			"min_confidence='high' to see only bindings RepoCortex can defend. CRITICAL: an EMPTY " +
 			"result is ambiguous and unresolved calls are reported separately, so absence of callers " +
 			"here is NOT evidence the symbol is dead. Confirm with search_code before deleting " +
-			"anything.",
+			"anything. The first line says UNKNOWN, UNRELIABLE, UNVERIFIED or INCOMPLETE when the " +
+			"answer is; a name shared by several definitions returns them to choose from (`path`, " +
+			"`line`), and `limit`/`offset` page a long list.",
 
 		"plan_rename": "Plan a symbol rename. Returns the edit SITES — a file and a line each, with " +
 			"no column — split into 'apply' (confidence 'exact': a compiler proved the binding) and " +
@@ -462,16 +354,20 @@ func toolDescriptions() map[string]string {
 		"analyze_impact": "Before changing a symbol, find out what depends on it. Separates DIRECT " +
 			"callers (a proven call edge) from INDIRECT reach and from dispatch rows the runtime MAY " +
 			"execute but no call site proves, and names what it CANNOT see — dynamic dispatch, " +
-			"unresolved references, traversal limits. The risk score and its factors are only as good " +
-			"as the resolution behind them; the response states the coverage rate ahead of the score " +
-			"so you know whether to trust it. The result is a LOWER BOUND: treat an empty or short " +
-			"result as 'nothing found', never as proof that changing the symbol is safe.",
+			"unresolved references, traversal limits. The risk level is 'unknown', never 'low', when " +
+			"the callers could not be determined: the references to the name were left unbound, or " +
+			"the language's calls are not extracted. The first line says so. The result is a LOWER " +
+			"BOUND: treat an empty or short result as 'nothing found', never as proof that changing " +
+			"the symbol is safe. A name shared by several definitions returns them to choose from " +
+			"(`path`, `line`).",
 
 		"find_tests": "Find the tests covering a symbol, and which signal found each one — a proven " +
 			"call edge is far stronger evidence than a matching filename, and the response names which " +
 			"you got. Use before changing behaviour, to know what to run. A symbol reported as " +
 			"untested is a positive finding, not silence, but it is bounded by what the index could " +
-			"resolve: confirm with search_code before trusting it on a low-resolution repository.",
+			"resolve; when the calls to the symbol could not be bound the answer says whether it is " +
+			"tested is UNKNOWN, and means it. A name shared by several definitions returns them to " +
+			"choose from (`path`, `line`).",
 
 		"list_api_endpoints": "List the HTTP endpoints this service exposes, with the handler that " +
 			"serves each one and where it is declared. Routes are recognised from the framework's own " +
@@ -526,10 +422,12 @@ func toolDescriptions() map[string]string {
 			"collapses unchanged context runs to minimize context token usage. Use this when analyzing " +
 			"pull requests, patches, or git diffs to preserve context window space.",
 
-		"plan_change": "Generate a deterministic refactoring and change plan for a symbol. " +
-			"Identifies all direct callers, assesses risk score, discovers covering test files, and " +
-			"produces an ordered execution sequence with pre/post-conditions. Use this before modifying " +
-			"or refactoring existing code to ensure regression-free changes.",
+		"plan_change": "Generate an ordered change plan for a symbol: the direct callers the index " +
+			"bound, a risk level, the test files found to cover it, and the steps in order. Use it " +
+			"before modifying or refactoring existing code. The callers are the ones RepoCortex could " +
+			"bind, not a guarantee of all of them: when they could not be determined the risk is " +
+			"'unknown' and the first line says the plan is incomplete, so search for the name before " +
+			"relying on it.",
 
 		"list_blindspots": "Audit the repository for code intelligence blindspots and hidden risks. " +
 			"Detects unresolved external and internal calls, untested critical functions with high fan-in, " +
@@ -579,10 +477,11 @@ func toolDescriptions() map[string]string {
 			"and the response says so.",
 
 		"list_dead_code": "List definitions that nothing in the index calls or references, graded by " +
-			"how far that can be trusted. 'likely' means the definition is unexported, its file parsed " +
-			"cleanly, no unbound reference anywhere is spelled like it and its name appears nowhere " +
-			"else in the source text; 'possible' means one of those could not be ruled out, and the " +
-			"row says which. Only 'likely' is returned unless you ask. Use it to find cleanup candidates " +
+			"how far that can be trusted. 'likely' means the definition is known to be unexported, its " +
+			"file parsed cleanly, no unbound reference anywhere is spelled like it and its name appears " +
+			"nowhere else in the source text; 'possible' means one of those could not be ruled out, and " +
+			"the row says which. Export status is known for Go only, so in other languages nothing is " +
+			"graded better than 'possible'. Only 'likely' is returned unless you ask. Use it to find cleanup candidates " +
 			"or to check whether code you are about to maintain is reachable at all. NEVER delete on " +
 			"this evidence alone: reflection, dependency injection, framework registration and other " +
 			"repositories all reach code without a reference this index can bind, so search for the " +
@@ -795,47 +694,6 @@ func (s *Server) getProjectOverview(ctx context.Context, req *sdk.CallToolReques
 
 // ---------------------------------------------------------------- search
 
-func (s *Server) searchCode(ctx context.Context, req *sdk.CallToolRequest, args searchArgs) (*sdk.CallToolResult, *Response, error) {
-	if strings.TrimSpace(args.Query) == "" {
-		return failWith("invalid_argument",
-			"Pass a non-empty query, then call search_code again.",
-			"query must not be empty")
-	}
-	runID, status, err := s.currentRun(ctx)
-	if err != nil {
-		return s.noRun(ctx, req, err)
-	}
-
-	limit := args.Limit
-	if limit <= 0 || limit > s.limits.MaxItems {
-		limit = 20
-	}
-
-	matches, err := s.deps.Registry.SearchFiles(ctx, args.Query, limit)
-	if err != nil {
-		return failFrom(err, "search failed: %v", err)
-	}
-
-	resp := &Response{
-		IndexRevision: runID,
-		IndexStatus:   status,
-		Summary:       fmt.Sprintf("%d file(s) matching %q.", len(matches), args.Query),
-	}
-	for _, m := range matches {
-		resp.Items = append(resp.Items, Item{
-			Kind: "file",
-			Path: m.Path,
-			Why:  "full-text match",
-		})
-	}
-	if len(matches) == 0 {
-		resp.Notes = append(resp.Notes,
-			"No matches. Search covers indexed files only; generated and oversized files are skipped. "+
-				"Try a shorter term — identifiers are indexed by their parts.")
-	}
-	return s.reply(ctx, req, resp)
-}
-
 // ---------------------------------------------------------------- symbols
 
 func (s *Server) findSymbol(ctx context.Context, req *sdk.CallToolRequest, args symbolArgs) (*sdk.CallToolResult, *Response, error) {
@@ -893,6 +751,10 @@ func (s *Server) findSymbol(ctx context.Context, req *sdk.CallToolRequest, args 
 	return s.reply(ctx, req, resp)
 }
 
+// maxSymbolExcerpts is how many definitions get_symbol shows with source. Each
+// costs an excerpt, and a name shared by more than this is one to narrow.
+const maxSymbolExcerpts = 5
+
 func (s *Server) getSymbol(ctx context.Context, req *sdk.CallToolRequest, args symbolRefArgs) (*sdk.CallToolResult, *Response, error) {
 	if strings.TrimSpace(args.Name) == "" {
 		return failWith("invalid_argument",
@@ -907,35 +769,83 @@ func (s *Server) getSymbol(ctx context.Context, req *sdk.CallToolRequest, args s
 	if err != nil {
 		return failFrom(err, "%v", err)
 	}
+	if args.Line < 0 {
+		return failWith("invalid_argument", "Pass line as the line a definition starts on, or omit it.",
+			"line must not be negative")
+	}
 	runID, status, err := s.currentRun(ctx)
 	if err != nil {
 		return s.noRun(ctx, req, err)
 	}
+	name := strings.TrimSpace(args.Name)
+	q := symbolQuery{Tool: "get_symbol", Param: "name", PathParam: "path", LineParam: "line",
+		Name: name, Path: args.Path, Line: args.Line}
 
-	syms, err := s.deps.Registry.FindSymbolsByName(ctx, runID, args.Name, "", 5)
+	// Every definition of the name is read, and the path and line are applied
+	// to all of them. This used to read the first five and look for the path
+	// among those, so a path naming the sixth returned an answer with no
+	// definition in it.
+	all, total, err := s.deps.Registry.SymbolCandidates(ctx, runID, name, maxSelectRows)
 	if err != nil {
 		return failFrom(err, "symbol lookup failed: %v", err)
 	}
-	if len(syms) == 0 {
-		return s.missingSymbol(ctx, req, runID, status, args.Name)
+	if total == 0 {
+		if all, total, err = s.deps.Registry.SymbolCandidatesByFQN(ctx, runID, name, maxSelectRows); err != nil {
+			return failFrom(err, "symbol lookup failed: %v", err)
+		}
 	}
-	syms, dropped := atLeastConfidence(syms, minConf)
-	if len(syms) == 0 {
-		return s.belowFloorOnly(ctx, req, runID, status, args.Name, minConf, dropped)
+	if total == 0 {
+		return s.missingSymbol(ctx, req, runID, status, name)
+	}
+	cands := all
+	if want := cleanPathHint(args.Path); want != "" {
+		if total > len(all) {
+			if cands, _, err = s.deps.Registry.SymbolCandidatesIn(ctx, runID, name, want, maxSelectRows); err != nil {
+				return failFrom(err, "symbol lookup failed: %v", err)
+			}
+		}
+		if cands = matchPath(cands, want); len(cands) == 0 {
+			sc, r := s.disambiguate(ctx, req, runID, status, q,
+				fmt.Sprintf("no definition of %q is in a file matching path=%q", name, args.Path), all, total)
+			return sc, r, nil
+		}
+	}
+	if args.Line > 0 {
+		at := matchLine(cands, args.Line)
+		if len(at) == 0 {
+			sc, r := s.disambiguate(ctx, req, runID, status, q,
+				fmt.Sprintf("no definition of %q starts at or contains line %d", name, args.Line), cands, total)
+			return sc, r, nil
+		}
+		cands = at
 	}
 
-	resp := &Response{
-		IndexRevision: runID,
-		IndexStatus:   status,
-		Summary:       fmt.Sprintf("%s (%s) at %s:%d", syms[0].Name, syms[0].Kind, syms[0].FilePath, syms[0].StartLine),
+	hits := make([]registry.SymbolHit, len(cands))
+	for i, c := range cands {
+		hits[i] = c.SymbolHit
+	}
+	syms, dropped := atLeastConfidence(hits, minConf)
+	if len(syms) == 0 {
+		return s.belowFloorOnly(ctx, req, runID, status, name, minConf, dropped)
+	}
+	shown := syms
+	if len(shown) > maxSymbolExcerpts {
+		shown = shown[:maxSymbolExcerpts]
+	}
+
+	resp := &Response{IndexRevision: runID, IndexStatus: status}
+	if len(syms) == 1 {
+		resp.Summary = fmt.Sprintf("%s (%s) at %s:%d", syms[0].Name, syms[0].Kind, syms[0].FilePath, syms[0].StartLine)
+	} else {
+		// Several definitions are several answers. The summary used to name
+		// the first as if it were the symbol.
+		resp.Summary = fmt.Sprintf("%d definitions are named %q; %d are shown below, each with its source. "+
+			"Pass path and line to see one.", len(syms), name, len(shown))
 	}
 	if note := floorNote(minConf, dropped); note != "" {
 		resp.Notes = append(resp.Notes, note)
 	}
-	for _, sym := range syms {
-		if args.Path != "" && !strings.Contains(sym.FilePath, args.Path) {
-			continue
-		}
+	for _, sym := range shown {
 		resp.Items = append(resp.Items, Item{
 			Kind:       sym.Kind,
 			Name:       sym.Name,
@@ -954,9 +864,9 @@ func (s *Server) getSymbol(ctx context.Context, req *sdk.CallToolRequest, args s
 			Excerpt: s.symbolExcerpt(ctx, runID, sym),
 		})
 	}
-	if len(syms) > 1 {
-		resp.Notes = append(resp.Notes, fmt.Sprintf(
-			"%d symbols share this name; pass 'path' to disambiguate.", len(syms)))
+	if rest := len(syms) - len(shown); rest > 0 {
+		resp.markTruncated(fmt.Sprintf("%d more definition(s) named %q are not shown; pass path to narrow, "+
+			"or find_symbol to list every one", rest, name))
 	}
 	return s.reply(ctx, req, resp)
 }
@@ -988,11 +898,11 @@ func (s *Server) symbolExcerpt(ctx context.Context, runID int64, sym registry.Sy
 
 // ---------------------------------------------------------------- references
 
-func (s *Server) findReferences(ctx context.Context, req *sdk.CallToolRequest, args symbolRefArgs) (*sdk.CallToolResult, *Response, error) {
+func (s *Server) findReferences(ctx context.Context, req *sdk.CallToolRequest, args relationArgs) (*sdk.CallToolResult, *Response, error) {
 	return s.relationshipQuery(ctx, req, args, false)
 }
 
-func (s *Server) findCallers(ctx context.Context, req *sdk.CallToolRequest, args symbolRefArgs) (*sdk.CallToolResult, *Response, error) {
+func (s *Server) findCallers(ctx context.Context, req *sdk.CallToolRequest, args relationArgs) (*sdk.CallToolResult, *Response, error) {
 	return s.relationshipQuery(ctx, req, args, true)
 }
 
@@ -1002,37 +912,51 @@ func (s *Server) findCallers(ctx context.Context, req *sdk.CallToolRequest, args
 // part most easily got wrong: an EMPTY RESULT IS AMBIGUOUS. It may mean nothing
 // calls the symbol, or that RepoCortex could not resolve the calls that do. An
 // agent told "no callers" will happily delete a method. So an empty result
-// always carries the coverage caveat.
-func (s *Server) relationshipQuery(ctx context.Context, req *sdk.CallToolRequest, args symbolRefArgs, callersOnly bool) (*sdk.CallToolResult, *Response, error) {
+// always carries what the index did with the references spelled like the name.
+func (s *Server) relationshipQuery(ctx context.Context, req *sdk.CallToolRequest, args relationArgs, callersOnly bool) (*sdk.CallToolResult, *Response, error) {
+	tool, label := "find_references", "reference"
+	var kinds []string
+	q := symbolQuery{Param: "name", PathParam: "path", LineParam: "line",
+		Name: args.Name, Path: args.Path, Line: args.Line}
+	if callersOnly {
+		tool, label = "find_callers", "caller"
+		kinds = []string{"CALLS"}
+		// A caller list is about something callable. A class and its
+		// same-named constructor, or a function and a variable holding it,
+		// are the usual way a callable name is shared.
+		q.Prefer, q.PreferWord = callableKinds, "functions and methods"
+	}
+	q.Tool = tool
+
 	if strings.TrimSpace(args.Name) == "" {
 		return failWith("invalid_argument",
-			"Pass a non-empty name, then call find_callers or find_references again.",
+			"Pass a non-empty name, then call "+tool+" again.",
 			"name must not be empty")
 	}
 	minConf, err := parseMinConfidence(args.MinConfidence)
 	if err != nil {
 		return failFrom(err, "%v", err)
 	}
-
-	label := "reference"
-	var kinds []string
-	if callersOnly {
-		label = "caller"
-		kinds = []string{"CALLS"}
+	page, err := s.page(args.pageArg, label+"(s)")
+	if err != nil {
+		return failWith("invalid_argument", "Pass limit and offset as non-negative numbers, or omit them.", "%v", err)
 	}
 
-	// The reference lookup itself — symbol resolution, the confidence/kind
-	// filtered registry query, item construction, coverage caveats — is
-	// shared with plan_rename via referencesFor (rename.go) so there is one
-	// implementation of it, not two.
-	lookup, shortCircuit := s.referencesFor(ctx, req, args.Name, args.Path, minConf, kinds)
+	// The reference lookup itself — symbol selection, the confidence/kind
+	// filtered registry query, item construction, coverage — is shared with
+	// plan_rename via referencesFor (rename.go) so there is one implementation
+	// of it, not two.
+	lookup, shortCircuit := s.referencesFor(ctx, req, q, minConf, kinds, page)
 	if shortCircuit != nil {
 		return shortCircuit, lookup.Resp, nil
 	}
-	items, resp, target, runID := lookup.Items, lookup.Resp, lookup.Target, lookup.RunID
+	resp, target, runID := lookup.Resp, lookup.Target, lookup.RunID
 
-	resp.Summary = fmt.Sprintf("%d %s(s) of %s (%s:%d).",
-		len(items), label, target.Name, target.FilePath, target.StartLine)
+	// The TOTAL, not the number of rows in this answer: "how many callers" is
+	// the question, and the first line must answer it even when the rows are a
+	// page of them. Which rows are shown is said by the lead and by Page.
+	resp.Summary = fmt.Sprintf("%d %s(s) of %s (%s:%d) are recorded.",
+		page.Total, label, target.Name, target.FilePath, target.StartLine)
 
 	// notCalls is informational only — how many further relationships point at
 	// this symbol without being calls — so it is a COUNT(*), not a row fetch:
