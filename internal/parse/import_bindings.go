@@ -1,6 +1,8 @@
 package parse
 
 import (
+	"strings"
+
 	"github.com/satyendrakumarsingh/repocortex/pkg/model"
 
 	ts "github.com/odvcencio/gotreesitter"
@@ -54,7 +56,7 @@ func (p *genericParser) importedBindings(tree *ts.Tree, src []byte) (out []Impor
 		if path == "" || alias == "" || alias == memberAliasPrefix || at == nil {
 			return
 		}
-		imp := Import{Path: path, Alias: alias}
+		imp := Import{Path: directoryIndex(path), Alias: alias}
 		imp.Range = model.Range{
 			Start: model.Position{Line: int(at.StartPoint().Row) + 1, Col: int(at.StartPoint().Column)},
 			End:   model.Position{Line: int(at.EndPoint().Row) + 1, Col: int(at.EndPoint().Column)},
@@ -216,12 +218,22 @@ func requireTarget(v *ts.Node, lang *ts.Language, src []byte) (path string, memb
 	return path, false, path != ""
 }
 
+// directoryIndex names the file a bare directory specifier loads: `require('..')`
+// and `require('./')` are the index of that directory, and a path with no name
+// in it is a path the resolver's import table has nothing to match.
+func directoryIndex(path string) string {
+	if strings.Trim(path, "./") != "" || !strings.HasPrefix(path, ".") {
+		return path
+	}
+	return strings.TrimSuffix(path, "/") + "/index"
+}
+
 // appendBinding adds one Import row positioned at the node that names it.
 func appendBinding(out []Import, path, alias string, at *ts.Node) []Import {
 	if path == "" || alias == "" || alias == memberAliasPrefix || at == nil {
 		return out
 	}
-	imp := Import{Path: path, Alias: alias}
+	imp := Import{Path: directoryIndex(path), Alias: alias}
 	imp.Range = model.Range{
 		Start: model.Position{Line: int(at.StartPoint().Row) + 1, Col: int(at.StartPoint().Column)},
 		End:   model.Position{Line: int(at.EndPoint().Row) + 1, Col: int(at.EndPoint().Column)},
