@@ -204,6 +204,8 @@ var supplements = map[string]string{
 (record_declaration name: (identifier) @name) @definition.class
 (invocation_expression (member_access_expression (identifier) (identifier) @name)) @reference.call
 (invocation_expression (identifier) @name) @reference.call
+(invocation_expression (member_access_expression "this" (identifier) @name)) @reference.call
+(invocation_expression (member_access_expression "base" (identifier) @name)) @reference.call
 `,
 
 	"ruby": `
@@ -374,6 +376,61 @@ var inheritanceQueries = map[string]string{
 	"python": `
 (class_definition superclasses: (argument_list (identifier) @name @reference.inherit))
 (class_definition superclasses: (argument_list (attribute attribute: (identifier) @name) @reference.inherit))
+`,
+
+	// C# writes one base_list after the colon and the grammar does not say which
+	// entry is the base class and which are interfaces:
+	//
+	//	class A : B, IFoo, IBar<T>   -> (base_list (identifier) (identifier) (generic_name ...))
+	//	struct S : IFoo              -> (struct_declaration (base_list (identifier)))
+	//	interface I : IBase          -> (interface_declaration (base_list (identifier)))
+	//	record R(int X) : Base(X), IFoo
+	//	                             -> (base_list (primary_constructor_base_type ...) (identifier))
+	//
+	// Where the declaration decides, the pattern follows it: a struct can only
+	// implement interfaces, an interface can only extend them, and a record's
+	// `Base(...)` call is a base class. In a class (or record) list nothing in
+	// the syntax decides, so the .NET naming convention does: a name shaped
+	// `I` + capital + lower-case (IDisposable, IFoo) is an interface and is
+	// IMPLEMENTS, anything else is EXTENDS. The limitation is that a class
+	// implementing an interface not named that way is recorded as EXTENDS to it,
+	// and a base class named like `IFoo` as IMPLEMENTS. Both channels are
+	// consulted together when a call is bound through the ancestry, so the
+	// label changes the edge kind and not the answer.
+	//
+	// An enum's base_list is its underlying integral type and is not captured.
+	// Each shape is spelled four ways: plain (B), generic (B<T>), and either
+	// qualified (Ns.B, Ns.B<T>). The last segment is captured, because the
+	// resolver matches a reference by simple name.
+	"c_sharp": `
+(class_declaration (base_list (identifier) @name @reference.implementation (#match? @name "^I[A-Z][a-z]")))
+(class_declaration (base_list (generic_name . (identifier) @name @reference.implementation) (#match? @name "^I[A-Z][a-z]")))
+(class_declaration (base_list (qualified_name (identifier) @name @reference.implementation .) (#match? @name "^I[A-Z][a-z]")))
+(class_declaration (base_list (qualified_name (generic_name . (identifier) @name @reference.implementation) .) (#match? @name "^I[A-Z][a-z]")))
+(class_declaration (base_list (identifier) @name @reference.extends (#not-match? @name "^I[A-Z][a-z]")))
+(class_declaration (base_list (generic_name . (identifier) @name @reference.extends) (#not-match? @name "^I[A-Z][a-z]")))
+(class_declaration (base_list (qualified_name (identifier) @name @reference.extends .) (#not-match? @name "^I[A-Z][a-z]")))
+(class_declaration (base_list (qualified_name (generic_name . (identifier) @name @reference.extends) .) (#not-match? @name "^I[A-Z][a-z]")))
+(record_declaration (base_list (identifier) @name @reference.implementation (#match? @name "^I[A-Z][a-z]")))
+(record_declaration (base_list (generic_name . (identifier) @name @reference.implementation) (#match? @name "^I[A-Z][a-z]")))
+(record_declaration (base_list (qualified_name (identifier) @name @reference.implementation .) (#match? @name "^I[A-Z][a-z]")))
+(record_declaration (base_list (qualified_name (generic_name . (identifier) @name @reference.implementation) .) (#match? @name "^I[A-Z][a-z]")))
+(record_declaration (base_list (identifier) @name @reference.extends (#not-match? @name "^I[A-Z][a-z]")))
+(record_declaration (base_list (generic_name . (identifier) @name @reference.extends) (#not-match? @name "^I[A-Z][a-z]")))
+(record_declaration (base_list (qualified_name (identifier) @name @reference.extends .) (#not-match? @name "^I[A-Z][a-z]")))
+(record_declaration (base_list (qualified_name (generic_name . (identifier) @name @reference.extends) .) (#not-match? @name "^I[A-Z][a-z]")))
+(struct_declaration (base_list (identifier) @name @reference.implementation))
+(struct_declaration (base_list (generic_name . (identifier) @name @reference.implementation)))
+(struct_declaration (base_list (qualified_name (identifier) @name @reference.implementation .)))
+(struct_declaration (base_list (qualified_name (generic_name . (identifier) @name @reference.implementation) .)))
+(interface_declaration (base_list (identifier) @name @reference.extends))
+(interface_declaration (base_list (generic_name . (identifier) @name @reference.extends)))
+(interface_declaration (base_list (qualified_name (identifier) @name @reference.extends .)))
+(interface_declaration (base_list (qualified_name (generic_name . (identifier) @name @reference.extends) .)))
+(primary_constructor_base_type (identifier) @name @reference.extends)
+(primary_constructor_base_type (generic_name . (identifier) @name @reference.extends))
+(primary_constructor_base_type (qualified_name (identifier) @name @reference.extends .))
+(primary_constructor_base_type (qualified_name (generic_name . (identifier) @name @reference.extends) .))
 `,
 
 	// Ruby: a single superclass and any number of mixins.
