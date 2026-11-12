@@ -31,6 +31,9 @@ import (
 // Object's.
 func (p *genericParser) constructorDelegations(tree *ts.Tree, src []byte) (out []Reference) {
 	lang := p.entry.Name
+	if tree != nil && lang == "ruby" {
+		return p.rubySupers(tree, src)
+	}
 	if tree == nil || (lang != "java" && lang != "c_sharp") {
 		return nil
 	}
@@ -170,6 +173,77 @@ func lastTypeName(n *ts.Node, lang *ts.Language, src []byte) string {
 			}
 			n = n.NamedChild(int(n.NamedChildCount()) - 1)
 		default:
+			return ""
+		}
+	}
+	return ""
+}
+
+// rubySupers records `super` and `super(...)`.
+//
+// A super call invokes the method of the same name in the ancestors, so the
+// reference is named after the method it is written in and has the receiver
+// `super`; the resolver starts at the ancestors of the enclosing class. The
+// argument count is not recorded: a bare `super` passes whatever the method
+// received.
+//
+// Not recorded: a `super` outside any def (a define_method block, a class
+// body), where the method it forwards to is not named by the syntax, and
+// `super.name`, which is a call of name on the result.
+func (p *genericParser) rubySupers(tree *ts.Tree, src []byte) (out []Reference) {
+	defer func() { _ = recover() }()
+	root := tree.RootNode()
+	if root == nil {
+		return nil
+	}
+	var walk func(n *ts.Node, depth int)
+	walk = func(n *ts.Node, depth int) {
+		if n == nil || depth > 200 {
+			return
+		}
+		if n.Type(p.lang) == "super" {
+			if parent := n.Parent(); parent != nil && parent.Type(p.lang) == "call" &&
+				parent.ChildByFieldName("receiver", p.lang) == n {
+				return
+			}
+			if name := p.enclosingDefName(n, src); name != "" {
+				out = append(out, Reference{
+					Name:         name,
+					Kind:         "reference.call",
+					Receiver:     "super",
+					ReceiverKind: model.ReceiverSuper,
+					Range:        toRange(n.Range()),
+				})
+			}
+			return
+		}
+		for i := 0; i < n.ChildCount(); i++ {
+			walk(n.Child(i), depth+1)
+		}
+	}
+	walk(root, 0)
+	return out
+}
+
+// enclosingDefName is the name of the def a node is written in, as the source
+// writes it.
+func (p *genericParser) enclosingDefName(n *ts.Node, src []byte) string {
+	for a := n.Parent(); a != nil; a = a.Parent() {
+		switch a.Type(p.lang) {
+		case "method":
+			if name := a.ChildByFieldName("name", p.lang); name != nil {
+				return name.Text(src)
+			}
+			if a.NamedChildCount() > 0 {
+				return a.NamedChild(0).Text(src)
+			}
+			return ""
+		case "singleton_method":
+			if name := a.ChildByFieldName("name", p.lang); name != nil {
+				return name.Text(src)
+			}
+			return ""
+		case "class", "module":
 			return ""
 		}
 	}

@@ -215,7 +215,8 @@ var supplements = map[string]string{
 	"ruby": `
 (class name: (constant) @name) @definition.class
 (module name: (constant) @name) @definition.module
-(call method: (identifier) @name) @reference.call
+(call receiver: (_) method: (identifier) @name) @reference.call
+(call !receiver method: (identifier) @name (#not-any-of? @name "include" "extend" "prepend")) @reference.call
 `,
 }
 
