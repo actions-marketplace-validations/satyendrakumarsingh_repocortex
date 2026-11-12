@@ -906,6 +906,15 @@ func (r *Resolver) pick(
 			return c, true
 		}
 		if c, ok := r.pickSameDir(spec, fr, cands); ok {
+			if spec.Name == "cpp" && edgeKindFor(ref.Kind) == model.EdgeExtends {
+				// A C++ base class found only because a file beside this one
+				// has a type of that name. Measured on leveldb after the
+				// macro-exported classes became symbols: 5 of 15 right, below
+				// the 60% floor medium keeps. The same edges one tier down were
+				// 24 of 24.
+				c.confidence = model.ConfidenceLow
+				c.reason += "; C++ base class by name only"
+			}
 			return c, true
 		}
 	}

@@ -134,6 +134,12 @@ type Result struct {
 	// `reader.peek()`. Reported so the drop is counted rather than silent.
 	Qualifiers int
 
+	// MacrosMasked is how many unknown-macro tokens were overwritten with
+	// spaces before the tree that produced this result was parsed, for a C,
+	// C++ or Objective-C file whose masked parse the guard in cmacro.go kept.
+	// Zero for every other file, and for every file the plain parse served.
+	MacrosMasked int
+
 	// Err explains a status other than ok. Its text starts with Reason, so it
 	// can be stored as files.parse_error unchanged. It is diagnostic text for
 	// the file's record, never a reason to abort the indexing run.
