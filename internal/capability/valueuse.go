@@ -262,6 +262,12 @@ func (d Deps) ValueUse(ctx context.Context, runID int64, tgt Target, idx *Symbol
 		}
 		spans := make([]registry.DefSpan, 0, len(defs))
 		for _, h := range defs {
+			// A function spelled like a type is a constructor or a return type
+			// read as a definition. The name occurs wherever the type is written,
+			// and counting those would count every use of the type.
+			if h.Kind == "class" || h.Kind == "interface" || h.Kind == "type_alias" {
+				return nil
+			}
 			spans = append(spans, registry.DefSpan{Path: h.FilePath, From: h.StartLine, To: max(h.EndLine, h.StartLine)})
 			if h.ID == id && line == 0 {
 				line = h.StartLine

@@ -117,6 +117,29 @@ func TestARecursiveCallAndAnImportAreNotUsesAsAValue(t *testing.T) {
 	}
 }
 
+// TestAConstructorIsNotAFunctionPassedAsAValue: serilog's LoggerConfiguration is
+// a method spelled like the class, and the class is written everywhere.
+func TestAConstructorIsNotAFunctionPassedAsAValue(t *testing.T) {
+	fs := serverFor(t, func(b *indexBuilder) {
+		b.fileText("src/Config.cs", "c_sharp", strings.Join([]string{
+			"class Config {",
+			"  public Config() {}",
+			"}",
+			"class Use {",
+			"  Config Make(Config other) { return other; }",
+			"}",
+			"",
+		}, "\n"),
+			typ("Config", model.KindClass, 1, 3), method("Config", 2, 2, 0).ownedBy("Config"),
+			typ("Use", model.KindClass, 4, 6))
+		b.wellBound("c_sharp", ".cs")
+	})
+	callers := mustAnswer(t, fs, "find_callers", map[string]any{"name": "Config"})
+	if first := firstLine(callers); strings.Contains(first, "passed as a value") {
+		t.Errorf("a constructor was reported as possibly passed as a value: %q", first)
+	}
+}
+
 // belowTheFloor is google/benchmark's IsZero: callers exist, every one at low
 // confidence, and the default floor of analyze_impact is medium.
 func belowTheFloor(b *indexBuilder) {
