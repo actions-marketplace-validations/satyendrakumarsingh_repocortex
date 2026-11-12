@@ -132,6 +132,8 @@ a heuristic guess.`,
 		newImplementationsCmd(g),
 		newTestsCmd(g),
 		newQueryCmd(g),
+		newSBOMCmd(g),
+		newVulnsCmd(g),
 	)
 	applyCommandGroups(root)
 	return root
