@@ -60,6 +60,9 @@ type Prepared struct {
 	before []byte
 	after  []byte
 	mode   fs.FileMode
+	// create: the file does not exist and Commit makes it (see Editor.Create).
+	// before is nil; a rollback removes the file instead of restoring it.
+	create bool
 }
 
 // Option configures an Editor.
@@ -327,7 +330,27 @@ func (e *Editor) readRegular(root *os.Root, rel string, limit int64) ([]byte, fs
 // what it changed.
 //
 // Only one Commit runs per project root at a time; see ErrLocked.
-func (e *Editor) Commit(ctx context.Context, prepared []Prepared) (err error) {
+func (e *Editor) Commit(ctx context.Context, prepared []Prepared) error {
+	return e.CommitChecked(ctx, prepared, nil)
+}
+
+// ErrCheckFailed: every file was written, the caller's check of the result
+// then failed, and the files were restored. Joined with ErrRollbackIncomplete
+// if they could not all be.
+var ErrCheckFailed = errors.New("edit: the check of the written files failed")
+
+// CommitChecked is Commit followed by check, run while the root's lock is
+// still held so no other edit can land between the write and its
+// verification. If check returns an error — a build that no longer passes,
+// say — every file is restored exactly as after a failed write, and the
+// error wraps ErrCheckFailed and what check returned. A nil check makes this
+// Commit.
+//
+// Files are written in the order given. A caller whose edit moves text from
+// one file to another lists the receiving file first: an interruption
+// between the two writes then leaves the text in both files, never in
+// neither.
+func (e *Editor) CommitChecked(ctx context.Context, prepared []Prepared, check func(context.Context) error) (err error) {
 	root, err := os.OpenRoot(e.root)
 	if err != nil {
 		return fmt.Errorf("edit: open project root %s: %w", e.root, err)
@@ -348,7 +371,12 @@ func (e *Editor) Commit(ctx context.Context, prepared []Prepared) (err error) {
 		if err := ctx.Err(); err != nil {
 			return e.rollback(root, done, fmt.Errorf("edit: commit: %w", err))
 		}
-		renamed, err := e.swap(root, p.Path, p.rel, p.before, p.after, p.mode)
+		var renamed bool
+		if p.create {
+			renamed, err = e.create(root, p.Path, p.rel, p.after, p.mode)
+		} else {
+			renamed, err = e.swap(root, p.Path, p.rel, p.before, p.after, p.mode)
+		}
 		if renamed {
 			// The new bytes are in place even though something after the
 			// rename failed; it has to be restored like the others.
@@ -356,6 +384,11 @@ func (e *Editor) Commit(ctx context.Context, prepared []Prepared) (err error) {
 		}
 		if err != nil {
 			return e.rollback(root, done, fmt.Errorf("edit: write %s: %w", p.Path, err))
+		}
+	}
+	if check != nil {
+		if cerr := check(ctx); cerr != nil {
+			return e.rollback(root, done, fmt.Errorf("%w: %w", ErrCheckFailed, cerr))
 		}
 	}
 	return nil
@@ -557,7 +590,13 @@ func (e *Editor) rollback(root *os.Root, done []Prepared, cause error) error {
 	var failed []error
 	for i := len(done) - 1; i >= 0; i-- {
 		p := done[i]
-		if _, err := e.swap(root, p.Path, p.rel, p.after, p.before, p.mode); err != nil {
+		var err error
+		if p.create {
+			err = e.uncreate(root, p.Path, p.rel, p.after)
+		} else {
+			_, err = e.swap(root, p.Path, p.rel, p.after, p.before, p.mode)
+		}
+		if err != nil {
 			failed = append(failed, fmt.Errorf("restore %s (it may still hold the new text): %w", p.Path, err))
 		}
 	}

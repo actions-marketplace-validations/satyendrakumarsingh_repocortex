@@ -73,6 +73,7 @@ Most commands are 0 on success and 1 on error. Four gate:
 | [`bench --fail-on-regression`](#bench) | 1 when any case fails |
 | [`docs --check`](#docs) | 1 when the committed documents have drifted |
 | [`rename`](#rename-old-new) | 0 would apply, or applied with `verify` passing or advisory; 1 error, `verify` `fail`, or an incomplete rollback; 2 refused (nothing written); 3 applied but not verified complete |
+| [`move`](#move-symbol-from-file-to-file) | 0 would apply, or applied and the package built; 1 error or an incomplete rollback; 2 refused (nothing written, or everything restored); 3 applied but no build checked it |
 
 ---
 
@@ -827,6 +828,161 @@ RepoCortex did not bind, so the old name survives; the exit code is 3, never 0,
 until you handle them by hand. Verify passing does not make a rename complete.
 
 MCP equivalent: none. The MCP server only plans (`plan_rename`, `plan_change`); it never edits.
+
+### `move <symbol> <from-file> <to-file>`
+
+**Answers:** can this Go declaration be moved to another file of its package,
+and exactly what would change in the two files? It moves one top-level
+declaration (a function, type, constant or variable, with its doc comment) and
+corrects the import lists of both files: the imports the moved code uses are
+added to the target, and the ones nothing else uses are removed from the
+source. A method is named `Type.Method`. A dry run by default: nothing is
+written without `--apply`.
+
+Inside a package a move changes no reference, so the whole edit is syntax, and
+it is read with the Go standard parser from the files as they are now. Paths
+are relative to the project root.
+
+`--apply` writes only if **all** of this holds:
+
+1. both files are Go files in one directory and one package, built under the
+   same constraints (the same `//go:build` line and the same `_test`,
+   `_GOOS`, `_GOARCH` file-name suffix), and neither is generated or a cgo
+   file. A target that does not exist is created, with the source's package
+   clause and `//go:build` line;
+2. both files are byte-for-byte what was indexed (otherwise re-index), inside
+   the project root, regular, writable, and not reached through a symlink;
+3. the name is declared exactly once in the source file, on lines of its own,
+   and the target does not already declare it;
+4. every name the moved code writes before a dot is accounted for: a local, a
+   name the package declares, or an import whose package name is **known** —
+   written in the file, a standard-library path, or reported by `go list`. The
+   name of a package outside the standard library is never guessed from its
+   import path;
+5. the move cannot change what the program does at start-up (below);
+6. with `go` on PATH, the package builds with the planned files in place.
+
+If anything fails, nothing is written, every reason is listed, and the exit
+code is 2.
+
+**What is refused, and why**
+
+| Refused | Why |
+|---|---|
+| any language but Go | there is no exact way here to cut a declaration out of another language's file |
+| a target in another directory, or with another `package` clause | every reference would need a new qualifier and import, and unexported names would stop resolving |
+| a method on its bare name; a method leaving its receiver type's package | a method moves only as `Type.Method`, and only inside the package |
+| `init` | init functions run in the order of the files that hold them |
+| a member of a constant group that uses `iota` or leaves a value out | the other members' values depend on its position |
+| a variable with an initialiser, in a package where any initialiser runs code | Go initialises package variables in declaration order, files taken by name; moving one changes that order, which is invisible only when no initialiser calls a function |
+| files with different build constraints, a `_test.go` file on one side only, an old-style `// +build` line with no `//go:build` | the declaration would be compiled in different builds than before, and one machine's build cannot show it |
+| generated files, cgo files, files named `_x.go` or `.x.go` | the generator would undo the move; a cgo preamble binds declarations to their file; the go command ignores those names |
+| a name declared more than once in the file, or in one statement with other names (`var a, b = 1, 2`) | the name does not say what to move |
+| a declaration that shares a line with other code | it cannot be cut out by lines |
+| a `//go:embed`, `//go:linkname`, `//go:generate` or `//export` directive on the declaration | each ties it to its file in a way syntax does not show |
+| the target already declares the name, imports the same package under another name, or uses the import's name for a different package | the result would not compile, or would mean something else |
+| the source dot-imports a package the moved code may draw on | what a dot-import supplies is not syntax |
+| an import whose package name is unknown (no `go` on PATH, or the module is not downloaded) and that the moved code may use | give the import an explicit name, or make the toolchain available |
+| a package that does not build before the move | no build could then tell a break from what was already broken; `--no-build` accepts a result checked by parsing only |
+| a file changed since indexing, not in the index, read-only, over 8 MiB, or a file of the package that cannot be read safely | as for [`rename`](#rename-old-new) |
+
+**How it is written and checked.** Before anything is written the two new
+files are scanned back into tokens and compared with the old ones: the source
+must be what it was less the cut lines, the target what it was plus the
+declaration, with no comment lost and no import changed beyond the plan. Then,
+with `go` on PATH, the package is compiled with the planned files substituted
+through `go build -overlay` (`go test -c` when the files are test files), still
+without writing. A second build, with the planned source made uncompilable,
+must then fail: that is what shows the first one compiled the moved code. Where
+it does not fail — the file's build constraints exclude it on this machine —
+the move is reported as not build-checked, never as passing. `go` runs with
+`GOPROXY=off`: nothing is downloaded.
+
+`--apply` then writes the target, then the source, each atomically, under the
+same `.repocortex-edit.lock` as `rename`. A new file is hard-linked into
+place, which fails rather than replace a file that has appeared since the plan
+(on a filesystem without hard links it is renamed into place after a last
+check that the name is free). If the second write fails the first is undone. The package is built once more from the files on disk, and both files
+are restored if that build fails. The index is not updated: run
+`repocortex index` afterwards.
+
+Each site carries a confidence. It is `exact` only when a compiler checked the
+result; without a build the sites are `high`, located by the Go parser and
+compiled by nobody.
+
+| Flag | Effect |
+|---|---|
+| `--apply` | write the edits (default is a dry run) |
+| `--no-build` | do not compile the result; it is checked by parsing only, sites are `high`, and an apply exits 3 |
+| global `--json` | machine-readable report: `declaration`, `sites`, `refusals`, `build`, `notes`, `limits` |
+
+| Exit | Meaning |
+|---|---|
+| 0 | dry run: would apply. Apply: written, and the package built from the files on disk |
+| 1 | error, or a rollback that could not restore a file |
+| 2 | refused: nothing was written, or everything written was restored |
+| 3 | applied, but **no build checked it**: `--no-build`, no `go` on PATH, or files this platform does not build |
+
+**Limits.** One declaration per run. A type's methods stay where they are;
+move each with `Type.Method`. A new file gets no licence or header comment.
+The declaration is appended to the target, not placed among related
+declarations. A file not gofmt-formatted is edited in place and left as it
+was; a formatted one stays formatted. The build check compiles for this
+machine's platform only. Moving to another package is not supported.
+
+A dry run, an apply and a refusal on a small module:
+
+```
+$ repocortex move Normalize config/load.go config/keys.go
+Move func Normalize: config/load.go -> config/keys.go  (config/load.go:27-32)
+DRY RUN: nothing was written. Re-run with --apply to make these edits.
+
+SITES
+  exact  config/keys.go:1      create-file    new file, package config
+  exact  config/keys.go:3      add-import     import "strings", which the moved code uses
+  exact  config/keys.go:5-10   insert         func Normalize with its doc comment
+  exact  config/load.go:27-32  remove         func Normalize with its doc comment
+  exact  config/load.go:8      remove-import  import "strings", which nothing else in this file uses
+
+BUILD: PASS  go build .
+  compiled with the planned files in place of the two on disk (go's -overlay); nothing was written for it
+
+NOTES
+  config/keys.go is a new file: it gets the package clause, the build constraint and the imports the declaration needs, and no licence or header comment. Add one if this repository requires it.
+
+LIMITS: move relocates one declaration between two files of one Go package and corrects both import lists. ...
+$ echo $?
+0
+$ repocortex move Normalize config/load.go config/keys.go --apply
+Move func Normalize: config/load.go -> config/keys.go  (config/load.go:27-32)
+APPLIED to 2 file(s).
+
+SITES
+  exact  config/keys.go:1      create-file    new file, package config
+  exact  config/keys.go:3      add-import     import "strings", which the moved code uses
+  exact  config/keys.go:5-10   insert         func Normalize with its doc comment
+  exact  config/load.go:27-32  remove         func Normalize with its doc comment
+  exact  config/load.go:8      remove-import  import "strings", which nothing else in this file uses
+
+BUILD: PASS  go build .
+  built from the files on disk after writing
+...
+$ echo $?
+0
+$ repocortex move FromFile config/kinds.go config/keys.go
+Move FromFile: config/kinds.go -> config/keys.go
+REFUSED: nothing was written.
+
+REASONS
+  config/kinds.go:8  FromFile is part of a constant group in which iota numbers the members, so taking a member out would change the values of the others. Move the whole group by hand
+...
+$ echo $?
+2
+```
+
+(The `LIMITS` paragraph is truncated here; the tool prints it in full.)
+
+MCP equivalent: none. The MCP server only plans; it never edits.
 
 ### `prune <file>`
 
