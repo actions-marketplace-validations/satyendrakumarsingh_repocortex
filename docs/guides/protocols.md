@@ -179,7 +179,7 @@ on this build:
 |---|---|---|
 | `minimal` (default for `serve`) | 7 | about 1,700 tokens |
 | `standard` | 18 | about 4,400 tokens |
-| `full` | 25 | about 6,400 tokens |
+| `full` | 26 | about 6,500 tokens |
 
 Tokens are estimated as bytes divided by four. Set the profile in `.repocortex.yml`:
 
@@ -191,7 +191,7 @@ The REST endpoint follows the same profile, because an OpenAPI document handed
 to a model is a list of functions with the same cost.
 
 A client that also forwards each tool's output schema to its model pays a
-little more: about 7,700 tokens on `full`. Every tool advertises one compact
+little more: about 8,200 tokens on `full`. Every tool advertises one compact
 output schema; a full copy per tool used to make that figure about 21,500.
 `repocortex tool list --json` reports both as `schema_bytes` and `wire_bytes`.
 
@@ -205,7 +205,7 @@ export REPOCORTEX_AUDIT_LOG=~/.repocortex-audit.jsonl    # or for every invocati
 ```
 
 ```json
-{"time":"2026-11-12T09:41:07Z","transport":"rest","tool":"find_callers","arguments":{"name":"ParseConfig"},"duration_ms":4,"outcome":"ok","result_bytes":1911}
+{"time":"2026-11-12T09:15:20Z","transport":"cli","tool":"find_callers","arguments":{"name":"openReadOnly"},"duration_ms":182,"outcome":"ok","result_bytes":1824,"structured_bytes":2490,"cited_files":9,"cited_file_bytes":154677}
 ```
 
 | Field | Meaning |
@@ -214,11 +214,32 @@ export REPOCORTEX_AUDIT_LOG=~/.repocortex-audit.jsonl    # or for every invocati
 | `tool` | The tool that was called |
 | `arguments` | As sent, cut at 2 KB and marked `arguments_truncated` |
 | `outcome` | `ok`, `tool_error` or `protocol_error` |
-| `result_bytes` | The size of the answer |
+| `result_bytes` | The size of the answer's text |
+| `structured_bytes` | The size of the structured copy of the same answer |
+| `cited_files`, `cited_file_bytes` | How many indexed files this answer named that no earlier answer in the same session had, and their total size when indexed. Left out when zero |
 
 The log records the call and never the answer. The answer is repository content,
 and copying it into a second file would double the places private source can
-leak from. The file is created readable only by you.
+leak from. The sizes are numbers only: the paths of the cited files are part of
+the answer and are not written. The file is created readable only by you.
+
+### Reading it back
+
+`repocortex stats` totals a log per tool, per transport and per day, lists the
+slowest calls and gives the failure rate. It prints numbers and tool names and
+never the arguments.
+
+```bash
+repocortex stats .repocortex/audit.jsonl
+repocortex stats --since 2026-11-01 --json
+```
+
+An agent can ask for the same accounting of its own session with the
+`get_session_stats` tool (`full` profile), which needs no log. Both report
+usage: calls, answer sizes, an estimate of those sizes in tokens (bytes / 4)
+and time. Neither reports a saving, because none has been measured. See
+[`stats`](../CLI.md#stats) and
+[`get_session_stats`](../reference/mcp-tools.md#get_session_stats).
 
 The log is a flag and an environment variable, not a key in `.repocortex.yml`. That
 file is part of the repository, and a repository must not be able to switch off

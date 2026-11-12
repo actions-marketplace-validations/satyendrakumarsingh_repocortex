@@ -1,7 +1,6 @@
 package mcp
 
 import (
-	"context"
 	"encoding/json"
 	"io"
 	"sync"
@@ -30,8 +29,8 @@ type AuditEvent struct {
 	// Session distinguishes concurrent agents on one server. It is the
 	// transport's session id when there is one (HTTP), otherwise empty.
 	Session string `json:"session,omitempty"`
-	// Transport is how the call arrived: "mcp" for a protocol client, "rest"
-	// or "cli" for the two in-process front ends.
+	// Transport is how the call arrived: "mcp" for a protocol client, or the
+	// name of an in-process front end ("rest", "cli", "portal").
 	Transport string `json:"transport"`
 	Tool      string `json:"tool"`
 	// Arguments are the call's arguments as sent, cut at auditArgBytes.
@@ -40,8 +39,20 @@ type AuditEvent struct {
 	DurationMS int64           `json:"duration_ms"`
 	// Outcome is "ok", "tool_error" (the tool answered with isError) or
 	// "protocol_error" (the call never reached a handler).
-	Outcome     string `json:"outcome"`
-	ResultBytes int    `json:"result_bytes"`
+	Outcome string `json:"outcome"`
+	// ResultBytes is the size of the answer's text. StructuredBytes is the
+	// size of the structured copy of the same answer. Both are sizes only:
+	// the answer itself is never recorded.
+	ResultBytes     int64 `json:"result_bytes"`
+	StructuredBytes int64 `json:"structured_bytes,omitempty"`
+	// CitedFiles and CitedFileBytes are how many indexed files this answer
+	// named that no earlier answer in the same session had named, and their
+	// total size when indexed. Numbers only; the paths are not recorded.
+	// Summed over a session they are the size of the distinct files its
+	// answers pointed at, which is an upper bound on reading those files whole
+	// and not a saving. See usage.go.
+	CitedFiles     int64 `json:"cited_files,omitempty"`
+	CitedFileBytes int64 `json:"cited_file_bytes,omitempty"`
 }
 
 // auditArgBytes bounds the arguments kept per event. A task description or a
@@ -49,19 +60,23 @@ type AuditEvent struct {
 // is one that gets turned off.
 const auditArgBytes = 2048
 
+// auditToolBytes bounds the tool name kept per event. A registered name is a
+// few words; a longer one is something a client invented, and the name is the
+// one field of an event the client writes in full.
+const auditToolBytes = 128
+
 // AuditLog appends events to a writer, one JSON line each.
 //
 // Safe for concurrent use: an HTTP server answers several sessions at once and
 // interleaved partial lines would make the file unparseable.
 type AuditLog struct {
-	mu  sync.Mutex
-	w   io.Writer
-	now func() time.Time
+	mu sync.Mutex
+	w  io.Writer
 }
 
 // NewAuditLog returns a log writing to w. The caller owns w and closes it.
 func NewAuditLog(w io.Writer) *AuditLog {
-	return &AuditLog{w: w, now: time.Now}
+	return &AuditLog{w: w}
 }
 
 // Record writes one event. A write failure is dropped: refusing to answer an
@@ -80,58 +95,34 @@ func (a *AuditLog) Record(ev AuditEvent) {
 	_, _ = a.w.Write(append(line, '\n'))
 }
 
-// auditMiddleware records every tools/call.
-func (s *Server) auditMiddleware(next sdk.MethodHandler) sdk.MethodHandler {
-	return func(ctx context.Context, method string, req sdk.Request) (sdk.Result, error) {
-		log := s.deps.Audit
-		if log == nil || method != methodCallTool {
-			return next(ctx, method, req)
-		}
-		call, ok := req.(*sdk.CallToolRequest)
-		if !ok || call.Params == nil {
-			return next(ctx, method, req)
-		}
-
-		start := log.now()
-		res, err := next(ctx, method, req)
-
-		ev := AuditEvent{
-			Time:       start.UTC().Format(time.RFC3339),
-			Transport:  s.transportOf(call),
-			Tool:       call.Params.Name,
-			DurationMS: log.now().Sub(start).Milliseconds(),
-			Outcome:    "ok",
-		}
-		if call.Session != nil {
-			ev.Session = call.Session.ID()
-		}
-		if args := call.Params.Arguments; len(args) > 0 {
-			if len(args) > auditArgBytes {
-				// A cut JSON document is not JSON, so it is stored as a string.
-				cut, _ := json.Marshal(string(args[:auditArgBytes]))
-				ev.Arguments, ev.ArgsCut = cut, true
-			} else if json.Valid(args) {
-				ev.Arguments = args
-			}
-		}
-		switch {
-		case err != nil:
-			ev.Outcome = "protocol_error"
-		default:
-			if tr, ok := res.(*sdk.CallToolResult); ok && tr != nil {
-				if tr.IsError {
-					ev.Outcome = "tool_error"
-				}
-				for _, c := range tr.Content {
-					if t, ok := c.(*sdk.TextContent); ok {
-						ev.ResultBytes += len(t.Text)
-					}
-				}
-			}
-		}
-		log.Record(ev)
-		return res, err
+// auditEvent builds the record of one measured call. The measuring is done
+// once, in usageMiddleware, and shared with the session counters.
+func (s *Server) auditEvent(call *sdk.CallToolRequest, m callMeasure, scratch *callScratch) AuditEvent {
+	ev := AuditEvent{
+		Time:            m.started.UTC().Format(time.RFC3339),
+		Transport:       s.transportOf(call),
+		Tool:            clip(m.tool, auditToolBytes),
+		DurationMS:      m.elapsed.Milliseconds(),
+		Outcome:         m.outcome,
+		ResultBytes:     m.resultBytes,
+		StructuredBytes: m.structuredBytes,
 	}
+	if scratch != nil {
+		ev.CitedFiles, ev.CitedFileBytes = scratch.citedFiles, scratch.citedFileBytes
+	}
+	if call.Session != nil {
+		ev.Session = call.Session.ID()
+	}
+	if args := call.Params.Arguments; len(args) > 0 {
+		if len(args) > auditArgBytes {
+			// A cut JSON document is not JSON, so it is stored as a string.
+			cut, _ := json.Marshal(string(args[:auditArgBytes]))
+			ev.Arguments, ev.ArgsCut = cut, true
+		} else if json.Valid(args) {
+			ev.Arguments = args
+		}
+	}
+	return ev
 }
 
 // transportOf names the front end a call arrived through.
