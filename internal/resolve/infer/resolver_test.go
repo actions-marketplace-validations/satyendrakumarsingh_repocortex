@@ -2,6 +2,7 @@ package infer
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"github.com/satyendrakumarsingh/repocortex/internal/registry"
@@ -9,8 +10,15 @@ import (
 )
 
 func sym(id int64, name, fqn, file string, fileID int64, exported bool) registry.SymbolIndexEntry {
+	// A definition the file qualifies by its own name alone is a function:
+	// the parser gives an owner to every method of a type, and an ownerless
+	// "method" is an object literal's (see isObjectMember).
+	kind := "method"
+	if _, qual, ok := strings.Cut(fqn, ":"); ok && qual == name {
+		kind = "function"
+	}
 	return registry.SymbolIndexEntry{
-		ID: id, Name: name, FQN: fqn, Kind: "method",
+		ID: id, Name: name, FQN: fqn, Kind: kind,
 		FileID: fileID, FilePath: file, Exported: exported,
 	}
 }

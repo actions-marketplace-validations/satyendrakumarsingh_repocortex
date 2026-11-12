@@ -508,6 +508,21 @@ func (r *Resolver) ResolveFile(
 			}
 		}
 
+		// A supertype written with a qualifier is the type that qualifier
+		// names, and not an unqualified namesake (supertype.go).
+		if (edgeKind == model.EdgeExtends || edgeKind == model.EdgeImplements) && ref.Receiver != "" {
+			kept, v := r.qualifiedSupertype(spec, ref, cands)
+			switch v {
+			case verdictExternal:
+				unresolved(ref, true)
+				continue
+			case verdictUnresolved:
+				unresolved(ref, false)
+				continue
+			}
+			cands = kept
+		}
+
 		// A call through a local value — a parameter, a loop variable — names no
 		// definition, and the parser said so. It is a call site, and it is
 		// bound to nothing.
@@ -695,6 +710,10 @@ func (r *Resolver) AppendNames(dst []string, seen map[string]struct{}, fr regist
 		dst = append(dst, name)
 	}
 	spec := r.specs.For(languageOfFile(fr))
+	if spec.Calls.ObjectsAreCallable && len(fr.Refs) > 0 {
+		// An object is called through its apply (object.go).
+		add("apply")
+	}
 	for _, ref := range fr.Refs {
 		add(ref.Name)
 		if ref.ReceiverKind == model.ReceiverImplementer {

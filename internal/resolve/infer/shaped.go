@@ -1,6 +1,7 @@
 package infer
 
 import (
+	"fmt"
 	"path"
 	"strings"
 
@@ -89,6 +90,7 @@ const (
 	ruleSameFileOtherType = "the only method of this name in the file; which object receives the call is decided at run time"
 	ruleRequiredOtherType = "a method of this name in a required file; which object receives the call is decided at run time"
 	ruleEnclosingType     = "declared on the enclosing type"
+	ruleNestedType        = "a type nested in the enclosing type"
 	ruleSamePackage       = "same package directory"
 	ruleImportedByName    = "imported by name from the module that defines it"
 	ruleReExported        = "imported by name from a package that re-exports it"
@@ -104,6 +106,7 @@ const (
 	ruleExtension         = "the only function of this name; called as a method, so an extension function of the receiver's type"
 	ruleNamedAfterType    = "receiver is named after the type that declares it"
 	ruleOnlyMember        = "the only member of this name in the repository; the receiver's type is not known"
+	ruleOnlyType          = "the only type that declares a member of this name; the receiver's type is not known"
 	ruleOnlyFree          = "the only free function of this name in the repository; its namespace is not a file"
 )
 
@@ -133,6 +136,10 @@ func (r *Resolver) resolveCall(c call, stats *Stats) decision {
 		c.class = c.scope
 	}
 
+	if isMacroInvocation(c.ref.Kind) {
+		return r.callMacro(c)
+	}
+	c.cands = withoutMacros(c.cands)
 	if isConstruction(c.ref.Kind) {
 		return r.callNew(c, stats)
 	}
@@ -402,40 +409,39 @@ func ownerQual(c registry.SymbolIndexEntry) string {
 }
 
 // oneDeclaration picks the declaration that stands for a group which is one
-// definition. chosen is false when the group holds several declarations and
-// nothing selected among them: the earliest is returned, and whether that is
-// THE definition (an overload signature and its implementation) or merely one
-// of several methods of the name (true overloads) is the caller's to say. ok
-// is false when the group is not one type's members at all.
-func oneDeclaration(ref registry.Reference, group []registry.SymbolIndexEntry) (first registry.SymbolIndexEntry, chosen, ok bool) {
+// definition. ok is false when the group is not one type's members at all.
+// Otherwise the choice says which declaration is named and whether the call
+// identifies it: where the language has overloads the argument count narrows
+// the group (overload.go), and where it does not the earliest declaration is
+// THE definition (an overload signature and its implementation) unless the
+// count selects another.
+func oneDeclaration(spec LanguageSpec, ref registry.Reference, group []registry.SymbolIndexEntry) (overloadChoice, bool) {
 	if len(group) == 0 {
-		return registry.SymbolIndexEntry{}, false, false
+		return overloadChoice{}, false
 	}
 	// Declarations of one name on one type in one directory are overloads, or
 	// a declaration and its definition. Which TYPE is not in doubt.
 	for _, c := range group[1:] {
 		if c.Name != group[0].Name || path.Dir(c.FilePath) != path.Dir(group[0].FilePath) {
-			return registry.SymbolIndexEntry{}, false, false
+			return overloadChoice{}, false
 		}
-		a, _ := memberOwner(c)
-		b, _ := memberOwner(group[0])
-		if a != b {
-			return registry.SymbolIndexEntry{}, false, false
+		// The whole qualified owner, not its last segment: Rack::Request::Helpers
+		// and Rack::Response::Helpers are two types, and a name they both
+		// declare is not an overload.
+		if ownerQual(c) != ownerQual(group[0]) {
+			return overloadChoice{}, false
 		}
 	}
 	if len(group) == 1 {
-		return group[0], true, true
+		return overloadChoice{first: group[0], chosen: true, declared: 1, allowed: 1}, true
+	}
+	if spec.Calls.Overloads {
+		return chooseOverload(ref, group), true
 	}
 	if c, picked := preferByArity(ref, group); picked {
-		return c, true, true
+		return overloadChoice{first: c, chosen: true, declared: len(group), allowed: 1}, true
 	}
-	first = group[0]
-	for _, c := range group[1:] {
-		if c.ID < first.ID {
-			first = c
-		}
-	}
-	return first, false, true
+	return overloadChoice{first: earliest(group), declared: len(group), allowed: len(group)}, true
 }
 
 // bindMember binds the call to the member of a type, if the type declares one.
@@ -444,20 +450,21 @@ func (c call) bindMember(t typeRef, rule string) (decision, bool) {
 	if len(group) == 0 {
 		return decision{}, false
 	}
-	first, chosen, ok := oneDeclaration(c.ref, group)
+	o, ok := oneDeclaration(c.spec, c.ref, group)
 	if !ok {
 		return ambiguousCall, true
 	}
+	first := o.first
 	confidence := model.ConfidenceHigh
 	reason := rule + " (" + t.name + ")"
 	switch {
-	case !chosen && c.spec.Calls.Overloads:
+	case o.overloaded():
 		// The type is right. Which of its methods of this name is a choice the
 		// argument count did not make, and the first declaration is the one
 		// called less than half the time: 49 right of 92 across Java, C# and
 		// C++.
 		confidence = model.ConfidenceLow
-		reason = rule + ", overloaded: the first declaration (" + t.name + ")"
+		reason = overloadedReason(rule, t.name, o)
 	case !t.strong:
 		confidence = c.spec.Calls.Measured.uniqueTypeName()
 		reason = rule + ", the only type of that name (" + t.name + ")"
@@ -511,6 +518,11 @@ func (r *Resolver) inherit(c call, t typeRef, super bool, fallback decision, sta
 
 // callBare binds `f()`.
 func (r *Resolver) callBare(c call, stats *Stats) decision {
+	if c.spec.isCoreSyntax(c.ref.Name) {
+		// `format!(...)`: the parser records a macro invocation as a call with
+		// no receiver, and a macro is not a function of the same name.
+		return externalCall
+	}
 	// What a bare name can reach at all: a definition that is not a member of
 	// anything, and — in a file the call is in — one local to a function the
 	// call is inside.
@@ -526,7 +538,7 @@ func (r *Resolver) callBare(c call, stats *Stats) decision {
 			continue
 		}
 		reach = append(reach, s)
-		if s.FileID == c.fr.FileID {
+		if s.FileID == c.fr.FileID && !c.spec.isObjectMember(s) {
 			local = append(local, s)
 		}
 	}
@@ -539,18 +551,20 @@ func (r *Resolver) callBare(c call, stats *Stats) decision {
 				rule = ruleEnclosingScope
 			}
 			switch {
-			case len(near) > 1 && c.spec.Calls.Overloads && anyKnownArity(near):
+			case len(near) > 1 && c.spec.Calls.Overloads:
 				// Several declarations of one name where the language has
-				// overloads are several functions. The argument count may
-				// choose; nothing else here can. Where no declaration's
-				// parameter count is known at all — C++ — a prototype and its
-				// definition cannot be told from two overloads, and the
-				// same-file rule keeps the tier it measured there (25 of 25
-				// on leveldb).
-				if s, picked := preferByArity(c.ref, near); picked {
-					return bound(candidate{s, model.ConfidenceHigh, rule})
+				// overloads are several functions, or a prototype and its
+				// definition, and only the argument count can tell which. A
+				// count that leaves one is the callee. Anything else is a
+				// choice, and is recorded as one: where no declaration's count
+				// is known - C++ today - a prototype cannot be told from an
+				// overload either, and the first declaration was the callee
+				// 3 times in 30 on google/benchmark (FormatKV).
+				o := chooseOverload(c.ref, near)
+				if o.chosen {
+					return bound(candidate{o.first, model.ConfidenceHigh, rule})
 				}
-				return bound(candidate{first, model.ConfidenceLow, rule + ", overloaded: the first declaration"})
+				return bound(candidate{o.first, model.ConfidenceLow, overloadedReason(rule, "", o)})
 			case c.spec.Calls.DynamicSelf && c.within == first.ID:
 				// A helper that shares its name with the method it wraps:
 				// `def respond_to; app { respond_to(...) } end`. Inside the
@@ -573,10 +587,20 @@ func (r *Resolver) callBare(c call, stats *Stats) decision {
 	// each type that one is nested in.
 	if c.spec.Calls.ImplicitSelf && c.class != "" {
 		for qual := c.class; qual != ""; qual = outerQual(qual) {
+			// `KeySet()` inside `LinkedHashTreeMap` constructs the type nested in
+			// it, which is nearer than any class of that name elsewhere.
+			if d, ok := c.nestedType(qual); ok {
+				return d
+			}
 			t := typeRef{name: lastQualSegment(qual), fileID: c.fr.FileID, filePath: c.fr.Path, qual: qual, strong: true}
 			if d, ok := c.bindMember(t, ruleEnclosingType); ok {
 				return d
 			}
+		}
+		// A member of the enclosing type shadows an object of the same name;
+		// failing one, the name may be an object called through its apply.
+		if d, ok := r.callBareObject(c); ok {
+			return d
 		}
 		// Not declared on it: inherited, statically imported, or a free
 		// function. Its ancestors are asked first, and what the name alone
@@ -584,10 +608,37 @@ func (r *Resolver) callBare(c call, stats *Stats) decision {
 		t, _ := c.enclosingType()
 		return r.inherit(c, t, false, r.bareBeyondType(c, reach, stats), stats)
 	}
+	if d, ok := r.callBareObject(c); ok {
+		return d
+	}
 	if c.spec.Calls.DynamicSelf {
 		return r.bareBeyondType(c, reach, stats)
 	}
 	return r.bareByName(c, reach, stats)
+}
+
+// nestedType binds a constructing call to a type declared inside the type with
+// this qualified name, in the call's own file. Only where a bare call
+// constructs (CallTraits.CallConstructs): Kotlin's `Node()`, Scala's `Node()`.
+// Measured on moshi, where the nested LinkedHashTreeMap.Node was bound to a
+// Java test class of the same name and KeySet() and EntrySet() to nothing.
+func (c call) nestedType(qual string) (decision, bool) {
+	if !c.spec.Calls.CallConstructs {
+		return decision{}, false
+	}
+	var nested []registry.SymbolIndexEntry
+	for _, s := range c.cands {
+		if isConstructibleKind(s.Kind) && s.FileID == c.fr.FileID && ownerQual(s) == qual {
+			nested = append(nested, s)
+		}
+	}
+	if first, ok := firstDeclaration(nested); ok {
+		return bound(candidate{first, model.ConfidenceHigh, ruleNestedType + " (" + lastQualSegment(qual) + ")"}), true
+	}
+	if len(nested) > 1 {
+		return ambiguousCall, true
+	}
+	return decision{}, false
 }
 
 // bareBeyondType is what a bare name answers where a bare name may be a
@@ -598,6 +649,11 @@ func (r *Resolver) callBare(c call, stats *Stats) decision {
 func (r *Resolver) bareBeyondType(c call, reach []registry.SymbolIndexEntry, stats *Stats) decision {
 	rest := r.bareByName(c, reach, stats)
 	if rest.verdict == verdictBound || rest.verdict == verdictExternal {
+		return rest
+	}
+	if c.spec.isCoreFunction(c.ref.Name) {
+		// `require(x)`, `include Mod`: the language's own, and the method of
+		// that name some other type declares is not what the call reaches.
 		return rest
 	}
 	if c.spec.Calls.DynamicSelf {
@@ -651,17 +707,6 @@ func (r *Resolver) bareOnOtherType(c call, stats *Stats) decision {
 	return ambiguousCall
 }
 
-// anyKnownArity reports whether the parser determined a parameter count for
-// any of the candidates.
-func anyKnownArity(cs []registry.SymbolIndexEntry) bool {
-	for _, c := range cs {
-		if c.ParamCount.Known() {
-			return true
-		}
-	}
-	return false
-}
-
 // outerQual is the qualified name of what a nested type is nested in, or "".
 func outerQual(qual string) string {
 	i := strings.LastIndexByte(qual, '.')
@@ -704,16 +749,42 @@ func (r *Resolver) bareByName(c call, reach []registry.SymbolIndexEntry, stats *
 					imported = append(imported, s)
 				}
 			}
-			if first, chosen, ok := oneDeclaration(c.ref, imported); ok {
-				if !chosen && c.spec.Calls.Overloads {
-					return bound(candidate{first, model.ConfidenceMedium, ruleStaticImport + ", overloaded: the first declaration (" + owner + ")"})
+			if o, ok := oneDeclaration(c.spec, c.ref, imported); ok {
+				if o.overloaded() {
+					return bound(candidate{o.first, model.ConfidenceLow, overloadedReason(ruleStaticImport, owner, o)})
 				}
-				return bound(candidate{first, model.ConfidenceHigh, ruleStaticImport + " (" + owner + ")"})
+				return bound(candidate{o.first, model.ConfidenceHigh, ruleStaticImport + " (" + owner + ")"})
 			}
 		}
 	}
 
+	// Past the import, what a bare name denotes is a name in scope. A method
+	// or accessor written in an object literal is a property of that object,
+	// not a name: `vary(this.res, field)` inside `vary (field) {}` is the
+	// `vary` package, and `new URL(...)` is not the `get URL ()` of another
+	// file. See isObjectMember.
+	scoped := reach[:0:0]
+	for _, s := range reach {
+		if !c.spec.isObjectMember(s) {
+			scoped = append(scoped, s)
+		}
+	}
+	reach = scoped
 	if len(reach) == 0 {
+		if c.spec.isBuiltinType(c.ref.Name) {
+			// `new URL(...)` with nothing in the repository by that name is
+			// the language's own.
+			return externalCall
+		}
+		return unresolvedCall
+	}
+	if c.spec.isCoreFunction(c.ref.Name) {
+		// What is left goes by the name: the package it shares, an import that
+		// defines something of that name, a neighbour, the only one there is.
+		// The name is the language's own (corefunctions.go), and a definition
+		// of it that is not in this file or named by an import says nothing
+		// about what the call reaches. Measured on moshi, where a private
+		// `require` of one class was bound to every stdlib `require(...)`.
 		return unresolvedCall
 	}
 	if c.spec.PackageIsDirectory {
@@ -752,12 +823,12 @@ func (r *Resolver) bareByName(c call, reach []registry.SymbolIndexEntry, stats *
 		return bound(best)
 	}
 	if !c.spec.PackageIsDirectory {
-		if best, ok := r.pickSameDir(c.spec, c.fr, reach); ok {
+		if best, ok := r.pickSameDir(c.spec, c.fr, reach); ok && !r.callsTestHelper(c, best.entry) {
 			best.confidence = weaker(best.confidence, c.spec.Calls.Measured.neighbour())
 			return bound(best)
 		}
 	}
-	if len(reach) == 1 && reach[0].Exported && !r.specs.IsGenericName(c.ref.Name) {
+	if len(reach) == 1 && reach[0].Exported && !r.specs.IsGenericName(c.ref.Name) && !r.callsTestHelper(c, reach[0]) {
 		return bound(candidate{reach[0], model.ConfidenceLow, "unique name in repository, no import evidence"})
 	}
 	return ambiguousCall
@@ -1012,8 +1083,8 @@ func ownedByImported(c call, m module, owner string) (decision, bool) {
 			owned = append(owned, s)
 		}
 	}
-	if first, chosen, ok := oneDeclaration(c.ref, owned); ok && chosen {
-		return bound(candidate{first, model.ConfidenceHigh, ruleImportedObject + " (" + owner + ")"}), true
+	if o, ok := oneDeclaration(c.spec, c.ref, owned); ok && o.chosen {
+		return bound(candidate{o.first, model.ConfidenceHigh, ruleImportedObject + " (" + owner + ")"}), true
 	}
 	return decision{}, false
 }
@@ -1060,6 +1131,12 @@ func namespaceBeneath(c call, m module, namespace string) decision {
 // callOnTypeOrValue binds a call made on a name that is a type — its member —
 // or, failing that, a value of unknown type.
 func (r *Resolver) callOnTypeOrValue(c call, name string, stats *Stats) decision {
+	if d, ok := r.callInPackage(c, name); ok {
+		return d
+	}
+	if d, ok := r.callInObject(c, []string{name}); ok {
+		return d
+	}
 	t, found, known := r.typeNamed(c, name)
 	if found {
 		if d, ok := c.bindMember(t, ruleNamedType); ok {
@@ -1344,7 +1421,7 @@ func (r *Resolver) moduleByStem(c call, stem string, stats *Stats) decision {
 		// No file and no directory of that name: a module of another crate.
 		return unresolvedCall
 	}
-	if first, ok := firstDeclaration(free); ok && !r.specs.IsGenericName(c.ref.Name) {
+	if first, ok := firstDeclaration(free); ok && !r.specs.IsGenericName(c.ref.Name) && !r.callsTestHelper(c, first) {
 		return bound(candidate{first, model.ConfidenceLow, ruleOnlyFree})
 	}
 	if len(free) > 1 {
@@ -1362,7 +1439,7 @@ func (r *Resolver) freeByName(c call) decision {
 			free = append(free, s)
 		}
 	}
-	if first, ok := firstDeclaration(free); ok {
+	if first, ok := firstDeclaration(free); ok && !r.callsTestHelper(c, first) {
 		return bound(candidate{first, model.ConfidenceMedium, ruleQualifiedFile + " (the crate's only one)"})
 	}
 	if len(free) > 1 {
@@ -1404,6 +1481,10 @@ func (r *Resolver) callPath(c call, stats *Stats) decision {
 		}
 	}
 
+	if d, ok := r.callInObject(c, segs); ok {
+		return d
+	}
+
 	// `a.b.Util.stat()`, `Outer.Inner.make()`: the tail names a type.
 	if c.spec.Calls.TypesAreCapitalised && capitalised(last) {
 		return r.callOnTypeOrValue(c, last, stats)
@@ -1433,7 +1514,11 @@ func (r *Resolver) memberByName(c call, limit model.Confidence, stats *Stats) de
 			delegating = true
 			continue
 		}
-		if _, isMember := memberOwner(s); isMember {
+		// A method written in an object literal is a member of some object, and
+		// the index does not say which: it still means the name is declared by
+		// more than one thing, and `ctx.onerror(err)` is not the one class's
+		// `onerror` when a context object has its own.
+		if _, isMember := memberOwner(s); isMember || c.spec.isObjectMember(s) {
 			members = append(members, s)
 		}
 	}
@@ -1460,12 +1545,22 @@ func (r *Resolver) memberByName(c call, limit model.Confidence, stats *Stats) de
 				named = append(named, s)
 			}
 		}
-		if first, _, ok := oneDeclaration(c.ref, named); ok {
-			return bound(candidate{first, weaker(c.spec.Calls.Measured.namedAfterType(), limit), ruleNamedAfterType})
+		if o, ok := oneDeclaration(c.spec, c.ref, named); ok && !r.callsTestHelper(c, o.first) {
+			tier := weaker(c.spec.Calls.Measured.namedAfterType(), limit)
+			reason := ruleNamedAfterType
+			if o.overloaded() {
+				tier, reason = weaker(tier, model.ConfidenceLow), overloadedReason(ruleNamedAfterType, hint, o)
+			}
+			best := candidate{o.first, tier, reason}
+			if r.deferOverride(c, best, members) {
+				return deferredCall
+			}
+			return bound(best)
 		}
 	}
 
-	if first, _, ok := oneDeclaration(c.ref, members); ok {
+	if o, ok := oneDeclaration(c.spec, c.ref, members); ok {
+		first := o.first
 		if r.specs.IsGenericName(c.ref.Name) || c.spec.isCoreMember(c.ref.Name) {
 			// One `get` in a repository says nothing about what a `get(...)`
 			// meant; the others are in libraries that were never indexed. The
@@ -1473,7 +1568,23 @@ func (r *Resolver) memberByName(c call, limit model.Confidence, stats *Stats) de
 			// every string or collection. See corenames.go.
 			return ambiguousCall
 		}
-		return bound(candidate{first, weaker(c.spec.Calls.Measured.unknownReceiver(), limit), ruleOnlyMember})
+		if r.callsTestHelper(c, first) {
+			// The name is all there is to go on, and the one type that
+			// declares it is in the test tree.
+			return unresolvedCall
+		}
+		if o.overloaded() {
+			// The type is the only one to declare the name, and it declares it
+			// several times. "The only member" would be a false statement.
+			owner, _ := memberOwner(first)
+			return bound(candidate{first, weaker(weaker(c.spec.Calls.Measured.unknownReceiver(), limit), model.ConfidenceLow),
+				overloadedReason(ruleOnlyType, owner, o)})
+		}
+		reason := ruleOnlyMember
+		if o.declared > 1 {
+			reason = ruleOnlyType + fmt.Sprintf(", declared %d times as one function; the first (%s) is its definition", o.declared, first.FQN)
+		}
+		return bound(candidate{first, weaker(c.spec.Calls.Measured.unknownReceiver(), limit), reason})
 	}
 	if len(members) > c.spec.MaxCandidates {
 		stats.CapExceeded++
@@ -1511,7 +1622,7 @@ func (r *Resolver) extensionFunction(c call) decision {
 		}
 		free = append(free, s)
 	}
-	if len(free) != 1 || r.specs.IsGenericName(c.ref.Name) || c.spec.isCoreMember(c.ref.Name) {
+	if len(free) != 1 || r.specs.IsGenericName(c.ref.Name) || c.spec.isCoreMember(c.ref.Name) || r.callsTestHelper(c, free[0]) {
 		return unresolvedCall
 	}
 	return bound(candidate{free[0], c.spec.Calls.Measured.extension(), ruleExtension})

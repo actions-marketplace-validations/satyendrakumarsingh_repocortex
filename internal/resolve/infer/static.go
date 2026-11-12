@@ -572,6 +572,13 @@ func (r *Resolver) pickQualified(
 		}
 		kept = append(kept, c)
 	}
+	if spec.isCoreMember(ref.Name) {
+		// A call on an object of unknown class, by a name the standard library
+		// and its test framework declare on their own types (`stdin.close()`,
+		// `thread.start()`, `sys.stdout.flush()`): the repository's one method of
+		// the name says nothing about it. See corenames.go.
+		return candidate{}, false
+	}
 	c, ok := r.pickByName(spec, fr, imports, ref, kept)
 	if !ok {
 		return candidate{}, false

@@ -169,6 +169,12 @@ type CallTraits struct {
 	// every rule that reaches one is the one measured for the language.
 	ValuesAreCallable bool
 
+	// ObjectsAreCallable reports that a singleton object can be called like a
+	// function, as its `apply`: Scala's `os.exists(p)` for `object exists`. The
+	// index holds an object as a variable, which a call cannot otherwise
+	// denote; see object.go.
+	ObjectsAreCallable bool
+
 	// Overloads reports that one type may declare several different methods
 	// under one name, told apart by their parameters: Java, C#, C++. Where it
 	// holds, knowing the type and the name still leaves a choice, and unless
@@ -249,6 +255,12 @@ type ruleTiers struct {
 	// Go, Java, C++, Rust and Ruby, and high in those five; 33 right of 33 on
 	// express, where the owner of a prototype or object method is the name its
 	// callers give the object (`res.send`, `app.use`), and high in JavaScript.
+	//
+	// Low in C#: 9 right of 21 on serilog (the whole tier, read edge by edge),
+	// and every one of the 12 wrong is `log.Warning(...)` on an `ILogger log`
+	// bound to the members of the static class `Log`. A C# type that cannot be
+	// instantiated is named for what it does, and a variable of that name is
+	// something else. The index does not say that a class is static.
 	NamedAfterType model.Confidence
 
 	// UniqueTypeName is the tier of a member binding whose type was identified
@@ -300,6 +312,21 @@ func (t ruleTiers) neighbour() model.Confidence {
 		return model.ConfidenceMedium
 	}
 	return t.Neighbour
+}
+
+// isObjectMember reports that a candidate is a method or accessor no type
+// owns: in ECMAScript, one written in an object literal (`module.exports = {
+// vary (field) {} }`, `get URL () {}`), which the index qualifies by the file
+// alone. In a language with no implicit `this` such a member is a property of a
+// value, and a call written with no receiver cannot reach it: the bare name is
+// a function, a constant holding one, a class, or an import. Measured on koa,
+// where 5 of 30 `high` edges bound the `vary`, `fresh`, `accepts` and `URL` of
+// a package or of the platform to one of these.
+//
+// An import is different. `const { vary } = require('./response')` does bring a
+// module's exported member into scope, and bindInModule still sees it.
+func (s LanguageSpec) isObjectMember(c registry.SymbolIndexEntry) bool {
+	return !s.Calls.ImplicitSelf && !s.Calls.DynamicSelf && c.Kind == string(model.KindMethod) && isModuleLevel(c)
 }
 
 // isBuiltinType reports whether the language itself defines a type or
@@ -358,7 +385,7 @@ var callTraitsByLanguage = map[string]CallTraits{
 	"go":         {Measured: ruleTiers{UnknownReceiver: model.ConfidenceHigh, NamedAfterType: model.ConfidenceHigh}, CallConstructs: true, OpenTypes: true, Imports: ImportsNameDirectories, Builtins: goBuiltins},
 	"java":       {NewConstructs: true, NoFreeFunctions: true, Measured: ruleTiers{UnknownReceiver: model.ConfidenceMedium, NamedAfterType: model.ConfidenceHigh}, ImplicitSelf: true, Overloads: true, TypesAreCapitalised: true, Imports: ImportsNameClasses, ExternalRoots: []string{"java", "javax"}, Builtins: javaBuiltins},
 	"kotlin":     {Measured: ruleTiers{Extension: model.ConfidenceHigh}, ClassBodyCode: true, ExtensionCalls: true, CallConstructs: true, ImplicitSelf: true, Overloads: true, TypesAreCapitalised: true, Imports: ImportsNameClasses, ExternalRoots: []string{"java", "javax", "kotlin"}, Builtins: javaBuiltins},
-	"scala":      {Measured: ruleTiers{UnknownReceiver: model.ConfidenceMedium, NamedAfterType: model.ConfidenceHigh}, ClassBodyCode: true, CallConstructs: true, ImplicitSelf: true, Overloads: true, TypesAreCapitalised: true, Imports: ImportsNameClasses, ExternalRoots: []string{"java", "javax", "scala"}, Builtins: javaBuiltins},
+	"scala":      {Measured: ruleTiers{UnknownReceiver: model.ConfidenceMedium, NamedAfterType: model.ConfidenceHigh}, ObjectsAreCallable: true, ClassBodyCode: true, CallConstructs: true, ImplicitSelf: true, Overloads: true, TypesAreCapitalised: true, Imports: ImportsNameClasses, ExternalRoots: []string{"java", "javax", "scala"}, Builtins: javaBuiltins},
 	"python":     {CallConstructs: true, TypesAreCapitalised: true, Imports: ImportsNameModules},
 	"javascript": {Measured: ruleTiers{NamedAfterType: model.ConfidenceHigh}, CallConstructs: true, ValuesAreCallable: true, TypesAreCapitalised: true, Imports: ImportsNameModules, Builtins: scriptBuiltins},
 	"typescript": {Measured: ruleTiers{UnknownReceiver: model.ConfidenceMedium}, CallConstructs: true, ValuesAreCallable: true, TypesAreCapitalised: true, Imports: ImportsNameModules, Builtins: scriptBuiltins},
@@ -368,7 +395,7 @@ var callTraitsByLanguage = map[string]CallTraits{
 	"astro":      {TypesAreCapitalised: true, Imports: ImportsNameModules, Builtins: scriptBuiltins},
 	"rust":       {Measured: ruleTiers{UnknownReceiver: model.ConfidenceMedium, NamedAfterType: model.ConfidenceHigh, UniqueTypeName: model.ConfidenceHigh}, CallConstructs: true, OpenTypes: true, TypesAreCapitalised: true, ScopeNamesModule: true, ExternalRoots: []string{"std", "core", "alloc"}, Builtins: rustBuiltins},
 	"ruby":       {Measured: ruleTiers{NamedAfterType: model.ConfidenceHigh}, ImplicitSelf: true, DynamicSelf: true, OpenTypes: true, TypesAreCapitalised: true, Builtins: rubyBuiltins},
-	"c_sharp":    {NoFreeFunctions: true, Measured: ruleTiers{UnknownReceiver: model.ConfidenceMedium, UniqueTypeName: model.ConfidenceHigh}, ImplicitSelf: true, Overloads: true, OpenTypes: true, TypesAreCapitalised: true, ExternalRoots: []string{"System", "Microsoft"}, Builtins: csharpBuiltins},
+	"c_sharp":    {NewConstructs: true, NoFreeFunctions: true, Measured: ruleTiers{UnknownReceiver: model.ConfidenceMedium, NamedAfterType: model.ConfidenceLow, UniqueTypeName: model.ConfidenceHigh}, ImplicitSelf: true, Overloads: true, OpenTypes: true, TypesAreCapitalised: true, ExternalRoots: []string{"System", "Microsoft"}, Builtins: csharpBuiltins},
 	"cpp":        {Measured: ruleTiers{NamedAfterType: model.ConfidenceHigh, Neighbour: model.ConfidenceLow}, CallConstructs: true, ImplicitSelf: true, Overloads: true, OpenTypes: true, ScopeNamesModule: true, ExternalRoots: []string{"std"}},
 	"c":          {OpenTypes: true},
 	"php":        {Measured: ruleTiers{NamedAfterType: model.ConfidenceHigh, UniqueTypeName: model.ConfidenceHigh}, NewConstructs: true, TypesAreCapitalised: true, Imports: ImportsNameClasses},
@@ -418,7 +445,7 @@ func (s LanguageSpec) canBind(c registry.SymbolIndexEntry, kind model.EdgeKind) 
 	switch kind {
 	case model.EdgeCalls:
 		return isCallableKind(c.Kind) || (isConstructibleKind(c.Kind) && (s.Calls.CallConstructs || s.Calls.NewConstructs)) ||
-			(s.Calls.ValuesAreCallable && isValueKind(c.Kind))
+			(s.Calls.ValuesAreCallable && isValueKind(c.Kind)) || c.Kind == macroSymbolKind
 	case model.EdgeExtends, model.EdgeImplements:
 		return isTypeKind(c.Kind)
 	default:

@@ -409,7 +409,8 @@ func (s LanguageSpec) isSelfName(r string) bool {
 }
 
 // IsTestFile reports whether a path is test code by this language's convention.
-// DESCRIPTIVE; see the TestFiles doc for why it is not consulted when binding.
+// Not a candidate filter (see the TestFiles doc); testhelper.go applies it to a
+// binding a name-only rule has already decided on.
 func (s LanguageSpec) IsTestFile(filePath string) bool { return s.TestFiles.Matches(filePath) }
 
 // Specs selects the LanguageSpec for a language — the Factory over the
