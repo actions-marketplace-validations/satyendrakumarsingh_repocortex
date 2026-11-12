@@ -1971,3 +1971,158 @@ by its directory. Kotlin's grammar defines no fields; the scope walk reads a
 class's or function's name and body by position instead. A Scala `object`
 opens a scope, and a statement written directly in a Kotlin or Scala type's
 body is a member's caller.
+
+## 2026-11-13: Rust impls, merged clauses, the SQL scanner, and library calls in PHP and Kotlin
+
+Four defects, each measured on a shallow clone with `init`, `index`, `resolve`.
+Where this section and an earlier one disagree, this one is later: the note
+above that Rust `impl Trait for Type` is not recorded is superseded by item 1.
+
+### 1. Rust `impl Trait for Type` is now `IMPLEMENTS`
+
+The reference sits on the impl block, which is not a symbol, so the edge had no
+source. The tags query now captures the type named by `type:` as well, the
+parser carries it on the reference (`Receiver`, with the new
+`model.ReceiverImplementer` shape; no call has that shape), and `bind()` starts
+the edge at that type: the symbol of the name in the impl's own file, else the
+one type of that name in the repository, else the one in the same directory,
+else no edge (the trait reference is still recorded as resolved). The trait and
+the type each take the four spellings `T`, `T<A>`, `path::T`, `path::T<A>`,
+read by their last segment.
+
+Recorded nothing, deliberately: `impl Type { }` (inherent), `impl<T: Bound>
+Trait for T` (blanket: the type is one of the impl's own type parameters, so
+there is no single type; dropped in the parser because a query cannot compare
+two nodes), `impl Trait for &T`, `[T]` and `(A, B)` (no type name), and the
+standard-library traits on the existing list, for the reason given there.
+
+ripgrep (HEAD, 247 `impl .. for ..` lines):
+
+| | before | after |
+|---|---:|---:|
+| `IMPLEMENTS` edges | 0 | 125 (high 7, medium 105, low 13) |
+| `CALLS` high / medium / low | 3134 / 870 / 419 | 3136 / 870 / 419 |
+| `INSTANTIATES` high / medium / low | 172 / 2 / 1 | 172 / 2 / 1 |
+
+151 impl references were captured (the rest are standard-library traits, blanket
+impls and impls for references); 128 resolved, to the trait in the repository,
+and 125 of those had a source. The 23 unresolved name traits from other crates.
+
+Precision: 30 of the 125 drawn with `random.seed(42)`, judged by reading the
+impl line and the trait definition: 30 right (3 of them `low`, all right). 100%
+with a wide interval on 30; 95 of the 125 are one trait, `Flag`.
+
+Recall: the five largest non-test files (`defs.rs`, `standard.rs`, `walk.rs`,
+`glob.rs`, `dir.rs`), every `impl Trait for Type` whose trait is defined in the
+repository: 106 of 107 have an edge. The miss is `impl<'a, P: ..> Trait for &'a
+mut P`, which names no type.
+
+New call edges: 2, not 20, both `high` and both right: `self.shortest_match()`
+inside `impl Matcher for RegexMatcher` now reaches `Matcher::shortest_match`,
+the trait's default method, through the hierarchy. No tier moved and the Rust
+row of `calltraits.go` is unchanged.
+
+`repocortex implementations` before and after:
+
+```
+Sink      before: Implemented or extended by (0)
+          after:  (7) UTF8, Lossy, Bytes (high); KitchenSink (medium);
+                      JSONSink, StandardSink, SummarySink (low)
+Matcher   before: Implemented or extended by (0)
+          after:  (5) RegexMatcher x3 and RegexMatcherNoCaps (low, across crates)
+```
+
+### 2. A function written as clauses is one symbol
+
+Elixir's query matches one clause head at a time, and the Erlang grammar makes
+each clause its own `fun_decl`, so a function of five clauses was five symbols
+of one name. `registerClauseMerge(language, arity)` (in `clausemerge.go`) folds
+consecutive definitions of a file that agree on name, kind, owner and head arity
+into one symbol from the first clause to the last. Elixir and Erlang are the
+only languages of the tree that write functions this way (Julia's methods are
+different methods, and Haskell has no query). Arity is available: it is the
+number of arguments written in the head, so `def f(a)` and `def f(a, b)` stay
+two symbols, `def f(a, b \\ 1)` is f/2, and a clause with another symbol of the
+same module between it and the earlier ones is not merged. Only functions and
+methods merge; a repeated module attribute is not a clause.
+
+| File | symbols before | after |
+|---|---:|---:|
+| fixtures/langs/elixir/shop.ex | 39 | 34 |
+| fixtures/langs/elixir/worker.ex | 24 | 21 |
+| linguist Elixir `float.ex` | 61 | 31 |
+| linguist Elixir `integer.ex` | 34 | 22 |
+| linguist Elixir `regex.ex` | 83 | 37 |
+| linguist Elixir `atom.ex`, `function.ex` | 4, 6 | 4, 6 |
+
+(The fixture counts are before the three `pack` lines were added to `shop.ex`
+to pin the non-merging cases.) Every same-named pair left in those files was
+read: all are different arities (`compile/2`, `/3` and `/4`, `round/2` and
+`/3`, `decompose/2` and `/4`, `to_string/1` and `/2`).
+
+### 3. The SQL table scanner
+
+| | cause | change |
+|---|---|---|
+| quoted name with a space produced no table | the tokenizer stripped the quotes and the bare word `Line Items` then failed the identifier check; a quoted keyword (`"order"`) failed the keyword check | a quoted token keeps its quotes, a qualifier is joined to it (`"shop"."Line Items"`, `[dbo].[Orders]`), and a quoted name is a name. Backticks, brackets and double quotes with spaces all work. Column lists read quoted names the same way, which also recovers every column of a backtick-quoted MySQL table (they were all rejected, the first character being a backtick) |
+| `accounts` at line 1, declared at line 3 | the file splitter started a statement at the first non-blank character after the previous `;`, and a comment is one | a statement starts at its first character that is not white space or part of a comment |
+| `DROP TABLE scratch` declared `scratch` | any DDL statement (CREATE, ALTER, DROP, CREATE INDEX) created the table symbol | ALTER, DROP and CREATE INDEX are marked `Existing` and stay accesses; only CREATE TABLE (and what an ORM entity declares) creates the symbol. A table only ever used keeps its accesses and is reported undeclared, as before: no symbol is created for it |
+
+Indexing a copy of `fixtures/langs/sql/`, `table` symbols:
+
+```
+before                        after
+mysql.sql   1 accounts        mysql.sql   3 accounts
+mysql.sql  10 transfers       mysql.sql  10 transfers
+mysql.sql  23 audit_log       mysql.sql  23 audit_log
+mysql.sql  42 scratch         (gone; the DROP is still a DDL access)
+schema.sql  5 customers       schema.sql  5 customers
+schema.sql 11 orders          schema.sql 11 orders
+                              schema.sql 17 line items
+schema.sql 22 scratch         schema.sql 22 scratch
+schema.sql 24 copy_of_orders  schema.sql 24 copy_of_orders
+```
+
+`column` symbols: `schema.sql` gains the two of `line items`; `mysql.sql` goes
+from none to nine. No pinned test expectation moved.
+
+### 4. Library calls bound to a lone repository namesake (PHP, Kotlin)
+
+`memberByName` binds `x.f()` on an `x` of unknown type when exactly one type in
+the repository declares an `f`, and `corenames.go` lists the names a language's
+own library declares, for which that is not evidence. PHP had seven names and
+Kotlin shared Java's list. Measured with 30 `low` `CALLS` edges drawn with
+`random.seed(42)`, judged by reading, before and after:
+
+| | low edges | sample right, before | sample right, after | removed edges right |
+|---|---:|---:|---:|---:|
+| guzzle | 1899 to 734 | 3 / 30 | 27 / 30 | 0 of 30 sampled (of 1165) |
+| okio | 1500 to 892 | 19 / 30 | 27 / 30 | 1 of 608 |
+| scopt (Scala, unchanged) | 103 | 30 / 30 | 30 / 30 | none removed |
+
+`high` and `medium` did not move in any of the three (guzzle 3563 / 0, okio
+1948 / 757, scopt 501 / 4). guzzle's removed edges were PSR-7 methods
+(`getBody` 229, `getHeaderLine` 227, `hasHeader` 109, `getUri` 97, `getContents`
+51 ...) and PHPUnit's `fail` (320), bound to a test double or a private helper;
+okio's were all `toLong`, bound to the one private `LARGE_INTEGER.toLong()`,
+which is visible in one file, and the one right edge is in that file.
+
+PHP gains the PSR-7/17/18 interface methods, PHPUnit's fixed names and its
+`assert*`, `expect*` and `markTest*` families (by prefix, with a capital after
+it), and the exception, closure and `Iterator`-style names. Kotlin gets its own
+list over the JVM's: number conversions, scope functions, and the string and
+collection extensions. Left out on purpose, after the first version of the list
+removed correct edges: Kotlin's `use` (okio declares its own for platforms
+without `kotlin.io`; 211 `high` edges to it were right), operator names
+(`div`, `plus`), `copy`, and PHP's reflection and `IteratorAggregate` names
+(`getName`, `setValue`, `getIterator`), which an application's own cookie or
+collection class declares, and which a call on a typed variable binds anyway.
+Scala shows no such pattern on scopt and has no entry.
+
+Still wrong: `Psr7\DiagnosticValue::escape()` (a static call on an imported
+library class) binds to an unrelated private `escape`; `$promise->cancel()` and
+ReflectionProperty's `setValue` bind to a lone repository method of the name;
+Kotlin's `inflated.utf8()` binds to a test function named `utf8` although
+`ByteString` declares `utf8` (in an `expect` class and its `actual` ones; why
+those do not count as members was not diagnosed); `randomBytes(..)`
+from a `nativeTest` source set binds to a `jvmTest` helper of the same name.
