@@ -10,7 +10,13 @@ package parse
 //   - a %placeholder rule set, @keyframes, @property, @counter-style and
 //     @layer names are a class;
 //   - a top-level rule set whose whole selector is one bare .class or #id is a
-//     class. Descendant, compound, listed or nested selectors are uses.
+//     class. Descendant, compound, listed or nested selectors are uses, and
+//     so is any class or id whose name contains interpolation
+//     (.#{$prefix}navbar): the name is only known after compilation.
+//
+// When the grammar fails inside a mixin or function (a call with a named
+// argument such as color.channel($c, "hue", $space: hsl) does), the name is
+// read from the @mixin or @function token inside the error node.
 func init() {
 	registerDefinitions("scss", scssDefinitions, true)
 }
@@ -19,6 +25,9 @@ const scssDefinitions = `
 (mixin_statement (identifier) @name) @definition.function
 
 (function_statement (identifier) @name) @definition.function
+
+(ERROR
+  ["@mixin" "@function"] . (identifier) @name @definition.function)
 
 (stylesheet
   (declaration
@@ -46,17 +55,21 @@ const scssDefinitions = `
 
 (stylesheet
   (rule_set
-    (selectors . (class_selector . (class_name) @name .) .)) @definition.class)
+    (selectors . (class_selector . (class_name) @name .) .)
+    (#not-match? @name "[#{}]")) @definition.class)
 
 (stylesheet
   (rule_set
-    (selectors . (id_selector (id_name) @name) .)) @definition.class)
+    (selectors . (id_selector (id_name) @name) .)
+    (#not-match? @name "[#{}]")) @definition.class)
 
 (ERROR
   (rule_set
-    (selectors . (class_selector . (class_name) @name .) .)) @definition.class)
+    (selectors . (class_selector . (class_name) @name .) .)
+    (#not-match? @name "[#{}]")) @definition.class)
 
 (ERROR
   (rule_set
-    (selectors . (id_selector (id_name) @name) .)) @definition.class)
+    (selectors . (id_selector (id_name) @name) .)
+    (#not-match? @name "[#{}]")) @definition.class)
 `

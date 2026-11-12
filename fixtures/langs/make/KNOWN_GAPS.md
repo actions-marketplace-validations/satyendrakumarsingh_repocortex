@@ -29,3 +29,19 @@
 - **BSD make** (`.if`, `.else`, `.endif`, `.include`) is not understood: the grammar reads
   some directive lines as variable assignments, so every name that begins with
   a dot is dropped (`bsd.mk`).
+- **A substitution reference with an empty replacement** (`$(OBJ:.c=)`,
+  `$(BOARD_DIR:/=)`, `$(X:$(Y)=)`) is not in the grammar. It does not only fail
+  on that line: the parser stops building `rule` and `variable_assignment`
+  nodes for the rest of the file and returns a flat run of words, with each
+  operator (`=`, `:=`, `:`) an ERROR node between two words (`recover.mk`).
+  The query reads that run (`makeRecovered` in `lang_make.go`) and keeps the
+  variables, targets and `define` macros it can tell apart. What is lost there:
+  the assignment on the bad line itself when its operator is a plain `=`
+  (`OBJ = $(SRC:.c=)`; an `+=` has the same tokens, so it cannot be told
+  apart), the first of several targets in one rule, a target after a variable
+  reference (`$(BUILD)/x:`), and every line the grammar then drops whole: once
+  a `'"quoted"'` string appears in the flat run, the tokens up to the next
+  variable reference are gone (a measured 34 of 75 definitions in
+  micropython's `ports/stm32/Makefile`). In the flat run a recipe line such as
+  `scp host:path .` reads as the target `host`, and `FOO=1 cmd` as the variable
+  `FOO`; in a file that parses, neither is recorded.

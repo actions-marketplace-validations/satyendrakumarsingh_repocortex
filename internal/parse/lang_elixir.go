@@ -60,12 +60,18 @@ func init() {
 		q.WriteString("(call (identifier) @_p (do_block (call (identifier) @_d (arguments . " + f + ") (#any-of? @_d " + defs + ")) @definition.method) (#eq? @_p \"defprotocol\"))\n")
 	}
 	q.WriteString(`
-; @type t :: ..., @typep t(a) :: ..., @opaque t :: ...
+; @type t :: ..., @typep t(a) :: ..., @opaque t :: ..., also with a when clause
 (unary_operator (call (identifier) @_a (arguments . (binary_operator . (call (identifier) @name))) (#any-of? @_a "type" "typep" "opaque"))) @definition.type_alias
 (unary_operator (call (identifier) @_a (arguments . (binary_operator . (identifier) @name)) (#any-of? @_a "type" "typep" "opaque"))) @definition.type_alias
+(unary_operator (call (identifier) @_a (arguments . (binary_operator . (binary_operator . (call (identifier) @name)))) (#any-of? @_a "type" "typep" "opaque"))) @definition.type_alias
+(unary_operator (call (identifier) @_a (arguments . (binary_operator . (binary_operator . (identifier) @name))) (#any-of? @_a "type" "typep" "opaque"))) @definition.type_alias
 
-; @callback f(a) :: ..., @macrocallback f(a) :: ...
+; @callback f(a) :: ..., @macrocallback f(a) :: ..., also with no parentheses (f :: ...)
+; and with a when clause after the return type (f(a) :: r when a: term)
 (unary_operator (call (identifier) @_a (arguments . (binary_operator . (call (identifier) @name))) (#any-of? @_a "callback" "macrocallback"))) @definition.method
+(unary_operator (call (identifier) @_a (arguments . (binary_operator . (identifier) @name)) (#any-of? @_a "callback" "macrocallback"))) @definition.method
+(unary_operator (call (identifier) @_a (arguments . (binary_operator . (binary_operator . (call (identifier) @name)))) (#any-of? @_a "callback" "macrocallback"))) @definition.method
+(unary_operator (call (identifier) @_a (arguments . (binary_operator . (binary_operator . (identifier) @name))) (#any-of? @_a "callback" "macrocallback"))) @definition.method
 
 ; @name value
 (do_block (unary_operator (call (identifier) @name (arguments (_)))) @definition.constant

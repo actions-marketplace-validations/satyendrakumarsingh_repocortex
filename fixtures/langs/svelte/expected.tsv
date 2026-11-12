@@ -9,6 +9,10 @@
 #   the names destructured from $props() -> field;
 #   $: name = ... -> variable;
 #   {#snippet name(...)} in the markup -> function.
+# A method written in object shorthand (get x() {}, onClick() {}) or a function-valued property is a
+#   method only in the component's own options object; in an object that is an argument of a call
+#   (createTable({ get data() {} }), computed(() => ({ f() {} }))) or is bound to a name it is not
+#   (Table.svelte). Methods of a class are always methods.
 # Not definitions: anything inside a function body, imports, $: statements that assign nothing,
 # $effect calls, a snippet inside a comment or an expression string.
 +page.svelte	2	field	data
@@ -48,3 +52,11 @@ Runes.svelte	12	constant	doubled
 Runes.svelte	13	variable	total
 Runes.svelte	15	function	bump
 Runes.svelte	20	function	reset
+Table.svelte	1	class	Table
+Table.svelte	2	field	rows
+Table.svelte	4	variable	selection
+Table.svelte	6	constant	table
+Table.svelte	21	function	reset
+Table.svelte	25	class	Cell
+Table.svelte	26	method	value
+Table.svelte	29	method	render

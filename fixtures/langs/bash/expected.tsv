@@ -4,6 +4,7 @@
 # export NAME=value, declare/typeset [flags] NAME[=value] (variable), and readonly NAME=value and
 # declare/typeset -r (constant). Each name of a multi-assignment line is its own symbol, and a name
 # assigned twice at top level is recorded at each assignment.
+# An append (NAME+=value, NAME+=(...)) is not an assignment of its own and is not recorded.
 # Not recorded: local, anything assigned inside a function, loop, case or if, a bare "export NAME",
 # "export -f", env prefixes (FOO=1 cmd), text inside here-documents and strings.
 deploy.sh	4	variable	VERSION
@@ -50,3 +51,10 @@ lib.sh	65	function	pipeline
 lib.sh	72	function	fetch
 lib.sh	74	function	fetch
 lib.sh	77	variable	DEFAULT_ARGS
+append.sh	3	variable	hooks
+append.sh	7	variable	PATH_LIST
+append.sh	10	variable	stages
+append.sh	13	variable	counter
+append.sh	16	variable	total
+append.sh	17	variable	EXTRA_FLAGS
+append.sh	20	function	register

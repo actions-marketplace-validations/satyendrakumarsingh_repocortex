@@ -27,7 +27,9 @@ import "strings"
 // existing function) and `comptime {}` blocks are not recorded. The members
 // of an error set are not recorded.
 //
-// Declarations inside a function body are locals and are not recorded.
+// The fields of a file that is itself a struct are written at file level and
+// are recorded as fields. Declarations inside a function body are locals and
+// are not recorded.
 func init() {
 	var q strings.Builder
 	q.WriteString(`
@@ -62,6 +64,9 @@ func init() {
 			}
 		}
 	}
+	// A file that is itself a struct (`const Self = @This();`) declares its
+	// fields at file level, with no container around them.
+	q.WriteString("(source_file (container_field . (identifier) @name) @definition.field)\n")
 	const constRx = `^(pub\\s+|export\\s+|extern\\s+(\"[^\"]*\"\\s+)?)*const\\b`
 	const varRx = `^(pub\\s+|export\\s+|extern\\s+(\"[^\"]*\"\\s+)?|threadlocal\\s+)*var\\b`
 	for _, p := range []string{"source_file", "struct_declaration", "enum_declaration", "union_declaration"} {

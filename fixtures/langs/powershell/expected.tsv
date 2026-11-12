@@ -1,0 +1,27 @@
+# Rule: function, filter and workflow are a function, at any depth, recorded
+# under the bare name: `function script:Get-Item` is Get-Item, because that is
+# how it is called (the scope modifiers global:, script:, local: and private:
+# are removed). class and enum are a class; a method or constructor of a class
+# is a method. Not definitions: class properties, enum members, parameters,
+# variables, the base class in `class Dog : Animal`, calls.
+sample.ps1	7	function	Get-Thing
+sample.ps1	16	function	Set-Thing
+sample.ps1	20	function	Private-Helper
+sample.ps1	25	function	Publish-Thing
+sample.ps1	29	function	Scoped
+sample.ps1	33	function	Hidden-One
+sample.ps1	37	function	plain
+sample.ps1	41	function	noArgs
+sample.ps1	43	function	Only-Even
+sample.ps1	47	function	Skip-Blank
+sample.ps1	51	function	Invoke-Flow
+sample.ps1	55	function	Outer-Func
+sample.ps1	56	function	Inner-Func
+sample.ps1	62	class	Color
+sample.ps1	67	class	Animal
+sample.ps1	71	method	Animal
+sample.ps1	75	method	Speak
+sample.ps1	79	method	Create
+sample.ps1	83	method	Reset
+sample.ps1	88	class	Dog
+sample.ps1	89	method	Speak

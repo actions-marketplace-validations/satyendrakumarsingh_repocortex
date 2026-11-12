@@ -6,6 +6,8 @@
 # clause that is not adjacent to the earlier ones (pack/1 after unpack/1); @type/@typep/@opaque (type_alias),
 # @callback/@macrocallback (method), and a module attribute given a value that the compiler does not
 # read (constant).
+# A @callback, @macrocallback or @type is found however it is written: arguments or none (f :: r),
+# a return type on the following lines, and a trailing "when" clause (f(a) :: r when a: term).
 # Not recorded: defstruct, defexception, defoverridable, @spec, @doc, @moduledoc, @impl, @behaviour,
 # use/import/alias, test/describe/setup blocks, anonymous functions, and a function whose name is
 # generated with unquote (see KNOWN_GAPS.md).
@@ -68,3 +70,16 @@ worker.ex	83	package	Worker.Behaviour
 worker.ex	84	method	perform
 worker.ex	85	method	name
 worker.ex	88	package	Worker.QueueTest
+callbacks.ex	1	package	Callbacks
+callbacks.ex	2	method	one
+callbacks.ex	4	method	two
+callbacks.ex	8	method	three
+callbacks.ex	13	method	four
+callbacks.ex	19	method	five
+callbacks.ex	21	method	six
+callbacks.ex	23	method	seven
+callbacks.ex	26	method	eight
+callbacks.ex	29	method	nine
+callbacks.ex	33	type_alias	pair
+callbacks.ex	36	type_alias	guarded
+callbacks.ex	39	function	local
