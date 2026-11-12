@@ -49,7 +49,6 @@ var (
 // trait, type_alias, module, namespace, constant, variable, field).
 // References are @reference.KIND with the same @name.
 //
-//nolint:unused // called from the init of each lang_<language>.go; the first of those has not landed yet
 func registerDefinitions(language, query string, replaceInferred bool) {
 	if _, dup := registeredDefinitions[language]; dup {
 		duplicateRegistrations = append(duplicateRegistrations, language)
