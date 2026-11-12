@@ -127,6 +127,47 @@ type call struct {
 	within int64
 }
 
+// isConstructorDelegation reports whether the call is `this(...)` written in a
+// constructor, which runs another constructor of the same class. Java and C#
+// record it as a call named after the class on the receiver `this`; Scala
+// writes `def this(...) = this(...)` and records it as a call named `this`.
+//
+// It never targets the constructor it is written in: `def this() = this(0)` is
+// not a call of itself, and a language does not allow a constructor to delegate
+// to itself. Its candidates are the class's other constructors, and the primary
+// constructor, which Scala does not declare as a symbol of its own.
+func (c call) isConstructorDelegation() bool {
+	switch c.spec.Name {
+	case "scala":
+		return c.ref.Name == "this" && c.ref.ReceiverKind == model.ReceiverBare
+	case "java", "c_sharp", "kotlin":
+		return c.ref.ReceiverKind == model.ReceiverSelf && c.ref.Receiver == "this" &&
+			c.class != "" && c.ref.Name == lastQualSegment(c.class)
+	}
+	return false
+}
+
+// otherConstructors is what a delegation can reach: the constructors the
+// enclosing class declares in this file, less the one it is written in, that
+// take the number of arguments it passes. A
+// constructor of another class that has the same name (Scala's are all called
+// `this`) is not a candidate.
+func (c call) otherConstructors() []registry.SymbolIndexEntry {
+	owner := lastQualSegment(c.class)
+	var kept []registry.SymbolIndexEntry
+	for _, s := range c.cands {
+		if s.ID == c.within || s.FileID != c.fr.FileID {
+			continue
+		}
+		if o, ok := memberOwner(s); ok && o == owner {
+			kept = append(kept, s)
+		}
+	}
+	// The one whose parameter count is the argument count; with none, the
+	// delegation is to a constructor the index does not hold (Scala's primary).
+	return narrowByArity(c.ref, kept)
+}
+
 // resolveCall binds one call by its shape.
 func (r *Resolver) resolveCall(c call, stats *Stats) decision {
 	c.scope = enclosingScope(c.fr, c.ref.Line)
@@ -134,6 +175,15 @@ func (r *Resolver) resolveCall(c call, stats *Stats) decision {
 	c.within, _ = enclosing(c.fr.Symbols, c.ref.Line)
 	if c.class == "" && c.spec.Calls.ClassBodyCode && c.scope != "" && declaresMembers(c.fr, c.scope) {
 		c.class = c.scope
+	}
+
+	if c.isConstructorDelegation() {
+		c.cands = c.otherConstructors()
+		if len(c.cands) == 0 {
+			// Delegation to the primary constructor, or to one the index does
+			// not hold.
+			return unresolvedCall
+		}
 	}
 
 	if isMacroInvocation(c.ref.Kind) {
