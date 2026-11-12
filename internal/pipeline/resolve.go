@@ -156,7 +156,7 @@ func Resolve(
 		// showed up as a 31% regression against the preloaded index. Asking
 		// once per page amortises the trip across ~500 files while keeping the
 		// working set bounded by the page, not by the repository.
-		if names := pageNames(page); len(names) > 0 {
+		if names := pageNames(resolver, page); len(names) > 0 {
 			if _, err := cands.Candidates(ctx, names); err != nil {
 				return fmt.Errorf("prefetch candidates: %w", err)
 			}
@@ -302,18 +302,17 @@ func (a runAncestry) Supertypes(ctx context.Context, types []string) (map[string
 // this pass spent its first life.
 var _ infer.Ancestry = runAncestry{}
 
-// pageNames collects the distinct names a page of files references.
-func pageNames(page []registry.FileRefs) []string {
+// pageNames collects the distinct names resolving a page of files will ask for.
+//
+// The resolver is asked rather than the references read directly, because what
+// a file needs is the resolver's decision: where a language's qualified names
+// state ownership it also looks up each receiver, and a warm-up that left
+// those out would hand every such file a round trip of its own.
+func pageNames(resolver *infer.Resolver, page []registry.FileRefs) []string {
 	seen := make(map[string]struct{}, 512)
 	var out []string
 	for _, fr := range page {
-		for _, ref := range fr.Refs {
-			if _, dup := seen[ref.Name]; dup {
-				continue
-			}
-			seen[ref.Name] = struct{}{}
-			out = append(out, ref.Name)
-		}
+		out = resolver.AppendNames(out, seen, fr)
 	}
 	return out
 }

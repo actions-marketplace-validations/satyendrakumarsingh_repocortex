@@ -3,6 +3,7 @@ package parse
 import (
 	"context"
 	"sort"
+	"strings"
 	"testing"
 )
 
@@ -35,9 +36,16 @@ from . import sibling
 		t.Fatal(err)
 	}
 
+	// Member rows — `from .helpers import Helper` also records WHICH name came
+	// from helpers, as a second row for the same path — are skipped here: this
+	// test is about the set of modules. TestPythonImportedMembersAreRecorded
+	// owns the member rows.
 	got := make([]string, 0, len(res.Imports))
 	aliases := map[string]string{}
 	for _, imp := range res.Imports {
+		if strings.HasPrefix(imp.Alias, memberAliasPrefix) {
+			continue
+		}
 		got = append(got, imp.Path)
 		if imp.Alias != "" {
 			aliases[imp.Path] = imp.Alias
@@ -45,12 +53,15 @@ from . import sibling
 	}
 	sort.Strings(got)
 
-	// `from . import sibling` is deliberately absent: its module_name is a bare
-	// relative_import with no dotted_name, and the imported names that follow are
-	// not necessarily modules — `from . import helper_fn` names a function. A
-	// path of "." carries no segments and would be dropped by buildImportSet
-	// anyway, so capturing it would add a row that can never match.
-	want := []string{"helpers", "numpy", "os", "pkg.mod", "scrapy.utils.test"}
+	// `from . import sibling` has no MODULE row: its module_name is a bare
+	// relative_import with no dotted_name, and a path of "." carries no
+	// segments for the import tier to match. What it imports is recorded as a
+	// member row instead, which this loop skips.
+	//
+	// The relative paths keep their dots. They used to be captured without
+	// them, and the resolver trims them for the unanchored import tier exactly
+	// as before; the rules that know the importing file use them to anchor.
+	want := []string{"..pkg.mod", ".helpers", "numpy", "os", "scrapy.utils.test"}
 	if len(got) != len(want) {
 		t.Fatalf("imports = %v, want %v", got, want)
 	}

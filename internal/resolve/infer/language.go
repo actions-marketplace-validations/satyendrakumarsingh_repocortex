@@ -253,6 +253,70 @@ type LanguageSpec struct {
 	// ancestry walk, which asks "what does this type extend").
 	ReceiverDenotesType bool
 
+	// QualifiedMembers reports that this language's qualified names STATE the
+	// class a member belongs to — `path/to/file.py:Account.save` — because
+	// internal/parse derived them from where each definition sits.
+	//
+	// It is the precondition for every rule that treats a receiver as a class
+	// without guessing, and it changes three things at once:
+	//
+	//   - ownership is read off the qualified name, compared EXACTLY. Elsewhere
+	//     the comparison folds case, which is what lets `transactionService`
+	//     name a TransactionService. In a dynamically typed language that
+	//     convention is the guess this package must not make: `settings.get()`
+	//     says nothing about a class called Settings. A receiver matches an
+	//     owner here only when it IS the class's name — because the source
+	//     wrote the class (`Settings.get()`), or because the parser replaced a
+	//     variable with the class the source states for it;
+	//   - a receiver in ClassSelfNames denotes the class the call is written
+	//     in, which the enclosing symbol's qualified name gives exactly;
+	//   - a method the receiver's class does not declare is looked for on its
+	//     ancestors before any weaker tier is believed. See static.go.
+	//
+	// False for every language whose qualified names are `path:name`. Setting it
+	// without the parser support produces a language where nothing is ever
+	// owned, which is safe and useless.
+	QualifiedMembers bool
+
+	// ClassSelfNames are the receiver tokens that denote the instance or class
+	// a method is written in: `self` and `cls` in Python. Read only where
+	// QualifiedMembers holds. Distinct from SelfNames, which says a token
+	// carries NO information; these say exactly which class it is.
+	ClassSelfNames []string
+
+	// SuperName is the receiver token for a call on the superclass — `super`,
+	// as internal/parse records `super().method()`. Read only where
+	// QualifiedMembers holds; empty elsewhere.
+	SuperName string
+
+	// PackageInitStem is the file stem that makes a file its DIRECTORY's module
+	// rather than a module of its own: `__init__` in Python, where
+	// `shop/models/__init__.py` is what `import shop.models` names.
+	//
+	// Without it such a file's segments end in `__init__`, which no import path
+	// ever writes, so nothing defined in a package's own module could be
+	// reached through the import tier at all — and in a library whose public
+	// classes live in `__init__.py` files that is most of the API. Empty means
+	// every file is named by its own stem.
+	PackageInitStem string
+
+	// ProximityIsEvidence reports whether a definition in the same directory is
+	// worth binding to when the file did NOT import it.
+	//
+	// Where a directory is a package this is not the question — a neighbour is
+	// in scope, and pickSameDir reports High. Everywhere else the same-directory
+	// tier is a preference reported at Medium, and for most languages nobody has
+	// measured whether that preference is ever right, so it stays on.
+	//
+	// For Python it was measured, against scip-python 0.6.6 on three
+	// repositories: 1 edge right of 194 on scrapy, 0 of 11 on requests, 0 of 8
+	// on httpx. That is not weak evidence, it is none: a Python name a file
+	// neither defines nor imports cannot denote a neighbour's definition, and a
+	// method called on an unknown object is not made likelier by which
+	// directory declares one of that name. So Python turns the tier off, and a
+	// reference only it could bind is recorded ambiguous, which is what it is.
+	ProximityIsEvidence bool
+
 	// MemberSeparators is what the language writes between a type and one of its
 	// members, MOST SPECIFIC FIRST.
 	//
@@ -321,7 +385,7 @@ func (s LanguageSpec) namesAType(receiver string) bool {
 // filter — the class of change this package has twice measured to be harmful.
 func (s LanguageSpec) usableReceiver(receiver string) bool {
 	r := strings.TrimPrefix(receiver, "*")
-	return r != "" && !s.isSelfName(r)
+	return r != "" && r != opaqueReceiver && !s.isSelfName(r)
 }
 
 func (s LanguageSpec) isSelfName(r string) bool {
@@ -460,6 +524,11 @@ func NewSpecs() *Specs {
 		PackageIsDirectory:  false,
 		ImportPathNamesFile: true,
 		ReceiverDenotesType: false,
+		QualifiedMembers:    false,
+		ClassSelfNames:      nil,
+		SuperName:           "",
+		PackageInitStem:     "",
+		ProximityIsEvidence: true,
 		MemberSeparators:    sepDefault,
 		SelfNames:           commonSelfNames,
 		MinTypeNameLength:   3,
@@ -489,6 +558,11 @@ func NewSpecs() *Specs {
 		// — and it still cost `high` precision, so the query was removed and
 		// this stays false. The numbers are in the A3 note in resolver.go.
 		ReceiverDenotesType: false,
+		QualifiedMembers:    false,
+		ClassSelfNames:      nil,
+		SuperName:           "",
+		PackageInitStem:     "",
+		ProximityIsEvidence: true,
 		MemberSeparators:    sepDefault,
 		SelfNames:           commonSelfNames,
 		MinTypeNameLength:   3,
@@ -507,6 +581,11 @@ func NewSpecs() *Specs {
 		// varTypeQueries rewrites `b.build()` to `Builder.build()` before the
 		// resolver ever sees it, which is what makes a receiver a type here.
 		ReceiverDenotesType: true,
+		QualifiedMembers:    false,
+		ClassSelfNames:      nil,
+		SuperName:           "",
+		PackageInitStem:     "",
+		ProximityIsEvidence: true,
 		MemberSeparators:    sepJVM,
 		SelfNames:           commonSelfNames,
 		MinTypeNameLength:   3,
@@ -526,6 +605,11 @@ func NewSpecs() *Specs {
 		PackageIsDirectory:  true,
 		ImportPathNamesFile: false,
 		ReceiverDenotesType: true,
+		QualifiedMembers:    false,
+		ClassSelfNames:      nil,
+		SuperName:           "",
+		PackageInitStem:     "",
+		ProximityIsEvidence: true,
 		MemberSeparators:    sepJVM,
 		SelfNames:           commonSelfNames,
 		MinTypeNameLength:   3,
@@ -550,6 +634,11 @@ func NewSpecs() *Specs {
 		ImportPathNamesFile: true,
 		// varTypeQueries covers `const b: Builder` and typed parameters.
 		ReceiverDenotesType: true,
+		QualifiedMembers:    false,
+		ClassSelfNames:      nil,
+		SuperName:           "",
+		PackageInitStem:     "",
+		ProximityIsEvidence: true,
 		MemberSeparators:    sepDefault,
 		SelfNames:           commonSelfNames,
 		MinTypeNameLength:   3,
@@ -577,6 +666,11 @@ func NewSpecs() *Specs {
 		// than left as an absent switch case, which is what it used to be.
 		ImportPathNamesFile: true,
 		ReceiverDenotesType: false,
+		QualifiedMembers:    false,
+		ClassSelfNames:      nil,
+		SuperName:           "",
+		PackageInitStem:     "",
+		ProximityIsEvidence: true,
 		MemberSeparators:    sepDefault,
 		SelfNames:           commonSelfNames,
 		MinTypeNameLength:   3,
@@ -603,6 +697,11 @@ func NewSpecs() *Specs {
 		PackageIsDirectory:  false,
 		ImportPathNamesFile: true,
 		ReceiverDenotesType: false,
+		QualifiedMembers:    false,
+		ClassSelfNames:      nil,
+		SuperName:           "",
+		PackageInitStem:     "",
+		ProximityIsEvidence: true,
 		MemberSeparators:    sepDefault,
 		SelfNames:           commonSelfNames,
 		MinTypeNameLength:   3,
@@ -624,6 +723,11 @@ func NewSpecs() *Specs {
 			PackageIsDirectory:  false,
 			ImportPathNamesFile: true,
 			ReceiverDenotesType: false,
+			QualifiedMembers:    false,
+			ClassSelfNames:      nil,
+			SuperName:           "",
+			PackageInitStem:     "",
+			ProximityIsEvidence: true,
 			MemberSeparators:    sepDefault,
 			SelfNames:           commonSelfNames,
 			MinTypeNameLength:   3,
@@ -642,6 +746,11 @@ func NewSpecs() *Specs {
 		Interop:             []string{"css"},
 		PackageIsDirectory:  false,
 		ImportPathNamesFile: true,
+		QualifiedMembers:    false,
+		ClassSelfNames:      nil,
+		SuperName:           "",
+		PackageInitStem:     "",
+		ProximityIsEvidence: true,
 		MemberSeparators:    sepDefault,
 		MinTypeNameLength:   3,
 		MaxCandidates:       MaxCandidates,
@@ -659,6 +768,11 @@ func NewSpecs() *Specs {
 		PackageIsDirectory:  false,
 		ImportPathNamesFile: true,
 		ReceiverDenotesType: false,
+		QualifiedMembers:    false,
+		ClassSelfNames:      nil,
+		SuperName:           "",
+		PackageInitStem:     "",
+		ProximityIsEvidence: true,
 		MemberSeparators:    sepDefault,
 		SelfNames:           commonSelfNames,
 		MinTypeNameLength:   3,
@@ -681,9 +795,23 @@ func NewSpecs() *Specs {
 		PackageIsDirectory: false,
 		// `from .helpers import X` names helpers.py.
 		ImportPathNamesFile: true,
-		// Dynamically typed, and internal/parse ships no varTypeQuery: a Python
-		// receiver is the variable, never the class.
+		// Dynamically typed, so false, and it stays false with the scope
+		// analysis in place: internal/parse replaces a receiver with a class
+		// only where the source states one, and every other receiver is still
+		// the variable. This field gates the two paths that treat ANY receiver
+		// as a type — the rescue from the candidate cap and the ancestry walk
+		// over an unbound name — and neither is sound for a variable.
 		ReceiverDenotesType: false,
+		// internal/parse/pyscope.go qualifies every nested definition the way
+		// Python's own __qualname__ does, so `Account.save` and `Audit.save`
+		// are different names and ownership can be read rather than inferred.
+		QualifiedMembers: true,
+		ClassSelfNames:   []string{"self", "cls"},
+		SuperName:        "super",
+		// shop/models/__init__.py is the module `shop.models`.
+		PackageInitStem: "__init__",
+		// Measured at 1 right in 213 across three repositories; see the field.
+		ProximityIsEvidence: false,
 		MemberSeparators:    sepDefault,
 		SelfNames:           commonSelfNames,
 		MinTypeNameLength:   3,
@@ -722,6 +850,11 @@ func NewSpecs() *Specs {
 			PackageIsDirectory:  false,
 			ImportPathNamesFile: true,
 			ReceiverDenotesType: false,
+			QualifiedMembers:    false,
+			ClassSelfNames:      nil,
+			SuperName:           "",
+			PackageInitStem:     "",
+			ProximityIsEvidence: true,
 			MemberSeparators:    sepScope,
 			SelfNames:           commonSelfNames,
 			MinTypeNameLength:   3,
@@ -771,6 +904,11 @@ func NewSpecs() *Specs {
 		PackageIsDirectory:  false,
 		ImportPathNamesFile: false,
 		ReceiverDenotesType: false,
+		QualifiedMembers:    false,
+		ClassSelfNames:      nil,
+		SuperName:           "",
+		PackageInitStem:     "",
+		ProximityIsEvidence: true,
 		MemberSeparators:    sepDefault,
 		SelfNames:           commonSelfNames,
 		MinTypeNameLength:   3,
@@ -792,6 +930,11 @@ func NewSpecs() *Specs {
 		PackageIsDirectory:  false,
 		ImportPathNamesFile: true,
 		ReceiverDenotesType: false,
+		QualifiedMembers:    false,
+		ClassSelfNames:      nil,
+		SuperName:           "",
+		PackageInitStem:     "",
+		ProximityIsEvidence: true,
 		MemberSeparators:    sepJVM,
 		SelfNames:           commonSelfNames,
 		MinTypeNameLength:   3,

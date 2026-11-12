@@ -440,19 +440,32 @@ var importQueries = map[string]string{
 	// unrelated helper in a neighbouring test file, 144 wrong edges from one
 	// name and ~45% of every high-confidence disagreement in the repository.
 	//
-	// The captured path is the dotted name WITHOUT its leading dots
-	// ("helpers", "pkg.mod"). The dots are the one thing this cannot use:
-	// resolving `..` needs the referencing file's own directory, which
-	// buildImportSet does not have. What lands is therefore an UNANCHORED
-	// module name, and the resolver treats it exactly as it treats any other —
-	// a unique match is High, several are Medium. That is the honest degradation
-	// and it was measured rather than assumed; see the Python numbers in the
-	// task record.
+	// The captured path is the relative import AS WRITTEN, leading dots
+	// included (".helpers", "..pkg.mod"). It used to be the dotted name alone,
+	// on the grounds that resolving `..` needs the referencing file's own
+	// directory, which buildImportSet does not have. That is still true of the
+	// import TIER: buildImportSet trims the dots and matches the rest as an
+	// unanchored module name, exactly as before, so a unique match is High and
+	// several are Medium. Keeping the dots is for the two rules that can use
+	// them — a name imported from the module, and a call qualified by it —
+	// which do know the referencing file and anchor the path to its directory.
+	// Without the dots a repository with a `models.py` in every package matches
+	// `from .models import Article` against all of them.
+	//
+	// The aliased pattern is anchored on import_statement, and the anchor is a
+	// correction. `aliased_import` is also how the grammar spells a renamed
+	// MEMBER — `from shop.models import Account as Acct` — and unanchored, the
+	// pattern recorded that as an import of a module called "Account" under the
+	// local name "Acct": a path that is not a module, matched against file
+	// stems by the import tier, and a module alias the resolver then read
+	// `Acct.close()` as package-qualified by. The module of a from-import is
+	// captured by the two patterns above it; the names it brings in are read by
+	// pyscope.go, which can tell the two shapes apart.
 	"python": `
 (import_statement name: (dotted_name) @path)
 (import_from_statement module_name: (dotted_name) @path)
-(import_from_statement module_name: (relative_import (dotted_name) @path))
-(aliased_import name: (dotted_name) @path alias: (identifier) @alias)
+(import_from_statement module_name: (relative_import (dotted_name)) @path)
+(import_statement name: (aliased_import name: (dotted_name) @path alias: (identifier) @alias))
 `,
 
 	"typescript": `
@@ -785,6 +798,16 @@ func VarTypeQuery(language string) string { return varTypeQueries[language] }
 //     three is satisfied by a call passing one.
 //   - Java is the language overload resolution matters most in, and it is the
 //     one language docs/accuracy.md has no compiler ground truth for.
+//
+// Python was built and measured, and is not here. The count was made honest —
+// a method's `self` taken off, a signature with a default, a splat or a bare
+// `*` refused outright — and it then decided almost nothing: across four
+// repositories adjudicated against scip-python it chose between candidates 56
+// times, every one in the lowest tier, and was right once. Switching it off
+// left two MORE call sites right, not fewer. docs/accuracy.md has the table.
+// An arity query is a grammar-shaped contract to keep through every grammar
+// bump, and this one bought nothing, so it was removed — the same decision,
+// for the same reason, the TypeScript attempt records there.
 //
 // Variadic forms are handled everywhere they appear by refusing to count at
 // all — see arityDialect. What is NOT acceptable is adding a language here on

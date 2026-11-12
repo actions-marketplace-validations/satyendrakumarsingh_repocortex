@@ -372,16 +372,33 @@ func (p *genericParser) Parse(ctx context.Context, path string, src []byte) (*Re
 		return res, nil //nolint:nilerr // see above
 	}
 	res.Imports = p.extractImports(tree, src)
+
+	// Python's scope-dependent facts: what each call was made on, each nested
+	// definition's qualified name, and the names its imports bring in. Nil for
+	// every other language, and for a Python tree the walk could not finish.
+	// See pyscope.go.
+	py := p.analyzePython(tree, src)
+	if py != nil {
+		res.Imports = mergeMemberImports(res.Imports, py.members)
+	}
+
 	// Before the tree is dropped below: this is the last consumer of it, and
 	// running after the drop is how the first version of this silently
 	// extracted nothing at all.
-	receivers := p.extractReceivers(tree, src)
-	// Rewrite each receiver from the variable that names it to the type it was
-	// declared as, where the file says so. `b.build()` becomes Builder.build().
-	if types := p.extractVarTypes(tree, src); len(types) > 0 {
-		for k, v := range receivers {
-			if t, ok := types[v]; ok {
-				receivers[k] = t
+	//
+	// Skipped where the scope walk already answered: it records every call's
+	// receiver, keyed more precisely than a line number allows.
+	var receivers map[callSite]string
+	if py == nil {
+		receivers = p.extractReceivers(tree, src)
+		// Rewrite each receiver from the variable that names it to the type it
+		// was declared as, where the file says so. `b.build()` becomes
+		// Builder.build().
+		if types := p.extractVarTypes(tree, src); len(types) > 0 {
+			for k, v := range receivers {
+				if t, ok := types[v]; ok {
+					receivers[k] = t
+				}
 			}
 		}
 	}
@@ -400,6 +417,10 @@ func (p *genericParser) Parse(ctx context.Context, path string, src []byte) (*Re
 	tree = nil
 	_ = tree
 
+	// objectDropped remembers where a call's object has already been dropped;
+	// see the reference case below.
+	var objectDropped map[pySite]bool
+
 	for _, tag := range tags {
 		switch {
 		case strings.HasPrefix(tag.Kind, "definition"):
@@ -408,6 +429,14 @@ func (p *genericParser) Parse(ctx context.Context, path string, src []byte) (*Re
 			}
 			sym := p.toSymbol(tag)
 			sym.ParamCount = paramCounts[callSite{line: sym.Range.Start.Line, name: sym.Name}]
+			if py != nil {
+				// A nested definition is qualified by what encloses it, so that
+				// two classes' `save` are two names. Module-level definitions
+				// are absent from the map and keep the default.
+				if q, ok := py.qualNames[callSite{line: sym.Range.Start.Line, name: sym.Name}]; ok {
+					sym.FQN = model.DefaultFQN(path, q)
+				}
+			}
 			res.Symbols = append(res.Symbols, sym)
 		case strings.HasPrefix(tag.Kind, "reference"):
 			r := Reference{
@@ -427,7 +456,36 @@ func (p *genericParser) Parse(ctx context.Context, path string, src []byte) (*Re
 			// narrow candidates for a relation that has no receiver at all.
 			if !isSupertypeRef(tag.Kind) {
 				site := callSite{line: r.Range.Start.Line, name: r.Name}
-				if recv, ok := receivers[site]; ok {
+				if py != nil {
+					// The scope walk saw every call in the file and keyed each
+					// by the position the tags query reports, so its answer
+					// replaces the line-keyed one outright: an empty receiver
+					// here means the source wrote a bare name.
+					at := pySite{line: r.Range.Start.Line, col: r.Range.Start.Col, name: r.Name}
+					if py.notCalls[at] {
+						// The object of a method call, tagged as a call, where
+						// the object is a local value. Not a call and not a
+						// use of anything the index holds.
+						//
+						// `run.run()` is the one shape where the object and
+						// the method share a name, so TWO references arrive
+						// at this position with this name and only one of
+						// them is the object. Exactly one is dropped; the
+						// other is the call, and keeps its receiver below.
+						_, alsoCalled := py.receivers[at]
+						if !alsoCalled || !objectDropped[at] {
+							if objectDropped == nil {
+								objectDropped = make(map[pySite]bool, 4)
+							}
+							objectDropped[at] = true
+							continue
+						}
+					}
+					r.Receiver = py.receivers[at]
+					if py.indirect[at] {
+						r.Kind += IndirectCallSuffix
+					}
+				} else if recv, ok := receivers[site]; ok {
 					r.Receiver = recv
 				}
 				// Matched the same way and excluded for the same reason: a
@@ -829,6 +887,39 @@ func (p *genericParser) extractImports(tree *ts.Tree, src []byte) []Import {
 
 	sort.SliceStable(out, func(i, j int) bool { return out[i].Path < out[j].Path })
 	return dedupeImports(out)
+}
+
+// mergeMemberImports appends the members a file imported by name to the
+// modules it imported, dropping exact repeats.
+//
+// The two lists do not compete: `from shop.models import Account` yields the
+// module row the import query already produced AND a member row, and both are
+// kept. The module row is what the import tier measures a candidate's file
+// against; the member row is what says WHICH name that module was imported for.
+func mergeMemberImports(imports, members []Import) []Import {
+	if len(members) == 0 {
+		return imports
+	}
+	type key struct{ path, alias string }
+	seen := make(map[key]struct{}, len(imports)+len(members))
+	for _, imp := range imports {
+		seen[key{imp.Path, imp.Alias}] = struct{}{}
+	}
+	for _, m := range members {
+		k := key{m.Path, m.Alias}
+		if _, dup := seen[k]; dup {
+			continue
+		}
+		seen[k] = struct{}{}
+		imports = append(imports, m)
+	}
+	sort.SliceStable(imports, func(i, j int) bool {
+		if imports[i].Path != imports[j].Path {
+			return imports[i].Path < imports[j].Path
+		}
+		return imports[i].Alias < imports[j].Alias
+	})
+	return imports
 }
 
 // unquote strips the quoting that string-literal captures carry, so

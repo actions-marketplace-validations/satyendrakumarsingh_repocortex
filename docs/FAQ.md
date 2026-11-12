@@ -47,6 +47,12 @@ truth across five repositories it lands between **5.7%** (prometheus) and
 **37.5%** (a Python corpus). At 5.7% it is wrong roughly nineteen times out of
 twenty.
 
+In Python `medium` also holds something the other languages' does not: every
+method call bound on its NAME because the receiver's class is unknown —
+`target.save()` bound to the only `save` in the file. Those were `high` until
+they were measured at 26–48% and moved; see "Python: the receiver's class, read
+from the source" in [accuracy.md](accuracy.md).
+
 An earlier version of this project documented `medium` as "probable".
 Measurement does not support that, and [accuracy.md](accuracy.md) records the
 correction rather than quietly editing the label.

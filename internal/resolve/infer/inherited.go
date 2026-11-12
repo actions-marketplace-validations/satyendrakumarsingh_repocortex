@@ -118,6 +118,16 @@ type deferredRef struct {
 	col      int
 	srcID    int64
 	hasSrc   bool
+
+	// static is true when the receiver's class is STATED by the source rather
+	// than read off a token: see static.go. receiver then holds that class's
+	// name, and ownership up the chain is decided by qualified name alone.
+	static bool
+	// fallback is what the pass-one tiers answered for a static reference, and
+	// hasFallback whether they answered at all. It is what the reference is
+	// bound to when the hierarchy has nothing to say.
+	fallback    candidate
+	hasFallback bool
 }
 
 // deferInherited parks a reference pass one refused, if ancestry could
@@ -152,6 +162,57 @@ func (r *Resolver) deferInherited(
 	d.srcID, d.hasSrc = enclosing(fr.Symbols, ref.Line)
 	r.deferred = append(r.deferred, d)
 	stats.Deferred++
+}
+
+// deferStatic parks a reference whose receiver's class is known and does not
+// declare the method, and reports whether it did.
+//
+// # Why these are parked even when pass one could bind them
+//
+// deferInherited above parks only what pass one REFUSED, and says why: a pass
+// that revisits bound references can change answers. This one parks a
+// reference pass one could have bound, and the difference is what is known.
+// There the receiver is a token; here it is a class, and "the class does not
+// declare `save`" is a fact that makes every candidate the tiers can offer —
+// the only `save` in the file, the only one in an imported module — a
+// candidate for a DIFFERENT class unless that class is an ancestor. Whether it
+// is an ancestor is exactly what cannot be asked until every file's
+// inheritance has been bound.
+//
+// So the tiers' answer is carried along as a FALLBACK rather than emitted, and
+// ResolveDeferred uses it in the two cases where it is still the best
+// evidence: the hierarchy agrees with it, or the hierarchy is silent. Nothing
+// is lost by waiting; a reference the queue has no room for is simply bound
+// now, the way it always was.
+func (r *Resolver) deferStatic(
+	spec LanguageSpec,
+	fr registry.FileRefs,
+	ref registry.Reference,
+	sr staticReceiver,
+	fallback candidate,
+	hasFallback bool,
+	stats *Stats,
+) bool {
+	if r.ancestry == nil || len(r.deferred) >= MaxDeferred {
+		return false
+	}
+	d := deferredRef{
+		refID:       ref.ID,
+		name:        ref.Name,
+		kind:        ref.Kind,
+		receiver:    sr.class,
+		spec:        spec,
+		filePath:    fr.Path,
+		line:        ref.Line,
+		col:         ref.Col,
+		static:      true,
+		fallback:    fallback,
+		hasFallback: hasFallback,
+	}
+	d.srcID, d.hasSrc = enclosing(fr.Symbols, ref.Line)
+	r.deferred = append(r.deferred, d)
+	stats.Deferred++
+	return true
 }
 
 // receiverNamesAType reports whether a captured receiver may be treated as the
@@ -199,6 +260,10 @@ func (r *Resolver) Deferred() int { return len(r.deferred) }
 func (r *Resolver) ResolveDeferred(ctx context.Context, stats *Stats) ([]model.Edge, []registry.RefOutcome, error) {
 	queued := r.deferred
 	r.deferred = nil
+	// What an earlier drain learned about the hierarchy is not carried into
+	// this one: edges may have been written in between.
+	r.supertypes = nil
+	defer func() { r.supertypes = nil }()
 
 	if r.ancestry == nil || len(queued) == 0 {
 		return nil, nil, nil
@@ -246,6 +311,11 @@ func (r *Resolver) drainChunk(
 			continue
 		}
 		best, ok, ambiguous := inheritedBinding(d, cands, known)
+		fromAncestry := ok
+		if d.static {
+			best, ok, ambiguous = settleStatic(d, best, ok, ambiguous)
+			fromAncestry = fromAncestry && ok
+		}
 
 		if ambiguous {
 			// Two ancestors define the same method and nothing here can say
@@ -268,7 +338,9 @@ func (r *Resolver) drainChunk(
 		// published from them.
 		stats.Ambiguous--
 		stats.Resolved++
-		stats.Inherited++
+		if fromAncestry {
+			stats.Inherited++
+		}
 		if stats.ByConfidence == nil {
 			stats.ByConfidence = map[model.Confidence]int64{}
 		}
@@ -305,6 +377,15 @@ func (r *Resolver) drainChunk(
 	return nil
 }
 
+// maxSupertypeMemo bounds how many types' supertypes one drain remembers.
+//
+// The memo is keyed by type name, so it is bounded by how many distinct types a
+// repository's parked references reach — thousands, not millions — but "small
+// times unbounded" is the reasoning MaxDeferred already refuses, so it has a
+// ceiling too. Past it the memo is dropped and rebuilt, which costs queries and
+// changes no answer.
+const maxSupertypeMemo = 100_000
+
 // ancestryClosure walks the hierarchy above a chunk's receivers, breadth first,
 // one batched request per level.
 //
@@ -314,24 +395,47 @@ func (r *Resolver) drainChunk(
 // MaxAncestryDepth requests for the entire chunk, after which every walk is
 // local map lookups.
 //
-// A name absent from the result is recorded with a nil slice, so it is treated
-// as "walked, has no supertypes" and never requested twice. A name still on the
-// frontier when the depth cap is reached is left ABSENT, which the per-reference
-// walk reads as "not walked" and stops at — unknown, rather than asserted empty.
+// And usually far fewer, because what one chunk learned the next does not ask
+// again. The hierarchy cannot change during a drain — ResolveDeferred runs
+// after every inheritance edge is written — so a type's supertypes are fetched
+// once per drain and remembered. That stopped being an optimisation when static
+// receivers arrived: a Python repository parks every `self.method()` its class
+// inherits, tens of thousands of references that between them name a few
+// hundred classes, and asking for the same `TestCase` ancestry once per chunk
+// was most of the pass. The memo changes how often the registry is asked and
+// nothing else: each chunk still walks outward from its own receivers, to the
+// same depth, over the same answers.
+//
+// Names are kept EXACTLY as written. They used to be folded to lower case
+// here, which made `Meta` and `meta` one type: whichever was asked about first
+// answered for both, and a class whose lower-cased name some other reference
+// had already asked about — and found nothing for — lost its ancestors. The
+// registry matches a type by its exact name, the port returns the requested
+// names verbatim, and a type name is an identifier; nothing on either side of
+// this map ever wanted the fold.
+//
+// A name the registry reports no supertypes for is recorded with a nil slice,
+// so it is treated as "walked, has no supertypes" and never requested twice. A
+// name still on the frontier when the depth cap is reached is not asked about;
+// if nothing else has asked, it is ABSENT, which the per-reference walk reads
+// as "not walked" and stops at — unknown, rather than asserted empty.
 func (r *Resolver) ancestryClosure(ctx context.Context, chunk []deferredRef) (map[string][]string, error) {
-	known := make(map[string][]string, len(chunk))
-	pending := make(map[string]struct{}, len(chunk))
+	if r.supertypes == nil || len(r.supertypes) > maxSupertypeMemo {
+		r.supertypes = make(map[string][]string, len(chunk))
+	}
+	known := r.supertypes
+	visited := make(map[string]struct{}, len(chunk))
 
 	// The frontier is a SLICE, in first-appearance order, so the requests this
 	// makes and the order supertypes are discovered in do not depend on map
 	// iteration.
 	var frontier []string
 	for _, d := range chunk {
-		key := strings.ToLower(d.receiver)
-		if _, dup := pending[key]; dup {
+		key := d.receiver
+		if _, dup := visited[key]; dup {
 			continue
 		}
-		pending[key] = struct{}{}
+		visited[key] = struct{}{}
 		frontier = append(frontier, d.receiver)
 	}
 
@@ -339,26 +443,32 @@ func (r *Resolver) ancestryClosure(ctx context.Context, chunk []deferredRef) (ma
 		if err := ctx.Err(); err != nil {
 			return nil, err
 		}
-		sup, err := r.ancestry.Supertypes(ctx, frontier)
-		if err != nil {
-			return nil, fmt.Errorf("supertypes at depth %d: %w", depth, err)
+		var ask []string
+		for _, name := range frontier {
+			if _, walked := known[name]; !walked {
+				ask = append(ask, name)
+			}
+		}
+		if len(ask) > 0 {
+			sup, err := r.ancestry.Supertypes(ctx, ask)
+			if err != nil {
+				return nil, fmt.Errorf("supertypes at depth %d: %w", depth, err)
+			}
+			for _, name := range ask {
+				known[name] = sup[name]
+			}
 		}
 		var next []string
 		for _, name := range frontier {
-			parents := sup[name]
-			known[strings.ToLower(name)] = parents
-			for _, p := range parents {
+			for _, p := range known[name] {
 				if p == "" {
 					continue
 				}
-				key := strings.ToLower(p)
-				if _, walked := known[key]; walked {
+				key := p
+				if _, seen := visited[key]; seen {
 					continue
 				}
-				if _, queued := pending[key]; queued {
-					continue
-				}
-				pending[key] = struct{}{}
+				visited[key] = struct{}{}
 				next = append(next, p)
 			}
 		}
@@ -395,17 +505,17 @@ func inheritedBinding(
 	cands []registry.SymbolIndexEntry,
 	known map[string][]string,
 ) (candidate, bool, bool) {
-	seen := map[string]struct{}{strings.ToLower(d.receiver): {}}
+	seen := map[string]struct{}{d.receiver: {}}
 	frontier := []string{d.receiver}
 
 	for depth := 1; depth <= MaxAncestryDepth && len(frontier) > 0; depth++ {
 		var next []string
 		for _, t := range frontier {
-			for _, p := range known[strings.ToLower(t)] {
+			for _, p := range known[t] {
 				if p == "" {
 					continue
 				}
-				key := strings.ToLower(p)
+				key := p
 				if _, dup := seen[key]; dup {
 					continue
 				}
@@ -427,7 +537,7 @@ func inheritedBinding(
 		var ownerNames []string
 		for _, anc := range next {
 			for _, c := range cands {
-				if !receiverMatches(d.spec, anc, c) || containsID(owners, c.ID) {
+				if !ancestorOwns(d, anc, c) || containsID(owners, c.ID) {
 					// Deduplicated by symbol id: one definition matched through
 					// two ancestor names (or through both the qualified-name and
 					// the file-name channel) is ONE definition, not a conflict.
@@ -444,7 +554,7 @@ func inheritedBinding(
 		case 1:
 			return candidate{
 				entry:      owners[0],
-				confidence: inheritedConfidence(depth),
+				confidence: inheritedConfidence(d, depth),
 				reason: fmt.Sprintf(
 					"not defined on %s; defined on %s, %d level(s) up its inheritance chain",
 					d.receiver, ownerNames[0], depth),
@@ -456,17 +566,59 @@ func inheritedBinding(
 	return candidate{}, false, false
 }
 
+// ancestorOwns reports whether an ancestor declares a candidate.
+//
+// For a static reference the test is the qualified name and nothing else: an
+// ancestor is a class, and a class owns exactly the members qualified by it.
+// receiverMatches' second channel — a candidate in a file NAMED for the
+// receiver — exists for languages whose qualified names carry no owner, and
+// here it would let a module-level `save` in `basemodel.py` pass for a method
+// of BaseModel.
+func ancestorOwns(d deferredRef, ancestor string, c registry.SymbolIndexEntry) bool {
+	if d.static {
+		owner, ok := memberOwner(c)
+		return ok && owner == ancestor
+	}
+	return receiverMatches(d.spec, ancestor, c)
+}
+
+// settleStatic decides a static reference from what its hierarchy said and
+// what the pass-one tiers had answered.
+//
+// Three cases, and the order is the rule:
+//
+//   - the hierarchy names a definition. It wins, whether the name alone
+//     pointed at the same one, at another, or at none: the name was choosing
+//     among spellings, and the class is known;
+//   - the hierarchy is silent or split — no indexed ancestor declares it, or
+//     two at one depth do. What the name alone answered stands, at the lower
+//     confidence a name-only binding carries, which is what keeps a base class
+//     outside the repository from costing an edge that was being found;
+//   - neither has an answer. The reference stays as pass one recorded it.
+func settleStatic(d deferredRef, inherited candidate, found, split bool) (candidate, bool, bool) {
+	switch {
+	case found:
+		return inherited, true, false
+	case d.hasFallback:
+		return d.fallback, true, false
+	default:
+		return candidate{}, false, split
+	}
+}
+
 // inheritedConfidence is what a binding through N levels of inheritance earns.
 //
-// Never High, at any depth. High in this package means the evidence constrained
-// the TYPE as well as the name — a definition in the same file, an owner the
-// candidate's qualified name actually carries, a package the file DECLARED it
-// imports. An inherited binding has neither of those. It rests on two
-// inferences stacked: that the receiver token names the type it appears to, and
-// that a chain of EXTENDS/IMPLEMENTS edges — themselves produced by this same
-// heuristic resolver, not by a compiler — is correct end to end. Publishing
-// that as High would claim more than the evidence supports, which is the one
-// thing the package doc forbids outright.
+// # Where the receiver is a token: never High, at any depth
+//
+// High in this package means the evidence constrained the TYPE as well as the
+// name — a definition in the same file, an owner the candidate's qualified name
+// actually carries, a package the file DECLARED it imports. An inherited
+// binding made from a receiver TOKEN has neither. It rests on two inferences
+// stacked: that the token names the type it appears to, and that a chain of
+// EXTENDS/IMPLEMENTS edges — themselves produced by this same heuristic
+// resolver, not by a compiler — is correct end to end. Publishing that as High
+// would claim more than the evidence supports, which is the one thing the
+// package doc forbids outright.
 //
 // Depth 1 earns Medium: a single inheritance step, and the method is not
 // declared on the receiver's own type, which is precisely the shape of ordinary
@@ -481,7 +633,32 @@ func inheritedBinding(
 // overrode the method with a definition the index never linked; by the second
 // level the honest summary is already "weak signal, thresholdable", which is
 // exactly what Low is defined to mean.
-func inheritedConfidence(depth int) model.Confidence {
+//
+// # Where the receiver's class is stated: High, and that is a measurement
+//
+// The first of those two inferences is gone for a static reference: the class
+// is the one the call is written in, or one the source names. What is left is
+// the chain, and whether a chain this resolver built can be trusted is an
+// empirical question rather than one to reason about — so it was measured,
+// against scip-python 0.6.6, over every binding the hierarchy made:
+//
+//	repository   agreed with the compiler
+//	django       6,650 of 6,714
+//	scrapy         799 of   805
+//	httpx           49 of    49
+//	requests         7 of     7
+//
+// 99.1% over 7,575 bindings. An earlier cut of the same measurement separated
+// one level up from two or more and found no decay with depth — on django
+// 1,866 of 1,922 at one level and 1,984 of 1,993 beyond it — because a method
+// found three levels up is a framework base class's, and those are not
+// overridden by accident. That is above every figure docs/accuracy.md
+// publishes for `high`, so this is where they are reported. The reasoning
+// above still describes what could go wrong; the table says how often it does.
+func inheritedConfidence(d deferredRef, depth int) model.Confidence {
+	if d.static {
+		return model.ConfidenceHigh
+	}
 	if depth <= 1 {
 		return model.ConfidenceMedium
 	}

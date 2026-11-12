@@ -62,6 +62,24 @@ the only kind that can falsify a resolution claim; RepoCortex's own numbers are
 the least trustworthy in the table for exactly that reason, and they are the
 highest.
 
+The Python scope analysis was measured on four, pinned by tag rather than by
+"whatever the default branch held": scrapy at the SHA the nightly corpus gate
+pins (`c7eacdbb`), requests `v2.32.3`, httpx `0.28.1` and django `5.1.4`. Four
+because one was not enough — a rule that agreed with the compiler index 8 times
+in 8 on scrapy agreed 1,486 times in 4,122 on django, and the reason was the
+compiler index, not the rule. See "Python: the receiver's class, read from the
+source" in accuracy.md.
+
+**`fixtures/pycalls` — hand-written ground truth.** A small Python package in
+which every interesting call site says, in a comment on its own line, which
+definition it reaches, or that it is dynamic and nothing may claim it at `high`.
+It exists for the shapes a compiler index cannot adjudicate — a call through a
+parameter has no SCIP target to disagree with — and it is a regression gate
+rather than a published figure: `go test ./internal/cli -run
+TestPythonCallGroundTruth -v` scores it and prints the table. Its markers were
+checked against `scip-python` once; the one disagreement is recorded in the
+fixture's README.
+
 **[performance.md](performance.md) — three corpora, each measuring a different
 thing.** `fixtures/payment-platform` (9 files) measures fixed costs — process
 start, migrations, transaction setup — rather than throughput. RepoCortex's own
