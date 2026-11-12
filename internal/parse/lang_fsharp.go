@@ -15,7 +15,9 @@ import "strings"
 //
 // A function ranks below a variable when a declaration is tagged both ways, so
 // the variable pattern excludes lambda bodies by text rather than relying on
-// ranking. For members the ranking is used the other way round: the broad
+// ranking. A return type written after the parameters (`member _.F(x) : T =`)
+// wraps them in a typed_pattern, and type parameters (`member _.F<'T>() =`)
+// put a type_arguments node between the name and them; both are methods. For members the ranking is used the other way round: the broad
 // pattern is a field (property) and the narrower one a method, and the method,
 // ranking higher, wins.
 //
@@ -29,6 +31,9 @@ func init() {
 		"(module_defn %s)",
 	}
 	const pat = "(identifier_pattern . (long_identifier_or_op [(identifier) @name (long_identifier . (identifier) @name .)]) %s)"
+	// A type with type parameters (`type Box<'T> =`) has its name wrapped in a
+	// long_identifier; one without has a bare identifier.
+	const tn = "[(identifier) @name (long_identifier . (identifier) @name)]"
 	decls := []string{
 		// functions
 		"(declaration_expression (function_or_value_defn (function_declaration_left . [(identifier) (op_identifier) (active_pattern)] @name) ) @definition.function)",
@@ -38,11 +43,11 @@ func init() {
 		// values
 		"(declaration_expression (function_or_value_defn (value_declaration_left " + strings.Replace(pat, "%s", ".", 1) + ") . (_) @_body) @definition.variable (#not-match? @_body \"^(fun|function)\\\\b\"))",
 		// types
-		"(type_definition [(union_type_defn (type_name (identifier) @name)) (record_type_defn (type_name (identifier) @name)) (anon_type_defn (type_name (identifier) @name)) (delegate_type_defn (type_name (identifier) @name)) (enum_type_defn (type_name (identifier) @name))] @definition.class)",
-		"(type_definition (interface_type_defn (type_name (identifier) @name)) @definition.interface)",
+		"(type_definition [(union_type_defn (type_name " + tn + ")) (record_type_defn (type_name " + tn + ")) (anon_type_defn (type_name " + tn + ")) (delegate_type_defn (type_name " + tn + ")) (enum_type_defn (type_name " + tn + "))] @definition.class)",
+		"(type_definition (interface_type_defn (type_name " + tn + ")) @definition.interface)",
 		"(type_definition (type_abbrev_defn (type_name [(identifier) @name (long_identifier . (identifier) @name)])) @definition.type_alias)",
 		// `type Id = int` has no bar and no fields: the grammar reads it as a union with one case
-		"(type_definition (union_type_defn (type_name (identifier) @name) (union_type_cases . (union_type_case (identifier) .) .)) @definition.type_alias)",
+		"(type_definition (union_type_defn (type_name " + tn + ") (union_type_cases . (union_type_case (identifier) .) .)) @definition.type_alias)",
 		// modules
 		"(module_defn . (identifier) @name) @definition.module",
 		"(module_defn (attributes) . (identifier) @name) @definition.module",
@@ -72,7 +77,8 @@ func init() {
 	// Members
 	b.WriteString(`
 (member_defn (method_or_prop_defn . (property_or_ident (identifier) @name .)) @definition.field)
-(member_defn (method_or_prop_defn . (property_or_ident (identifier) @name .) . [(paren_pattern) (argument_patterns) (identifier_pattern) (const (unit))]) @definition.method)
+(member_defn (method_or_prop_defn . (property_or_ident (identifier) @name .) . [(paren_pattern) (argument_patterns) (identifier_pattern) (typed_pattern) (const (unit))]) @definition.method)
+(member_defn (method_or_prop_defn . (property_or_ident (identifier) @name .) . (type_arguments) . [(paren_pattern) (argument_patterns) (identifier_pattern) (typed_pattern) (const (unit))]) @definition.method)
 (member_defn . (property_or_ident (identifier) @name .)) @definition.field
 (member_defn (member_signature . (identifier) @name) @definition.field)
 (member_defn (member_signature . (identifier) @name (curried_spec (arguments_spec))) @definition.method)
