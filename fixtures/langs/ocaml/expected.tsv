@@ -1,5 +1,7 @@
-# OCaml. A definition is an item of the file, or of a module or signature written in the file
-# (up to four modules deep).
+# OCaml. A definition is an item of the file, or of a module or signature written in the file,
+# at any depth of modules, `include struct` / `include sig` / `include module type of struct`,
+# `open struct`, constrained modules (`module M : sig ... end with type t := u`) and functor
+# parameter and result signatures. An item with an expression above it is not one: see below.
 #   let / let rec / and: function when it has parameters or its body is fun or function,
 #     variable otherwise (so `let pi = 3.14` and `let tm = structure "tm"` are variables);
 #     a parenthesised operator is named by the operator; `let () =`, `let _ =` and tuple
@@ -9,8 +11,10 @@
 #   type -> class for a variant, record, abstract or extensible type, type_alias for an alias;
 #   exception -> class; module -> package; module type -> interface;
 #   class -> class, class type -> interface, method -> method, instance variable (val) -> field.
-# Not definitions: let ... in inside an expression, let module (and everything in it), variant
-# constructors, record fields, open and include.
+# Not definitions: let ... in inside an expression, let module (and everything in it), the
+# argument of a functor application (`Make (struct let seed = 1 end)`), a destructive
+# substitution (`type t := u`, in a signature or after `with`), variant constructors, record
+# fields, open and include.
 shapes.ml	2	variable	pi
 shapes.ml	4	function	square
 shapes.ml	6	function	fact
@@ -122,3 +126,38 @@ more.ml	82	class	Failed
 more.ml	84	class	Alias
 more.ml	86	function	now
 shapes.mli	57	variable	callbacks
+includes.ml	2	package	Either
+includes.ml	3	package	Option
+includes.ml	7	variable	default_size
+includes.ml	8	function	make_name
+includes.ml	10	interface	Sized
+includes.ml	11	class	t
+includes.ml	13	function	size
+includes.ml	17	variable	nested_default
+includes.ml	21	package	Parts
+includes.ml	22	class	outer
+includes.ml	23	class	t
+includes.ml	25	function	fractional
+includes.ml	29	interface	Wrapped
+includes.ml	30	variable	wrapped
+includes.ml	34	package	Creators
+includes.ml	35	class	key
+includes.ml	36	function	hash
+includes.ml	38	class	table
+includes.ml	40	function	create
+includes.ml	43	package	Deep
+includes.ml	44	package	L1
+includes.ml	45	package	L2
+includes.ml	46	package	L3
+includes.ml	47	package	L4
+includes.ml	48	variable	bottom
+includes.ml	55	class	opaque
+includes.ml	57	function	outer_function
+includes.ml	67	package	Applied
+includes.mli	1	interface	S
+includes.mli	2	class	t
+includes.mli	5	function	length
+includes.mli	6	function	is_empty
+includes.mli	17	package	Inner
+includes.mli	18	variable	inner_size
+includes.mli	23	variable	last

@@ -13,8 +13,11 @@
   The same holds for a `struct` passed as a first-class module. Matching every
   `structure` regardless of its parent would index the contents of
   `let module M = struct ... end in` inside function bodies, which are locals.
-- **Modules nested more than four deep** (file > module > module > module >
-  module > item). The query spells out each container level; it stops at four.
+  (The query now asks the other way round: an item is a definition unless it has
+  a let binding, a top-level expression, a class binding, an extension node,
+  an `ERROR` or a functor application above it. The functor application is on
+  that list on purpose, which is why this gap remains. Nesting depth is no
+  longer limited.)
 - **A function-valued binding whose body is not a literal `fun` or `function`**
   is a variable, not a function: `let f = (fun x -> x)`, `let g = List.map h`,
   `let choose = min_binding`. Whether a name is a function is not syntactic
@@ -30,3 +33,13 @@
   `include` declare nothing.
 - **Pattern bindings** (`let (a, b) = ...`, `let { x; y } = ...`) declare names
   inside a pattern; they are not indexed.
+- **Destructive substitutions are not definitions.** `type t := u` in a
+  signature, and the `with type t := u` of `include S with type t := u`, remove
+  a type and declare none. They used to be recorded as `type_alias` when the
+  query reached them (an `include ... with type ...` line was a `type_alias`
+  named after the type); they are not now.
+- **A top-level `include sig ... end` in an `.mli`** is a syntax error for the
+  grammar (it is read fine inside a `module type ... = sig`), so what follows
+  it is read through error recovery.
+- **Items under an `ERROR` node** are not definitions, because a function body
+  that failed to parse looks the same as a signature that did.
