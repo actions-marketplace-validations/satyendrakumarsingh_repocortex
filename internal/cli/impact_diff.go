@@ -255,9 +255,16 @@ func writeImpactDiff(out io.Writer, rep impact.DiffReport, limit int, coverage s
 			fmt.Fprintf(out, "Riskiest change: %s — risk UNKNOWN: %s.\n",
 				rep.RiskiestSeed, strings.TrimSuffix(rep.Risk.Undetermined, "."))
 		case rep.Risk.Undetermined != "":
+			partial := ""
+			if rep.Risk.Partial != "" {
+				partial = "; " + rep.Risk.Partial
+			}
 			fmt.Fprintf(out, "Riskiest change: %s — risk %s or higher (score %d counts only the callers "+
-				"that were bound, certainty %s).\n",
-				rep.RiskiestSeed, rep.Risk.Level, rep.Risk.Score, rep.Risk.Certainty)
+				"that were bound%s, certainty %s).\n",
+				rep.RiskiestSeed, rep.Risk.Level, rep.Risk.Score, partial, rep.Risk.Certainty)
+		case rep.Risk.Partial != "":
+			fmt.Fprintf(out, "Riskiest change: %s — risk %s or higher (score %d; %s; certainty %s).\n",
+				rep.RiskiestSeed, rep.Risk.Level, rep.Risk.Score, rep.Risk.Partial, rep.Risk.Certainty)
 		default:
 			fmt.Fprintf(out, "Riskiest change: %s — risk %s (score %d, certainty %s).\n",
 				rep.RiskiestSeed, rep.Risk.Level, rep.Risk.Score, rep.Risk.Certainty)

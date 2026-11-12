@@ -529,6 +529,7 @@ func newImplementationsCmd(g *Global) *cobra.Command {
 		path          string
 		limit         int
 		minConfidence string
+		directOnly    bool
 	)
 	cmd := &cobra.Command{
 		Use:   "implementations <name>",
@@ -540,6 +541,10 @@ func newImplementationsCmd(g *Global) *cobra.Command {
 
 Use it before changing an interface, an abstract method or a base class, when
 the callers of the declaration are not the whole story.
+
+The types listed are every type that reaches the target through extends and
+implements edges, direct ones first, each with its depth. --direct-only lists
+the ones that name the target themselves.
 
 Only DECLARED relationships are visible from syntax: extends, implements, an
 embedded type. A Go type that satisfies an interface without naming it appears
@@ -571,10 +576,23 @@ exist.`,
 			if err != nil {
 				return err
 			}
-			subtypes, err := s.reg.IncomingEdges(ctx, s.runID, target.ID, limit, filter)
+			agentArgs := relationshipArgs(name, path, minConfidence)
+			if directOnly {
+				agentArgs["direct_only"] = true
+			}
+			line := askAgentTool(ctx, g, "find_implementations", agentArgs)
+			if line.refused() && !g.JSON {
+				// The name has no type: the tool says so and answered for
+				// nothing, and a table of zeros under it would answer for the
+				// constructor it refused.
+				line.print(cmd.OutOrStdout())
+				return nil
+			}
+			subs, err := s.reg.SubtypeClosure(ctx, s.runID, target.ID, filter, directOnly, limit, 0)
 			if err != nil {
 				return fmt.Errorf("relationship lookup: %w", err)
 			}
+			subtypes := subs.Hits
 			supertypes, err := s.reg.OutgoingEdges(ctx, s.runID, target.ID, limit, filter)
 			if err != nil {
 				return fmt.Errorf("relationship lookup: %w", err)
@@ -583,6 +601,7 @@ exist.`,
 			if g.JSON {
 				return emitJSON(cmd.OutOrStdout(), map[string]any{
 					"name": name, "index_revision": s.runID,
+					"summary": line.Summary,
 					"target": map[string]any{
 						"id": target.ID, "kind": target.Kind, "path": target.FilePath, "line": target.StartLine,
 					},
@@ -593,26 +612,45 @@ exist.`,
 			}
 
 			out := cmd.OutOrStdout()
+			line.print(out)
 			fmt.Fprintf(out, "%s (%s) at %s:%d\n", target.Name, target.Kind, target.FilePath, target.StartLine)
-			section := func(title string, edges []registry.EdgeHit, incoming bool) {
-				fmt.Fprintf(out, "\n%s (%d)\n", title, len(edges))
+			section := func(title string, edges []registry.EdgeHit, incoming bool, depths []int, total int) {
+				fmt.Fprintf(out, "\n%s (%d", title, total)
+				if len(edges) < total {
+					fmt.Fprintf(out, ", %d shown; raise --limit", len(edges))
+				}
+				fmt.Fprintln(out, ")")
 				if len(edges) == 0 {
 					fmt.Fprintln(out, "  none declared")
 					return
 				}
 				tw := tabwriter.NewWriter(out, 2, 8, 2, ' ', 0)
-				for _, e := range edges {
+				for i, e := range edges {
 					other := e.DstName
 					if incoming {
 						other = e.SrcName
 					}
-					fmt.Fprintf(tw, "  %s\t%s\t%s:%d\t%s (%s)\n",
-						strings.ToLower(e.Kind), other, e.EvidenceFile, e.EvidenceLine, e.Confidence, e.Source)
+					via := ""
+					if depths != nil && depths[i] > 1 {
+						via = fmt.Sprintf("  depth %d, via %s", depths[i], e.DstName)
+					}
+					fmt.Fprintf(tw, "  %s\t%s\t%s:%d\t%s (%s)%s\n",
+						strings.ToLower(e.Kind), other, e.EvidenceFile, e.EvidenceLine, e.Confidence, e.Source, via)
 				}
 				_ = tw.Flush()
 			}
-			section("Implemented or extended by", subtypes, true)
-			section("Implements or extends", supertypes, false)
+			edges := make([]registry.EdgeHit, len(subtypes))
+			depths := make([]int, len(subtypes))
+			for i, h := range subtypes {
+				edges[i], depths[i] = h.EdgeHit, h.Depth
+				if h.Depth > 1 {
+					// The path's weakest link, not the last edge: a type reached
+					// through a guess is not reported more strongly than the guess.
+					edges[i].Confidence = string(h.PathConfidence)
+				}
+			}
+			section("Implemented or extended by", edges, true, depths, subs.Total)
+			section("Implements or extends", supertypes, false, nil, len(supertypes))
 			if len(subtypes) == 0 && len(supertypes) == 0 {
 				fmt.Fprintf(out, "\n%s\n", emptyCaveat(ctx, s))
 			}
@@ -624,6 +662,8 @@ exist.`,
 	cmd.Flags().IntVarP(&limit, "limit", "n", 100, "maximum relationships to report in each direction")
 	cmd.Flags().StringVar(&minConfidence, "min-confidence", "",
 		"drop edges below this confidence (exact, high, medium, low)")
+	cmd.Flags().BoolVar(&directOnly, "direct-only", false,
+		"list only the types that extend or implement the target themselves")
 	return cmd
 }
 
@@ -668,6 +708,7 @@ To find the tests for everything a change touches, use 'repocortex impact'.`,
 			defer s.close()
 
 			deps := capability.NewDeps(s.reg, graph.NewForRun(s.db, s.runID))
+			opts.CheckValueUse = true
 			rep, err := tests.FindTestsWith(ctx, deps, s.runID, name, opts)
 			if err != nil {
 				if errors.Is(err, capability.ErrTargetNotFound) {
@@ -678,10 +719,24 @@ To find the tests for everything a change touches, use 'repocortex impact'.`,
 			if g.JSON {
 				return emitJSON(cmd.OutOrStdout(), rep)
 			}
+			testArgs := map[string]any{"symbol": name}
+			if minConfidence != "" {
+				testArgs["min_confidence"] = minConfidence
+			}
+			line := askAgentTool(ctx, g, "find_tests", testArgs)
 
 			out := cmd.OutOrStdout()
+			line.print(out)
 			fmt.Fprintf(out, "%s at %s\n\n", rep.Target.Name, rep.Target.FilePath)
 			if len(rep.Tests) == 0 {
+				if rep.ValueUse.Any() {
+					// "No tests found" is the tool's own NOT KNOWN here: the name
+					// occurs where no call is recorded, and a test that reaches the
+					// symbol through a function passed as a value leaves no edge.
+					fmt.Fprintf(out, "No tests found for %s, and whether one reaches it is not known "+
+						"(the first line says why).\n\n%s\n", rep.Target.Name, emptyCaveat(ctx, s))
+					return nil
+				}
 				fmt.Fprintf(out, "No tests found for %s.\n\n%s\n", rep.Target.Name, emptyCaveat(ctx, s))
 				return nil
 			}

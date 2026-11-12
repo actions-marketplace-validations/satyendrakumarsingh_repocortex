@@ -79,13 +79,25 @@ Examples:
 			// Human readable output
 			fmt.Printf("RepoCortex Change Plan for %s (%s)\n", plan.Target.Name, plan.Target.Kind)
 			fmt.Printf("Location:      %s:%d\n", plan.Target.FilePath, plan.Target.Line)
+			if plan.ValueUse.Any() {
+				// The same doubt the agent tool leads with: a function passed as a
+				// value is reached without a call edge.
+				fmt.Printf("INCOMPLETE:    %s.\n", plan.ValueUse.Lead())
+			}
 			switch {
 			case plan.RiskLevel == impact.LevelUnknown:
 				fmt.Printf("Risk Level:    UNKNOWN: %s.\n", strings.TrimSuffix(plan.RiskUndetermined, "."))
 				fmt.Println("               The callers below are the ones the index could bind, not all of them.")
 			case plan.RiskUndetermined != "":
-				fmt.Printf("Risk Level:    %s or higher (Score: %d/100 counts only the callers that were bound)\n",
-					strings.ToUpper(plan.RiskLevel), plan.RiskScore)
+				why := "counts only the callers that were bound"
+				if plan.RiskPartial != "" {
+					why += "; " + plan.RiskPartial
+				}
+				fmt.Printf("Risk Level:    %s or higher (Score: %d/100 %s)\n",
+					strings.ToUpper(plan.RiskLevel), plan.RiskScore, why)
+			case plan.RiskPartial != "":
+				fmt.Printf("Risk Level:    %s or higher (Score: %d/100; %s)\n",
+					strings.ToUpper(plan.RiskLevel), plan.RiskScore, plan.RiskPartial)
 			default:
 				fmt.Printf("Risk Level:    %s (Score: %d/100)\n", strings.ToUpper(plan.RiskLevel), plan.RiskScore)
 			}
