@@ -19,6 +19,8 @@ type fakeSource struct {
 	calls     []registry.ClientCallUsage
 	endpoints []registry.Endpoint
 	tables    []registry.TableUsage
+	// languages is files per language, as the index names languages.
+	languages map[string]int
 	// edges is keyed by source symbol id.
 	edges map[int64][]registry.EdgeHit
 	// failOn names the method that should return an error, for the paths where
@@ -82,6 +84,13 @@ func (f *fakeSource) TableUsageReport(_ context.Context, _ int64) ([]registry.Ta
 		return nil, fmt.Errorf("fake: tables unreadable")
 	}
 	return f.tables, nil
+}
+
+func (f *fakeSource) LanguageCounts(_ context.Context, _ int64) (map[string]int, error) {
+	if f.failOn == "LanguageCounts" {
+		return nil, fmt.Errorf("fake: languages unreadable")
+	}
+	return f.languages, nil
 }
 
 // readyRun is a healthy, current run stamped by the build the tests claim to be

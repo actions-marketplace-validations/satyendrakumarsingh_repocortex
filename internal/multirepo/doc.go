@@ -59,6 +59,17 @@
 //     right answer, and choosing one would produce the invented dependency that
 //     the whole binding design exists to avoid.
 //
+// # The contract view
+//
+// [Federator.Contracts] reads the same calls and routes and asks the opposite
+// question: not which call is answered, but which is not, and why — a method
+// no route with that path accepts, a different number of path segments, a
+// path nothing declares, or agreement that depends on a base path no index
+// holds. It shares this package's ceiling (never `exact`) and its rule about
+// members that could not be read, and adds one of its own: when the route
+// side of the comparison is incomplete, every finding loses a tier and says
+// which member cost it. See contract.go.
+//
 // # Saying what could not be joined
 //
 // A federated view that silently omits a member is worse than no federated view

@@ -1363,6 +1363,43 @@ with the members, including any whose index is absent or stale, and ends with
 what it could not join; exit status is 2 when a member could not be read, so
 the report is a floor rather than a total.
 
+### Checking API contracts between repositories
+
+```bash
+repocortex system contracts --members ./repocortex.system.yml
+```
+
+`system` shows which calls are answered. `system contracts` takes the same
+members and reports the calls that are not, and why:
+
+| Finding | Meaning |
+|---|---|
+| `method_mismatch` | the path matches a route, and no route with that path accepts the method the call uses |
+| `path_variable_mismatch` | a route starts where the call starts, and the two differ in how many path segments follow |
+| `no_matching_route` | nothing any member declares matches: a broken call, or a call out of this system |
+| `base_path_unverified` | the two agree only if a mount point, gateway prefix or client base URL is assumed |
+
+Each finding names the file and line of the call and of every route it is
+about, and carries a confidence that is never `exact` and never above `high`.
+A literal path that meets a literal route is `high`, a match through a path
+variable is `medium`, and anything resting on the literal prefix of a run-time
+target or on an assumed base path is `low`.
+
+The report says what it did not read before it says what it found:
+
+- Outbound calls are extracted from Go and the JavaScript family only. A member
+  written in Java or Python is listed with its calls marked as not read.
+- A target that begins with a run-time value, typically a base URL from
+  configuration, keeps none of its path in the index. It is listed as not
+  compared, not guessed at.
+- When a member's index is missing, partial or older than `--stale-after`, or a
+  member holds a language routes are not extracted from, every finding loses
+  one confidence tier and the report names the member.
+- Query, header and body parameters are not in the index and are not compared.
+
+The last section lists routes no indexed call reaches. It is informational and
+always `low`: it is a list of leads, never a list of dead code.
+
 ## Runtime correlation
 
 What actually ran, correlated against what could.

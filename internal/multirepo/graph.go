@@ -45,6 +45,12 @@ type Federator struct {
 	runningVersion   string
 	staleAfter       time.Duration
 	now              func() time.Time
+
+	// Contract report only; see contract.go.
+	maxContractRows  int
+	extractedClients []string
+	extractedRoutes  []string
+	isTestPath       func(string) bool
 }
 
 // Option configures a Federator. Functional options per CLAUDE.md §2.
@@ -127,6 +133,7 @@ func New(opts ...Option) (*Federator, error) {
 		maxSharedTables:  DefaultMaxSharedTables,
 		staleAfter:       DefaultStaleAfter,
 		now:              time.Now,
+		maxContractRows:  DefaultMaxContractRows,
 	}
 	for _, opt := range opts {
 		if err := opt(f); err != nil {
@@ -165,6 +172,52 @@ type memberFacts struct {
 // whose index answered a query with an error, which means the file is there and
 // broken rather than absent.
 func (f *Federator) Build(ctx context.Context, members []Member) (*Report, error) {
+	facts, err := loadMembers(ctx, members)
+	if err != nil {
+		return nil, err
+	}
+
+	rep := &Report{
+		Edges:        []CrossRepoEdge{},
+		SharedTables: []SharedTable{},
+		Unjoined: Unjoined{
+			Calls:              []UnjoinedCall{},
+			AmbiguousCalls:     []AmbiguousCall{},
+			Endpoints:          []UnconsumedEndpoint{},
+			UnavailableMembers: []string{},
+			Truncated:          map[string]int{},
+		},
+	}
+
+	routes := buildRoutes(facts)
+	if err := f.joinCalls(ctx, rep, facts, routes); err != nil {
+		return nil, err
+	}
+	f.collectUnconsumed(rep, facts)
+	f.joinTables(rep, facts)
+	rep.Members = f.memberStatuses(facts)
+	rep.Provenance = f.provenance(facts)
+	rep.Caveats = standingCaveats()
+
+	for _, mf := range facts {
+		if !mf.member.Available() {
+			rep.Unjoined.UnavailableMembers = append(rep.Unjoined.UnavailableMembers, mf.member.Name)
+		}
+	}
+	if len(rep.Unjoined.Truncated) == 0 {
+		rep.Unjoined.Truncated = nil
+	}
+	return rep, nil
+}
+
+// loadMembers validates the member list and loads every member once.
+//
+// Shared by [Federator.Build] and [Federator.Contracts] so the two reports
+// cannot disagree about what a member is: the same refusals (fewer than two
+// members, an unnamed one, a duplicate name), the same name order, and the same
+// rule that an unreadable member is carried through as a finding rather than
+// dropped.
+func loadMembers(ctx context.Context, members []Member) ([]*memberFacts, error) {
 	if len(members) < 2 {
 		return nil, fmt.Errorf(
 			"multirepo: a system graph needs at least two members, got %d — "+
@@ -200,38 +253,7 @@ func (f *Federator) Build(ctx context.Context, members []Member) (*Report, error
 		}
 		facts = append(facts, mf)
 	}
-
-	rep := &Report{
-		Edges:        []CrossRepoEdge{},
-		SharedTables: []SharedTable{},
-		Unjoined: Unjoined{
-			Calls:              []UnjoinedCall{},
-			AmbiguousCalls:     []AmbiguousCall{},
-			Endpoints:          []UnconsumedEndpoint{},
-			UnavailableMembers: []string{},
-			Truncated:          map[string]int{},
-		},
-	}
-
-	routes := buildRoutes(facts)
-	if err := f.joinCalls(ctx, rep, facts, routes); err != nil {
-		return nil, err
-	}
-	f.collectUnconsumed(rep, facts)
-	f.joinTables(rep, facts)
-	rep.Members = f.memberStatuses(facts)
-	rep.Provenance = f.provenance(facts)
-	rep.Caveats = standingCaveats()
-
-	for _, mf := range facts {
-		if !mf.member.Available() {
-			rep.Unjoined.UnavailableMembers = append(rep.Unjoined.UnavailableMembers, mf.member.Name)
-		}
-	}
-	if len(rep.Unjoined.Truncated) == 0 {
-		rep.Unjoined.Truncated = nil
-	}
-	return rep, nil
+	return facts, nil
 }
 
 // loadMember reads one member's four projections, or records why it could not.

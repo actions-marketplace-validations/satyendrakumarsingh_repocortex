@@ -95,22 +95,31 @@ assembled from a six-week-old index of one service is a picture of a system that
 no longer exists, and only the tool can know that.
 
 Exit status is 0 when every member was read, and 2 when the report is a floor
-rather than a total because one was not.`,
+rather than a total because one was not.
+
+'repocortex system contracts' takes the same members and asks the narrower
+question: does each client still call a route that exists, with the right
+method?`,
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			return runSystem(cmd, g)
 		},
 	}
 
-	cmd.Flags().StringArray("member", nil,
+	// Persistent, not local: `system contracts` reads the same member list and
+	// the same staleness threshold, and a second declaration of either would be
+	// a second spelling of one idea.
+	cmd.PersistentFlags().StringArray("member", nil,
 		"a member repository as name=path-to-index.db (repeatable)")
-	cmd.Flags().String("members", "",
+	cmd.PersistentFlags().String("members", "",
 		"read the member list from this estate file (YAML: members: [{name, index}])")
+	cmd.PersistentFlags().Duration("stale-after", 0,
+		"age at which a member index is called out as old (0 = default)")
 	cmd.Flags().Int("max-edges", 0, "cap the cross-repository edges reported (0 = default)")
 	cmd.Flags().Int("max-unjoined", 0, "cap each unjoined section (0 = default)")
 	cmd.Flags().Int("max-shared-tables", 0, "cap the shared-table section (0 = default)")
-	cmd.Flags().Duration("stale-after", 0,
-		"age at which a member index is called out as old (0 = default)")
+
+	cmd.AddCommand(newSystemContractsCmd(g))
 	return cmd
 }
 
@@ -123,18 +132,11 @@ const systemExitIncomplete = 2
 func runSystem(cmd *cobra.Command, g *Global) error {
 	ctx := cmd.Context()
 
-	entries, err := systemMembers(cmd)
+	members, closeAll, err := openSystemMembers(cmd)
 	if err != nil {
 		return err
 	}
-
-	opened := &memberCatalogue{byPath: map[string]*openIndex{}}
-	defer opened.closeAll()
-
-	members := make([]multirepo.Member, 0, len(entries))
-	for _, e := range entries {
-		members = append(members, opened.member(ctx, e))
-	}
+	defer closeAll()
 
 	opts := []multirepo.Option{multirepo.WithRunningVersion(Version)}
 	if n, _ := cmd.Flags().GetInt("max-edges"); n > 0 {
@@ -177,6 +179,24 @@ func runSystem(cmd *cobra.Command, g *Global) error {
 				len(rep.Unjoined.UnavailableMembers))}
 	}
 	return nil
+}
+
+// openSystemMembers resolves the member list and opens each index read-only.
+//
+// One door for `system` and `system contracts`, so the two cannot come to
+// disagree about which repositories the system is or about what an unreadable
+// one looks like. The returned function closes every index that opened.
+func openSystemMembers(cmd *cobra.Command) ([]multirepo.Member, func(), error) {
+	entries, err := systemMembers(cmd)
+	if err != nil {
+		return nil, nil, err
+	}
+	opened := &memberCatalogue{byPath: map[string]*openIndex{}}
+	members := make([]multirepo.Member, 0, len(entries))
+	for _, e := range entries {
+		members = append(members, opened.member(cmd.Context(), e))
+	}
+	return members, opened.closeAll, nil
 }
 
 // systemMembers gathers the member list from the estate file and the flags.

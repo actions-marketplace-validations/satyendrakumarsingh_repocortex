@@ -12,7 +12,7 @@ import (
 // CLAUDE.md §1 and §3, and the pattern already set by internal/diffgraph/ports.go
 // and internal/context/ports.go.
 //
-// Five methods, each load-bearing for something the report would otherwise have
+// Six methods, each load-bearing for something the report would otherwise have
 // to invent:
 //
 //   - Run supplies git_revision, producer_version, status and index_state.
@@ -30,6 +30,10 @@ import (
 //     for endpoints that actually took part in a match, so it costs one query
 //     per cross-repo edge rather than one per endpoint.
 //   - TableUsageReport is the second join: two members naming one table.
+//   - LanguageCounts is read by the contract report only. It is what lets that
+//     report say "this member is written in Java, and outbound calls are not
+//     extracted from Java" instead of presenting a member with no calls as a
+//     member that makes none.
 //
 // HONEST LIMIT, stated in the same spirit as internal/diffgraph/ports.go: three
 // of these signatures name registry DTOs, so this package still imports
@@ -45,6 +49,7 @@ type MemberSource interface {
 	EndpointReport(ctx context.Context, runID int64) ([]registry.Endpoint, error)
 	OutgoingEdges(ctx context.Context, runID, symbolID int64, limit int, filter registry.EdgeFilter) ([]registry.EdgeHit, error)
 	TableUsageReport(ctx context.Context, runID int64) ([]registry.TableUsage, error)
+	LanguageCounts(ctx context.Context, runID int64) (map[string]int, error)
 }
 
 // Compile-time proof that the production type satisfies the port. If a registry
