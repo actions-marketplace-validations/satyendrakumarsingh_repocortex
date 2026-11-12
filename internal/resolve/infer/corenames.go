@@ -150,7 +150,8 @@ func buildCoreMembers() map[string]map[string]struct{} {
 		GetEnumerator MoveNext Reset Substring Split Join Trim TrimStart TrimEnd Replace
 		StartsWith EndsWith ToLower ToUpper ToLowerInvariant ToUpperInvariant PadLeft PadRight
 		Format Append AppendLine AppendFormat Parse TryParse Write WriteLine Read ReadLine Flush
-		Close GetValue SetValue Invoke CopyTo AsEnumerable Cast OfType HasValue GetValueOrDefault`)
+		Close GetValue SetValue Invoke CopyTo AsEnumerable Cast OfType HasValue GetValueOrDefault
+		AsSpan AsMemory Slice Fill`)
 
 	coreMembers["cpp"] = words(`
 		size length empty clear begin end cbegin cend rbegin rend front back data c_str at
