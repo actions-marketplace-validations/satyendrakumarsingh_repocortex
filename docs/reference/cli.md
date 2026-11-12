@@ -172,6 +172,16 @@ $ repocortex index --full --digest
   Duration:      7346ms
 ```
 
+`Symbols`, and the `Partial parses` and `Parse failures` lines printed when there
+are any, are counted from the rows the run published, so they are the numbers
+`repocortex status` prints next and the two parse figures add up to the run's
+stored `parse_failures`. `Symbols` is everything the index holds a definition
+for: what the parsers extracted, plus the endpoints, tables, configuration keys
+and deployment units the analysers found. A partial parse is a file the parser
+recovered from or got nothing out of; a parse failure is a file with no symbols
+at all. The JSON form carries them as `symbols`, `partial_parses` and
+`parse_failures`.
+
 ### `resolve`
 
 **Answers:** which definition does each reference point at? Builds the call

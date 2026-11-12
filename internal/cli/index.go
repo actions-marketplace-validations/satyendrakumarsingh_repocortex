@@ -193,6 +193,7 @@ type indexReport struct {
 	Indexed       int64  `json:"files_indexed"`
 	Skipped       int64  `json:"files_skipped"`
 	ParseFailures int64  `json:"parse_failures"`
+	PartialParses int64  `json:"partial_parses"`
 	Symbols       int64  `json:"symbols"`
 	References    int64  `json:"references"`
 	Imports       int64  `json:"imports"`
@@ -324,6 +325,24 @@ func runIndex(cmd *cobra.Command, g *Global, workers int, showDigest bool, accur
 	}
 	committed = true
 
+	// Symbols and parse outcomes are counted from the rows just published,
+	// not from the pipeline's running tally.
+	//
+	// The two disagreed, and the rows were right. The tally counts what the
+	// parsers returned for files whose parse succeeded. The index also holds
+	// the endpoints, tables, configuration keys and deployment units the
+	// analysers found, and the symbols of files that parsed only in part, and
+	// it holds one row where a file declared the same thing twice on a line.
+	// On Newtonsoft.Json this command printed 6,432 symbols and 43 parse
+	// failures while the run it had just stored said 6,745 and 48, and
+	// `repocortex status` then printed 6,745. The 48 was 43 files that failed
+	// and 5 that parsed in part, which is how they are shown: the same two
+	// numbers, from the same rows, that `status` prints.
+	counts, err := reg.Counts(ctx, run.ID)
+	if err != nil {
+		return fmt.Errorf("count the published revision: %w", err)
+	}
+
 	report := indexReport{
 		Project:       cfg.ProjectName,
 		IndexRun:      run.ID,
@@ -331,8 +350,9 @@ func runIndex(cmd *cobra.Command, g *Global, workers int, showDigest bool, accur
 		Files:         stats.FilesDiscovered,
 		Indexed:       stats.FilesIndexed,
 		Skipped:       stats.FilesSkipped,
-		ParseFailures: stats.ParseFailures,
-		Symbols:       stats.Symbols,
+		ParseFailures: counts.ParseFailed,
+		PartialParses: counts.ParsePartial,
+		Symbols:       counts.Symbols,
 		References:    stats.References,
 		Imports:       stats.Imports,
 		DurationMS:    time.Since(start).Milliseconds(),
@@ -367,6 +387,9 @@ func renderIndexReport(cmd *cobra.Command, g *Global, r indexReport) error {
 	_, _ = fmt.Fprintf(out, "  Symbols:       %d\n", r.Symbols)
 	_, _ = fmt.Fprintf(out, "  References:    %d (unresolved until M2)\n", r.References)
 	_, _ = fmt.Fprintf(out, "  Imports:       %d\n", r.Imports)
+	if r.PartialParses > 0 {
+		_, _ = fmt.Fprintf(out, "  Partial parses: %d  (symbols may be incomplete in these files)\n", r.PartialParses)
+	}
 	if r.ParseFailures > 0 {
 		_, _ = fmt.Fprintf(out, "  Parse failures: %d\n", r.ParseFailures)
 	}
