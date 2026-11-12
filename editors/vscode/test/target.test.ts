@@ -3,7 +3,15 @@ import { test } from 'node:test';
 
 import { questionArguments } from '../src/core/args';
 import type { Definition } from '../src/core/target';
-import { answeredLocation, chooseDefinition, definitionsFrom, describeDefinition, targetFor, targetWarnings } from '../src/core/target';
+import {
+  answeredLocation,
+  candidatesFrom,
+  chooseDefinition,
+  definitionsFrom,
+  describeDefinition,
+  targetFor,
+  targetWarnings,
+} from '../src/core/target';
 import { answer } from './helpers';
 
 const one = definitionsFrom(answer('find_symbol.json'));
@@ -75,16 +83,81 @@ test('several definitions in one file: the hinted line decides', () => {
   assert.ok(noLine.kind === 'ask' && noLine.candidates.length === 2);
 });
 
-test('the fully qualified name is sent only when the bare name is ambiguous', () => {
-  const single = targetFor(one[0] as Definition, one);
-  assert.deepEqual(single, { name: 'parseToolArg', path: 'internal/cli/tool.go' });
-  assert.deepEqual(questionArguments('impact', single, 'low'), { symbol: 'parseToolArg', min_confidence: 'low' });
+test('a chosen definition is asked about by its name, path and line, never its qualified name', () => {
+  const single = targetFor(one[0] as Definition);
+  assert.deepEqual(single, { name: 'parseToolArg', path: 'internal/cli/tool.go', line: 384 });
+  assert.deepEqual(questionArguments('impact', single, 'low'), {
+    symbol: 'parseToolArg',
+    path: 'internal/cli/tool.go',
+    line: 384,
+    min_confidence: 'low',
+  });
 
   const web = many.find((d) => d.path === 'internal/web/web.go') as Definition;
-  const target = targetFor(web, many);
-  assert.deepEqual(target, { name: 'New', path: 'internal/web/web.go', fqn: 'internal/web/web.go:New' });
-  assert.deepEqual(questionArguments('tests', target, 'high'), { symbol: 'internal/web/web.go:New', min_confidence: 'high' });
-  assert.deepEqual(questionArguments('callers', target, 'high'), { name: 'New', path: 'internal/web/web.go', min_confidence: 'high' });
+  const target = targetFor(web);
+  assert.deepEqual(target, { name: 'New', path: 'internal/web/web.go', line: 309 });
+  assert.deepEqual(questionArguments('tests', target, 'high'), { symbol: 'New', path: 'internal/web/web.go', line: 309, min_confidence: 'high' });
+  assert.deepEqual(questionArguments('callers', target, 'high'), { name: 'New', path: 'internal/web/web.go', line: 309, min_confidence: 'high' });
+
+  // The index reported no line: the file is all there is to send.
+  assert.deepEqual(targetFor({ name: 'x', kind: 'function', path: 'a.go', line: 0 }), { name: 'x', path: 'a.go' });
+});
+
+test('overloads share one qualified name, and only the line tells them apart', () => {
+  const overloads = definitionsFrom(answer('find_symbol_overloads.json'));
+  assert.equal(overloads.length, 2);
+  assert.equal(overloads[0]?.fqn, overloads[1]?.fqn);
+  const targets = overloads.map((d) => questionArguments('impact', targetFor(d), 'low'));
+  assert.deepEqual(
+    targets.map((t) => [t['symbol'], t['line']]),
+    [
+      ['parse', 4],
+      ['parse', 8],
+    ],
+  );
+  // The editor points at the second one: it is chosen without asking.
+  const choice = chooseDefinition(overloads, { source: 'definition', path: 'java/src/main/java/com/shop/Parser.java', line: 8 });
+  assert.ok(choice.kind === 'chosen' && choice.definition.line === 8);
+});
+
+test('the candidates a tool lists instead of answering are read as definitions to choose from', () => {
+  assert.deepEqual(candidatesFrom(answer('find_callers_ambiguous.json')), [
+    {
+      name: 'parse',
+      kind: 'method',
+      path: 'java/src/main/java/com/shop/Parser.java',
+      line: 4,
+      fqn: 'java/src/main/java/com/shop/Parser.java:parse',
+      detail: 'in class Parser, 1 parameter(s), lines 4-6',
+    },
+    {
+      name: 'parse',
+      kind: 'method',
+      path: 'java/src/main/java/com/shop/Parser.java',
+      line: 8,
+      fqn: 'java/src/main/java/com/shop/Parser.java:parse',
+      detail: 'in class Parser, 2 parameter(s), lines 8-10',
+    },
+  ]);
+  const three = candidatesFrom(answer('analyze_impact_ambiguous.json'));
+  assert.deepEqual(
+    three.map((d) => [d.kind, d.path, d.line, d.detail]),
+    [
+      ['function', 'internal/cache/cache.go', 10, '0 parameter(s), lines 10-12'],
+      ['function', 'internal/queue/queue.go', 10, '0 parameter(s), lines 10-12'],
+      ['function', 'internal/store/store.go', 10, '0 parameter(s), lines 10-12'],
+    ],
+  );
+  // Each one, sent back, is what the tool said would select it.
+  assert.deepEqual(questionArguments('impact', targetFor(three[2] as Definition), 'low'), {
+    symbol: 'New',
+    path: 'internal/store/store.go',
+    line: 10,
+    min_confidence: 'low',
+  });
+  // Rows of an ordinary answer are results, not candidates.
+  assert.deepEqual(candidatesFrom(answer('find_callers.json')), []);
+  assert.deepEqual(candidatesFrom(answer('find_symbol_many.json')), []);
 });
 
 test('the answered definition is read back from the summary', () => {
@@ -100,37 +173,62 @@ test('the answered definition is read back from the summary', () => {
   assert.equal(answeredLocation(''), undefined);
 });
 
+test('the answered definition is still read when the summary opens with a warning word', () => {
+  // "INCOMPLETE — rows 1-50 of 63 are shown. 63 caller(s) of record (...) are recorded."
+  assert.deepEqual(answeredLocation(answer('find_callers_paged.json').summary), { path: 'internal/handlers/record.go', line: 7 });
+  assert.deepEqual(answeredLocation(answer('find_callers_unreliable.json').summary), { path: 'py/billing/invoice.py', line: 5 });
+  assert.deepEqual(answeredLocation(answer('find_callers_unknown.json').summary), { path: 'rb/lib/money.rb', line: 2 });
+  // analyze_impact now names the definition too.
+  assert.deepEqual(answeredLocation(answer('analyze_impact_unreliable.json').summary), { path: 'py/billing/invoice.py', line: 5 });
+  // A list of candidates answered for nothing.
+  assert.equal(answeredLocation(answer('analyze_impact_ambiguous.json').summary), undefined);
+});
+
 test('an answer for a different definition than the one asked about is flagged', () => {
   // Captured from `find_callers name=New path=internal/web/web.go`: the tool
   // answered for internal/capability/ownership/ownership.go:136 instead.
   const wrong = answer('find_callers_wrong_target.json');
   const web = many.find((d) => d.path === 'internal/web/web.go') as Definition;
-  const warnings = targetWarnings('callers', web, many, wrong);
+  const warnings = targetWarnings(web, many, wrong);
   assert.equal(warnings.length, 1);
   assert.match(warnings[0] as string, /is for the definition at internal\/capability\/ownership\/ownership\.go:136, NOT the one you asked about \(internal\/web\/web\.go:309\)/u);
 
   // The same answer is correct when ownership.go was the one asked about.
   const ownership = many.find((d) => d.path === 'internal/capability/ownership/ownership.go') as Definition;
-  assert.deepEqual(targetWarnings('callers', ownership, many, wrong), []);
+  assert.deepEqual(targetWarnings(ownership, many, wrong), []);
 });
 
 test('no warning when the name is unique', () => {
-  assert.deepEqual(targetWarnings('callers', one[0] as Definition, one, answer('find_callers.json')), []);
-  assert.deepEqual(targetWarnings('impact', one[0] as Definition, one, answer('analyze_impact.json')), []);
+  assert.deepEqual(targetWarnings(one[0] as Definition, one, answer('find_callers.json')), []);
+  assert.deepEqual(targetWarnings(one[0] as Definition, one, answer('analyze_impact.json')), []);
 });
 
-test('same-file namesakes share a fully qualified name, and the impact tools cannot tell them apart', () => {
+test('an answer that names the definition asked about, among namesakes, carries no warning', () => {
+  // Five definitions are named settle. The tool was given the path and line
+  // of one and says in its summary that it answered for that one.
+  const defs = [def('py/billing/invoice.py', 5, 'settle'), def('py/billing/refund.py', 5, 'settle'), def('py/billing/credit.py', 5, 'settle')];
+  assert.deepEqual(targetWarnings(defs[0] as Definition, defs, answer('find_callers_unreliable.json')), []);
+  assert.deepEqual(targetWarnings(defs[0] as Definition, defs, answer('analyze_impact_unreliable.json')), []);
+  // The same answers are not about the namesake in refund.py.
+  const other = targetWarnings(defs[1] as Definition, defs, answer('analyze_impact_unreliable.json'));
+  assert.equal(other.length, 1);
+  assert.match(other[0] as string, /is for the definition at py\/billing\/invoice\.py:5, NOT the one you asked about \(py\/billing\/refund\.py:5\)/u);
+  // Two overloads in one file differ only by line.
+  const overloads = definitionsFrom(answer('find_symbol_overloads.json'));
+  assert.deepEqual(targetWarnings(overloads[1] as Definition, overloads, answer('find_callers_selected.json')), []);
+  assert.equal(targetWarnings(overloads[0] as Definition, overloads, answer('find_callers_selected.json')).length, 1);
+});
+
+test('an older impact answer does not say which namesake it is for, and that is stated', () => {
   const defs = [def('data.go', 156), def('data.go', 201), def('other.go', 5)];
-  const warnings = targetWarnings('impact', defs[1] as Definition, defs, answer('analyze_impact.json'));
+  const warnings = targetWarnings(defs[1] as Definition, defs, answer('analyze_impact.json'));
   assert.equal(warnings.length, 1);
-  assert.match(warnings[0] as string, /2 definitions named "String" are in data\.go/u);
-  // A namesake in another file is told apart by the qualified name: no warning.
-  assert.deepEqual(targetWarnings('tests', defs[2] as Definition, defs, answer('find_tests.json')), []);
+  assert.match(warnings[0] as string, /3 definitions are named "String" and the tool did not say which one it answered for\. The one asked about is data\.go:201\./u);
 });
 
 test('a shared name with no answered location is stated, not hidden', () => {
   const web = many.find((d) => d.path === 'internal/web/web.go') as Definition;
-  const warnings = targetWarnings('callers', web, many, { ...answer('find_callers_wrong_target.json'), summary: 'something new' });
+  const warnings = targetWarnings(web, many, { ...answer('find_callers_wrong_target.json'), summary: 'something new' });
   assert.equal(warnings.length, 1);
   assert.match(warnings[0] as string, /did not say which one it answered for/u);
 });

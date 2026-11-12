@@ -91,7 +91,9 @@ export class ResultsView implements vscode.TreeDataProvider<Node>, vscode.Dispos
     this.root = projectRoot;
     this.report.set(reportText);
     this.view.title = model.title;
-    this.view.description = `${model.resultCount} ${model.resultCount === 1 ? 'row' : 'rows'}`;
+    // The count is the tool's own when it gave one, and a doubtful answer
+    // says so here, beside the title, before any row is read.
+    this.view.description = model.status;
     this.view.message = model.summary;
     this.changed.fire();
     void this.reveal();

@@ -121,4 +121,62 @@ test('the cache key changes with the index, the floor, the file and the name', (
   assert.notEqual(base, lensCacheKey('/r', 'ready|1|t', 'low', 'b.go', 'f'));
   assert.notEqual(base, lensCacheKey('/r', 'ready|1|t', 'low', 'a.go', 'g'));
   assert.notEqual(base, lensCacheKey('/other', 'ready|1|t', 'low', 'a.go', 'f'));
+  // Two definitions of one name in one file are looked up apart.
+  assert.notEqual(lensCacheKey('/r', 'ready|1|t', 'low', 'a.go', 'f', 5), lensCacheKey('/r', 'ready|1|t', 'low', 'a.go', 'f', 9));
+  assert.notEqual(base, lensCacheKey('/r', 'ready|1|t', 'low', 'a.go', 'f', 5));
+});
+
+test('count: a counted total replaces the rows returned, with no plus sign', () => {
+  const a = answer('find_callers_paged.json');
+  const count = lensCount(a, 'internal/handlers/record.go');
+  // 63 call sites exist and 50 came back. The verdict is "incomplete" only
+  // because rows were cut, which the counted total is not affected by.
+  assert.deepEqual(count, { kind: 'count', callers: 50, sites: 63, atLeast: false, shown: 50 });
+  assert.equal(lensTitle(count, { sharedName: false }), 'RepoCortex: 63 call sites');
+  assert.doesNotMatch(lensTitle(count, { sharedName: false }), /\+/u);
+  const tooltip = lensTooltip(count, a, 'low');
+  assert.match(tooltip, /^INCOMPLETE — rows 1-50 of 63 are shown\./u);
+  assert.match(tooltip, /It returned 50 of them\./u);
+  assert.match(tooltip, /Truncated: showing rows 1-50 of 63 caller\(s\), so 13 are not shown here\./u);
+});
+
+test('count: a number the index cannot stand behind says so in the title', () => {
+  const a = answer('find_callers_unreliable.json');
+  const count = lensCount(a, 'py/billing/invoice.py');
+  assert.deepEqual(count, { kind: 'count', callers: 1, sites: 1, atLeast: false, doubt: 'unreliable' });
+  assert.equal(lensTitle(count, { sharedName: false }), 'RepoCortex: 1 caller (unreliable)');
+  assert.equal(lensTitle(count, { sharedName: true }), 'RepoCortex: 1 caller (unreliable) (name shared in this file)');
+  const tooltip = lensTooltip(count, a, 'low');
+  assert.match(tooltip, /^UNRELIABLE — only 38% of the Python references/u);
+  assert.match(tooltip, /COVERAGE TOO LOW/u);
+
+  // Zero under low coverage is still "found", and still marked.
+  const zero = lensCount(answer('find_callers_selected.json'), 'java/src/main/java/com/shop/Parser.java');
+  assert.equal(lensTitle(zero, { sharedName: true }), 'RepoCortex: 0 callers found (unreliable) (name shared in this file)');
+
+  // Without a reliability, the verdict decides.
+  const old = answer('find_callers.json');
+  const mixed = lensCount({ ...old, verdict: { status: 'mixed', counts: {}, signals: [], nextStep: '' } }, 'internal/cli/tool.go');
+  assert.equal(lensTitle(mixed, { sharedName: false }), 'RepoCortex: 2 callers, 3 call sites (mixed confidence)');
+  const cut = lensCount({ ...old, verdict: { status: 'incomplete', counts: {}, signals: [], nextStep: '' } }, 'internal/cli/tool.go');
+  assert.equal(lensTitle(cut, { sharedName: false }), 'RepoCortex: 2 callers, 3 call sites (incomplete)');
+});
+
+test('when nothing can be concluded the lens shows no number at all', () => {
+  const a = answer('find_callers_unknown.json');
+  const count = lensCount(a, 'rb/lib/money.rb');
+  assert.deepEqual(count, { kind: 'unknown' });
+  assert.equal(lensTitle(count, { sharedName: false }), 'RepoCortex: callers unknown');
+  assert.match(lensTooltip(count, a, 'low'), /^UNKNOWN — RepoCortex found no reference in any Ruby file of this index/u);
+});
+
+test('a list of candidates is never counted as callers', () => {
+  const a = answer('find_callers_ambiguous.json');
+  assert.equal(a.items.length, 2);
+  const count = lensCount(a, 'java/src/main/java/com/shop/Parser.java');
+  assert.deepEqual(count, { kind: 'ambiguous' });
+  assert.equal(lensTitle(count, { sharedName: true }), 'RepoCortex: callers unknown (name matches several definitions)');
+  const tooltip = lensTooltip(count, a, 'low');
+  assert.match(tooltip, /^AMBIGUOUS — 2 definitions of "parse" match path=/u);
+  assert.match(tooltip, /Nothing was counted\. Click to choose a definition and list its callers\.$/u);
 });

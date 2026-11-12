@@ -80,6 +80,20 @@ function toOutline(symbols: readonly (vscode.DocumentSymbol | vscode.SymbolInfor
 }
 
 /**
+ * The 1-based line sent to select a lens's definition, or undefined to
+ * select by file alone.
+ *
+ * The line comes from the editor's outline, which follows the buffer, while
+ * the tool matches it against the index. After edits the two drift apart, so
+ * the line is sent only where the file alone cannot decide: a name the file
+ * defines more than once. If it then matches nothing, the tool lists the
+ * candidates and the lens says the callers are unknown.
+ */
+function selectingLine(target: LensTarget): number | undefined {
+  return target.sharedName ? target.line + 1 : undefined;
+}
+
+/**
  * A CodeLens with the caller count above function and type definitions.
  *
  * Off unless `repocortex.codeLens.enabled` is set. Built so that typing never
@@ -204,7 +218,7 @@ export class CallerLensProvider implements vscode.CodeLensProvider<CallerLens>, 
   async resolveCodeLens(lens: CallerLens, token: vscode.CancellationToken): Promise<CallerLens> {
     const request: LensRequest = { uri: lens.uri.toString(), line: lens.target.line, name: lens.target.name };
     const floor = minConfidence(lens.uri);
-    const key = lensCacheKey(lens.root, this.status.token(lens.root), floor, lens.relativePath, lens.target.name);
+    const key = lensCacheKey(lens.root, this.status.token(lens.root), floor, lens.relativePath, lens.target.name, selectingLine(lens.target));
 
     const apply = (title: string, tooltip: string): CallerLens => {
       lens.command = { title, tooltip, command: 'repocortex.showCallers', arguments: [request] };
@@ -249,10 +263,11 @@ export class CallerLensProvider implements vscode.CodeLensProvider<CallerLens>, 
   }
 
   private async lookup(lens: CallerLens, floor: ReturnType<typeof minConfidence>, signal: AbortSignal): Promise<Resolved> {
+    const line = selectingLine(lens.target);
     const call = await this.client.callTool(
       lens.root,
       'find_callers',
-      questionArguments('callers', { name: lens.target.name, path: lens.relativePath }, floor),
+      questionArguments('callers', { name: lens.target.name, path: lens.relativePath, ...(line !== undefined ? { line } : {}) }, floor),
       { signal, timeoutMs: LOOKUP_TIMEOUT_MS },
     );
     if (call.outcome.kind !== 'answer') {

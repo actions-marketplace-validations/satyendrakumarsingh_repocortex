@@ -1,7 +1,19 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { EnvelopeError, failureMessage, interpretToolRun, limitsOf, parseToolEnvelope, verdictLine } from '../src/core/result';
+import {
+  AMBIGUOUS_NAME,
+  doubtOf,
+  EnvelopeError,
+  failureMessage,
+  interpretToolRun,
+  isAmbiguous,
+  limitsOf,
+  parseToolEnvelope,
+  rowsWithheld,
+  verdictIsWarning,
+  verdictLine,
+} from '../src/core/result';
 import { answer, fixture } from './helpers';
 
 test('find_callers: every item keeps its tier, location and reason', () => {
@@ -138,10 +150,172 @@ test('exit 1 with is_error is a tool failure carrying the tool message', () => {
   assert.ok(missing.kind === 'tool-failure');
   assert.equal(missing.answer.hasResult, false);
   assert.match(missing.message, /missing properties: \["name"\]/u);
+});
 
-  const ambiguous = interpretToolRun({ code: 1, stdout: fixture('analyze_impact_ambiguous.json'), stderr: '' });
-  assert.ok(ambiguous.kind === 'tool-failure');
-  assert.match(ambiguous.message, /"New" matches 15 symbols; re-ask with a fully-qualified name/u);
+test('an ambiguous name is an answer, not a failure, and its rows are candidates', () => {
+  const outcome = interpretToolRun({ code: 0, stdout: fixture('analyze_impact_ambiguous.json'), stderr: '' });
+  assert.ok(outcome.kind === 'answer');
+  const a = outcome.answer;
+  assert.equal(a.isError, false);
+  assert.equal(a.outcome, AMBIGUOUS_NAME);
+  assert.equal(isAmbiguous(a), true);
+  assert.match(a.summary, /^AMBIGUOUS — "New" names 3 definitions and analyze_impact answered for none of them\./u);
+  assert.deepEqual(
+    a.items.map((i) => [i.kind, i.name, i.path, i.line, i.confidence]),
+    [
+      ['candidate', 'New', 'internal/cache/cache.go', 10, undefined],
+      ['candidate', 'New', 'internal/queue/queue.go', 10, undefined],
+      ['candidate', 'New', 'internal/store/store.go', 10, undefined],
+    ],
+  );
+  // Nothing was analysed, so nothing is graded.
+  assert.equal(a.verdict, undefined);
+  assert.equal(a.reliability, undefined);
+  assert.equal(a.page, undefined);
+  assert.equal(doubtOf(a), undefined);
+
+  assert.equal(isAmbiguous(answer('find_callers_ambiguous.json')), true);
+  assert.equal(isAmbiguous(answer('find_callers_selected.json')), false);
+});
+
+test('reliability is read with its level, lead and reasons', () => {
+  const a = answer('find_callers_unreliable.json');
+  assert.equal(a.reliability?.level, 'low');
+  assert.equal(a.reliability?.lead, 'only 38% of the Python references that name something this index defines are bound.');
+  assert.equal(a.reliability?.reasons.length, 2);
+  assert.match(a.reliability?.reasons[0] ?? '', /^COVERAGE TOO LOW — relationship lookup for Python is unreliable here/u);
+  assert.equal(a.verdict?.status, 'unreliable');
+  assert.match(a.summary, /^UNRELIABLE — only 38% of the Python references/u);
+  assert.deepEqual(doubtOf(a), { word: 'unreliable', from: 'reliability' });
+
+  const none = answer('find_callers_unknown.json');
+  assert.equal(none.reliability?.level, 'none');
+  assert.match(none.summary, /^UNKNOWN — RepoCortex found no reference in any Ruby file of this index/u);
+  assert.deepEqual(doubtOf(none), { word: 'unknown', from: 'reliability' });
+
+  // A paged list from a well-covered language: the coverage is good and the
+  // verdict alone says the rows are not all of them.
+  const paged = answer('find_callers_paged.json');
+  assert.deepEqual(paged.reliability, { level: 'good', lead: '', reasons: [] });
+  assert.equal(paged.verdict?.status, 'incomplete');
+  assert.deepEqual(doubtOf(paged), { word: 'incomplete', from: 'verdict' });
+});
+
+test('a doubtful answer: any level but good, and the unreliable, incomplete and mixed verdicts', () => {
+  const base = answer('find_callers.json');
+  assert.equal(doubtOf(base), undefined);
+  const withLevel = (level: string) => doubtOf({ ...base, reliability: { level, lead: '', reasons: [] } });
+  assert.equal(withLevel('good'), undefined);
+  assert.deepEqual(withLevel('incomplete'), { word: 'incomplete', from: 'reliability' });
+  assert.deepEqual(withLevel('unverified'), { word: 'unverified', from: 'reliability' });
+  assert.deepEqual(withLevel('low'), { word: 'unreliable', from: 'reliability' });
+  assert.deepEqual(withLevel('none'), { word: 'unknown', from: 'reliability' });
+  // A level this extension has never heard of is not a good one.
+  assert.deepEqual(withLevel('partial'), { word: 'partial', from: 'reliability' });
+
+  const withVerdict = (status: string) => doubtOf({ ...base, verdict: { status, counts: {}, signals: [], nextStep: '' } });
+  assert.equal(withVerdict('proven'), undefined);
+  assert.equal(withVerdict('strong'), undefined);
+  assert.deepEqual(withVerdict('unreliable'), { word: 'unreliable', from: 'verdict' });
+  assert.deepEqual(withVerdict('incomplete'), { word: 'incomplete', from: 'verdict' });
+  assert.deepEqual(withVerdict('mixed'), { word: 'mixed confidence', from: 'verdict' });
+
+  for (const status of ['weak', 'empty', 'unreliable', 'incomplete', 'mixed']) {
+    assert.equal(verdictIsWarning(status), true, status);
+  }
+  for (const status of ['proven', 'strong', '', 'toString']) {
+    assert.equal(verdictIsWarning(status), false, status);
+  }
+});
+
+test('a page is read with its counted total, and says how many rows were withheld', () => {
+  const paged = answer('find_callers_paged.json');
+  assert.deepEqual(paged.page, { offset: 0, limit: 50, total: 63, returned: 50, nextOffset: 50 });
+  assert.equal(paged.items.length, 50);
+  assert.equal(rowsWithheld(paged), 13);
+  assert.equal(paged.truncated, true);
+  assert.match(paged.truncatedReason ?? '', /^showing rows 1-50 of 63 caller\(s\), so 13 are not shown here\./u);
+
+  // A page that reaches the end has no next_offset.
+  const whole = answer('find_callers_unreliable.json');
+  assert.deepEqual(whole.page, { offset: 0, limit: 50, total: 1, returned: 1, nextOffset: 0 });
+  assert.equal(rowsWithheld(whole), 0);
+});
+
+test('an older binary: none of the new fields, and nothing is made of their absence', () => {
+  for (const name of [
+    'find_callers.json',
+    'find_callers_truncated.json',
+    'find_callers_floor.json',
+    'find_callers_missing.json',
+    'find_callers_wrong_target.json',
+    'find_callers_stale.json',
+    'analyze_impact.json',
+    'analyze_impact_omitted.json',
+    'find_tests.json',
+    'find_implementations.json',
+    'find_implementations_both.json',
+    'find_symbol.json',
+    'find_symbol_many.json',
+  ]) {
+    const a = answer(name);
+    assert.equal(a.reliability, undefined, name);
+    assert.equal(a.page, undefined, name);
+    assert.equal(a.outcome, undefined, name);
+    assert.equal(isAmbiguous(a), false, name);
+    assert.equal(rowsWithheld(a), 0, name);
+    assert.ok(!limitsOf(a).some((l) => l.kind === 'reliability'), name);
+    // The one thing read differently in an older answer is a verdict of
+    // "mixed", which is now a warning. No other sample is doubted.
+    assert.deepEqual(doubtOf(a), a.verdict?.status === 'mixed' ? { word: 'mixed confidence', from: 'verdict' } : undefined, name);
+  }
+  assert.equal(answer('find_implementations_both.json').verdict?.status, 'mixed');
+  // The key set of an older answer is exactly what it was.
+  assert.deepEqual(Object.keys(answer('find_callers.json')).sort(), [
+    'hasResult',
+    'indexRevision',
+    'indexStatus',
+    'isError',
+    'items',
+    'notes',
+    'provenance',
+    'summary',
+    'text',
+    'tool',
+    'truncated',
+    'verdict',
+  ]);
+});
+
+test('the reliability comes first among the limits, and a sentence the tool repeated is shown once', () => {
+  const a = answer('find_callers_unreliable.json');
+  const limits = limitsOf(a);
+  assert.deepEqual(limits[0], {
+    kind: 'reliability',
+    label: 'Reliability',
+    text: 'low — only 38% of the Python references that name something this index defines are bound.',
+    warning: true,
+  });
+  // Both reasons are among the notes already, so they are not listed again.
+  assert.equal(limits.filter((l) => l.kind === 'reliability').length, 1);
+  for (const reason of a.reliability?.reasons ?? []) {
+    assert.equal(limits.filter((l) => l.text === reason).length, 1, reason);
+    assert.equal(limits.find((l) => l.text === reason)?.warning, true, reason);
+  }
+  // The verdict repeats the lead as a signal: once is enough.
+  assert.ok(a.verdict?.signals.includes(a.reliability?.lead ?? ''));
+  assert.ok(!limits.some((l) => l.kind === 'signal' && l.text === a.reliability?.lead));
+  // Every note is still there, verbatim.
+  for (const note of a.notes) {
+    assert.ok(limits.some((l) => l.kind === 'note' && l.text === note), note);
+  }
+
+  // A reason the notes do not carry is shown in its own row.
+  const extra = limitsOf({ ...a, reliability: { level: 'low', lead: '', reasons: ['said nowhere else'] } });
+  assert.deepEqual(
+    extra.filter((l) => l.kind === 'reliability').map((l) => l.text),
+    ['low', 'said nowhere else'],
+  );
 });
 
 test('no index: the CLI error on stderr, and the success-shaped "absent" answer', () => {
@@ -189,9 +363,37 @@ test('malformed envelopes are rejected, and wrong field types are ignored rather
         truncated: 'yes',
         provenance: { head_matches_build: 'true' },
         omitted: { count: 0 },
+        reliability: { level: 3, lead: 'ignored', reasons: 'x' },
+        page: { offset: 0, limit: 50, total: '63', returned: 50, next_offset: 50 },
+        outcome: ['ambiguous_name'],
       },
     }),
   );
+  assert.equal(odd.reliability, undefined);
+  // A page with no counted total is no page: the rows are counted as before.
+  assert.equal(odd.page, undefined);
+  assert.equal(odd.outcome, undefined);
+  assert.equal(isAmbiguous(odd), false);
+
+  const partial = parseToolEnvelope(
+    JSON.stringify({
+      tool: 'find_callers',
+      is_error: false,
+      text: '',
+      result: {
+        items: [{ kind: 'calls', name: 'a' }],
+        reliability: { level: 'low', lead: 7, reasons: ['kept', 3] },
+        page: { total: 9, offset: -1, limit: 'many', next_offset: 2.5 },
+        outcome: 'something_new',
+      },
+    }),
+  );
+  assert.deepEqual(partial.reliability, { level: 'low', lead: '', reasons: ['kept'] });
+  assert.deepEqual(partial.page, { offset: 0, limit: 0, total: 9, returned: 1, nextOffset: 0 });
+  assert.equal(rowsWithheld(partial), 8);
+  // An outcome this extension does not know is kept and is not the ambiguous one.
+  assert.equal(partial.outcome, 'something_new');
+  assert.equal(isAmbiguous(partial), false);
   assert.equal(odd.text, '');
   assert.equal(odd.summary, '');
   assert.equal(odd.indexRevision, 0);

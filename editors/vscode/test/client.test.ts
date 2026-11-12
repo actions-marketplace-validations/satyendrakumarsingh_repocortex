@@ -3,12 +3,14 @@ import { test } from 'node:test';
 
 import { AbortedError } from '../src/core/cache';
 import { RepoCortexClient, STATUS_TIMEOUT_MS, TOOL_TIMEOUT_MS } from '../src/core/client';
-import { messageForError, messageForOutcome } from '../src/core/messages';
-import { interpretToolRun } from '../src/core/result';
+import { QUESTION_TOOL, questionArguments } from '../src/core/args';
+import { messageForAmbiguous, messageForError, messageForOutcome } from '../src/core/messages';
+import { interpretToolRun, isAmbiguous } from '../src/core/result';
 import type { RunRequest, RunResult } from '../src/core/runner';
 import { BinaryNotFoundError, BinaryNotRunnableError, RunCancelledError, RunTimeoutError, runBinary } from '../src/core/runner';
 import { StatusError } from '../src/core/status';
-import { fixture } from './helpers';
+import { answeredLocation, definitionsFrom, targetFor } from '../src/core/target';
+import { answer, fixture } from './helpers';
 
 function fakeRunner(reply: (request: RunRequest) => RunResult | Error): { runner: (r: RunRequest) => Promise<RunResult>; requests: RunRequest[] } {
   const requests: RunRequest[] = [];
@@ -111,6 +113,36 @@ test('messages: no index offers to build one; a tool failure offers the report',
   assert.match(m3.text, /may be older than this extension expects/u);
 });
 
+test('messages: a binary too old to take path and line is named as the likely cause', () => {
+  // Captured from the v1.0.1 release, asked the way this extension now asks.
+  const refused = interpretToolRun({ code: 1, stdout: fixture('error_unknown_argument.json'), stderr: '' });
+  assert.ok(refused.kind === 'tool-failure');
+  const message = messageForOutcome(refused);
+  assert.equal(message.severity, 'error');
+  assert.equal(message.remedy, 'show-report');
+  assert.match(message.text, /the tool analyze_impact reported a failure\. validating "arguments": .*unexpected additional properties \["line" "path"\]/u);
+  assert.match(message.text, /The installed repocortex may be older than this extension expects; update it\.$/u);
+  // Any other failure is reported without that guess.
+  const other = interpretToolRun({ code: 1, stdout: fixture('error_bad_confidence.json'), stderr: '' });
+  assert.ok(other.kind === 'tool-failure');
+  assert.doesNotMatch(messageForOutcome(other).text, /older than this extension/u);
+});
+
+test('messages: an ambiguous name is a warning that carries the tool summary and offers the report', () => {
+  const message = messageForAmbiguous('New', answer('analyze_impact_ambiguous.json'));
+  assert.equal(message.severity, 'warning');
+  assert.equal(message.remedy, 'show-report');
+  assert.equal(
+    message.text,
+    'RepoCortex: "New" matches several definitions, so nothing was analysed. ' +
+      'AMBIGUOUS — "New" names 3 definitions and analyze_impact answered for none of them. Pass the path and line of one row below.',
+  );
+  assert.equal(
+    messageForAmbiguous('New', { ...answer('analyze_impact_ambiguous.json'), summary: '' }).text,
+    'RepoCortex: "New" matches several definitions, so nothing was analysed.',
+  );
+});
+
 // Runs against a real binary and a real index when both are named:
 //   REPOCORTEX_BIN=/path/to/repocortex REPOCORTEX_PROJECT=/path/to/indexed/repo npm test
 const bin = process.env['REPOCORTEX_BIN'];
@@ -133,18 +165,21 @@ test('live: the real binary answers every question the extension asks', { skip: 
   assert.ok(found.outcome.kind === 'answer');
   assert.ok(found.outcome.answer.items.length >= 1, `no definition of ${symbol}`);
 
-  for (const [tool, args] of [
-    ['find_callers', { name: symbol, min_confidence: 'low' }],
-    ['analyze_impact', { symbol, min_confidence: 'low' }],
-    ['find_tests', { symbol, min_confidence: 'low' }],
-    ['find_implementations', { name: symbol, min_confidence: 'low' }],
-  ] as const) {
-    const call = await client.callTool(root, tool, args);
+  // Asked the way the extension asks: the bare name, with the path and line
+  // of one definition find_symbol listed. That must select it, however many
+  // definitions share the name.
+  const definition = definitionsFrom(found.outcome.answer)[0];
+  assert.ok(definition !== undefined, `no located definition of ${symbol}`);
+  for (const kind of ['callers', 'impact', 'tests', 'implementations'] as const) {
+    const tool = QUESTION_TOOL[kind];
+    const call = await client.callTool(root, tool, questionArguments(kind, targetFor(definition), 'low'));
     assert.equal(call.outcome.kind, 'answer', `${tool}: ${JSON.stringify(call.outcome).slice(0, 300)}`);
     assert.ok(call.outcome.kind === 'answer');
     assert.equal(call.outcome.answer.tool, tool);
     assert.notEqual(call.outcome.answer.summary, '');
     assert.ok(call.outcome.answer.provenance?.caveat, `${tool} carried no provenance caveat`);
+    assert.equal(isAmbiguous(call.outcome.answer), false, `${tool} listed candidates: ${call.outcome.answer.summary}`);
+    assert.deepEqual(answeredLocation(call.outcome.answer.summary), { path: definition.path, line: definition.line }, tool);
   }
 
   // A name the CLI's key=value form would have read as a file or a boolean.

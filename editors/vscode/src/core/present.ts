@@ -9,7 +9,7 @@ import type { QuestionKind } from './args';
 import { QUESTION_TITLE } from './args';
 import { describeConfidence } from './confidence';
 import type { LimitStatement, ToolAnswer, ToolItem } from './result';
-import { limitsOf, verdictLine } from './result';
+import { doubtOf, limitsOf, rowsWithheld, verdictIsWarning, verdictLine } from './result';
 
 export interface LimitRow {
   readonly type: 'limit';
@@ -49,7 +49,15 @@ export interface ResultModel {
   /** The tool's own one-line summary. */
   readonly summary: string;
   readonly sections: readonly Section[];
+  /** Rows in the view. */
   readonly resultCount: number;
+  /** Rows that exist, as the tool counted them. Equal to resultCount when it gave no count. */
+  readonly totalCount: number;
+  /**
+   * The view's one-line status: `3 rows`, `showing 50 of 63`, and ahead of
+   * that the tool's word for a doubtful answer: `unreliable · 1 row`.
+   */
+  readonly status: string;
 }
 
 const KIND_TITLES: Readonly<Record<string, string>> = {
@@ -59,6 +67,9 @@ const KIND_TITLES: Readonly<Record<string, string>> = {
   test: 'Tests',
   subtype: 'Implements or extends this',
   supertype: 'This implements or extends',
+  // The extension asks the user to choose before it shows anything, so these
+  // rows should not reach the view. If they do, the heading says what they are.
+  candidate: 'Definitions that share the name: nothing was analysed',
 };
 
 function kindTitle(kind: string): string {
@@ -138,8 +149,24 @@ export function buildResultModel(answer: ToolAnswer, options: ModelOptions): Res
       type: 'limit',
       label: 'Verdict',
       text: [verdictLine(answer.verdict), answer.verdict.nextStep].filter((s) => s !== '').join('. '),
-      warning: answer.verdict.status === 'weak' || answer.verdict.status === 'empty',
+      warning: verdictIsWarning(answer.verdict.status),
       author: 'tool',
+    });
+  }
+  if (rowsWithheld(answer) > 0) {
+    // The tool's own advice is to pass an offset, which this view cannot do.
+    const shown = answer.items.length;
+    const total = totalRows(answer);
+    limits.push({
+      type: 'limit',
+      label: 'Shown',
+      text:
+        (total > shown
+          ? `This view holds ${shown} of the ${total} rows RepoCortex counted. `
+          : `This view holds ${shown} rows and RepoCortex says more exist. `) +
+        'The extension reads the first page only; to read on, run the same tool call in a terminal with the offset the tool names.',
+      warning: true,
+      author: 'extension',
     });
   }
   if (limits.length > 0) {
@@ -165,12 +192,36 @@ export function buildResultModel(answer: ToolAnswer, options: ModelOptions): Res
   }
 
   const subject = options.askedAbout !== undefined ? `${options.symbol} (${options.askedAbout})` : options.symbol;
+  const doubt = doubtOf(answer);
   return {
     title: `${QUESTION_TITLE[options.kind]} ${subject}`,
+    // Shown as the tool wrote it. Its first word may be UNKNOWN, UNRELIABLE,
+    // UNVERIFIED, INCOMPLETE or AMBIGUOUS, and that word is the answer.
     summary: answer.summary !== '' ? answer.summary : 'RepoCortex returned no summary.',
     sections,
     resultCount: answer.items.length,
+    totalCount: totalRows(answer),
+    status: [doubt?.word ?? '', countRows(answer)].filter((s) => s !== '').join(' · '),
   };
+}
+
+/**
+ * How many rows there are: `3 rows`, from the tool's own count when it gave
+ * one, and `showing 50 of 63` when it returned fewer than it counted.
+ */
+export function countRows(answer: ToolAnswer): string {
+  const total = totalRows(answer);
+  if (rowsWithheld(answer) > 0) {
+    // A next offset with a total no larger than the page contradicts itself;
+    // the rows in hand are then the only number worth stating.
+    return total > answer.items.length ? `showing ${answer.items.length} of ${total}` : `showing ${answer.items.length}, more exist`;
+  }
+  return `${total} ${total === 1 ? 'row' : 'rows'}`;
+}
+
+/** The tool's count of the rows that exist, and never fewer than it returned. */
+function totalRows(answer: ToolAnswer): number {
+  return Math.max(answer.page?.total ?? 0, answer.items.length);
 }
 
 /**

@@ -2,6 +2,35 @@
 
 All notable changes to the RepoCortex VS Code extension are recorded here.
 
+## Unreleased
+
+Follows the answer format of the `repocortex` tools as it stands after
+release 1.0.1. That release refuses the `path` and `line` arguments this
+version sends, so the binary must be updated with it.
+
+### Changed
+
+- Every question names one definition by its bare name, its file and the
+  line it starts on. The fully qualified name is no longer sent: overloads in
+  one file share it.
+- A name the tool matches to several definitions is offered as a list to
+  choose from, and the question is asked again about the choice. The list is
+  never shown as results.
+- The results view shows the tool's summary unchanged, including an opening
+  `UNKNOWN`, `UNRELIABLE`, `UNVERIFIED` or `INCOMPLETE`, and shows the same
+  word beside the row count. The reliability the tool reports comes first in
+  the view when it is less than good.
+- The verdicts `unreliable`, `incomplete` and `mixed` are shown as warnings,
+  as `weak` and `empty` already were.
+- Row counts come from the tool's own total. A list the tool returned in
+  part reads `showing 50 of 195`, and the CodeLens shows the counted total
+  with no `+`.
+- The CodeLens marks a count the index cannot stand behind, as in
+  `1 caller (unreliable)`, and reads `callers unknown` when the tool says
+  nothing can be concluded or lists definitions instead of answering.
+- A tool failure that names unexpected arguments says the binary may be
+  older than the extension expects.
+
 ## 0.1.0
 
 First version.

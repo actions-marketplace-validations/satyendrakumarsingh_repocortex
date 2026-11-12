@@ -43,7 +43,18 @@ if (rest[0] === 'tool' && rest[1] === 'call') {
   const tool = rest[2];
   const args = JSON.parse(rest[3].slice('--args='.length));
   const name = args.name || args.symbol || '';
+  // A key ending in a line answers only a call that selects that line.
   const table = {
+    'find_symbol|parse': ['find_symbol_overloads.json', 0],
+    'find_callers|parse': ['find_callers_ambiguous.json', 0],
+    'find_callers|parse|4': ['find_callers_ambiguous.json', 0],
+    'find_callers|parse|8': ['find_callers_selected.json', 0],
+    'find_symbol|record': ['find_symbol.json', 0, 'record'],
+    'find_callers|record': ['find_callers_paged.json', 0],
+    'find_symbol|settle': ['find_symbol.json', 0, 'settle'],
+    'find_callers|settle': ['find_callers_unreliable.json', 0],
+    'analyze_impact|settle': ['analyze_impact_unreliable.json', 0],
+    'find_callers|cents': ['find_callers_unknown.json', 0],
     'get_project_overview|': ['get_project_overview.json', 0],
     'find_symbol|parseToolArg': ['find_symbol.json', 0],
     'find_callers|parseToolArg': ['find_callers.json', 0],
@@ -57,12 +68,14 @@ if (rest[0] === 'tool' && rest[1] === 'call') {
     'analyze_impact|Boom': ['error_bad_confidence.json', 1],
     'find_symbol|Ghost': ['find_symbol_missing.json', 0],
   };
-  const hit = table[tool + '|' + name];
+  const hit = table[tool + '|' + name + '|' + args.line] || table[tool + '|' + name];
   if (!hit) { process.stderr.write(read('stderr_unknown_tool.txt')); process.exit(1); }
   let text = read(hit[0]);
   if (hit[2]) text = text.split('parseToolArg').join(hit[2]);
-  process.stdout.write(text);
-  process.exit(hit[1]);
+  // Exit only once the text is written: a sample larger than the pipe's
+  // buffer is cut short by an exit that does not wait for it.
+  process.stdout.write(text, () => process.exit(hit[1]));
+  return;
 }
 process.stderr.write('error: unknown command\\n');
 process.exit(1);
@@ -126,9 +139,14 @@ before(() => {
 
   // 30 lines of padding so line numbers resemble a real file.
   const pad = (n: number): string => Array.from({ length: n }, (_, i) => `// line ${i + 1}`).join('\n');
-  write('project/internal/cli/tool.go', `${pad(8)}\n\tk, v, err := parseToolArg(pair, stdin)\nfunc parseToolArg(pair string) {\n}\nvar s Symbol\nvar x = New()\nvar b = Boom()\nvar g = Ghost()\n`);
+  write('project/internal/cli/tool.go', `${pad(8)}\n\tk, v, err := parseToolArg(pair, stdin)\nfunc parseToolArg(pair string) {\n}\nvar s Symbol\nvar x = New()\nvar b = Boom()\nvar g = Ghost()\nvar p = parse()\nvar r = record()\nvar t = settle()\n`);
   write('project/internal/cli/structure_test.go', `${pad(300)}\n`);
   write('project/internal/web/web.go', `${pad(5)}\nfunc New() {}\n`);
+  // The files the newer samples are about, for the lenses placed in them.
+  write('project/java/src/main/java/com/shop/Parser.java', `${pad(12)}\n`);
+  write('project/internal/handlers/record.go', `${pad(12)}\n`);
+  write('project/py/billing/invoice.py', `${pad(12)}\n`);
+  write('project/rb/lib/money.rb', `${pad(12)}\n`);
 
   const fake = createFakeVscode();
   control = fake.control;
@@ -192,7 +210,7 @@ test('Show callers: looks the definition up, asks, and fills the view', { skip: 
       'tool',
       'call',
       'find_callers',
-      '--args={"name":"parseToolArg","path":"internal/cli/tool.go","min_confidence":"low"}',
+      '--args={"name":"parseToolArg","path":"internal/cli/tool.go","line":384,"min_confidence":"low"}',
     ],
   ]);
 
@@ -237,7 +255,7 @@ test('Show the full tool report: the verbatim tool text', { skip: posixOnly }, a
   const text = control.shown.at(-1)?.document.getText() ?? '';
   assert.match(text, /=== SYSTEM METADATA ===\n3 caller\(s\) of parseToolArg/u);
   assert.match(text, /=== INFERRED ===/u);
-  assert.match(text, /--args=\{"name":"parseToolArg","path":"internal\/cli\/tool\.go","min_confidence":"low"\}/u);
+  assert.match(text, /--args=\{"name":"parseToolArg","path":"internal\/cli\/tool\.go","line":384,"min_confidence":"low"\}/u);
 });
 
 test('Show what this could break, Show tests, Show implementations', { skip: posixOnly }, async () => {
@@ -246,7 +264,10 @@ test('Show what this could break, Show tests, Show implementations', { skip: pos
   await settle();
   clearLog();
   await control.run('repocortex.showImpact');
-  assert.deepEqual(questionCalls().at(-1), { tool: 'analyze_impact', args: { symbol: 'parseToolArg', min_confidence: 'high' } });
+  assert.deepEqual(questionCalls().at(-1), {
+    tool: 'analyze_impact',
+    args: { symbol: 'parseToolArg', path: 'internal/cli/tool.go', line: 384, min_confidence: 'high' },
+  });
   let tree = control.tree(RESULTS);
   assert.equal(tree.message, 'parseToolArg: 2 direct, 2 indirect. Risk low (score 10).');
   const all = tree.rows.map((r) => String(r.item.label));
@@ -256,7 +277,10 @@ test('Show what this could break, Show tests, Show implementations', { skip: pos
   assert.ok(all.includes('Indirect: reaches this symbol through other calls (2)'));
 
   await control.run('repocortex.showTests');
-  assert.deepEqual(questionCalls().at(-1), { tool: 'find_tests', args: { symbol: 'parseToolArg', min_confidence: 'high' } });
+  assert.deepEqual(questionCalls().at(-1), {
+    tool: 'find_tests',
+    args: { symbol: 'parseToolArg', path: 'internal/cli/tool.go', line: 384, min_confidence: 'high' },
+  });
   tree = control.tree(RESULTS);
   assert.equal(tree.description, '10 rows');
 
@@ -267,7 +291,7 @@ test('Show what this could break, Show tests, Show implementations', { skip: pos
   await control.run('repocortex.showImplementations');
   assert.deepEqual(questionCalls().at(-1), {
     tool: 'find_implementations',
-    args: { name: 'Symbol', path: 'internal/cli/tool.go', min_confidence: 'low' },
+    args: { name: 'Symbol', path: 'internal/cli/tool.go', line: 384, min_confidence: 'low' },
   });
   tree = control.tree(RESULTS);
   assert.ok(tree.rows.some((r) => r.item.label === 'Implements or extends this (5)'));
@@ -284,7 +308,10 @@ test('a shared name: the user picks, and a wrong-definition answer is flagged', 
   const pick = control.quickPicks.at(-1);
   assert.equal(pick?.items.length, 15);
   assert.equal(pick?.options.title, '15 indexed definitions are named "New".');
-  assert.deepEqual(questionCalls().at(-1), { tool: 'find_callers', args: { name: 'New', path: 'internal/web/web.go', min_confidence: 'low' } });
+  assert.deepEqual(questionCalls().at(-1), {
+    tool: 'find_callers',
+    args: { name: 'New', path: 'internal/web/web.go', line: 309, min_confidence: 'low' },
+  });
 
   const tree = control.tree(RESULTS);
   const first = tree.rows[1]?.item;
@@ -381,6 +408,194 @@ test('CodeLens: off by default; when on, one lookup per symbol, cached', { skip:
     questionCalls().map((c) => c.tool),
     ['find_symbol', 'find_callers'],
   );
+  control.setSetting('repocortex.codeLens.enabled', false);
+  await settle();
+});
+
+const PARSER = 'java/src/main/java/com/shop/Parser.java';
+
+/** Answers each quick pick in turn with the item whose label ends in the given suffix; undefined dismisses it. */
+function pickInTurn(...suffixes: (string | undefined)[]): void {
+  let turn = 0;
+  control.answerQuickPick = (items) => {
+    const suffix = suffixes[turn++];
+    return suffix === undefined ? undefined : items.find((i: { label: string }) => i.label.endsWith(suffix));
+  };
+}
+
+test('the tool lists candidates instead of answering: the user chooses and the question is asked again', { skip: posixOnly }, async () => {
+  await settle();
+  clearLog();
+  control.messages.length = 0;
+  const picksBefore = control.quickPicks.length;
+  control.openEditor(toolFile(), 15, 9); // on "parse", which has two overloads in Parser.java
+  // The first choice is among what find_symbol listed. The stub then answers
+  // the question about line 4 with a candidate list, as the tool does when a
+  // path and line do not come down to one definition.
+  pickInTurn(':4', ':8');
+  await control.run('repocortex.showCallers');
+
+  assert.deepEqual(questionCalls(), [
+    { tool: 'find_symbol', args: { name: 'parse' } },
+    { tool: 'find_callers', args: { name: 'parse', path: PARSER, line: 4, min_confidence: 'low' } },
+    { tool: 'find_callers', args: { name: 'parse', path: PARSER, line: 8, min_confidence: 'low' } },
+  ]);
+  assert.equal(control.quickPicks.length, picksBefore + 2);
+  const offered = control.quickPicks.at(-1);
+  assert.equal(offered?.options.title, '"parse" matches several definitions and RepoCortex answered for none of them. It listed 2 to choose from.');
+  assert.deepEqual(
+    offered?.items.map((i: { label: string; description: string }) => [i.label, i.description]),
+    [
+      [`${PARSER}:4`, 'method, in class Parser, 1 parameter(s), lines 4-6'],
+      [`${PARSER}:8`, 'method, in class Parser, 2 parameter(s), lines 8-10'],
+    ],
+  );
+
+  // The view holds the answer for the definition chosen, and no candidate.
+  const tree = control.tree(RESULTS);
+  assert.equal(tree.title, `Callers of parse (method  ${PARSER}:8)`);
+  assert.match(tree.message, /^UNRELIABLE — only 0% of the Java references .* 0 caller\(s\) of parse \(java\/src\/main\/java\/com\/shop\/Parser\.java:8\) are recorded\.$/u);
+  assert.equal(tree.description, 'unreliable · 0 rows');
+  assert.ok(!tree.rows.some((r) => /candidate|Definitions that share/u.test(String(r.item.label))));
+  assert.ok(!tree.rows.some((r) => r.item.command?.command === 'repocortex.openResult'));
+  assert.deepEqual(control.messages, []);
+});
+
+test('candidates the user does not choose from are reported, never shown as results', { skip: posixOnly }, async () => {
+  clearLog();
+  control.messages.length = 0;
+  control.openEditor(toolFile(), 15, 9);
+  pickInTurn(':4', undefined);
+  await control.run('repocortex.showCallers');
+  assert.deepEqual(
+    questionCalls().map((c) => [c.tool, c.args['line']]),
+    [
+      ['find_symbol', undefined],
+      ['find_callers', 4],
+    ],
+  );
+  let tree = control.tree(RESULTS);
+  assert.equal(tree.rows.length, 0);
+  assert.equal(tree.description, '');
+  assert.match(tree.message, /^RepoCortex: "parse" matches several definitions, so nothing was analysed\. AMBIGUOUS — 2 definitions of "parse" match path=/u);
+  // The user closed the list knowingly: no notification on top of the view.
+  assert.equal(control.messages.length, 0);
+  // The candidates stay readable in the report.
+  await control.run('repocortex.showFullReport');
+  assert.match(control.shown.at(-1)?.document.getText() ?? '', /outcome: ambiguous_name\n/u);
+
+  // Choosing a candidate the tool again cannot single out ends there: the
+  // question is not asked a third time.
+  clearLog();
+  pickInTurn(':4', ':4');
+  await control.run('repocortex.showCallers');
+  assert.deepEqual(
+    questionCalls().map((c) => [c.tool, c.args['line']]),
+    [
+      ['find_symbol', undefined],
+      ['find_callers', 4],
+      ['find_callers', 4],
+    ],
+  );
+  tree = control.tree(RESULTS);
+  assert.equal(tree.rows.length, 0);
+  assert.match(tree.message, /matches several definitions, so nothing was analysed/u);
+  const message = control.messages.at(-1);
+  assert.equal(message?.severity, 'warning');
+  assert.deepEqual(message?.actions, ['Show Report']);
+  control.messages.length = 0;
+  control.answerQuickPick = () => undefined;
+});
+
+test('a paged answer: the header counts what exists and says how much of it is shown', { skip: posixOnly }, async () => {
+  clearLog();
+  control.openEditor(toolFile(), 16, 9); // on "record"
+  await control.run('repocortex.showCallers');
+  const tree = control.tree(RESULTS);
+  assert.equal(tree.description, 'incomplete · showing 50 of 63');
+  assert.equal(tree.message, 'INCOMPLETE — rows 1-50 of 63 are shown. 63 caller(s) of record (internal/handlers/record.go:7) are recorded.');
+  const labels = tree.rows.map((r) => String(r.item.label));
+  assert.ok(labels.includes('Call sites (50)'));
+  assert.ok(labels.some((l) => l.startsWith('Truncated: showing rows 1-50 of 63 caller(s), so 13 are not shown here.')));
+  const shown = tree.rows.find((r) => String(r.item.label).startsWith('Shown: This view holds 50 of the 63 rows RepoCortex counted.'));
+  assert.ok(shown);
+  assert.match(shown.item.tooltip ?? '', /Written by the RepoCortex extension, not by the repocortex tool\./u);
+  assert.equal(tree.rows.filter((r) => r.item.command?.command === 'repocortex.openResult').length, 50);
+  assert.deepEqual(control.messages, []);
+});
+
+test('an unreliable answer with an unknown risk: marked as a warning, summary untouched', { skip: posixOnly }, async () => {
+  clearLog();
+  control.openEditor(toolFile(), 17, 9); // on "settle"
+  await control.run('repocortex.showImpact');
+  assert.deepEqual(questionCalls().at(-1), {
+    tool: 'analyze_impact',
+    args: { symbol: 'settle', path: 'internal/cli/tool.go', line: 384, min_confidence: 'low' },
+  });
+  const tree = control.tree(RESULTS);
+  assert.equal(tree.description, 'unreliable · 1 row');
+  assert.match(tree.message, /^UNRELIABLE — only 38% of the Python references that name something this index defines are bound\. /u);
+  assert.match(tree.message, / Risk unknown: 3 of the 8 reference\(s\) spelled like this name are not listed as its callers/u);
+  // The first group is flagged, and its first line is the reliability.
+  assert.equal(tree.rows[0]?.item.iconPath?.id, 'warning');
+  assert.equal(tree.rows[1]?.item.label, 'Reliability: low — only 38% of the Python references that name something this index defines are bound.');
+  assert.equal(tree.rows[1]?.item.iconPath?.id, 'warning');
+  const verdict = tree.rows.find((r) => String(r.item.label).startsWith('Verdict: unreliable (high 1).'));
+  assert.equal(verdict?.item.iconPath?.id, 'warning');
+  // Nowhere does the view call an unknown risk low.
+  assert.ok(!tree.rows.some((r) => /risk low/iu.test(String(r.item.label))));
+  assert.deepEqual(control.messages, []);
+});
+
+test('CodeLens: counted totals, unreliable counts, unknown and ambiguous names', { skip: posixOnly }, async () => {
+  const provider = control.codeLensProviders[0];
+  const token = { isCancellationRequested: false, onCancellationRequested: () => ({ dispose() {} }) };
+  const symbol = (name: string, line: number): unknown => {
+    const range = { start: { line, character: 0 } };
+    return { name, kind: 11, range, selectionRange: range, children: [] };
+  };
+  control.setSetting('repocortex.codeLens.enabled', true);
+  await settle();
+  const titles = async (relative: string, symbols: unknown[]): Promise<string[]> => {
+    const document = control.openEditor(path.join(work, 'project', relative), 0, 0);
+    control.symbolProvider = () => symbols;
+    const lenses = await provider.provideCodeLenses(document, token);
+    const out: string[] = [];
+    for (const lens of lenses) {
+      out.push((await provider.resolveCodeLens(lens, token)).command.title);
+    }
+    return out;
+  };
+
+  clearLog();
+  assert.deepEqual(await titles('internal/handlers/record.go', [symbol('record', 6)]), ['RepoCortex: 63 call sites']);
+  assert.deepEqual(await titles('py/billing/invoice.py', [symbol('settle', 4)]), ['RepoCortex: 1 caller (unreliable)']);
+  assert.deepEqual(await titles('rb/lib/money.rb', [symbol('cents', 1)]), ['RepoCortex: callers unknown']);
+  // A name the file defines once is selected by the file alone.
+  assert.deepEqual(
+    questionCalls().map((c) => c.args),
+    [
+      { name: 'record', path: 'internal/handlers/record.go', min_confidence: 'low' },
+      { name: 'settle', path: 'py/billing/invoice.py', min_confidence: 'low' },
+      { name: 'cents', path: 'rb/lib/money.rb', min_confidence: 'low' },
+    ],
+  );
+
+  // Two overloads in one file: each lens sends its own line and is looked
+  // up apart. The stub lists candidates for the first and answers the second.
+  clearLog();
+  assert.deepEqual(await titles(PARSER, [symbol('parse', 3), symbol('parse', 7)]), [
+    'RepoCortex: callers unknown (name matches several definitions)',
+    'RepoCortex: 0 callers found (unreliable) (name shared in this file)',
+  ]);
+  assert.deepEqual(
+    questionCalls().map((c) => c.args),
+    [
+      { name: 'parse', path: PARSER, line: 4, min_confidence: 'low' },
+      { name: 'parse', path: PARSER, line: 8, min_confidence: 'low' },
+    ],
+  );
+  control.symbolProvider = () => undefined;
   control.setSetting('repocortex.codeLens.enabled', false);
   await settle();
 });

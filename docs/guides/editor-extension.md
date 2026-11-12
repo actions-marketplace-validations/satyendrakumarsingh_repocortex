@@ -107,9 +107,13 @@ once and a file gets at most 60 lenses.
 
 - The extension needs a trusted workspace and files on disk.
 - The CodeLens needs a language extension that provides an outline.
-- `find_callers` and `find_implementations` take a path as a hint, not a
-  filter. For a name shared by more than five definitions the tool may answer
-  for another one. The extension detects this and reports it; it cannot get
-  the right answer out of the tool.
-- `analyze_impact` and `find_tests` cannot tell apart two definitions with
-  the same name in the same file.
+- It needs a `repocortex` binary newer than v1.0.1. Every question is asked
+  with the path and line of the definition under the cursor, which v1.0.1
+  rejects as unknown arguments; the extension then says the binary may be
+  older than it expects.
+- A name shared by several definitions is asked about one definition at a
+  time. When the tool cannot tell which one is meant it lists them, and the
+  extension offers that list to choose from; nothing is counted until one is
+  chosen.
+- A long answer is shown one page at a time: the view holds the first page and
+  says how many rows the tool counted. There is no "load more" yet.

@@ -20,7 +20,6 @@ import { parseToolEnvelope } from '../src/core/result';
 //   find_callers_stale.json      fixtures/payment-platform, indexed one commit behind HEAD
 //   find_symbol_many.json        name=New                     (15 definitions)
 //   analyze_impact_omitted.json  symbol=emitJSON              (51 results left out)
-//   analyze_impact_ambiguous.json  symbol=New                 (exit 1, is_error)
 //   find_implementations.json    name=Symbol;  _both: name=Impacted
 //   error_missing_argument.json  find_callers with no name    (exit 1, result null)
 //   error_bad_confidence.json    min_confidence=bogus         (exit 1)
@@ -28,6 +27,29 @@ import { parseToolEnvelope } from '../src/core/result';
 //   status_*.json                repocortex --json status
 //   stderr_no_index.txt          tool call in a folder with no .repocortex (exit 1)
 //   stderr_unknown_tool.txt      tool call nope               (exit 1)
+//
+// Those samples predate reliability, paging and the ambiguous-name outcome:
+// they carry none of the new fields, and so they also stand for an older
+// binary. The samples below were captured from a `repocortex` built from the
+// working tree on top of commit a0000c5, run against a small throwaway
+// project made for the purpose (Go, Java, Python and Ruby files; init, index,
+// resolve). Nothing in them was edited. That project was not a git repository, so every one says
+// "HEAD could not be determined" and carries the stale-index signal.
+//
+//   analyze_impact_ambiguous.json  symbol=New                 (exit 0: three candidates, nothing analysed)
+//   find_callers_ambiguous.json    name=parse path=<Parser.java>   (two overloads in one file)
+//   find_callers_selected.json     the same with line=8       (answers for the second overload)
+//   find_symbol_overloads.json     name=parse                 (both overloads, one qualified name)
+//   find_callers_paged.json        name=record path=... line=7     (rows 1-50 of 63)
+//   find_callers_unreliable.json   name=settle path=... line=5     (Python: 38% of references bound)
+//   analyze_impact_unreliable.json the same symbol            (UNRELIABLE, and "Risk unknown")
+//   find_callers_unknown.json      name=cents path=... line=2      (Ruby: no reference extracted)
+//
+// One sample is from the v1.0.1 release, built from its tag and run against a
+// copy of the same project: what a binary from before `path` and `line`
+// selected a definition says when it is given them.
+//
+//   error_unknown_argument.json    analyze_impact symbol=record path=... line=7   (exit 1, result null)
 
 /** The extension folder. Compiled tests live in out/test, two levels below it. */
 export const EXTENSION_DIR = path.resolve(__dirname, '..', '..');

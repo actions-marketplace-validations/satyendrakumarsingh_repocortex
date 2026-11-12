@@ -1,13 +1,15 @@
 // Picks which definition a question is about, and checks afterwards that the
 // tool answered for that one.
 //
-// A name is not a symbol: fifteen functions can be called `New`. The tools
-// take a name plus a path hint (find_callers, find_implementations) or a
-// fully qualified name (analyze_impact, find_tests). Neither is airtight, so
-// when the answer may be for a different definition than the one the user
-// pointed at, the extension says so instead of presenting it as the answer.
+// A name is not a symbol: fifteen functions can be called `New`. Every tool
+// takes a name plus the path and line of one definition, and answers for that
+// one or for none: when they do not come down to one it lists the candidates
+// instead. An older binary could answer for a namesake, so the answer is
+// still checked, and when it may be for a different definition than the one
+// the user pointed at, the extension says so instead of presenting it as the
+// answer.
 
-import type { QuestionKind, QuestionTarget } from './args';
+import type { QuestionTarget } from './args';
 import type { ToolAnswer } from './result';
 
 /** One definition, as find_symbol reports it. */
@@ -20,6 +22,8 @@ export interface Definition {
   readonly line: number;
   readonly fqn?: string;
   readonly confidence?: string;
+  /** What tells it from its namesakes, when the tool said: `in class Gson, 2 parameter(s), lines 850-852`. */
+  readonly detail?: string;
 }
 
 /** The definitions in a find_symbol answer that carry a location. */
@@ -37,6 +41,35 @@ export function definitionsFrom(answer: ToolAnswer): Definition[] {
     };
     if (item.fqn !== undefined) def.fqn = item.fqn;
     if (item.confidence !== undefined) def.confidence = item.confidence;
+    out.push(def);
+  }
+  return out;
+}
+
+/**
+ * The definitions a tool listed instead of answering (`outcome:
+ * ambiguous_name`), for the user to choose from.
+ *
+ * A candidate row has the kind `candidate`. What the definition is comes in
+ * its `why`, ahead of the arguments that select it:
+ * `method, in class Gson, 2 parameter(s), lines 850-852; select with path=... line=850`.
+ */
+export function candidatesFrom(answer: ToolAnswer): Definition[] {
+  const out: Definition[] = [];
+  for (const item of answer.items) {
+    if (item.kind !== 'candidate' || item.name === undefined || item.path === undefined) {
+      continue;
+    }
+    const described = (item.why ?? '').split('; select with ')[0] ?? '';
+    const comma = described.indexOf(', ');
+    const def: { name: string; kind: string; path: string; line: number; fqn?: string; detail?: string } = {
+      name: item.name,
+      kind: (comma >= 0 ? described.slice(0, comma) : described).trim(),
+      path: item.path,
+      line: item.line ?? 0,
+    };
+    if (item.fqn !== undefined) def.fqn = item.fqn;
+    if (comma >= 0) def.detail = described.slice(comma + 2).trim();
     out.push(def);
   }
   return out;
@@ -117,16 +150,14 @@ export function chooseDefinition(definitions: readonly Definition[], hint: Defin
 }
 
 /**
- * The tool arguments that single out `chosen`.
- *
- * The fully qualified name is used only when the bare name is ambiguous:
- * analyze_impact and find_tests refuse an ambiguous bare name, and with a
- * unique one the bare name gives the more readable summary.
+ * The tool arguments that single out `chosen`: its name, its file and the
+ * line it starts on. The line is left out when the index reported none, and
+ * the tool then lists candidates if the file holds several.
  */
-export function targetFor(chosen: Definition, all: readonly Definition[]): QuestionTarget {
-  const target: { name: string; path?: string; fqn?: string } = { name: chosen.name, path: chosen.path };
-  if (all.length > 1 && chosen.fqn !== undefined) {
-    target.fqn = chosen.fqn;
+export function targetFor(chosen: Definition): QuestionTarget {
+  const target: { name: string; path: string; line?: number } = { name: chosen.name, path: chosen.path };
+  if (chosen.line > 0) {
+    target.line = chosen.line;
   }
   return target;
 }
@@ -134,10 +165,10 @@ export function targetFor(chosen: Definition, all: readonly Definition[]): Quest
 /**
  * The definition a summary says it answered for.
  *
- * find_callers and find_implementations name it in their summary line, as
+ * Every tool names it in its summary line, as
  * `... of parseToolArg (internal/cli/tool.go:384).` This reads that location
  * back. It returns undefined when the summary carries none, which is the
- * case for analyze_impact and find_tests.
+ * case for analyze_impact and find_tests from an older binary.
  */
 export function answeredLocation(summary: string): { path: string; line: number } | undefined {
   const match = /\(([^()\s:][^()\s]*):(\d+)\)/u.exec(summary);
@@ -155,39 +186,25 @@ export function answeredLocation(summary: string): { path: string; line: number 
  * Warnings, written by the extension, about whether an answer is for the
  * definition the user chose. Empty when there is nothing to warn about.
  */
-export function targetWarnings(
-  kind: QuestionKind,
-  chosen: Definition,
-  all: readonly Definition[],
-  answer: ToolAnswer,
-): string[] {
-  const warnings: string[] = [];
+export function targetWarnings(chosen: Definition, all: readonly Definition[], answer: ToolAnswer): string[] {
   if (all.length <= 1) {
-    return warnings;
+    return [];
   }
-
-  const sameFile = all.filter((d) => d.path === chosen.path);
-  if (kind === 'callers' || kind === 'implementations') {
-    const answered = answeredLocation(answer.summary);
-    if (answered !== undefined && (answered.path !== chosen.path || (chosen.line > 0 && answered.line !== chosen.line))) {
-      warnings.push(
-        `This answer is for the definition at ${answered.path}:${answered.line}, NOT the one you asked about ` +
-          `(${chosen.path}:${chosen.line}). ${all.length} definitions are named "${chosen.name}" and the tool's ` +
-          'path hint could not single yours out. Do not read this as an answer about your symbol.',
-      );
-    } else if (answered === undefined) {
-      warnings.push(
-        `${all.length} definitions are named "${chosen.name}" and the tool did not say which one it answered for. ` +
-          `The one asked about is ${chosen.path}:${chosen.line}.`,
-      );
-    }
-  } else if (sameFile.length > 1) {
-    warnings.push(
-      `${sameFile.length} definitions named "${chosen.name}" are in ${chosen.path}. They share one fully qualified ` +
-        'name, so this tool cannot tell them apart: the answer may be for any of them.',
-    );
+  const answered = answeredLocation(answer.summary);
+  if (answered === undefined) {
+    return [
+      `${all.length} definitions are named "${chosen.name}" and the tool did not say which one it answered for. ` +
+        `The one asked about is ${chosen.path}:${chosen.line}.`,
+    ];
   }
-  return warnings;
+  if (answered.path !== chosen.path || (chosen.line > 0 && answered.line !== chosen.line)) {
+    return [
+      `This answer is for the definition at ${answered.path}:${answered.line}, NOT the one you asked about ` +
+        `(${chosen.path}:${chosen.line}). ${all.length} definitions are named "${chosen.name}" and the tool ` +
+        'did not single yours out. Do not read this as an answer about your symbol.',
+    ];
+  }
+  return [];
 }
 
 /** A one-line label for a definition in a pick list: `function  internal/cli/tool.go:384`. */

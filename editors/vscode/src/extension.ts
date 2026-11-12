@@ -10,13 +10,14 @@ import type { QuestionKind } from './core/args';
 import { checkSymbolName, findSymbolArguments, indexStepsFor, QUESTION_TITLE, QUESTION_TOOL, questionArguments } from './core/args';
 import { RepoCortexClient } from './core/client';
 import type { UserMessage } from './core/messages';
-import { messageForError, messageForOutcome } from './core/messages';
+import { messageForAmbiguous, messageForError, messageForOutcome } from './core/messages';
 import { toRepoRelative } from './core/paths';
 import { buildResultModel, fullReport } from './core/present';
 import type { ToolAnswer, ToolOutcome } from './core/result';
+import { isAmbiguous } from './core/result';
 import { runBinary } from './core/runner';
 import type { Definition, DefinitionHint } from './core/target';
-import { chooseDefinition, definitionsFrom, describeDefinition, targetFor, targetWarnings } from './core/target';
+import { candidatesFrom, chooseDefinition, definitionsFrom, describeDefinition, targetFor, targetWarnings } from './core/target';
 import type { LensRequest } from './codeLens';
 import { CallerLensProvider } from './codeLens';
 import { affectsRepoCortex, binaryPath, currentProjectRoot, minConfidence, projectRootFor } from './config';
@@ -184,10 +185,15 @@ export function activate(context: vscode.ExtensionContext): void {
     void notify(message);
   };
 
+  /**
+   * Puts several definitions of one name to the user. 'tool-listed' is the
+   * case where a question was asked and the tool listed these instead of
+   * answering, because the name, path and line did not come down to one.
+   */
   const pickDefinition = async (
     name: string,
     candidates: readonly Definition[],
-    reason: 'ambiguous' | 'hint-mismatch',
+    reason: 'ambiguous' | 'hint-mismatch' | 'tool-listed',
     hint: DefinitionHint,
     listWasCut: boolean,
   ): Promise<Definition | undefined> => {
@@ -196,11 +202,13 @@ export function activate(context: vscode.ExtensionContext): void {
       reason === 'hint-mismatch'
         ? `The editor resolves "${name}" to ${where ?? 'a definition'} which the index does not list under that name. ` +
           'These indexed definitions only share the name.'
-        : `${candidates.length} indexed definitions are named "${name}".`;
+        : reason === 'tool-listed'
+          ? `"${name}" matches several definitions and RepoCortex answered for none of them. It listed ${candidates.length} to choose from.`
+          : `${candidates.length} indexed definitions are named "${name}".`;
     const picked = await vscode.window.showQuickPick(
       candidates.map((definition) => ({
         label: definition.line > 0 ? `${definition.path}:${definition.line}` : definition.path,
-        description: definition.kind,
+        description: [definition.kind, definition.detail ?? ''].filter((s) => s !== '').join(', '),
         definition,
       })),
       {
@@ -277,19 +285,55 @@ export function activate(context: vscode.ExtensionContext): void {
           }
 
           // Step 2: the question itself, about that one definition.
-          const call = await client.callTool(root, QUESTION_TOOL[kind], questionArguments(kind, targetFor(chosen, definitions), floor), {
-            signal,
-          });
+          let namesakes: readonly Definition[] = definitions;
+          let call = await client.callTool(root, QUESTION_TOOL[kind], questionArguments(kind, targetFor(chosen), floor), { signal });
+
+          // The tool answers for one definition or for none. When the path
+          // and line did not come down to one (two definitions start on one
+          // line, the index reported no line, or it was rebuilt in between)
+          // it lists the candidates instead. Those are definitions, not
+          // results: they go to the user as a choice and never into the view.
+          if (call.outcome.kind === 'answer' && isAmbiguous(call.outcome.answer)) {
+            const listed = call.outcome.answer;
+            status.noteProvenance(root, listed.provenance);
+            const candidates = candidatesFrom(listed);
+            const picked =
+              candidates.length > 0 ? await pickDefinition(subject.name, candidates, 'tool-listed', hint, listed.truncated) : undefined;
+            if (signal.aborted) {
+              return;
+            }
+            if (picked === undefined) {
+              const message = messageForAmbiguous(subject.name, listed);
+              results.showProblem(title, message.text, listed.text);
+              if (candidates.length === 0) {
+                // Nothing could be offered, so the message is the only account of what happened.
+                void notify(message);
+              }
+              return;
+            }
+            chosen = picked;
+            namesakes = candidates;
+            call = await client.callTool(root, QUESTION_TOOL[kind], questionArguments(kind, targetFor(chosen), floor), { signal });
+          }
+
           if (call.outcome.kind !== 'answer') {
             reportOutcome(title, call.outcome);
             return;
           }
           const answer = call.outcome.answer;
           status.noteProvenance(root, answer.provenance);
+          if (isAmbiguous(answer)) {
+            // Asked with a path and line the tool itself listed, and it still
+            // chose none. Asking a third time would not change that.
+            const message = messageForAmbiguous(subject.name, answer);
+            results.showProblem(title, message.text, answer.text);
+            void notify(message);
+            return;
+          }
           const model = buildResultModel(answer, {
             kind,
             symbol: subject.name,
-            extensionWarnings: targetWarnings(kind, chosen, definitions, answer),
+            extensionWarnings: targetWarnings(chosen, namesakes, answer),
             askedAbout: describeDefinition(chosen),
           });
           results.show(model, root, fullReport(model, answer, call.argv));

@@ -2,6 +2,7 @@
 // ask RepoCortex about, and what a find_callers answer says about one of them.
 
 import type { ToolAnswer } from './result';
+import { doubtOf, isAmbiguous, rowsWithheld } from './result';
 import { answeredLocation } from './target';
 
 /** Most lenses placed in one file. Definitions past this get none. */
@@ -107,25 +108,42 @@ export type LensCount =
       readonly kind: 'count';
       /** Distinct calling symbols among the rows returned. */
       readonly callers: number;
-      /** Rows returned: one per call site. */
+      /** Call sites: the tool's own count when it gave one, else the rows returned. */
       readonly sites: number;
-      /** True when the tool cut the list, so both numbers are floors. */
+      /** True when the tool cut the list and counted nothing, so both numbers are floors. */
       readonly atLeast: boolean;
+      /**
+       * Rows returned, set only when the tool counted more call sites than it
+       * returned. `callers` then covers this part of the list alone.
+       */
+      readonly shown?: number;
+      /** The tool's word for a count that is not to be trusted: `unreliable`, `unverified`. */
+      readonly doubt?: string;
     }
   /** The tool answered for a same-named definition in another file. */
   | { readonly kind: 'other-definition'; readonly path: string; readonly line: number }
+  /** The name matched several definitions and the tool answered for none of them. */
+  | { readonly kind: 'ambiguous' }
+  /** The tool said nothing can be concluded about callers. Its count is not a count. */
+  | { readonly kind: 'unknown' }
   /** The index has no definition under this name. */
   | { readonly kind: 'not-indexed' };
 
 /**
  * Reads a find_callers answer for a lens in `filePath` (repository-relative).
  *
- * The check on the answered location matters: the tool's path hint is a
- * preference, not a filter, so for a name shared by many definitions it can
- * answer for one in a different file. A count for another function must not
- * be shown above this one.
+ * A list of candidates is checked for first: its rows are definitions, and
+ * counting them would show the number of namesakes as a number of callers.
+ *
+ * The check on the answered location matters for an older binary, whose path
+ * hint is a preference, not a filter: for a name shared by many definitions
+ * it can answer for one in a different file. A count for another function
+ * must not be shown above this one.
  */
 export function lensCount(answer: ToolAnswer, filePath: string): LensCount {
+  if (isAmbiguous(answer)) {
+    return { kind: 'ambiguous' };
+  }
   const answered = answeredLocation(answer.summary);
   if (answered === undefined) {
     return { kind: 'not-indexed' };
@@ -133,11 +151,32 @@ export function lensCount(answer: ToolAnswer, filePath: string): LensCount {
   if (answered.path !== filePath) {
     return { kind: 'other-definition', path: answered.path, line: answered.line };
   }
+  if (answer.reliability?.level === 'none') {
+    return { kind: 'unknown' };
+  }
   const distinct = new Set<string>();
   for (const item of answer.items) {
     distinct.add(`${item.path ?? ''}\u0000${item.name ?? ''}`);
   }
-  return { kind: 'count', callers: distinct.size, sites: answer.items.length, atLeast: answer.truncated };
+  const rows = answer.items.length;
+  const counted = answer.page !== undefined;
+  const count: { kind: 'count'; callers: number; sites: number; atLeast: boolean; shown?: number; doubt?: string } = {
+    kind: 'count',
+    callers: distinct.size,
+    sites: counted ? Math.max(answer.page.total, rows) : rows,
+    // With a counted total the number is exact, however many rows came back.
+    atLeast: answer.truncated && !counted,
+  };
+  if (rowsWithheld(answer) > 0) {
+    count.shown = rows;
+  }
+  const doubt = doubtOf(answer);
+  // A verdict of "incomplete" on a counted list says rows were cut. The
+  // count shown is the tool's total, which the cut does not touch.
+  if (doubt !== undefined && !(doubt.from === 'verdict' && doubt.word === 'incomplete' && counted)) {
+    count.doubt = doubt.word;
+  }
+  return count;
 }
 
 function plural(n: number, one: string, many: string): string {
@@ -151,16 +190,27 @@ export function lensTitle(count: LensCount, target: Pick<LensTarget, 'sharedName
       return 'RepoCortex: not in the index';
     case 'other-definition':
       return 'RepoCortex: callers unknown (name is shared)';
+    case 'ambiguous':
+      return 'RepoCortex: callers unknown (name matches several definitions)';
+    case 'unknown':
+      return 'RepoCortex: callers unknown';
     case 'count': {
       const plus = count.atLeast ? '+' : '';
       let title: string;
       if (count.sites === 0) {
         title = 'RepoCortex: 0 callers found';
+      } else if (count.shown !== undefined) {
+        // Distinct callers cannot be counted from part of the list, so only
+        // the tool's own total is stated.
+        title = `RepoCortex: ${count.sites} ${plural(count.sites, 'call site', 'call sites')}`;
       } else {
         title = `RepoCortex: ${count.callers}${plus} ${plural(count.callers, 'caller', 'callers')}`;
         if (count.sites !== count.callers) {
           title += `, ${count.sites}${plus} call sites`;
         }
+      }
+      if (count.doubt !== undefined) {
+        title += ` (${count.doubt})`;
       }
       return target.sharedName ? `${title} (name shared in this file)` : title;
     }
@@ -179,6 +229,15 @@ export function lensTooltip(count: LensCount, answer: ToolAnswer, minConfidence:
   if (answer.summary !== '') {
     lines.push(answer.summary);
   }
+  if (count.kind === 'ambiguous') {
+    // The notes of a candidate list tell an agent how to call the tool again.
+    // Here the click does that.
+    lines.push('Nothing was counted. Click to choose a definition and list its callers.');
+    return lines.join('\n\n');
+  }
+  if (count.kind === 'count' && count.shown !== undefined) {
+    lines.push(`The number is the tool's count of call sites. It returned ${count.shown} of them.`);
+  }
   if (answer.truncated && answer.truncatedReason !== undefined) {
     lines.push(`Truncated: ${answer.truncatedReason}`);
   }
@@ -190,7 +249,23 @@ export function lensTooltip(count: LensCount, answer: ToolAnswer, minConfidence:
   return lines.join('\n\n');
 }
 
-/** Cache key for one lens lookup. Changes whenever the index is rebuilt. */
-export function lensCacheKey(projectRoot: string, token: string, minConfidence: string, filePath: string, name: string): string {
-  return [projectRoot, token, minConfidence, filePath, name].join('\u0000');
+/**
+ * Cache key for one lens lookup. Changes whenever the index is rebuilt.
+ *
+ * `line` is given for a name the file defines more than once: each of those
+ * lenses asks about its own definition, so each needs its own entry.
+ */
+export function lensCacheKey(
+  projectRoot: string,
+  token: string,
+  minConfidence: string,
+  filePath: string,
+  name: string,
+  line?: number,
+): string {
+  const parts = [projectRoot, token, minConfidence, filePath, name];
+  if (line !== undefined) {
+    parts.push(String(line));
+  }
+  return parts.join('\u0000');
 }

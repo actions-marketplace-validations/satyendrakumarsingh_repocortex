@@ -3,7 +3,7 @@
 // wording for each failure can be tested.
 
 import { AbortedError, QueueOverflowError } from './cache';
-import type { ToolOutcome } from './result';
+import type { ToolAnswer, ToolOutcome } from './result';
 import { EnvelopeError } from './result';
 import {
   BinaryNotFoundError,
@@ -85,12 +85,18 @@ export function messageForOutcome(outcome: Exclude<ToolOutcome, { kind: 'answer'
         severity: 'warning',
         remedy: 'index',
       };
-    case 'tool-failure':
+    case 'tool-failure': {
+      // A binary from before `path` and `line` selected a definition rejects
+      // them as arguments its schema does not have.
+      const older = /\bunexpected additional properties\b/iu.test(outcome.message)
+        ? ' The installed repocortex may be older than this extension expects; update it.'
+        : '';
       return {
-        text: `RepoCortex: the tool ${outcome.answer.tool !== '' ? outcome.answer.tool + ' ' : ''}reported a failure. ${outcome.message}`,
+        text: `RepoCortex: the tool ${outcome.answer.tool !== '' ? outcome.answer.tool + ' ' : ''}reported a failure. ${outcome.message}${older}`,
         severity: 'error',
         remedy: 'show-report',
       };
+    }
     case 'cli-error': {
       const older = /\bno tool named\b|\bunknown (?:command|flag)\b/iu.test(outcome.message)
         ? ' The installed repocortex may be older than this extension expects; update it.'
@@ -102,4 +108,18 @@ export function messageForOutcome(outcome: Exclude<ToolOutcome, { kind: 'answer'
       };
     }
   }
+}
+
+/**
+ * The message for a name the tool matched to several definitions and
+ * answered for none of. It is not a failure: the tool's summary says what
+ * to choose between, and the report lists the candidates.
+ */
+export function messageForAmbiguous(name: string, answer: ToolAnswer): UserMessage {
+  const summary = answer.summary !== '' ? ` ${answer.summary}` : '';
+  return {
+    text: `RepoCortex: "${name}" matches several definitions, so nothing was analysed.${summary}`,
+    severity: 'warning',
+    remedy: 'show-report',
+  };
 }

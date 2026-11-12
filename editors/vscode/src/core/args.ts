@@ -78,44 +78,42 @@ export interface QuestionTarget {
   readonly name: string;
   /** Repository-relative path of the definition, with forward slashes. */
   readonly path?: string;
-  /**
-   * The index's fully qualified name (`path:name`). Sent to the tools that
-   * take `symbol`, and only when the bare name matches several definitions:
-   * those tools refuse an ambiguous bare name.
-   */
-  readonly fqn?: string;
+  /** 1-based line the definition starts on, as the index reports it. Used only with `path`. */
+  readonly line?: number;
 }
+
+/** The argument that carries the symbol name, which differs by tool. */
+const NAME_ARGUMENT: Readonly<Record<QuestionKind, 'name' | 'symbol'>> = {
+  callers: 'name',
+  implementations: 'name',
+  impact: 'symbol',
+  tests: 'symbol',
+};
+
+/** A tool's arguments. `line` is a JSON number; everything else is a string. */
+export type ToolArguments = Record<string, string | number>;
 
 /**
  * The JSON arguments object for one question.
  *
- * find_callers and find_implementations take `name` and an optional `path`
- * hint. analyze_impact and find_tests take `symbol`, which may be a bare name
- * or a fully qualified one. min_confidence is always sent, so the floor in
- * force is the one the user chose and the tool reports what it left out.
+ * Every tool takes the bare name (as `name` or `symbol`) and selects one
+ * definition with `path` and `line`. The fully qualified name is not sent:
+ * overloads in one file share it, so the tool treats it as ambiguous and
+ * lists candidates instead of answering. min_confidence is always sent, so
+ * the floor in force is the one the user chose and the tool reports what it
+ * left out.
  */
-export function questionArguments(
-  kind: QuestionKind,
-  target: QuestionTarget,
-  minConfidence: Confidence,
-): Record<string, string> {
-  switch (kind) {
-    case 'callers':
-    case 'implementations': {
-      const args: Record<string, string> = { name: target.name };
-      if (target.path !== undefined && target.path !== '') {
-        args['path'] = target.path;
-      }
-      args['min_confidence'] = minConfidence;
-      return args;
+export function questionArguments(kind: QuestionKind, target: QuestionTarget, minConfidence: Confidence): ToolArguments {
+  const args: ToolArguments = { [NAME_ARGUMENT[kind]]: target.name };
+  if (target.path !== undefined && target.path !== '') {
+    args['path'] = target.path;
+    // A line without its file would match a definition on that line anywhere.
+    if (target.line !== undefined && Number.isInteger(target.line) && target.line > 0) {
+      args['line'] = target.line;
     }
-    case 'impact':
-    case 'tests':
-      return {
-        symbol: target.fqn !== undefined && target.fqn !== '' ? target.fqn : target.name,
-        min_confidence: minConfidence,
-      };
   }
+  args['min_confidence'] = minConfidence;
+  return args;
 }
 
 /** Arguments for the definition lookup that precedes every question. */

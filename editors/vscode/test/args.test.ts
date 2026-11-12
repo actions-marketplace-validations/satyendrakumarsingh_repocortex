@@ -49,24 +49,45 @@ test('only the tools the extension knows can be called', () => {
   assert.throws(() => toolCallArgv('/r', 'minimize_diff' as never, {}), /unknown tool/u);
 });
 
-test('callers and implementations send name, a path hint and the floor', () => {
-  assert.deepEqual(questionArguments('callers', { name: 'New', path: 'internal/web/web.go', fqn: 'internal/web/web.go:New' }, 'low'), {
+test('every question sends the bare name, the path and line of one definition, and the floor', () => {
+  const target = { name: 'New', path: 'internal/web/web.go', line: 309 };
+  assert.deepEqual(questionArguments('callers', target, 'low'), { name: 'New', path: 'internal/web/web.go', line: 309, min_confidence: 'low' });
+  assert.deepEqual(questionArguments('implementations', target, 'high'), {
     name: 'New',
     path: 'internal/web/web.go',
-    min_confidence: 'low',
+    line: 309,
+    min_confidence: 'high',
   });
-  assert.deepEqual(questionArguments('implementations', { name: 'Symbol' }, 'high'), { name: 'Symbol', min_confidence: 'high' });
-});
-
-test('impact and tests send the fully qualified name when there is one', () => {
-  assert.deepEqual(questionArguments('impact', { name: 'New', path: 'internal/web/web.go', fqn: 'internal/web/web.go:New' }, 'medium'), {
-    symbol: 'internal/web/web.go:New',
+  // analyze_impact and find_tests call the name `symbol`. It is the bare name
+  // there too: a qualified one is shared by overloads and selects nothing.
+  assert.deepEqual(questionArguments('impact', target, 'medium'), {
+    symbol: 'New',
+    path: 'internal/web/web.go',
+    line: 309,
     min_confidence: 'medium',
   });
+  assert.deepEqual(questionArguments('tests', target, 'low'), { symbol: 'New', path: 'internal/web/web.go', line: 309, min_confidence: 'low' });
+});
+
+test('the line travels as a JSON number, inside the one JSON argument', () => {
+  const argv = toolCallArgv('/work/repo', 'analyze_impact', questionArguments('impact', { name: 'New', path: 'internal/web/web.go', line: 309 }, 'low'));
+  assert.equal(argv.length, 6);
+  assert.equal(argv[5], '--args={"symbol":"New","path":"internal/web/web.go","line":309,"min_confidence":"low"}');
+});
+
+test('a line is sent only when it is a real line and its file is known', () => {
+  assert.deepEqual(questionArguments('implementations', { name: 'Symbol' }, 'high'), { name: 'Symbol', min_confidence: 'high' });
   assert.deepEqual(questionArguments('tests', { name: 'parseToolArg', path: 'internal/cli/tool.go' }, 'low'), {
     symbol: 'parseToolArg',
+    path: 'internal/cli/tool.go',
     min_confidence: 'low',
   });
+  for (const line of [0, -4, 2.5, Number.NaN]) {
+    assert.deepEqual(questionArguments('callers', { name: 'f', path: 'a.go', line }, 'low'), { name: 'f', path: 'a.go', min_confidence: 'low' });
+  }
+  // A line with no file would select a definition on that line in any file.
+  assert.deepEqual(questionArguments('callers', { name: 'f', line: 12 }, 'low'), { name: 'f', min_confidence: 'low' });
+  assert.deepEqual(questionArguments('callers', { name: 'f', path: '', line: 12 }, 'low'), { name: 'f', min_confidence: 'low' });
 });
 
 test('symbol names are checked before use', () => {

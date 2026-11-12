@@ -20,6 +20,12 @@ export interface ToolItem {
   readonly why?: string;
 }
 
+/**
+ * `outcome` on an answer that lists definitions to choose from. The name
+ * matched several, the tool analysed nothing, and every item is a candidate.
+ */
+export const AMBIGUOUS_NAME = 'ambiguous_name';
+
 export interface Provenance {
   readonly builtAtSha?: string;
   readonly headSha?: string;
@@ -51,6 +57,28 @@ export interface Omission {
   readonly strongerDropped: readonly string[];
 }
 
+/** How far the index supports an answer, as the tool judged it. */
+export interface Reliability {
+  /** good, incomplete, unverified, low or none. A level this extension does not know is kept as written. */
+  readonly level: string;
+  /** The clause the summary opens with when the level is not good. */
+  readonly lead: string;
+  /** The same finding at full length. The tool repeats these among its notes. */
+  readonly reasons: readonly string[];
+}
+
+/** Which slice of the whole result an answer carries. */
+export interface Page {
+  readonly offset: number;
+  readonly limit: number;
+  /** Rows that exist. The tool counts them; it does not infer them from a full page. */
+  readonly total: number;
+  /** Rows this answer carries. */
+  readonly returned: number;
+  /** The offset that continues after these rows. 0 when the answer reaches the end. */
+  readonly nextOffset: number;
+}
+
 export interface ToolAnswer {
   readonly tool: string;
   readonly isError: boolean;
@@ -68,6 +96,12 @@ export interface ToolAnswer {
   readonly provenance?: Provenance;
   readonly verdict?: Verdict;
   readonly omitted?: Omission;
+  /** Absent on an answer from a binary that does not grade its answers against coverage. */
+  readonly reliability?: Reliability;
+  /** Absent on a tool that does not page, and on an answer from an older binary. */
+  readonly page?: Page;
+  /** Set when the answer is not an answer to the question asked. See AMBIGUOUS_NAME. */
+  readonly outcome?: string;
 }
 
 export class EnvelopeError extends Error {
@@ -205,6 +239,42 @@ function parseOmission(raw: unknown): Omission | undefined {
   return out;
 }
 
+function count(value: unknown): number | undefined {
+  const n = num(value);
+  return n !== undefined && Number.isInteger(n) && n >= 0 ? n : undefined;
+}
+
+function parseReliability(raw: unknown): Reliability | undefined {
+  if (!isObject(raw)) {
+    return undefined;
+  }
+  // Without a level there is no judgement to report.
+  const level = str(raw['level']);
+  if (level === undefined) {
+    return undefined;
+  }
+  return { level, lead: str(raw['lead']) ?? '', reasons: strings(raw['reasons']) };
+}
+
+function parsePage(raw: unknown, rows: number): Page | undefined {
+  if (!isObject(raw)) {
+    return undefined;
+  }
+  // The total is the reason to read a page at all. Without a counted one the
+  // answer is treated as unpaged, and its rows are counted as before.
+  const total = count(raw['total']);
+  if (total === undefined) {
+    return undefined;
+  }
+  return {
+    offset: count(raw['offset']) ?? 0,
+    limit: count(raw['limit']) ?? 0,
+    total,
+    returned: count(raw['returned']) ?? rows,
+    nextOffset: count(raw['next_offset']) ?? 0,
+  };
+}
+
 /** Parses the JSON envelope printed by `repocortex --json tool call`. */
 export function parseToolEnvelope(stdout: string): ToolAnswer {
   let raw: unknown;
@@ -241,6 +311,9 @@ export function parseToolEnvelope(stdout: string): ToolAnswer {
     provenance?: Provenance;
     verdict?: Verdict;
     omitted?: Omission;
+    reliability?: Reliability;
+    page?: Page;
+    outcome?: string;
   } = {
     tool: str(raw['tool']) ?? '',
     isError: raw['is_error'],
@@ -260,7 +333,13 @@ export function parseToolEnvelope(stdout: string): ToolAnswer {
   if (reason !== undefined) answer.truncatedReason = reason;
   if (provenance !== undefined) answer.provenance = provenance;
   if (verdict !== undefined) answer.verdict = verdict;
+  const reliability = parseReliability(result?.['reliability']);
+  const page = parsePage(result?.['page'], items.length);
+  const outcome = str(result?.['outcome']);
   if (omitted !== undefined) answer.omitted = omitted;
+  if (reliability !== undefined) answer.reliability = reliability;
+  if (page !== undefined) answer.page = page;
+  if (outcome !== undefined) answer.outcome = outcome;
   return answer;
 }
 
@@ -339,9 +418,79 @@ export function interpretToolRun(run: { readonly code: number | null; readonly s
   };
 }
 
+/**
+ * True when the answer lists definitions to choose from. Nothing was
+ * analysed, so its items must never be shown as callers, tests or impact.
+ */
+export function isAmbiguous(answer: ToolAnswer): boolean {
+  return answer.outcome === AMBIGUOUS_NAME;
+}
+
+/**
+ * How many rows the tool counted but did not return. 0 when it returned them
+ * all, and when it gave no count: an older binary says only `truncated`.
+ */
+export function rowsWithheld(answer: ToolAnswer): number {
+  const page = answer.page;
+  if (page === undefined) {
+    return 0;
+  }
+  const beyond = page.total - page.offset - answer.items.length;
+  // next_offset alone says rows follow, even if the arithmetic does not.
+  return beyond > 0 ? beyond : page.nextOffset > 0 ? 1 : 0;
+}
+
+/** Why an answer must not be taken at face value. */
+export interface Doubt {
+  /** One or two words for a title: unknown, unreliable, unverified, incomplete, mixed confidence. */
+  readonly word: string;
+  /**
+   * 'reliability' when the index's coverage is the reason. 'verdict' when
+   * only the rows are: their tiers differ, or some were cut.
+   */
+  readonly from: 'reliability' | 'verdict';
+}
+
+// The word the tool itself opens the summary with for each level. Maps, so
+// that a level or status named like an object method is not found by accident.
+const RELIABILITY_WORDS: ReadonlyMap<string, string> = new Map([
+  ['none', 'unknown'],
+  ['low', 'unreliable'],
+  ['unverified', 'unverified'],
+  ['incomplete', 'incomplete'],
+]);
+
+const VERDICT_WORDS: ReadonlyMap<string, string> = new Map([
+  ['unreliable', 'unreliable'],
+  ['incomplete', 'incomplete'],
+  ['mixed', 'mixed confidence'],
+]);
+
+/**
+ * Whether the tool said this answer is doubtful, and in which word.
+ *
+ * Any reliability level other than `good` counts, including one this
+ * extension has never seen: an unknown level is not a good one. Without a
+ * reliability the verdict decides. Undefined means the tool raised no doubt,
+ * which is still a lower bound and never proof.
+ */
+export function doubtOf(answer: ToolAnswer): Doubt | undefined {
+  const level = answer.reliability?.level;
+  if (level !== undefined && level !== 'good') {
+    return { word: RELIABILITY_WORDS.get(level) ?? level, from: 'reliability' };
+  }
+  const word = VERDICT_WORDS.get(answer.verdict?.status ?? '');
+  return word !== undefined ? { word, from: 'verdict' } : undefined;
+}
+
+/** True for a verdict that says the rows are not to be acted on as they stand. */
+export function verdictIsWarning(status: string): boolean {
+  return status === 'weak' || status === 'empty' || VERDICT_WORDS.has(status);
+}
+
 /** One statement, in the tool's own words, about what an answer does not cover. */
 export interface LimitStatement {
-  readonly kind: 'stale' | 'truncated' | 'omitted' | 'note' | 'signal' | 'caveat';
+  readonly kind: 'reliability' | 'stale' | 'truncated' | 'omitted' | 'note' | 'signal' | 'caveat';
   /** A short label for the row. */
   readonly label: string;
   readonly text: string;
@@ -369,10 +518,26 @@ function describeOmission(o: Omission): string {
 /**
  * Everything the tool said about the limits of its own answer, in the order
  * a reader needs it. Nothing is dropped or summarised away: each note is
- * passed through verbatim.
+ * passed through verbatim. A sentence the tool gave twice, as the reliability
+ * lead and again as a verdict signal or a note, is shown once.
  */
 export function limitsOf(answer: ToolAnswer): LimitStatement[] {
   const out: LimitStatement[] = [];
+  const reliability = answer.reliability !== undefined && answer.reliability.level !== 'good' ? answer.reliability : undefined;
+  if (reliability !== undefined) {
+    // First, because it decides how everything below it is to be read.
+    out.push({
+      kind: 'reliability',
+      label: 'Reliability',
+      text: reliability.lead !== '' ? `${reliability.level} — ${reliability.lead}` : reliability.level,
+      warning: true,
+    });
+    for (const reason of reliability.reasons) {
+      if (!answer.notes.includes(reason)) {
+        out.push({ kind: 'reliability', label: 'Reliability', text: reason, warning: true });
+      }
+    }
+  }
   const prov = answer.provenance;
   const stale = prov !== undefined && !prov.headMatchesBuild && answer.indexStatus !== 'absent';
   if (stale && prov.caveat !== '') {
@@ -399,10 +564,15 @@ export function limitsOf(answer: ToolAnswer): LimitStatement[] {
       kind: 'note',
       label: 'Note',
       text: note,
-      warning: /NOT VISIBLE|LOWER BOUND|unresolved|incomplete|omitted|not proof/iu.test(note),
+      warning:
+        /NOT VISIBLE|LOWER BOUND|unresolved|incomplete|omitted|not proof/iu.test(note) ||
+        (reliability !== undefined && reliability.reasons.includes(note)),
     });
   }
   for (const signal of answer.verdict?.signals ?? []) {
+    if (reliability !== undefined && signal === reliability.lead) {
+      continue;
+    }
     out.push({ kind: 'signal', label: 'Signal', text: signal, warning: true });
   }
   if (prov !== undefined && prov.caveat !== '' && !stale) {
