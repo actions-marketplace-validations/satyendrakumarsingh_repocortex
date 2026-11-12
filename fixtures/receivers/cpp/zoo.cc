@@ -30,3 +30,9 @@ class Tree : public Plant {}; // super Plant -> cpp.Plant
 
 template <typename T>
 class Box : public ns::Base<T> {}; // super Base -> none
+
+class ostream {}; // def cpp.ostream
+
+class Quiet : public ostream {}; // super ostream -> cpp.ostream
+
+class Loud : public std::ostream {}; // super ostream -> none

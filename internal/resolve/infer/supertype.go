@@ -53,15 +53,16 @@ func (r *Resolver) qualifiedSupertype(spec LanguageSpec, ref registry.Reference,
 	if len(kept) > 0 {
 		return kept, verdictBound
 	}
-	if r.layout.Known() && !r.layout.HasDirNamed(segs[0]) && !hasNestingOwner(segs, cands) {
+	if r.layout.Known() && !r.layout.HasDirNamed(segs[0]) && !r.layout.HasStem(segs[0]) && !hasNestingOwner(segs, cands) {
 		return nil, verdictExternal
 	}
 	return nil, verdictUnresolved
 }
 
 // supertypeQualifierFits reports whether a type is where a qualifier says: the
-// qualifier is the tail of the type's own qualified name (nesting), or the
-// directories above the type's file end with it (a package).
+// qualifier is the tail of the type's own qualified name (nesting), or a run of
+// the directories above the type's file, with its name, spells it (a package
+// or a module).
 func supertypeQualifierFits(segs []string, c registry.SymbolIndexEntry) bool {
 	qual, _ := strings.CutPrefix(c.FQN, c.FilePath+":")
 	typeSegs := strings.Split(qual, ".")
@@ -83,16 +84,28 @@ func supertypeQualifierFits(segs []string, c registry.SymbolIndexEntry) bool {
 			dir = append(dir, p)
 		}
 	}
-	if len(dir) < len(segs) {
-		return false
+	// The qualifier names a package or a module: some run of the directories
+	// above the file, or of those and the file's own name (a Python or Rust
+	// module is a file). Not only the innermost directories: a source root
+	// (`os/src/`, `src/main/java/org/x/`) sits between the package and the file.
+	stem := path.Base(c.FilePath)
+	if i := strings.IndexByte(stem, '.'); i > 0 {
+		stem = stem[:i]
 	}
-	tail := dir[len(dir)-len(segs):]
-	for i, seg := range segs {
-		if !strings.EqualFold(tail[i], seg) {
-			return false
+	dir = append(dir, stem)
+	for start := 0; start+len(segs) <= len(dir); start++ {
+		fits := true
+		for i, seg := range segs {
+			if !strings.EqualFold(dir[start+i], seg) {
+				fits = false
+				break
+			}
+		}
+		if fits {
+			return true
 		}
 	}
-	return true
+	return false
 }
 
 // hasNestingOwner reports whether the qualifier's last segment names a type

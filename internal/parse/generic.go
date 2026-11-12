@@ -623,6 +623,14 @@ func (p *genericParser) Parse(ctx context.Context, path string, src []byte) (*Re
 			if fixed && fix.owner != "" {
 				sym.FQN = model.DefaultFQN(path, fix.owner+"."+sym.Name)
 			}
+			if tag.Kind == macroDefinitionTag {
+				// A macro_rules! is a function by kind and a macro by name:
+				// `src/error.rs:print_error!`. See macroFQNMarker.
+				if sym.FQN == "" {
+					sym.FQN = model.DefaultFQN(path, sym.Name)
+				}
+				sym.FQN += macroFQNMarker
+			}
 			res.Symbols = append(res.Symbols, sym)
 		case strings.HasPrefix(tag.Kind, "reference"):
 			r := Reference{
@@ -700,6 +708,10 @@ func (p *genericParser) Parse(ctx context.Context, path string, src []byte) (*Re
 			}
 			if t, ok := implementers[tag.NameRange.StartByte]; ok && isSupertypeRef(tag.Kind) {
 				r.Receiver, r.ReceiverKind = t, model.ReceiverImplementer
+			} else if isSupertypeRef(tag.Kind) {
+				// The qualifier the supertype is written with, if any. See
+				// supertypeQualifier.
+				r.Receiver = supertypeQualifier(p.entry.Name, src, tag.NameRange.StartByte)
 			}
 			// A use of a renamed import is a use of the export. See
 			// renamedImports.
@@ -1645,7 +1657,7 @@ func kindFromTag(tagKind string) model.EntityKind {
 		return model.KindInterface
 	case "method", "constructor":
 		return model.KindMethod
-	case "function":
+	case "function", "function.macro":
 		return model.KindFunction
 	case "field", "property", "member":
 		return model.KindField
