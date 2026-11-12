@@ -69,7 +69,7 @@ func commandGroupOf() map[string]string {
 		// Check the repository and the index.
 		"status": groupHealth, "doctor": groupHealth, "languages": groupHealth,
 		"blindspots": groupHealth, "dead-code": groupHealth, "hotspots": groupHealth,
-		"arch": groupHealth, "accuracy": groupHealth, "bench": groupHealth,
+		"bus-factor": groupHealth, "arch": groupHealth, "accuracy": groupHealth, "bench": groupHealth,
 
 		// Serve agents and integrate.
 		"serve": groupServe, "tool": groupServe, "ui": groupServe,

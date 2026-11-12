@@ -1381,6 +1381,73 @@ repocortex hotspots --path internal/ --commits 1000
 
 Needs a git repository. Agent tool: `list_hotspots`.
 
+### `bus-factor`
+
+Lists the directories whose recent commits come from the fewest people, most
+concentrated first.
+
+```bash
+repocortex bus-factor
+repocortex bus-factor --path internal/ --commits 2000
+repocortex bus-factor --depth 1
+repocortex bus-factor --files --path internal/billing/
+```
+
+| Flag | Meaning |
+|---|---|
+| `--path PREFIX` | Only files under this prefix |
+| `--commits N` | How many recent commits to read (default 500) |
+| `--min-commits N` | Fewest commits a directory needs to be measured (default 5) |
+| `--depth N` | Group by the first N path segments instead of each file's own directory |
+| `--files` | Measure each file instead of each directory |
+| `-n`, `--limit N` | Most directories to list (default 20) |
+
+```
+$ repocortex bus-factor
+Knowledge distribution from the last 38 commit(s) (2025-06-16 to 2025-07-23) by 6 author name(s).
+4 directory(ies) measured, 3 with a bus factor of 1. Most concentrated first.
+
+BUS FACTOR  DIRECTORY  COMMITS  PEOPLE  TOP CONTRIBUTOR  SHARE  THEIR LAST CHANGE  IDLE
+1           auth       6        2       kit              83%    2025-07-15         8d
+1           billing    11       2       Robin Vega       82%    2025-06-24         29d
+1           search     6        2       ash              50%    2025-07-10         13d
+2           api        8        3       Ash Berg         38%    2025-07-02         21d
+```
+
+| Column | Meaning |
+|---|---|
+| `BUS FACTOR` | The smallest number of people whose commits make up at least half of the commits that touched the directory |
+| `PEOPLE` | Distinct author names among those commits |
+| `SHARE` | The part of those commits made by the largest contributor |
+| `IDLE` | Days between that person's last change there and the newest commit read. Measured against the history, not today |
+
+The order is the lowest bus factor, then the largest share, then the most
+commits. A commit counts once for each directory it touches. Below the table
+the command gives the same figure for every commit read taken together, then
+what it could not see, then what the figure cannot establish.
+
+What to keep in mind when reading it:
+
+- It counts who changed the code in the commits read, not who understands it.
+  Review, pairing and co-authors named only in a commit message are not counted.
+- People are the author names git recorded, exactly as spelled. Names are never
+  merged, so one person under two spellings counts as two and a bus factor can
+  read higher than it is. When two names committed from one address the output
+  says which names, and still leaves them apart. Email addresses are never
+  printed; a name that was itself recorded as an address is cut at the at sign.
+- The output says how many commits were read and the dates they span. A shallow
+  clone and a squash-merge workflow both distort the figures: the first has no
+  history before its depth, the second records a whole branch as one commit
+  under one name. On a shallow clone whose history cannot be walked, the command
+  says so and measures nothing.
+- Directories with fewer than `--min-commits` commits are not measured and are
+  counted in the output. They are unmeasured, not low risk. So are directories
+  the index does not hold: never indexed, or deleted or renamed since. Renames
+  are not followed.
+
+A directory that is not a git repository gets an explanation, not an error.
+Agent tool: `list_knowledge_risks`.
+
 ### `path <from> <to>`
 
 Shows the shortest routes from one symbol to another, each hop with its file,

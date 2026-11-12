@@ -236,6 +236,7 @@ func TestEveryToolAnswerStaysBoundedAtScale(t *testing.T) {
 		"analyze_impact":          {"symbol": hub},
 		"analyze_change":          {"base": "HEAD"},
 		"find_owners":             {"symbol": hub},
+		"list_knowledge_risks":    {},
 		"get_resolution_coverage": {},
 		"plan_rename":             {"name": ordinary, "new_name": ordinary + "Renamed"},
 		"plan_change":             {"symbol": hub},

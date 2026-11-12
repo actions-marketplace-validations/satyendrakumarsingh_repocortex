@@ -94,6 +94,7 @@ keeps this table complete.
 | `trace_call_path` | `path` | | `list_hotspots` | `hotspots` |
 | `find_tests` | `tests` | | `analyze_impact` | `impact` |
 | `analyze_change` | `impact --base --head` | | `find_owners` | `owners` |
+| `list_knowledge_risks` | `bus-factor` | | | |
 
 Any tool is also callable as itself: `repocortex tool call <tool>`.
 

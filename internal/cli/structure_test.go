@@ -714,6 +714,7 @@ func TestEveryAgentToolHasACommand(t *testing.T) {
 		"analyze_impact":          "impact",
 		"analyze_change":          "impact",
 		"find_owners":             "owners",
+		"list_knowledge_risks":    "bus-factor",
 		"plan_rename":             "rename",
 		"plan_change":             "plan-change",
 		"list_api_endpoints":      "api",

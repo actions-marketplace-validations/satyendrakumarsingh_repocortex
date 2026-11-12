@@ -215,6 +215,45 @@ Exposed only with `mcp: { profile: full }`, and always available through
 | `trace_call_path` | `from`, `to`, `from_path`, `to_path`, `max_depth` | Up to three shortest routes, one row per hop |
 | `list_dead_code` | `path`, `min_certainty`, `include_exported`, `limit` | Definitions nothing calls, graded `likely` or `possible` |
 | `list_hotspots` | `path`, `commits`, `limit`, `include_tests` | Files ranked by commits times size, each followed by the files that change with it |
+| `list_knowledge_risks` | `path`, `commits`, `limit`, `min_commits`, `depth`, `files` | Directories ranked by how few people made their recent commits: bus factor, the largest contributor's share and how long ago they last changed it |
+
+### `list_knowledge_risks`
+
+Lists the directories where recent work is concentrated in the fewest people,
+most concentrated first. The bus factor of a directory is the smallest number
+of people whose commits make up at least half of the commits that touched it in
+the history read; one means a single person made half or more of them.
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `path` | string | no | Only measure files under this path prefix, e.g. 'internal/billing/'. |
+| `commits` | integer | no | How many recent commits to read. Default 500. |
+| `limit` | integer | no | Most directories to return. Default 15. |
+| `min_commits` | integer | no | Fewest commits a directory needs before it is measured. Default 5. Directories below it are counted in the answer, not listed. |
+| `depth` | integer | no | Group by the first N path segments instead of by each file's own directory, e.g. 1 for top-level directories. Default 0. |
+| `files` | boolean | no | Measure each file instead of each directory. Default false. |
+
+Each row gives the bus factor, the commits and distinct author names behind it,
+the largest contributors with their shares, and for the largest the date of
+their last change there and how many days before the newest commit read that
+was. The summary gives the same figure for every commit read taken together.
+
+What the answer always states:
+
+- how many commits were read, the dates they span, and whether earlier history
+  was left unread;
+- how many directories had too few commits to measure. Those are unmeasured, not
+  low risk, and an empty list means nothing could be measured;
+- how many directories the history touched that the index does not hold;
+- that it counts who changed the code, not who understands it;
+- that a shallow clone or a squash-merge workflow distorts the figures. On a
+  shallow clone it says so in a note of its own.
+
+People are the author names git recorded, exactly as spelled. Names are never
+merged: when two names committed from one address the answer names both and
+leaves them apart. No email address is returned, in the text or the structured
+result. Without a git repository the tool answers that nothing was measured; it
+does not fail. Command: `repocortex bus-factor`.
 
 ## Names
 
