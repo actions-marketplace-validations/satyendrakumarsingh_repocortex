@@ -46,7 +46,7 @@ One Go binary. A SQLite file in `.repocortex/`. Nothing leaves your machine.
 | **What it is** | A local code-intelligence server: it turns a repository into a call graph and answers an AI coding agent's questions about it |
 | **Who it is for** | Developers using Claude Code, Cursor, Codex, Copilot, Gemini CLI, Windsurf or any other coding agent on a real codebase |
 | **What it answers** | Who calls this, what breaks if I change it, which tests to run, what a pull request puts at risk, what is unused, where change concentrates |
-| **How agents reach it** | MCP (stdio or HTTP), a REST API with OpenAPI, or the command line: the same 25 tools on each |
+| **How agents reach it** | MCP (stdio or HTTP), a REST API with OpenAPI, or the command line: the same 28 tools on each |
 | **What makes it different** | Every relationship is marked `exact`, `high`, `medium` or `low` with measured precision, and every answer states what the index could not see |
 | **Where it runs** | Your machine or your CI runner. No account, no cloud index, no model, no telemetry |
 | **Licence** | Apache-2.0, free for commercial use |
@@ -398,7 +398,7 @@ Every tool's schema costs the agent context on every request, so the default pro
 | `find_callees` · `find_implementations` · `trace_call_path` | What a symbol calls; a type's hierarchy; the shortest routes between two symbols | full |
 | `list_dead_code` · `list_hotspots` | Definitions nothing calls, graded; where change concentrates and what changes together | full |
 
-`minimal` exposes 7 tools (about 1,700 tokens of schema per request), `standard` 18 (about 4,400) and `full` 25 (about 6,400). `repocortex tool list` prints the cost of each. Every tool has one name of the form `<verb>_<noun>`, using the verbs other MCP servers use (`get`, `list`, `find`, `search`); see [naming conventions](docs/reference/naming-conventions.md).
+`minimal` exposes 7 tools (about 2,000 tokens of schema per request), `standard` 18 (about 5,000) and `full` 28 (about 8,400). `repocortex tool list` prints the cost of each. Every tool has one name of the form `<verb>_<noun>`, using the verbs other MCP servers use (`get`, `list`, `find`, `search`); see [naming conventions](docs/reference/naming-conventions.md).
 
 ## How it works
 

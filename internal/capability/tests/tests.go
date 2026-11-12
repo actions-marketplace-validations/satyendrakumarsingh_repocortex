@@ -186,6 +186,17 @@ type TestReport struct {
 
 	Completeness capability.Completeness `json:"completeness"`
 
+	// Binding is what the index did with the references spelled like the
+	// target. A test reaches the target through one of those references, so
+	// when they could not be bound, "no test found" says nothing about tests.
+	Binding capability.TargetBinding `json:"binding"`
+
+	// Undetermined is non-empty when the graph signal could not have found the
+	// tests even if they exist, and says why. It qualifies Untested: Untested
+	// with Undetermined set means "nothing was found, and the search could not
+	// see", not "nothing covers this".
+	Undetermined string `json:"undetermined,omitempty"`
+
 	Truncated       bool   `json:"truncated"`
 	TruncatedReason string `json:"truncated_reason,omitempty"`
 }
@@ -271,6 +282,23 @@ func FindTestsWith(ctx context.Context, deps capability.Deps, runID int64, targe
 	if err != nil {
 		return TestReport{}, err
 	}
+	return findTestsFor(ctx, deps, runID, tgt, opts)
+}
+
+// FindTestsForTarget is FindTestsWith for a caller that has already chosen the
+// definition, by file and line or any other means. See impact.AnalyzeTarget for
+// why a name is not always enough to choose one.
+func FindTestsForTarget(ctx context.Context, deps capability.Deps, runID int64, tgt capability.Target, opts Options) (TestReport, error) {
+	if err := deps.Validate(); err != nil {
+		return TestReport{}, err
+	}
+	if tgt.SymbolID == 0 {
+		return TestReport{}, fmt.Errorf("tests: %w: the target carries no symbol id", capability.ErrTargetNotFound)
+	}
+	return findTestsFor(ctx, deps, runID, tgt, opts.withDefaults())
+}
+
+func findTestsFor(ctx context.Context, deps capability.Deps, runID int64, tgt capability.Target, opts Options) (TestReport, error) {
 	idx, err := deps.SymbolIndex(ctx, runID)
 	if err != nil {
 		return TestReport{}, err
@@ -354,6 +382,22 @@ func FindTestsWith(ctx context.Context, deps capability.Deps, runID int64, targe
 		if t.Strongest == SignalGraph {
 			rep.ProvenByGraph++
 		}
+	}
+	rep.Binding, err = deps.TargetBinding(ctx, runID, tgt)
+	if err != nil {
+		return TestReport{}, err
+	}
+	if rep.Target.Language == "" {
+		rep.Target.Language = rep.Binding.Language
+	}
+	// Only the graph signal is blinded by unbound references; a test found by
+	// name or by sibling file is found either way. So the doubt is stated
+	// whenever no test was PROVEN, and it is the whole finding when none was
+	// found at all.
+	if reason, ok := rep.Binding.Undetermined(); ok && rep.ProvenByGraph == 0 {
+		rep.Undetermined = reason
+		rep.Completeness.Caveats = append(rep.Completeness.Caveats,
+			"Whether a test reaches "+tgt.Name+" through a call could not be determined: "+reason+".")
 	}
 	if rep.Untested {
 		rep.Completeness.Caveats = append(rep.Completeness.Caveats,

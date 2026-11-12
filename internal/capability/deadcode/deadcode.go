@@ -79,11 +79,12 @@ const (
 type Reason string
 
 const (
-	ReasonExported     Reason = "exported"
-	ReasonNameUnbound  Reason = "unbound_reference_with_same_name"
-	ReasonOverrides    Reason = "implements_or_extends"
-	ReasonPartialParse Reason = "file_partially_parsed"
-	ReasonMentioned    Reason = "name_appears_elsewhere"
+	ReasonExported      Reason = "exported"
+	ReasonExportUnknown Reason = "export_status_unknown"
+	ReasonNameUnbound   Reason = "unbound_reference_with_same_name"
+	ReasonOverrides     Reason = "implements_or_extends"
+	ReasonPartialParse  Reason = "file_partially_parsed"
+	ReasonMentioned     Reason = "name_appears_elsewhere"
 
 	// ReasonRouteHandler and ReasonEventConsumer mark an entry point a
 	// framework calls. The definition has no caller in the index because its
@@ -100,11 +101,12 @@ const (
 // reasonText is the sentence shown beside each Reason. Kept in one table so
 // the CLI, the MCP tool and the HTTP API cannot word the same fact three ways.
 var reasonText = map[Reason]string{
-	ReasonExported:     "exported, so code outside this index may use it",
-	ReasonNameUnbound:  "a reference spelled like it was never bound to a definition and may be a use of it",
-	ReasonOverrides:    "implements or extends another declaration, so it may be reached through that type",
-	ReasonPartialParse: "its file did not parse cleanly, so uses inside the file may be missing",
-	ReasonMentioned:    "its name appears in code outside its own definition, so it may be passed as a value, registered by name or referenced from configuration",
+	ReasonExported:      "exported, so code outside this index may use it",
+	ReasonExportUnknown: "the index cannot tell whether it is exported in this language, so code outside this index may use it",
+	ReasonNameUnbound:   "a reference spelled like it was never bound to a definition and may be a use of it",
+	ReasonOverrides:     "implements or extends another declaration, so it may be reached through that type",
+	ReasonPartialParse:  "its file did not parse cleanly, so uses inside the file may be missing",
+	ReasonMentioned:     "its name appears in code outside its own definition, so it may be passed as a value, registered by name or referenced from configuration",
 
 	ReasonRouteHandler:  "an HTTP route names a handler spelled like it and was not bound to one, so the router may dispatch to it",
 	ReasonEventConsumer: "it consumes an event topic or queue, so a message broker's client may invoke it",
@@ -116,11 +118,12 @@ func (r Reason) Text() string { return reasonText[r] }
 
 // reasonLabel is the short form for a table cell; Text is the explanation.
 var reasonLabel = map[Reason]string{
-	ReasonExported:     "exported",
-	ReasonNameUnbound:  "unbound reference with this name",
-	ReasonOverrides:    "implements or extends",
-	ReasonPartialParse: "file partially parsed",
-	ReasonMentioned:    "name appears elsewhere",
+	ReasonExported:      "exported",
+	ReasonExportUnknown: "export status unknown",
+	ReasonNameUnbound:   "unbound reference with this name",
+	ReasonOverrides:     "implements or extends",
+	ReasonPartialParse:  "file partially parsed",
+	ReasonMentioned:     "name appears elsewhere",
 
 	ReasonRouteHandler:  "route handler",
 	ReasonEventConsumer: "event consumer",
@@ -134,7 +137,7 @@ func (r Reason) Label() string { return reasonLabel[r] }
 func Reasons() []Reason {
 	return []Reason{
 		ReasonTestOnly,
-		ReasonExported, ReasonNameUnbound, ReasonOverrides, ReasonPartialParse, ReasonMentioned,
+		ReasonExported, ReasonExportUnknown, ReasonNameUnbound, ReasonOverrides, ReasonPartialParse, ReasonMentioned,
 		ReasonRouteHandler, ReasonEventConsumer,
 	}
 }
@@ -205,6 +208,13 @@ type Report struct {
 	// TestOnly is the separate finding, present only when Options.TestOnly
 	// asked for it. Nothing in it is counted in Likely or Possible above.
 	TestOnly *TestOnlyReport `json:"test_only,omitempty"`
+
+	// ExportUnknown counts candidates graded possible because the index cannot
+	// tell whether they are exported (capability.ExportedKnown), in the
+	// languages named by ExportUnknownLangs. Reported so a reader in a Java or
+	// TypeScript repository knows why nothing is graded likely.
+	ExportUnknown      int      `json:"export_status_unknown"`
+	ExportUnknownLangs []string `json:"export_status_unknown_languages,omitempty"`
 
 	Completeness capability.Completeness `json:"completeness"`
 }
@@ -315,6 +325,24 @@ func Find(ctx context.Context, deps capability.Deps, src Source, runID int64, op
 	if err != nil {
 		return nil, err
 	}
+	exportUnknown := map[string]bool{}
+
+	// What the INDEX says about each language, beside what the parser's tier
+	// table says. The table calls PHP, Kotlin and Scala resolved; an index of
+	// them holds no reference at all, so every definition in them has no
+	// caller by construction. A language with definitions and nothing
+	// recording what its code uses is not judged, whatever its tier.
+	langs, err := deps.LanguageBindings(ctx, runID)
+	if err != nil {
+		return nil, fmt.Errorf("deadcode: %w", err)
+	}
+	extracts := func(language string) bool {
+		if langs == nil {
+			return true
+		}
+		lb := capability.LanguageBindingFor(langs, language)
+		return lb.Definitions == 0 || lb.ExtractsReferences()
+	}
 	// More than limit are kept through the scan because the text check below
 	// demotes some of them, and a demoted row must be replaced by the next
 	// best rather than leave the answer short.
@@ -347,18 +375,26 @@ scan:
 				rep.Skipped++
 				continue
 			}
-			if opts.Judgeable != nil && !opts.Judgeable(u.Language) {
+			if (opts.Judgeable != nil && !opts.Judgeable(u.Language)) || !extracts(u.Language) {
 				rep.Skipped++
 				rep.SkippedUnjudged++
 				unjudged[u.Language] = true
 				continue
 			}
-			if u.Exported && !opts.IncludeExported {
+			// The exported flag decides anything only where it can be trusted.
+			// Elsewhere it follows the first letter of the name, so skipping on
+			// it would hide `class Parser` and keep `public void run()`.
+			exportKnown := capability.ExportedKnown(u.Language, u.FilePath)
+			if exportKnown && u.Exported && !opts.IncludeExported {
 				rep.Skipped++
 				continue
 			}
 
-			c := grade(u, handlers)
+			c := grade(u, handlers, exportKnown)
+			if !exportKnown {
+				rep.ExportUnknown++
+				exportUnknown[u.Language] = true
+			}
 			if c.Certainty == CertaintyLikely {
 				rep.Likely++
 			} else {
@@ -413,6 +449,10 @@ scan:
 		rep.UnjudgedLangs = append(rep.UnjudgedLangs, lang)
 	}
 	sort.Strings(rep.UnjudgedLangs)
+	for lang := range exportUnknown {
+		rep.ExportUnknownLangs = append(rep.ExportUnknownLangs, lang)
+	}
+	sort.Strings(rep.ExportUnknownLangs)
 
 	stats, err := deps.ResolutionStats(ctx, runID)
 	if err != nil {
@@ -589,13 +629,21 @@ func isExpectedUncalled(kind, name, filePath string) bool {
 
 // grade turns a registry row into a candidate with its certainty and reasons.
 // handlers is the set of route handler names no definition was bound to.
-func grade(u registry.UnreferencedSymbol, handlers map[string]bool) Candidate {
+//
+// exportKnown says whether the index's exported flag is a fact for this
+// symbol's language. When it is not, the candidate cannot be likely: a public
+// API is the most ordinary reason for a definition to have no caller here, and
+// it has not been ruled out.
+func grade(u registry.UnreferencedSymbol, handlers map[string]bool, exportKnown bool) Candidate {
 	c := Candidate{
 		Name: u.Name, FQN: u.FQN, Kind: u.Kind,
 		Path: u.FilePath, Line: u.StartLine, EndLine: u.EndLine,
 		Language: u.Language,
 	}
-	if u.Exported {
+	switch {
+	case !exportKnown:
+		c.Reasons = append(c.Reasons, ReasonExportUnknown)
+	case u.Exported:
 		c.Reasons = append(c.Reasons, ReasonExported)
 	}
 	if u.NameUnbound {

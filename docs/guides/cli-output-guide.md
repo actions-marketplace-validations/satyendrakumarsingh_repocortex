@@ -1928,15 +1928,17 @@ The text of the `find_callers` tool result:
 
 ```text
 === SYSTEM METADATA ===
-1 caller(s) of updateStatus (src/main/java/com/pay/service/TransactionService.java:18).
+INCOMPLETE — 2 of the 3 references spelled "updateStatus" are not among the rows below. 1 caller(s) of updateStatus (src/main/java/com/pay/service/TransactionService.java:18) are recorded.
 index_revision: 3  status: ready
-note: 42 references repository-wide are unresolved or ambiguous, so this list may be incomplete.
+note: INCOMPLETE FOR THIS SYMBOL — 2 of the 3 reference(s) spelled like this name are not listed as its callers: 2 ambiguous (several definitions share the name and none was chosen). Any of them may be a use of this definition. Run search_code for the name before concluding anything from what is absent.
+note: References spelled "updateStatus" in this index: 3. 1 bound to this definition, 2 ambiguous.
 provenance: This compares commits only. Staged, unstaged and untracked changes are invisible to the index and are NOT reflected here — a matching commit does not mean the working tree matches.
-verdict: strong (high=1)
-next_step: No result fell below high confidence. Act on these, but verify before deleting anything.
+verdict: incomplete (high=1)
+verdict_signal: 2 of the 3 references spelled "updateStatus" are not among the rows below.
+next_step: The rows shown are high confidence or better and can be used as they are. The LIST is known to be incomplete, so conclude nothing from what is absent: run search_code for the name.
 
 === INFERRED ===
-- calls handleCallback  src/main/java/com/pay/controller/CallbackController.java:23  [confidence=high source=source_code]  (receiver type matches)
+- calls handleCallback  src/main/java/com/pay/controller/CallbackController.java:23  [confidence=high source=source_code]  (written as TransactionService.updateStatus; receiver type matches)
 ```
 
 On stderr at start-up:
@@ -1949,9 +1951,18 @@ time=… level=INFO msg="serving MCP on stdio" project=payment-platform profile=
 
 - `--list-tools` shows what the agent will see. To add `analyze_impact` and
   `find_tests`, set `mcp.profile: standard` (or `full`) in `.repocortex.yml`.
-- Each tool result starts with a metadata block: the count, index revision,
-  a `note` on how much is unbound, a `verdict` (strong or weak, with counts per
-  confidence), and a `next_step` for the agent.
+- Each tool result starts with a metadata block. Its first line is the answer
+  in one sentence, and it opens with `UNKNOWN`, `UNRELIABLE`, `UNVERIFIED`,
+  `INCOMPLETE` or `AMBIGUOUS` when the index cannot stand behind it. Here two
+  of the three references spelled `updateStatus` were left ambiguous, so the
+  one caller listed is not presented as all of them. Then come the index
+  revision, a `note` on what became of the references spelled like the symbol,
+  a `verdict` with counts per confidence, and a `next_step` for the agent. The
+  verdict is never stronger than the coverage it rests on; see
+  [reading an answer](../reference/mcp-tools.md#reading-an-answer).
+- A caller row says how its call is written when the call carries a qualifier.
+  The binding matched the name `updateStatus`; the row shows the text in front
+  of it so a reader can check it.
 - The text is split into labelled sections. `SYSTEM METADATA` is RepoCortex's
   own report. `INFERRED` holds results it derived from the graph.
   `SOURCE EVIDENCE` holds verbatim repository content and comes with a note to

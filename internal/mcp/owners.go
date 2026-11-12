@@ -2,7 +2,6 @@ package mcp
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -30,7 +29,9 @@ import (
 
 type ownersArgs struct {
 	Symbol string `json:"symbol" jsonschema:"The symbol you are changing, e.g. 'updateStatus' or 'TransactionService'."`
-	Limit  int    `json:"limit,omitempty" jsonschema:"Most people to list. Default 5."`
+	Path   string `json:"path,omitempty" jsonschema:"File or directory of the definition, to choose between symbols that share the name."`
+	lineArg
+	Limit int `json:"limit,omitempty" jsonschema:"Most people to list. Default 5."`
 }
 
 const defaultOwners = 5
@@ -55,21 +56,21 @@ func (s *Server) findOwners(ctx context.Context, req *sdk.CallToolRequest, args 
 		return failWith("invalid_argument", "Pass limit as a positive number, or omit it.",
 			"limit must not be negative")
 	}
-	runID, status, err := s.currentRun(ctx)
-	if err != nil {
-		return s.noRun(ctx, req, err)
+	q := targetQuery("find_owners", args.Symbol, args.Path, args.Line)
+	sel, sc, scResp := s.selectSymbol(ctx, req, q)
+	if sc != nil {
+		return sc, scResp, nil
 	}
+	runID, status := sel.RunID, sel.Status
 	if s.deps.Owners == nil {
 		return s.guide(ctx, req, runID, status,
 			"No commit history is available to this server, so nobody can be named.",
 			"This reads git history. The project is not a git repository, or its history could not be opened.")
 	}
 
-	blast, err := impact.AnalyzeWith(ctx, s.capDeps, runID, args.Symbol, impact.Options{})
+	blast, err := impact.AnalyzeTarget(ctx, s.capDeps, runID,
+		capability.TargetFromCandidate(args.Symbol, sel.Target), impact.Options{})
 	if err != nil {
-		if errors.Is(err, capability.ErrTargetNotFound) {
-			return s.missingSymbol(ctx, req, runID, status, args.Symbol)
-		}
 		return failFrom(err, "blast radius of %s: %v", args.Symbol, err)
 	}
 
@@ -90,9 +91,15 @@ func (s *Server) findOwners(ctx context.Context, req *sdk.CallToolRequest, args 
 	resp := &Response{
 		IndexRevision: runID,
 		IndexStatus:   status,
-		Summary: fmt.Sprintf("%d person(s) have recently changed code that a change to %s reaches (%d symbol(s) in %d file(s)), from the last %d commit(s).",
-			len(rep.People), args.Symbol, rep.Reach.Symbols, rep.Reach.Files, rep.Window.CommitsRead),
+		Summary: fmt.Sprintf("%d person(s) have recently changed code that a change to %s (%s:%d) reaches (%d symbol(s) in %d file(s)), from the last %d commit(s).",
+			len(rep.People), sel.Target.Name, sel.Target.FilePath, sel.Target.StartLine,
+			rep.Reach.Symbols, rep.Reach.Files, rep.Window.CommitsRead),
 	}
+	// The people are ranked over what the change REACHES, so the answer is as
+	// good as that reach: when the callers could not be determined, the list
+	// is of who touched the definition and little else.
+	cov := s.coverageFor(ctx, runID, blast.Target.Language, blast.Target.FilePath, blast.Binding, aboutCallers)
+	s.applyCoverage(resp, cov, "the reach this ranking is drawn from")
 	for _, p := range rep.People {
 		why := fmt.Sprintf("changed %d of the reached symbol(s) (%.0f%%) across %d file(s), in %d commit(s)",
 			p.Symbols, 100*p.Share, p.FilesTouched, p.CommitCount)
@@ -112,6 +119,9 @@ func (s *Server) findOwners(ctx context.Context, req *sdk.CallToolRequest, args 
 			"Someone who wrote it years ago and someone listed in CODEOWNERS may both be absent. "+
 			"Email addresses are deliberately left out of this answer.")
 	resp.Notes = append(resp.Notes, rep.Caveats...)
+	if n := sel.note(q); n != "" {
+		resp.Notes = append(resp.Notes, n)
+	}
 	if !rep.Window.Exhausted {
 		resp.Notes = append(resp.Notes, fmt.Sprintf(
 			"Only the last %d commit(s) were read; earlier history exists and was not.", rep.Window.CommitsRead))

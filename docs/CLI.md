@@ -890,6 +890,11 @@ MCP equivalent: `list_blindspots`.
 symbol safely? Output carries the target, direct callers, risk, covering tests
 and pre/post-conditions per step.
 
+The callers are the ones the index bound. When references spelled like the
+symbol were left unbound, or its language yields no references, the risk level
+is `UNKNOWN` with the counts and no score, in place of `LOW`. `MODERATE` and
+`HIGH` are printed as "or higher", because a floor survives missing callers.
+
 | Flag | Effect |
 |---|---|
 | `--min-confidence <tier>` | lowest edge confidence to walk: `exact`, `high`, `medium` (default), `low` |
@@ -1763,10 +1768,16 @@ repocortex dead-code --include-test-only
 | `--include-test-only` | Also list, in a separate section, definitions whose every caller is in a test file |
 | `-n`, `--limit N` | Most candidates to list (default 50) |
 
-A row is `likely` only when it is unexported, its file parsed cleanly, no
-unbound reference is spelled like it, and its name appears nowhere in the code
-outside its own definition. Never delete on this evidence alone. Agent tool:
-`list_dead_code`.
+A row is `likely` only when it is known to be unexported, its file parsed
+cleanly, no unbound reference is spelled like it, and its name appears nowhere
+in the code outside its own definition. Never delete on this evidence alone.
+Agent tool: `list_dead_code`.
+
+The index knows whether a definition is exported for Go only. In every other
+language a candidate is graded `possible` at best, with the reason "export
+status unknown", and nothing is left out for being exported. A language with
+definitions and no reference in the index is not judged at all: every
+definition in it would look unused.
 
 A function a framework calls is never `likely`. The handler a route was bound
 to has the route pointing at it, so it is not listed at all. A definition
@@ -1974,9 +1985,12 @@ repocortex tool describe trace_call_path
 repocortex tool call find_callers name=ParseConfig min_confidence=high
 ```
 
-`call` exits 1 when the tool reports a failure and 0 otherwise. Flags:
-`--profile` (default `full`), `--args JSON`, `--args-file FILE`, `--audit-log
-FILE`. Full description: [protocols](guides/protocols.md#command-line).
+`call` exits 1 when the tool reports a failure and 0 otherwise. A name shared
+by several definitions is not a failure: the answer lists them with the `path`
+and `line` that select each, and the exit status is 0. Flags: `--profile`
+(default `full`), `--args JSON`, `--args-file FILE`, `--audit-log FILE`. Full
+description: [protocols](guides/protocols.md#command-line). What the first line
+of an answer means: [reading an answer](reference/mcp-tools.md#reading-an-answer).
 
 ### `stats`
 

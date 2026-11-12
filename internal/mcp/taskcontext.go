@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/satyendrakumarsingh/repocortex/internal/capability"
 	devctx "github.com/satyendrakumarsingh/repocortex/internal/context"
 	"github.com/satyendrakumarsingh/repocortex/pkg/model"
 
@@ -155,10 +156,19 @@ func (s *Server) getTaskContext(ctx stdctx.Context, call *sdk.CallToolRequest, a
 	}
 	resp.Notes = append(resp.Notes, pack.Notes...)
 
+	// The pack is found by walking the graph, so it is as complete as the
+	// graph is. Judged over the run, since a task is not about one symbol.
+	cov := s.coverageFor(ctx, runID, "", "", capability.TargetBinding{}, aboutContext)
+	s.applyCoverage(resp, cov, "context assembly")
+
 	if len(pack.Items) == 0 {
-		resp.Notes = append(resp.Notes,
-			"Nothing matched. Either the task names code that is not in this repository, "+
-				"or references have not been resolved yet — run 'repocortex resolve'.")
+		note := "Nothing matched. Either the task names code that is not in this repository, " +
+			"or the index did not bind the relationships that lead to it."
+		// 'repocortex resolve' is named only when it would change something.
+		if cov.Pending > 0 {
+			note += fmt.Sprintf(" %d reference(s) have not been resolved yet: run 'repocortex resolve'.", cov.Pending)
+		}
+		resp.Notes = append(resp.Notes, note)
 	}
 	return s.reply(ctx, call, resp)
 }

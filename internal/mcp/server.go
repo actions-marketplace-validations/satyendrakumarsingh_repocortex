@@ -174,6 +174,11 @@ func newServer(deps Deps, share *Server) (*Server, error) {
 	if limits.MaxItems == 0 {
 		limits = DefaultLimits()
 	}
+	// A caller that set a cap of its own and said nothing about paging keeps
+	// its cap: `limit` may ask for fewer rows than MaxItems, never more.
+	if limits.MaxPageItems < limits.MaxItems {
+		limits.MaxPageItems = limits.MaxItems
+	}
 
 	impl := &sdk.Implementation{
 		Name:    "repocortex",
@@ -540,6 +545,10 @@ func (s *Server) reply(ctx context.Context, req *sdk.CallToolRequest, r *Respons
 	if r.Provenance == nil {
 		r.Provenance = s.provenanceFor(ctx, r.IndexRevision)
 	}
+	// The tool's own summary, kept so the lead can be recomputed in front of
+	// it. What the lead says depends on what Bound cuts, and what Bound cuts
+	// depends on how long the summary is.
+	base := r.Summary
 	r.attachWeakConfidenceNote()
 	r.Bound(s.limits)
 
@@ -554,8 +563,12 @@ func (s *Server) reply(ctx context.Context, req *sdk.CallToolRequest, r *Respons
 		before := len(r.Items)
 		r.gradeSelf()
 		r.attachWeakConfidenceNote()
+		// THE FIRST LINE. An answer the index cannot stand behind says so
+		// before it says anything else; see Response.lead.
+		lead := r.lead()
+		r.Summary = lead + base
 		r.Bound(s.limits)
-		if len(r.Items) == before {
+		if len(r.Items) == before && r.lead() == lead {
 			break
 		}
 	}

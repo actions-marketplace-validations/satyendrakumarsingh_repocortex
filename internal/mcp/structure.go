@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/satyendrakumarsingh/repocortex/internal/capability"
 	"github.com/satyendrakumarsingh/repocortex/internal/capability/deadcode"
 	"github.com/satyendrakumarsingh/repocortex/internal/capability/hotspots"
 	"github.com/satyendrakumarsingh/repocortex/internal/graph"
@@ -30,8 +31,10 @@ import (
 type pathArgs struct {
 	From     string `json:"from" jsonschema:"Symbol the path starts at, e.g. 'handleCallback'."`
 	To       string `json:"to" jsonschema:"Symbol the path should reach, e.g. 'saveTransaction'."`
-	FromPath string `json:"from_path,omitempty" jsonschema:"Optional file path to disambiguate 'from' when several symbols share the name."`
-	ToPath   string `json:"to_path,omitempty" jsonschema:"Optional file path to disambiguate 'to' when several symbols share the name."`
+	FromPath string `json:"from_path,omitempty" jsonschema:"File or directory of the 'from' definition, when several symbols share the name."`
+	FromLine int    `json:"from_line,omitempty" jsonschema:"Line the 'from' definition starts on."`
+	ToPath   string `json:"to_path,omitempty" jsonschema:"File or directory of the 'to' definition, when several symbols share the name."`
+	ToLine   int    `json:"to_line,omitempty" jsonschema:"Line the 'to' definition starts on."`
 	MaxDepth int    `json:"max_depth,omitempty" jsonschema:"Longest route to look for, in hops. Default 6. Raise it only if the answer was 'no route found' and you expect a long one."`
 }
 
@@ -87,55 +90,8 @@ func (s *Server) registerStructure(allowed map[string]bool) {
 
 // ---------------------------------------------------------------- shared lookup
 
-// resolved is a symbol name turned into one definition.
-type resolved struct {
-	RunID  int64
-	Status string
-	Target registry.SymbolHit
-	// Others counts further definitions sharing the name, so the answer can
-	// say it chose one.
-	Others int
-}
-
-// resolveSymbol turns a name (and optional path hint) into one definition.
-//
-// On any outcome other than success it returns the finished result the caller
-// must hand back unchanged, for the reason referencesFor documents: a handler
-// that also returned an error would have its guidance replaced by the SDK's
-// bare protocol error.
-func (s *Server) resolveSymbol(ctx context.Context, req *sdk.CallToolRequest, name, pathHint string) (resolved, *sdk.CallToolResult, *Response) {
-	runID, status, err := s.currentRun(ctx)
-	if err != nil {
-		sc, r, _ := s.noRun(ctx, req, err)
-		return resolved{}, sc, r
-	}
-	syms, err := s.deps.Registry.FindSymbolsByName(ctx, runID, name, "", 5)
-	if err != nil {
-		sc, r, _ := failFrom(err, "symbol lookup failed: %v", err)
-		return resolved{}, sc, r
-	}
-	if len(syms) == 0 {
-		sc, r, _ := s.missingSymbol(ctx, req, runID, status, name)
-		return resolved{}, sc, r
-	}
-	target := syms[0]
-	for _, sym := range syms {
-		if pathHint != "" && strings.Contains(sym.FilePath, pathHint) {
-			target = sym
-			break
-		}
-	}
-	return resolved{RunID: runID, Status: status, Target: target, Others: len(syms) - 1}, nil, nil
-}
-
-// ambiguityNote says the answer is for one of several same-named definitions.
-func ambiguityNote(r resolved, param string) string {
-	if r.Others <= 0 {
-		return ""
-	}
-	return fmt.Sprintf("%d other definition(s) share the name %q; this answer is for the one at %s:%d. "+
-		"Pass %s to choose another.", r.Others, r.Target.Name, r.Target.FilePath, r.Target.StartLine, param)
-}
+// Selecting the definition is selectSymbol's (select.go), shared with every
+// other tool that takes a symbol.
 
 // outgoingItems renders edges that START at a symbol.
 func outgoingItems(edges []registry.EdgeHit) []Item {
@@ -154,9 +110,28 @@ func outgoingItems(edges []registry.EdgeHit) []Item {
 	return items
 }
 
+// gate judges coverage for an answer about sel's definition, records it as the
+// response's Reliability and puts the caveat ahead of every other note. Shared
+// wording with every other relationship tool, through coverage.
+func (s *Server) gate(ctx context.Context, resp *Response, sel selection, subject string, about question) coverage {
+	cov := s.coverageFor(ctx, sel.RunID, sel.Target.Language, sel.Target.FilePath, capability.TargetBinding{}, about)
+	s.applyCoverage(resp, cov, subject)
+	return cov
+}
+
+// applyCoverage attaches cov to resp: its Reliability, and its caveat first.
+// When the response already carries a Reliability (a route has two ends), the
+// worse of the two is kept.
+func (s *Server) applyCoverage(resp *Response, cov coverage, subject string) {
+	resp.Reliability = worse(resp.Reliability, cov.reliability(subject))
+	if gate := cov.caveat(subject); gate != nil {
+		resp.Notes = append(gate, resp.Notes...)
+	}
+}
+
 // ---------------------------------------------------------------- find_callees
 
-func (s *Server) findCallees(ctx context.Context, req *sdk.CallToolRequest, args symbolRefArgs) (*sdk.CallToolResult, *Response, error) {
+func (s *Server) findCallees(ctx context.Context, req *sdk.CallToolRequest, args relationArgs) (*sdk.CallToolResult, *Response, error) {
 	if strings.TrimSpace(args.Name) == "" {
 		return failWith("invalid_argument",
 			"Pass a non-empty name, then call find_callees again.",
@@ -166,29 +141,34 @@ func (s *Server) findCallees(ctx context.Context, req *sdk.CallToolRequest, args
 	if err != nil {
 		return failFrom(err, "%v", err)
 	}
-	r, sc, scResp := s.resolveSymbol(ctx, req, args.Name, args.Path)
+	page, err := s.page(args.pageArg, "callee(s)")
+	if err != nil {
+		return failWith("invalid_argument", "Pass limit and offset as non-negative numbers, or omit them.", "%v", err)
+	}
+	q := symbolQuery{Tool: "find_callees", Param: "name", PathParam: "path", LineParam: "line",
+		Name: args.Name, Path: args.Path, Line: args.Line,
+		Prefer: callableKinds, PreferWord: "functions and methods"}
+	sel, sc, scResp := s.selectSymbol(ctx, req, q)
 	if sc != nil {
 		return sc, scResp, nil
 	}
 
 	filter := registry.EdgeFilter{MinConfidence: minConf, Kinds: []string{string(model.EdgeCalls)}}
-	edges, err := s.deps.Registry.OutgoingEdges(ctx, r.RunID, r.Target.ID, s.limits.MaxItems, filter)
+	edges, total, err := s.deps.Registry.EdgePage(ctx, sel.RunID, sel.Target.ID, false, page.Limit, page.Offset, filter)
 	if err != nil {
 		return failFrom(err, "relationship lookup failed: %v", err)
 	}
+	page.Total = total
 
 	resp := &Response{
-		IndexRevision: r.RunID,
-		IndexStatus:   r.Status,
+		IndexRevision: sel.RunID,
+		IndexStatus:   sel.Status,
 		Summary: fmt.Sprintf("%s (%s:%d) calls %d symbol(s) the index could bind.",
-			r.Target.Name, r.Target.FilePath, r.Target.StartLine, len(edges)),
+			sel.Target.Name, sel.Target.FilePath, sel.Target.StartLine, total),
 		Items: outgoingItems(edges),
+		Page:  page,
 	}
-	s.gateCoverage(ctx, resp, r, "callee lookup")
-	if len(edges) == s.limits.MaxItems {
-		resp.markTruncated(fmt.Sprintf(
-			"the item cap (%d) was reached; more callees may exist — raise min_confidence to see the strongest", s.limits.MaxItems))
-	}
+	s.gate(ctx, resp, sel, "callee lookup", aboutCallees)
 	// The gap here has a different shape from find_callers', so it gets its
 	// own sentence: a call into a library has no definition in this index and
 	// can never appear, however well the repository itself resolves.
@@ -196,23 +176,10 @@ func (s *Server) findCallees(ctx context.Context, req *sdk.CallToolRequest, args
 		"Only calls to definitions INSIDE this index are listed. Calls into libraries, the standard "+
 			"library and generated code have no definition here to bind to, so this is what the "+
 			"symbol calls within the repository, not everything it calls.")
-	if n := ambiguityNote(r, "path"); n != "" {
+	if n := sel.note(q); n != "" {
 		resp.Notes = append(resp.Notes, n)
 	}
 	return s.reply(ctx, req, resp)
-}
-
-// gateCoverage prepends the low-coverage caveat when the index's binding rate
-// does not support a relationship answer. Shared wording with every other
-// relationship tool, through coverageOf.
-func (s *Server) gateCoverage(ctx context.Context, resp *Response, r resolved, subject string) {
-	rs, err := s.deps.Registry.ResolutionStats(ctx, r.RunID)
-	if err != nil {
-		return
-	}
-	if gate := coverageOf(rs, r.Target.FilePath).caveat(subject); gate != nil {
-		resp.Notes = append(gate, resp.Notes...)
-	}
 }
 
 // ---------------------------------------------------------------- find_implementations
@@ -220,7 +187,7 @@ func (s *Server) gateCoverage(ctx context.Context, resp *Response, r resolved, s
 // hierarchyKinds are the edges that record a type relationship.
 var hierarchyKinds = []string{string(model.EdgeImplements), string(model.EdgeExtends)}
 
-func (s *Server) findImplementations(ctx context.Context, req *sdk.CallToolRequest, args symbolRefArgs) (*sdk.CallToolResult, *Response, error) {
+func (s *Server) findImplementations(ctx context.Context, req *sdk.CallToolRequest, args relationArgs) (*sdk.CallToolResult, *Response, error) {
 	if strings.TrimSpace(args.Name) == "" {
 		return failWith("invalid_argument",
 			"Pass a non-empty name, then call find_implementations again.",
@@ -230,43 +197,58 @@ func (s *Server) findImplementations(ctx context.Context, req *sdk.CallToolReque
 	if err != nil {
 		return failFrom(err, "%v", err)
 	}
-	r, sc, scResp := s.resolveSymbol(ctx, req, args.Name, args.Path)
+	page, err := s.page(args.pageArg, "type relationship(s)")
+	if err != nil {
+		return failWith("invalid_argument", "Pass limit and offset as non-negative numbers, or omit them.", "%v", err)
+	}
+	// The question is about a TYPE. "What implements Render" was answered for
+	// a method named Render, because the first definition of the name was
+	// taken whatever it was.
+	q := symbolQuery{Tool: "find_implementations", Param: "name", PathParam: "path", LineParam: "line",
+		Name: args.Name, Path: args.Path, Line: args.Line,
+		Prefer: typeKinds, PreferWord: "types"}
+	sel, sc, scResp := s.selectSymbol(ctx, req, q)
 	if sc != nil {
 		return sc, scResp, nil
 	}
+	target := sel.Target
 
+	// ONE list, supertypes first, paged as one. There are always far fewer
+	// supertypes than subtypes, so they lead and cannot be crowded out; and
+	// because offset and limit run over the concatenation, "rows 51-100 of
+	// 136" means the same rows on every call. The two used to be capped
+	// separately at 25 each with no way to see the 26th.
 	filter := registry.EdgeFilter{MinConfidence: minConf, Kinds: hierarchyKinds}
-	// The cap is split so a type with hundreds of subtypes cannot crowd its
-	// own supertypes out of the answer: what a type IS matters as much to a
-	// reader as what is built on it, and there are always far fewer of them.
-	half := max(s.limits.MaxItems/2, 1)
-	down, err := s.deps.Registry.IncomingEdges(ctx, r.RunID, r.Target.ID, half, filter)
+	up, upTotal, err := s.deps.Registry.EdgePage(ctx, sel.RunID, target.ID, false, page.Limit, page.Offset, filter)
 	if err != nil {
 		return failFrom(err, "relationship lookup failed: %v", err)
 	}
-	up, err := s.deps.Registry.OutgoingEdges(ctx, r.RunID, r.Target.ID, half, filter)
+	// Asked for even when the page is already full of supertypes, with a
+	// limit of one, because the total comes back with it.
+	downLimit, downOffset := page.Limit-len(up), max(page.Offset-upTotal, 0)
+	fetchOnlyTotal := downLimit <= 0
+	if fetchOnlyTotal {
+		downLimit = 1
+	}
+	down, downTotal, err := s.deps.Registry.EdgePage(ctx, sel.RunID, target.ID, true, downLimit, downOffset, filter)
 	if err != nil {
 		return failFrom(err, "relationship lookup failed: %v", err)
 	}
+	if fetchOnlyTotal {
+		down = nil
+	}
+	page.Total = upTotal + downTotal
 
 	resp := &Response{
-		IndexRevision: r.RunID,
-		IndexStatus:   r.Status,
+		IndexRevision: sel.RunID,
+		IndexStatus:   sel.Status,
 		Summary: fmt.Sprintf("%s (%s:%d): %d implementing or extending it, %d it implements or extends.",
-			r.Target.Name, r.Target.FilePath, r.Target.StartLine, len(down), len(up)),
+			target.Name, target.FilePath, target.StartLine, downTotal, upTotal),
+		Page: page,
 	}
-	for _, e := range down {
-		why := "implements or extends " + r.Target.Name
-		if e.Detail != "" {
-			why += " — " + e.Detail
-		}
-		resp.Items = append(resp.Items, Item{
-			Kind: "subtype", Name: e.SrcName, Path: e.EvidenceFile, Line: e.EvidenceLine,
-			Confidence: e.Confidence, Source: e.Source, Why: why,
-		})
-	}
+	proven := false
 	for _, e := range up {
-		why := r.Target.Name + " " + strings.ToLower(e.Kind) + " this"
+		why := target.Name + " " + strings.ToLower(e.Kind) + " this"
 		if e.Detail != "" {
 			why += " — " + e.Detail
 		}
@@ -274,19 +256,35 @@ func (s *Server) findImplementations(ctx context.Context, req *sdk.CallToolReque
 			Kind: "supertype", Name: e.DstName, Path: e.EvidenceFile, Line: e.EvidenceLine,
 			Confidence: e.Confidence, Source: e.Source, Why: why,
 		})
+		proven = proven || e.Confidence == string(model.ConfidenceExact)
+	}
+	for _, e := range down {
+		why := "implements or extends " + target.Name
+		if e.Detail != "" {
+			why += " — " + e.Detail
+		}
+		resp.Items = append(resp.Items, Item{
+			Kind: "subtype", Name: e.SrcName, Path: e.EvidenceFile, Line: e.EvidenceLine,
+			Confidence: e.Confidence, Source: e.Source, Why: why,
+		})
+		proven = proven || e.Confidence == string(model.ConfidenceExact)
 	}
 
-	s.gateCoverage(ctx, resp, r, "type hierarchy lookup")
-	if len(down) == half || len(up) == half {
-		resp.markTruncated(fmt.Sprintf(
-			"one direction reached its cap (%d); more may exist — raise min_confidence or pass a path", half))
+	cov := s.coverageFor(ctx, sel.RunID, target.Language, target.FilePath, capability.TargetBinding{}, aboutHierarchy)
+	cov.requireHierarchy()
+	if !proven {
+		// A compiler-proven row means a compiler index was imported, and that
+		// index does see structural implementations.
+		cov.Structural = structuralTyping(target.Language, target.Kind)
 	}
+	s.applyCoverage(resp, cov, "type hierarchy lookup")
+
 	resp.Notes = append(resp.Notes,
 		"A type relationship is recorded only where the source states it (extends, implements, an "+
 			"embedded type) or a compiler index proved it. Structural typing — a Go type that satisfies "+
 			"an interface without naming it, a TypeScript object that happens to fit — is visible only "+
 			"after 'repocortex scip import'. Treat an empty list as 'none declared', not 'none exist'.")
-	if n := ambiguityNote(r, "path"); n != "" {
+	if n := sel.note(q); n != "" {
 		resp.Notes = append(resp.Notes, n)
 	}
 	return s.reply(ctx, req, resp)
@@ -324,11 +322,19 @@ func (s *Server) traceCallPath(ctx context.Context, req *sdk.CallToolRequest, ar
 		depth = maxPathDepth
 	}
 
-	from, sc, scResp := s.resolveSymbol(ctx, req, args.From, args.FromPath)
+	fromQ := symbolQuery{Tool: "trace_call_path", Param: "from", PathParam: "from_path", LineParam: "from_line",
+		Name: args.From, Path: args.FromPath, Line: args.FromLine,
+		Prefer: callableKinds, PreferWord: "functions and methods",
+		Rest: " to=" + quoteArg(args.To)}
+	toQ := symbolQuery{Tool: "trace_call_path", Param: "to", PathParam: "to_path", LineParam: "to_line",
+		Name: args.To, Path: args.ToPath, Line: args.ToLine,
+		Prefer: callableKinds, PreferWord: "functions and methods",
+		Rest: " from=" + quoteArg(args.From)}
+	from, sc, scResp := s.selectSymbol(ctx, req, fromQ)
 	if sc != nil {
 		return sc, scResp, nil
 	}
-	to, sc, scResp := s.resolveSymbol(ctx, req, args.To, args.ToPath)
+	to, sc, scResp := s.selectSymbol(ctx, req, toQ)
 	if sc != nil {
 		return sc, scResp, nil
 	}
@@ -339,11 +345,17 @@ func (s *Server) traceCallPath(ctx context.Context, req *sdk.CallToolRequest, ar
 	}
 
 	resp := &Response{IndexRevision: from.RunID, IndexStatus: from.Status}
-	s.gateCoverage(ctx, resp, from, "path search")
+	// A route is only as good as the weaker of its two ends: a path into a
+	// language whose calls are not extracted cannot be found from either side.
+	s.gate(ctx, resp, from, "path search", aboutRoutes)
+	if to.Target.Language != from.Target.Language {
+		s.gate(ctx, resp, to, "path search", aboutRoutes)
+	}
 
 	if len(paths) == 0 {
-		resp.Summary = fmt.Sprintf("No route found from %s to %s within %d hop(s).",
-			from.Target.Name, to.Target.Name, depth)
+		resp.Summary = fmt.Sprintf("No route found from %s (%s:%d) to %s (%s:%d) within %d hop(s).",
+			from.Target.Name, from.Target.FilePath, from.Target.StartLine,
+			to.Target.Name, to.Target.FilePath, to.Target.StartLine, depth)
 		resp.Notes = append(resp.Notes,
 			"This is not proof that none exists. A route passes only through relationships the "+
 				"index bound, so one unresolved call, an interface dispatch or a callback anywhere "+
@@ -351,8 +363,9 @@ func (s *Server) traceCallPath(ctx context.Context, req *sdk.CallToolRequest, ar
 				"the start to see where the two halves stop.")
 	} else {
 		hops := len(paths[0]) - 1
-		resp.Summary = fmt.Sprintf("%d shortest route(s) from %s to %s, %d hop(s) each.",
-			len(paths), from.Target.Name, to.Target.Name, hops)
+		resp.Summary = fmt.Sprintf("%d shortest route(s) from %s (%s:%d) to %s (%s:%d), %d hop(s) each.",
+			len(paths), from.Target.Name, from.Target.FilePath, from.Target.StartLine,
+			to.Target.Name, to.Target.FilePath, to.Target.StartLine, hops)
 		for pi, p := range paths {
 			for hi := 0; hi+1 < len(p); hi++ {
 				resp.Items = append(resp.Items, s.hopItem(ctx, from.RunID, p[hi], p[hi+1], pi+1, hi+1, len(p)-1))
@@ -363,7 +376,7 @@ func (s *Server) traceCallPath(ctx context.Context, req *sdk.CallToolRequest, ar
 				"and are not listed. A route is as trustworthy as its weakest hop: read the "+
 				"confidence on each one.")
 	}
-	for _, n := range []string{ambiguityNote(from, "from_path"), ambiguityNote(to, "to_path")} {
+	for _, n := range []string{from.note(fromQ), to.note(toQ)} {
 		if n != "" {
 			resp.Notes = append(resp.Notes, n)
 		}
@@ -476,18 +489,41 @@ func (s *Server) findDeadCode(ctx context.Context, req *sdk.CallToolRequest, arg
 	// actionable thing this server returns, and the most dangerous to act on
 	// unread.
 	resp.Notes = append(resp.Notes, deadcode.Limits)
-	if rs := rep.Completeness.Resolution; rs.Total > 0 && rep.Completeness.BindingRate < coverageFloor {
+	// Judged over the run: a dead-code list spans every language in it. The
+	// advice is coverage's own, so it names 'repocortex resolve' only when
+	// something is actually pending.
+	cov := coverageOf(rep.Completeness.Resolution, "")
+	cov.About = "what is unused"
+	if cov.level() == ReliabilityLow {
+		resp.Reliability = cov.reliability("the dead-code scan")
 		resp.Notes = append(resp.Notes, fmt.Sprintf(
 			"COVERAGE TOO LOW — only %.0f%% of the references that name something this index defines "+
-				"are bound. Most of what is listed here is more likely unbound than unused. Run "+
-				"'repocortex resolve', and 'repocortex scip import' where an indexer exists, before trusting it.",
-			100*rep.Completeness.BindingRate))
+				"are bound. Most of what is listed here is more likely unbound than unused.%s",
+			100*rep.Completeness.BindingRate, cov.resolveAdvice()))
+	}
+	if rep.ExportUnknown > 0 {
+		resp.Notes = append(resp.Notes, fmt.Sprintf(
+			"%d candidate(s) in %s are graded possible at best: the index cannot tell whether a "+
+				"definition is exported in those languages, so a public API with no caller here looks "+
+				"exactly like dead code. Nothing in them is graded likely.",
+			rep.ExportUnknown, displayLanguages(rep.ExportUnknownLangs)))
 	}
 	if rep.SkippedUnjudged > 0 {
+		// The first line says "N definitions have no caller", and N leaves
+		// these out. When they are all there is, the list is empty because
+		// nothing could be judged, and the first line must say that.
+		unjudged := fmt.Sprintf("%d definition(s) in %s were not judged, because this index holds no "+
+			"reference from that code and every one of them would look unused.",
+			rep.SkippedUnjudged, displayLanguages(rep.UnjudgedLangs))
+		if rep.Likely+rep.Possible == 0 {
+			resp.Reliability = &Reliability{Level: ReliabilityNone, Lead: unjudged}
+		} else {
+			resp.Summary += " " + unjudged
+		}
 		resp.Notes = append(resp.Notes, fmt.Sprintf(
-			"%d definition(s) in %s were not judged: the index parses those languages without "+
-				"binding their references, so every definition in them would look unused.",
-			rep.SkippedUnjudged, strings.Join(rep.UnjudgedLangs, ", ")))
+			"%d definition(s) in %s were not judged: this index holds no reference from those "+
+				"languages, so every definition in them would look unused.",
+			rep.SkippedUnjudged, displayLanguages(rep.UnjudgedLangs)))
 	}
 	if n := rep.Skipped - rep.SkippedUnjudged; n > 0 {
 		what := "tests, entry points and exported definitions"
@@ -572,6 +608,15 @@ func testOnlyWhy(c deadcode.Candidate) string {
 		return why + ", and its name appears in no other code that is not a test"
 	}
 	return why + ", but " + strings.Join(also, "; ")
+}
+
+// displayLanguages joins index language names in the spelling a reader uses.
+func displayLanguages(langs []string) string {
+	out := make([]string, len(langs))
+	for i, l := range langs {
+		out[i] = capability.DisplayLanguage(l)
+	}
+	return strings.Join(out, ", ")
 }
 
 // deadCodeWhy is the one-line justification shown beside a candidate.

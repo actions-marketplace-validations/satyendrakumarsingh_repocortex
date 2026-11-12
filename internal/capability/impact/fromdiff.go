@@ -409,7 +409,7 @@ func AnalyzeDiff(ctx context.Context, deps capability.Deps, runID int64, req Dif
 		}
 		unknowns.addAll(seedRep.Unknown)
 		trunc.add(seedRep.Truncated, seedRep.TruncatedReason)
-		if seedRep.Risk.Score > rep.Risk.Score || rep.RiskiestSeed == "" {
+		if riskier(seedRep.Risk, rep.Risk) || rep.RiskiestSeed == "" {
 			rep.Risk, rep.RiskiestSeed = seedRep.Risk, tgt.FQN
 		}
 	}
@@ -506,6 +506,19 @@ func mergeImpacted(a, b Impacted) Impacted {
 	default:
 		return a
 	}
+}
+
+// riskier reports whether a should replace b as the riskiest change.
+//
+// By level first, then by score. Score alone ranked a symbol whose callers
+// could not be determined below every symbol with a single caller, because an
+// undetermined symbol scores what little was seen. LevelRank puts unknown above
+// low, so "we cannot tell" outranks "we can tell, and it is small".
+func riskier(a, b Risk) bool {
+	if ra, rb := LevelRank(a.Level), LevelRank(b.Level); ra != rb {
+		return ra > rb
+	}
+	return a.Score > b.Score
 }
 
 // targetForSeed builds the resolved target a seed already is.
@@ -894,6 +907,13 @@ type unknownSet struct {
 	order []Unknown
 	seen  map[string]struct{}
 
+	// Unbound-name unknowns fold for the same reason below-floor ones do: each
+	// embeds its own symbol's counts, so one row per changed symbol is a
+	// hundred rows saying one thing.
+	unboundSeeds   int
+	unboundTotal   int64
+	unboundExample string
+
 	floor        model.Confidence
 	floorTotal   int64
 	floorSeeds   int
@@ -916,6 +936,14 @@ func (s *unknownSet) addAll(us []Unknown) {
 			s.floorBounded = s.floorBounded || u.CountIsLowerBound
 			continue
 		}
+		if u.Kind == UnknownUnboundName {
+			s.unboundSeeds++
+			s.unboundTotal += u.Count
+			if s.unboundExample == "" {
+				s.unboundExample = u.Detail
+			}
+			continue
+		}
 		key := string(u.Kind) + "|" + u.Detail
 		if _, dup := s.seen[key]; dup {
 			continue
@@ -926,6 +954,15 @@ func (s *unknownSet) addAll(us []Unknown) {
 }
 
 func (s *unknownSet) list() []Unknown {
+	if s.unboundSeeds > 0 {
+		s.order = append(s.order, Unknown{
+			Kind: UnknownUnboundName,
+			Detail: fmt.Sprintf("The callers of %d changed symbol(s) could not be determined, so what those "+
+				"changes reach is unknown rather than small. For the first of them: %s",
+				s.unboundSeeds, s.unboundExample),
+			Count: s.unboundTotal,
+		})
+	}
 	if s.floorSeeds == 0 {
 		return s.order
 	}
@@ -935,9 +972,10 @@ func (s *unknownSet) list() []Unknown {
 			"symbol only through edges weaker than %q are left out of the counts above. This figure is "+
 			"the SUM of the per-seed counts, so a symbol excluded from two seeds is counted twice — it "+
 			"bounds the excluded region, it is not a distinct-symbol total; each seed's own figure is in "+
-			"Seeds[i].Report. Re-run with MinConfidence=low (--min-confidence low) to see them. They are "+
-			"excluded by default because heuristic `low` edges are measured at 0.0-2.8%% precision "+
-			"(docs/accuracy.md).", s.floorTotal, s.floorSeeds, s.floor),
+			"Seeds[i].Report. Re-run with min_confidence=low (--min-confidence low) to see them. They are "+
+			"excluded by default because a `low` edge is a name match with nothing to confirm it; how "+
+			"often one is right varies by language and project (docs/accuracy.md says how it is measured).",
+			s.floorTotal, s.floorSeeds, s.floor),
 		Count:             s.floorTotal,
 		CountIsLowerBound: s.floorBounded,
 	})

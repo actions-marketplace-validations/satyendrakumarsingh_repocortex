@@ -248,8 +248,20 @@ func writeImpactDiff(out io.Writer, rep impact.DiffReport, limit int, coverage s
 	fmt.Fprintf(out, "%s at risk through recorded references, plus %d reachable only through dispatch.\n",
 		countOf(rep.TotalImpacted(), "symbol", "symbols"), len(rep.Dispatch))
 	if rep.RiskiestSeed != "" {
-		fmt.Fprintf(out, "Riskiest change: %s — risk %s (score %d, certainty %s).\n",
-			rep.RiskiestSeed, rep.Risk.Level, rep.Risk.Score, rep.Risk.Certainty)
+		// No score beside an unknown level: it is the sum of what was bound,
+		// and the callers were not. See impact.Risk.Undetermined.
+		switch {
+		case rep.Risk.Level == impact.LevelUnknown:
+			fmt.Fprintf(out, "Riskiest change: %s — risk UNKNOWN: %s.\n",
+				rep.RiskiestSeed, strings.TrimSuffix(rep.Risk.Undetermined, "."))
+		case rep.Risk.Undetermined != "":
+			fmt.Fprintf(out, "Riskiest change: %s — risk %s or higher (score %d counts only the callers "+
+				"that were bound, certainty %s).\n",
+				rep.RiskiestSeed, rep.Risk.Level, rep.Risk.Score, rep.Risk.Certainty)
+		default:
+			fmt.Fprintf(out, "Riskiest change: %s — risk %s (score %d, certainty %s).\n",
+				rep.RiskiestSeed, rep.Risk.Level, rep.Risk.Score, rep.Risk.Certainty)
+		}
 		fmt.Fprintln(out, "  This is the MAXIMUM over the changed symbols, never a total: "+
 			"two risks of 40 do not make an 80.")
 	}

@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/satyendrakumarsingh/repocortex/internal/capability"
+	"github.com/satyendrakumarsingh/repocortex/internal/capability/impact"
 	"github.com/satyendrakumarsingh/repocortex/internal/capability/planchange"
 	"github.com/satyendrakumarsingh/repocortex/internal/graph"
 	"github.com/satyendrakumarsingh/repocortex/internal/registry"
@@ -78,7 +79,16 @@ Examples:
 			// Human readable output
 			fmt.Printf("RepoCortex Change Plan for %s (%s)\n", plan.Target.Name, plan.Target.Kind)
 			fmt.Printf("Location:      %s:%d\n", plan.Target.FilePath, plan.Target.Line)
-			fmt.Printf("Risk Level:    %s (Score: %d/100)\n", strings.ToUpper(plan.RiskLevel), plan.RiskScore)
+			switch {
+			case plan.RiskLevel == impact.LevelUnknown:
+				fmt.Printf("Risk Level:    UNKNOWN: %s.\n", strings.TrimSuffix(plan.RiskUndetermined, "."))
+				fmt.Println("               The callers below are the ones the index could bind, not all of them.")
+			case plan.RiskUndetermined != "":
+				fmt.Printf("Risk Level:    %s or higher (Score: %d/100 counts only the callers that were bound)\n",
+					strings.ToUpper(plan.RiskLevel), plan.RiskScore)
+			default:
+				fmt.Printf("Risk Level:    %s (Score: %d/100)\n", strings.ToUpper(plan.RiskLevel), plan.RiskScore)
+			}
 			fmt.Printf("Blast Radius:  %d direct caller(s), %d total reached\n\n", plan.DirectCallers, plan.TotalCallers)
 
 			fmt.Println("Preconditions:")

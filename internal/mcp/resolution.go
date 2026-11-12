@@ -3,6 +3,7 @@ package mcp
 import (
 	"context"
 	"fmt"
+	"sort"
 
 	"github.com/satyendrakumarsingh/repocortex/internal/capability"
 	"github.com/satyendrakumarsingh/repocortex/internal/registry"
@@ -60,8 +61,77 @@ func (s *Server) resolutionCoverage(ctx context.Context, req *sdk.CallToolReques
 		Summary:       resolutionSummary(rs),
 	}
 	resp.Notes = append(resp.Notes, resolutionNotes(rs)...)
+
+	// One row per language that holds code. The run-wide rate is an average
+	// over languages that can differ completely: a repository can bind its
+	// Java well and hold not one Kotlin reference, and the average of those
+	// describes neither.
+	if langs, err := s.capDeps.LanguageBindings(ctx, runID); err == nil {
+		resp.Items = languageRows(langs)
+		if len(resp.Items) > 0 {
+			resp.Notes = append(resp.Notes,
+				"The rows are the same figures per language. An answer about a symbol is judged on its "+
+					"own language's row, not on the summary line above.")
+		}
+	}
 	resp.Notes = append(resp.Notes, capability.LowerBoundCaveat)
 	return s.reply(ctx, req, resp)
+}
+
+// languageRows renders each language's binding outcome, largest first.
+//
+// The rows carry no confidence tier: they are counts, and grading counts would
+// put a verdict on a coverage report.
+func languageRows(langs map[string]registry.LanguageBinding) []Item {
+	names := make([]string, 0, len(langs))
+	for name, l := range langs {
+		if l.Definitions > 0 {
+			names = append(names, name)
+		}
+	}
+	sort.Slice(names, func(i, j int) bool {
+		a, b := langs[names[i]], langs[names[j]]
+		if a.Definitions != b.Definitions {
+			return a.Definitions > b.Definitions
+		}
+		return names[i] < names[j]
+	})
+
+	items := make([]Item, 0, len(names))
+	for _, name := range names {
+		l := langs[name]
+		display := capability.DisplayLanguage(name)
+		if display == "" {
+			display = "(no language recorded)"
+		}
+		var why string
+		switch {
+		case !l.ExtractsReferences():
+			why = fmt.Sprintf("%d file(s); %s, so nothing about callers in it can be concluded",
+				l.Files, capability.NoReferencesClause(name, l.Definitions))
+		case l.Total == 0:
+			why = fmt.Sprintf("%d definition(s) in %d file(s); %d relationship(s) recorded, none from "+
+				"reference resolution", l.Definitions, l.Files, l.Relationships)
+		case l.Pending == l.Total:
+			why = fmt.Sprintf("%d definition(s) in %d file(s); all %d reference(s) are pending — run "+
+				"'repocortex resolve'", l.Definitions, l.Files, l.Total)
+		default:
+			why = fmt.Sprintf("%d definition(s) in %d file(s); resolved %d of %d references that name "+
+				"something this index defines (%.1f%%), %d ambiguous, %d matched no definition here",
+				l.Definitions, l.Files, l.Resolved, l.Bindable(), 100*l.BindingRate(), l.Ambiguous, l.Unresolved)
+			if l.Pending > 0 {
+				why += fmt.Sprintf(", %d pending", l.Pending)
+			}
+			if l.BindingRate() < bindingFloor {
+				why += "; below the floor, so relationship answers in this language are unreliable"
+			}
+		}
+		if l.ExtractsReferences() && l.Hierarchy == 0 {
+			why += "; no extends or implements relationship is recorded for it"
+		}
+		items = append(items, Item{Kind: "language", Name: display, Why: why})
+	}
+	return items
 }
 
 // resolutionSummary states the rate and, in the same sentence, everything the

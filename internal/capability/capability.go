@@ -170,15 +170,18 @@ type AmbiguousTargetError struct {
 }
 
 func (e *AmbiguousTargetError) Error() string {
+	// Each candidate is named by file and line, not by qualified name.
+	// Overloads share one qualified name, so a list of those printed the same
+	// string once per overload and told the reader nothing.
 	names := make([]string, 0, len(e.Candidates))
 	for i, c := range e.Candidates {
 		if i == 5 {
 			names = append(names, fmt.Sprintf("… and %d more", len(e.Candidates)-5))
 			break
 		}
-		names = append(names, c.FQN)
+		names = append(names, fmt.Sprintf("%s:%d", c.FilePath, c.Line))
 	}
-	return fmt.Sprintf("capability: %q matches %d symbols; re-ask with a fully-qualified name (%s)",
+	return fmt.Sprintf("capability: %q matches %d definitions; select one by file and line (%s)",
 		e.Query, len(e.Candidates), strings.Join(names, ", "))
 }
 
@@ -195,6 +198,11 @@ type Target struct {
 	FilePath string `json:"file_path"`
 	Line     int    `json:"line"`
 	Exported bool   `json:"exported"`
+
+	// Language is the defining file's language as the index names it. Empty
+	// when the target was resolved without its file row; ExportedKnown and
+	// TargetBinding both cope with that.
+	Language string `json:"language,omitempty"`
 
 	// Confidence and Source describe how reliably the SYMBOL ITSELF was
 	// extracted — a Tier-1 generic extraction is not the same fact as a
@@ -256,10 +264,22 @@ func ResolveTarget(ctx context.Context, deps Deps, runID int64, target string) (
 	if err != nil {
 		return Target{}, fmt.Errorf("capability: resolve %q: %w", target, err)
 	}
+	// SEVERAL rows can carry one qualified name. Overloads do: the name is the
+	// file and the identifier, with no owner and no signature. Returning the
+	// first of them would be the silent pick AmbiguousTargetError exists to
+	// refuse, made on the very re-ask that error tells the caller to send.
+	var matches []Target
 	for _, h := range byName {
 		if h.FQN == target {
-			return targetFromHit(target, h), nil
+			matches = append(matches, targetFromHit(target, h))
 		}
+	}
+	switch len(matches) {
+	case 0:
+	case 1:
+		return matches[0], nil
+	default:
+		return Target{}, &AmbiguousTargetError{Query: target, Candidates: matches}
 	}
 	// The index knows the symbol but the name query did not return it (more
 	// than maxTargetCandidates share the name). Report what the index has
@@ -268,6 +288,15 @@ func ResolveTarget(ctx context.Context, deps Deps, runID int64, target string) (
 		Query: target, SymbolID: sym.ID, Name: sym.Name, FQN: sym.FQN,
 		Kind: sym.Kind, FilePath: sym.FilePath, Exported: sym.Exported,
 	}, nil
+}
+
+// TargetFromCandidate builds the Target for a definition the caller has already
+// selected, by file and line or any other means. It carries the language,
+// which a Target resolved by name alone does not.
+func TargetFromCandidate(query string, c registry.SymbolCandidate) Target {
+	t := targetFromHit(query, c.SymbolHit)
+	t.Language = c.Language
+	return t
 }
 
 func targetFromHit(query string, h registry.SymbolHit) Target {
