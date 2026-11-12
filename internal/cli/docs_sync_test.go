@@ -122,3 +122,84 @@ func TestGateWorkflowImportsCompilerFactsBeforeImpact(t *testing.T) {
 		t.Error("the gate must never run the repository's own build")
 	}
 }
+
+// TestInstallationPageMatchesTheToolchainAndRelease: the installation page
+// said "Go 1.23+" against `go 1.26.0` in go.mod, named v1.0.0 archives after
+// v1.0.1 had shipped, and described install locations neither installer uses.
+// Each of those is a fact stated somewhere else in the repository, so the page
+// is compared with where it is stated.
+func TestInstallationPageMatchesTheToolchainAndRelease(t *testing.T) {
+	read := func(parts ...string) string {
+		t.Helper()
+		data, err := os.ReadFile(filepath.Join(append([]string{"..", ".."}, parts...)...))
+		if err != nil {
+			t.Fatal(err)
+		}
+		return string(data)
+	}
+	page := read("docs", "getting-started", "installation.md")
+
+	// The Go version: `go 1.26.0` in go.mod is "Go 1.26".
+	var goMinor string
+	for _, line := range strings.Split(read("go.mod"), "\n") {
+		if f := strings.Fields(line); len(f) == 2 && f[0] == "go" {
+			if v := strings.SplitN(f[1], ".", 3); len(v) >= 2 {
+				goMinor = v[0] + "." + v[1]
+			}
+		}
+	}
+	if goMinor == "" {
+		t.Fatal("go.mod has no go directive")
+	}
+	if !strings.Contains(page, "Go "+goMinor) {
+		t.Errorf("installation.md does not say Go %s, which is what go.mod requires", goMinor)
+	}
+	// And names no other.
+	for i := 0; i < len(page); i++ {
+		if !strings.HasPrefix(page[i:], "Go 1.") {
+			continue
+		}
+		rest := page[i+len("Go "):]
+		end := 0
+		for end < len(rest) && (rest[end] == '.' || (rest[end] >= '0' && rest[end] <= '9')) {
+			end++
+		}
+		if got := strings.TrimRight(rest[:end], "."); got != goMinor && !strings.HasPrefix(got, goMinor+".") {
+			t.Errorf("installation.md names Go %s; go.mod requires Go %s", got, goMinor)
+		}
+	}
+
+	// The release the archive names are written for is the one the package
+	// manifests point at, which the release process updates.
+	scoop := read("packaging", "scoop", "repocortex.json")
+	_, after, ok := strings.Cut(scoop, `"version": "`)
+	if !ok {
+		t.Fatal("packaging/scoop/repocortex.json has no version")
+	}
+	release := "v" + after[:strings.Index(after, `"`)]
+	for _, field := range strings.FieldsFunc(page, func(r rune) bool { return r == '`' || r == ' ' || r == '\n' || r == '/' }) {
+		if !strings.HasPrefix(field, "repocortex_v") {
+			continue
+		}
+		if !strings.HasPrefix(field, "repocortex_"+release+"_") {
+			t.Errorf("installation.md names %s; the current release is %s", field, release)
+		}
+	}
+	if !strings.Contains(page, "repocortex_"+release+"_linux_amd64.tar.gz") {
+		t.Errorf("installation.md names no archive of the current release %s", release)
+	}
+
+	// Where each installer puts the binary.
+	if sh := read("install.sh"); !strings.Contains(sh, `INSTALL_DIR="${HOME}/.local/bin"`) || !strings.Contains(page, "`~/.local/bin`") {
+		t.Error("installation.md and install.sh disagree about the default install directory (~/.local/bin)")
+	}
+	if ps := read("install.ps1"); !strings.Contains(ps, `$env:LOCALAPPDATA\Programs\repocortex`) ||
+		!strings.Contains(page, `%LOCALAPPDATA%\Programs\repocortex`) {
+		t.Error(`installation.md and install.ps1 disagree about the default install directory (%LOCALAPPDATA%\Programs\repocortex)`)
+	}
+	for _, stale := range []string{"`repocortex.exe` and `repocortex.exe`", "alias"} {
+		if strings.Contains(page, stale) {
+			t.Errorf("installation.md still says %q; there is one command and one name", stale)
+		}
+	}
+}
