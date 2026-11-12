@@ -962,7 +962,10 @@ func (s *Server) relationshipQuery(ctx context.Context, req *sdk.CallToolRequest
 		// A caller list is about something callable. A class and its
 		// same-named constructor, or a function and a variable holding it,
 		// are the usual way a callable name is shared.
-		q.Prefer, q.PreferWord = callableKinds, "functions and methods"
+		q.Prefer, q.PreferWord, q.PreferNoun = callableKinds, "functions and methods", "function or method"
+		// What constructs a class is a caller of it in the sense that matters,
+		// and the answer counts the constructions separately.
+		q.Tolerate = typeKinds
 	}
 	q.Tool = tool
 

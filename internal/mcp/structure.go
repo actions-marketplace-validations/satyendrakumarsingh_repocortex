@@ -147,7 +147,7 @@ func (s *Server) findCallees(ctx context.Context, req *sdk.CallToolRequest, args
 	}
 	q := symbolQuery{Tool: "find_callees", Param: "name", PathParam: "path", LineParam: "line",
 		Name: args.Name, Path: args.Path, Line: args.Line,
-		Prefer: callableKinds, PreferWord: "functions and methods"}
+		Prefer: callableKinds, PreferWord: "functions and methods", PreferNoun: "function or method"}
 	sel, sc, scResp := s.selectSymbol(ctx, req, q)
 	if sc != nil {
 		return sc, scResp, nil
@@ -206,7 +206,16 @@ func (s *Server) findImplementations(ctx context.Context, req *sdk.CallToolReque
 	// taken whatever it was.
 	q := symbolQuery{Tool: "find_implementations", Param: "name", PathParam: "path", LineParam: "line",
 		Name: args.Name, Path: args.Path, Line: args.Line,
-		Prefer: typeKinds, PreferWord: "types"}
+		Prefer: typeKinds, PreferWord: "types", PreferNoun: "type",
+		// An abstract or overridden method has implementations too: the index
+		// records an override as an extends or implements edge on the method.
+		Admit: func(ctx context.Context, runID int64, c registry.SymbolCandidate) bool {
+			f := registry.EdgeFilter{Kinds: hierarchyKinds}
+			_, up, uerr := s.deps.Registry.EdgePage(ctx, runID, c.ID, false, 1, 0, f)
+			_, down, derr := s.deps.Registry.EdgePage(ctx, runID, c.ID, true, 1, 0, f)
+			return uerr != nil || derr != nil || up+down > 0
+		},
+		AdmitWhy: "has an extends or implements relationship recorded"}
 	sel, sc, scResp := s.selectSymbol(ctx, req, q)
 	if sc != nil {
 		return sc, scResp, nil
@@ -324,11 +333,11 @@ func (s *Server) traceCallPath(ctx context.Context, req *sdk.CallToolRequest, ar
 
 	fromQ := symbolQuery{Tool: "trace_call_path", Param: "from", PathParam: "from_path", LineParam: "from_line",
 		Name: args.From, Path: args.FromPath, Line: args.FromLine,
-		Prefer: callableKinds, PreferWord: "functions and methods",
+		Prefer: callableKinds, PreferWord: "functions and methods", PreferNoun: "function or method",
 		Rest: " to=" + quoteArg(args.To)}
 	toQ := symbolQuery{Tool: "trace_call_path", Param: "to", PathParam: "to_path", LineParam: "to_line",
 		Name: args.To, Path: args.ToPath, Line: args.ToLine,
-		Prefer: callableKinds, PreferWord: "functions and methods",
+		Prefer: callableKinds, PreferWord: "functions and methods", PreferNoun: "function or method",
 		Rest: " from=" + quoteArg(args.From)}
 	from, sc, scResp := s.selectSymbol(ctx, req, fromQ)
 	if sc != nil {
