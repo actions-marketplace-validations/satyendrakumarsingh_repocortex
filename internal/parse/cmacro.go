@@ -505,7 +505,8 @@ loop:
 			// A macro in the middle of the head, between the return type and
 			// the name (`void *JEMALLOC_ATTR(malloc) je_malloc(`): one that is
 			// followed by more of the head, never the name in front of `(`.
-			if c, next, ok := s.macroAt(k); ok && (s.word(next) != "" || s.punct(next, '*') || s.punct(next, '&')) {
+			// and never the first word, which is a type (`DFA* Prog::Get(`).
+			if c, next, ok := s.macroAt(k); ok && words > 0 && (s.word(next) != "" || s.punct(next, '*') || s.punct(next, '&')) {
 				found = append(found, c)
 				if next-1 > k {
 					hasParen = true
