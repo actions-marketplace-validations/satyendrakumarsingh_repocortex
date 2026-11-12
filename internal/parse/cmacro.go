@@ -479,7 +479,7 @@ func (s *candScan) declMacros(i int) []macroCandidate {
 		// The run ended on a macro alone on its line, in front of a directive,
 		// an Objective-C `@` declaration or a closing brace.
 		if s.aloneOnLine(lastFrom, j) {
-			return found[len(found)-1:]
+			return found
 		}
 		return nil
 	}
@@ -628,6 +628,9 @@ func (s *candScan) trailingMacros(i int) []macroCandidate {
 			found[n].expect = s.toks[open-1].start
 		}
 	case s.punct(k, ';'):
+	case s.punct(k, ':') && !s.punct(k+1, ':') && s.cpp:
+		// A constructor's member initialiser list follows the annotation:
+		//   MutexLock(Mutex& m) ACQUIRE(m) : ml_(m.native_handle()) {}
 	default:
 		return nil
 	}
@@ -701,7 +704,10 @@ type maskedParse struct {
 	// implementers belongs to tags: positions in one are positions in the
 	// other, so a retry that replaces the tags replaces it too.
 	implementers map[uint32]string
-	count        int
+	// count is how many macro tokens were overwritten, branches how many
+	// conditional branches were blanked.
+	count    int
+	branches int
 }
 
 // retryMasked is the guarded second parse. plain is the parse already done;
@@ -713,34 +719,191 @@ type maskedParse struct {
 // the same work limits and cancellation as any parse: the caller must look at
 // ctx afterwards, since a cancelled parse returns nil here.
 func (p *genericParser) retryMasked(ctx context.Context, tree *ts.Tree, stop stopInfo, src []byte, tags []ts.Tag) *maskedParse {
-	if !maskedLanguages[p.entry.Name] || stop.early || ctx.Err() != nil {
+	return p.retryMaskedWithin(ctx, tree, stop, src, tags, p.cfg.ceilingMicros())
+}
+
+// retryMaskedWithin is retryMasked with the wall-clock allowance of the
+// retry's parse given in microseconds.
+//
+// THE TWO MASKS ARE ONE RETRY. The macro mask (this file) and the conditional
+// mask (cond.go) are decided independently, each by its own trouble test on
+// the plain tree, and whichever are due are applied together to one masked
+// text that is parsed once. That keeps the bound: a file is parsed at most
+// twice by the two mechanisms in total, however many of them it needs. They do
+// not interfere: the conditional mask only blanks text (a macro candidate
+// inside a blanked branch is already spaces), and the macro mask only blanks
+// tokens. The cost is that the guard judges the two together: if one of them
+// would have been refused alone, it can pull the other down with it. The
+// alternative, a retry each, would parse a file three times and would still
+// not let the second mask see the first one's result.
+//
+// A plain parse that stopped early (a work limit, the clock, or the parser
+// giving up) is retried too, by the same rules: a conditional group that cuts
+// a declaration is the usual reason the parser gives up, and the masked text
+// either reads further or it does not. Only cancellation is never retried.
+func (p *genericParser) retryMaskedWithin(ctx context.Context, tree *ts.Tree, stop stopInfo, src []byte, tags []ts.Tag, micros uint64) *maskedParse {
+	lang := p.entry.Name
+	macroOK, condOK := maskedLanguages[lang], condLanguages[lang]
+	if !macroOK && !condOK || ctx.Err() != nil || stop.early && stop.reason == ts.ParseStopCancelled {
 		return nil
 	}
-	cands := findMacroCandidates(src, p.entry.Name)
-	if len(cands) == 0 {
-		return nil
+	root := tree.RootNode()
+
+	// The macro mask: candidates by text, and trouble where one sits. An
+	// early stop leaves the rest of the file unread, so a candidate there
+	// cannot be called clean.
+	var cands []macroCandidate
+	names := map[string]bool{}
+	macroDue := false
+	if macroOK {
+		cands = findMacroCandidates(src, lang)
+		for _, c := range cands {
+			names[c.name] = true
+		}
+		macroDue = len(cands) > 0 && (stop.early || troubleAtCandidates(root, cands, tags, names))
 	}
-	names := make(map[string]bool, len(cands))
-	for _, c := range cands {
-		names[c.name] = true
+
+	// The conditional mask: groups by text, and error nodes on or next to
+	// their directives. Only a tree with errors, or one that stopped, is
+	// scanned.
+	var plan *condPlan
+	var plainErrs []condSpan
+	if condOK && root != nil && (stop.early || root.HasError()) {
+		if dirs := scanCondDirectives(src, lang == "c_sharp"); len(dirs) > 0 {
+			plainErrs = errorSpans(root)
+			errs := leafErrorSpans(root)
+			if stop.early {
+				// Everything from a little before the stop to the end was
+				// not read; groups there may be the reason.
+				errs = append(errs, condSpan{max(0, stop.parsedBytes-4096), len(src)})
+			}
+			plan = planCondMask(src, buildCondGroups(dirs), errs)
+		}
 	}
-	if !troubleAtCandidates(tree.RootNode(), cands, tags, names) {
+	condDue := !plan.empty()
+	if !macroDue && !condDue {
 		return nil
 	}
 
-	masked := maskCandidates(src, cands)
-	tree2, stop2, err := p.parseOnce(ctx, masked)
-	if err != nil || tree2 == nil || stop2.early || ctx.Err() != nil {
+	masked := src
+	if condDue {
+		masked = plan.apply(masked)
+	}
+	macros := 0
+	if macroDue {
+		masked = maskCandidates(masked, cands)
+		for _, c := range cands {
+			if !plan.inBlanked(c.start) {
+				macros++
+			}
+		}
+	} else {
+		names = map[string]bool{}
+	}
+
+	tree2, stop2, err := p.parseOnceWithin(ctx, masked, micros)
+	if err != nil || tree2 == nil || ctx.Err() != nil || stop2.early && !stop.early {
 		return nil
 	}
 	tags2, implementers2, err := p.tagTree(tree2, masked)
 	if err != nil {
 		return nil
 	}
-	if !maskIsBetter(tree.RootNode(), tags, tree2.RootNode(), tags2, names) {
+	var mc *maskContext
+	if condDue {
+		mc = &maskContext{
+			plan: plan, plainErrs: plainErrs, language: lang,
+			plainEarly: stop.early, maskedEarly: stop2.early,
+			plainParsed: stop.parsedBytes, maskedParsed: stop2.parsedBytes,
+		}
+	}
+	if !maskGuard(root, tags, tree2.RootNode(), tags2, names, mc) {
 		return nil
 	}
-	return &maskedParse{by: p, tree: tree2, stop: stop2, src: masked, tags: tags2, implementers: implementers2, count: len(cands)}
+	branches := 0
+	if condDue {
+		branches = plan.branches
+	}
+	return &maskedParse{by: p, tree: tree2, stop: stop2, src: masked, tags: tags2, implementers: implementers2, count: macros, branches: branches}
+}
+
+// errorSpans lists the byte ranges of the error and missing nodes of a tree.
+func errorSpans(root *ts.Node) []condSpan {
+	var out []condSpan
+	walkErrors(root, func(n *ts.Node) bool {
+		out = append(out, condSpan{int(n.StartByte()), int(n.EndByte())})
+		return true
+	})
+	return out
+}
+
+// leafErrorSpans lists the byte ranges of the error and missing nodes that
+// have no error inside them: where the parser actually gave up, as opposed to
+// the nodes that merely enclose that place. The conditional mask judges groups
+// by these, so a chain of twelve nested error nodes that all start at line 1
+// does not make every directive of the file look guilty.
+func leafErrorSpans(root *ts.Node) []condSpan {
+	var out []condSpan
+	walkErrors(root, func(n *ts.Node) bool {
+		for i := 0; i < n.ChildCount(); i++ {
+			if c := n.Child(i); c != nil && (c.IsError() || c.IsMissing() || c.HasError()) {
+				return true
+			}
+		}
+		out = append(out, condSpan{int(n.StartByte()), int(n.EndByte())})
+		return true
+	})
+	return out
+}
+
+// maskContext carries what the guard needs to judge a conditional mask: where
+// the plain parse was unreliable, where text was blanked, and how far each
+// parse got when one of them stopped early. A nil context is the macro mask
+// alone, whose guard is unchanged.
+type maskContext struct {
+	plan         *condPlan
+	plainErrs    []condSpan
+	language     string
+	plainEarly   bool
+	maskedEarly  bool
+	plainParsed  int
+	maskedParsed int
+}
+
+// unreliable reports whether a definition of the plain parse may legitimately
+// be absent from the masked one: it was read inside an error node, where the
+// name is as likely to be wrong as right, or it sits in a branch that was
+// blanked on purpose.
+func (mc *maskContext) unreliable(t ts.Tag) bool {
+	pos := int(t.NameRange.StartByte)
+	if mc.plan.inBlanked(pos) {
+		return true
+	}
+	for _, e := range mc.plainErrs {
+		if e.start <= pos && pos < e.end {
+			return true
+		}
+	}
+	return false
+}
+
+// keywordNames are words that are never the name of a definition. A symbol
+// carrying one is a misreading of a declaration the mask cut wrongly.
+var keywordNames = map[string]map[string]bool{
+	"c_sharp": wordSet("abstract as base bool break case catch checked class const continue default delegate do else enum event explicit extern false finally fixed for foreach goto if implicit in interface internal is lock namespace new null object operator out override params private protected public readonly ref return sealed sizeof stackalloc static struct switch this throw true try typeof unchecked unsafe using virtual void volatile while"),
+	"c":       cKeywords,
+	"cpp":     cKeywords,
+	"objc":    cKeywords,
+}
+
+var cKeywords = wordSet("auto break case char const continue default do double else enum extern float for goto if inline int long register restrict return short signed sizeof static struct switch typedef union unsigned void volatile while class namespace template typename public private protected virtual new delete this try catch throw using operator")
+
+func wordSet(s string) map[string]bool {
+	out := map[string]bool{}
+	for _, w := range strings.Fields(s) {
+		out[w] = true
+	}
+	return out
 }
 
 // troubleAtCandidates reports whether the plain parse shows trouble where a
@@ -804,18 +967,61 @@ func walkErrors(root *ts.Node, visit func(*ts.Node) bool) {
 	}
 }
 
-// maskIsBetter is the guard. The masked parse replaces the plain one only when
+// maskIsBetter is the guard for the macro mask alone; see maskGuard.
+func maskIsBetter(plainRoot *ts.Node, plain []ts.Tag, maskedRoot *ts.Node, masked []ts.Tag, names map[string]bool) bool {
+	return maskGuard(plainRoot, plain, maskedRoot, masked, names, nil)
+}
+
+// maskGuard is the guard. The masked parse replaces the plain one only when
 // it is measurably better and no worse: no more error nodes (a missing token
 // counts as one) and no fewer definitions, with at least one of the two
 // strictly better; no definition named after a masked token; and every
 // definition the plain parse had that was not itself named after a masked
 // token still there.
-func maskIsBetter(plainRoot *ts.Node, plain []ts.Tag, maskedRoot *ts.Node, masked []ts.Tag, names map[string]bool) bool {
+//
+// For the conditional mask (mc is not nil) the same rule holds with four
+// additions, each because that mask removes text:
+//
+//   - a plain definition that was read inside an error node, or that sits in a
+//     branch which was blanked on purpose, is not one the mask can lose: the
+//     first is as likely wrong as right, the second is gone by design. Such
+//     definitions are neither required to survive nor counted;
+//   - no definition may be named after a keyword of the language;
+//   - more error nodes than the plain parse are tolerated when the text under
+//     error nodes, in bytes, shrank and the definitions strictly grew: one
+//     error node that swallowed a file and several small ones are not the
+//     same amount of trouble;
+//   - a plain parse that stopped early cannot be compared by its error count,
+//     which only reflects the part it read; the masked parse must have read
+//     further (to the end, or past where the plain one stopped), and every
+//     reliable definition must still be there.
+func maskGuard(plainRoot *ts.Node, plain []ts.Tag, maskedRoot *ts.Node, masked []ts.Tag, names map[string]bool, mc *maskContext) bool {
 	pe, pm, _ := countSyntaxErrors(plainRoot)
 	me, mm, _ := countSyntaxErrors(maskedRoot)
 	plainErrs, maskedErrs := pe+pm, me+mm
-	if maskedErrs > plainErrs {
-		return false
+	better, moreDefs := false, false
+	switch {
+	case mc != nil && mc.plainEarly:
+		if mc.maskedEarly && mc.maskedParsed <= mc.plainParsed {
+			return false
+		}
+		better = true
+	default:
+		if maskedErrs > plainErrs {
+			// More error nodes can still be a better reading, when one big
+			// error that swallowed the text became several small ones: the
+			// conditional mask accepts that, and only if the text under
+			// errors shrank and the definitions grew (checked below).
+			if mc == nil || errorBytes(maskedRoot) >= errorBytes(plainRoot) {
+				return false
+			}
+			moreDefs = true
+		}
+		better = maskedErrs < plainErrs
+	}
+	var keywords map[string]bool
+	if mc != nil {
+		keywords = keywordNames[mc.language]
 	}
 	have := make(map[string]int, len(masked))
 	nMasked := 0
@@ -823,7 +1029,7 @@ func maskIsBetter(plainRoot *ts.Node, plain []ts.Tag, maskedRoot *ts.Node, maske
 		if !isDefinitionTag(t.Kind) {
 			continue
 		}
-		if names[t.Name] {
+		if names[t.Name] || keywords[t.Name] {
 			return false
 		}
 		have[t.Name]++
@@ -839,24 +1045,59 @@ func maskIsBetter(plainRoot *ts.Node, plain []ts.Tag, maskedRoot *ts.Node, maske
 			// for a name; it is not one the mask can lose.
 			continue
 		}
+		if mc != nil && mc.unreliable(t) {
+			continue
+		}
 		nPlain++
 		if have[t.Name] == 0 {
 			return false
 		}
 	}
-	if nMasked < nPlain {
+	if nMasked < nPlain || moreDefs && nMasked <= nPlain {
 		return false
 	}
-	return maskedErrs < plainErrs || nMasked > nPlain
+	return better || nMasked > nPlain
+}
+
+// errorBytes is the number of bytes under the innermost error nodes of a tree:
+// how much text the parser actually gave up on. The outer error nodes that
+// merely enclose them are not counted; they can span the whole file while
+// everything in them was read.
+func errorBytes(root *ts.Node) int {
+	total := 0
+	for _, s := range leafErrorSpans(root) {
+		total += s.end - s.start
+	}
+	return total
 }
 
 func isDefinitionTag(kind string) bool { return strings.HasPrefix(kind, "definition") }
 
-// maskNote is the sentence appended to a parse error when macros were masked,
-// so a file read through a mask says so.
+// maskNote is the sentence appended to a parse error when text was masked, so
+// a file read through a mask says so. It names what was overwritten: macro
+// tokens, and the conditional branches that were blanked (a definition that
+// exists only in one of them is not in the index).
 func (r *Result) maskNote() string {
-	if r.MacrosMasked == 0 {
+	var parts []string
+	if r.MacrosMasked > 0 {
+		parts = append(parts, plural(r.MacrosMasked, "macro token")+" masked")
+	}
+	if r.BranchesBlanked > 0 {
+		what := "conditional branches"
+		if r.BranchesBlanked == 1 {
+			what = "conditional branch"
+		}
+		parts = append(parts, fmt.Sprintf("%d %s blanked (definitions only in %s are not indexed)", r.BranchesBlanked, what, branchPronoun(r.BranchesBlanked)))
+	}
+	if len(parts) == 0 {
 		return ""
 	}
-	return fmt.Sprintf("; read with %s masked", plural(r.MacrosMasked, "macro token"))
+	return "; read with " + strings.Join(parts, " and ")
+}
+
+func branchPronoun(n int) string {
+	if n == 1 {
+		return "it"
+	}
+	return "them"
 }

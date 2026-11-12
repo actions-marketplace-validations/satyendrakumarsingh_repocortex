@@ -1,0 +1,16 @@
+# C#: interfaces (interface), classes (class) and methods (method). Fields and properties are
+# not listed. conditional.cs is the conditional-compilation fixture: `#if` groups that cut a
+# method apart (a body or `;` behind the parameter list, `=>` behind `#if`, an attribute in
+# its own group) are read with the first branch of each group; a definition that exists only
+# in a branch that is not kept is not extracted. Its return types are keywords (`int`, `bool`,
+# `void`), because a return type written as a plain identifier is also recorded as a method.
+conditional.cs	3	interface	IGreeter
+conditional.cs	9	method	Count
+conditional.cs	15	method	Total
+conditional.cs	25	method	Matches
+conditional.cs	33	method	Greet
+conditional.cs	36	class	Greeter
+conditional.cs	38	method	Count
+conditional.cs	40	method	Total
+conditional.cs	42	method	Matches
+conditional.cs	44	method	Greet

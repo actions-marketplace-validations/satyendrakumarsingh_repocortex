@@ -451,38 +451,66 @@ func (p *genericParser) Parse(ctx context.Context, path string, src []byte) (*Re
 	// From here on "by" is the parser whose tree this is: p, or p's alternate
 	// when the second recovery route was the one that read the file. Its
 	// queries are the ones compiled against the tree's own Language.
-	by, tree, stop, err := p.parseTree(ctx, src)
-	if cerr := ctx.Err(); cerr != nil {
-		// Cancellation stops the parser mid-file and leaves a tree of whatever
-		// it had read. That tree is the caller's cancellation, not a fact
-		// about the file, so nothing from it is reported.
-		return nil, cerr
-	}
-	if err != nil {
-		// A failed parse is data about this file, not a run-level failure.
-		// Spec §13 requires a parser failure to be isolated to the affected
-		// file. The error is recorded ON the result so the gap stays visible;
-		// returning it here would abort the whole indexing run over one file.
-		res.Status = StatusFailed
-		res.Reason = model.ParseReasonUnspecified
-		res.Err = err
-		return res, nil //nolint:nilerr // deliberate: recorded on the result, see above
+	// readTree is the plain parse and its tags, under the given wall-clock
+	// allowance. done is true when res is final (a failure) or ctx was
+	// cancelled, and cerr then says which.
+	readTree := func(micros uint64) (by *genericParser, tree *ts.Tree, stop stopInfo, tags []ts.Tag, implementers map[uint32]string, done bool, cerr error) {
+		by, tree, stop, err := p.parseTreeWithin(ctx, src, micros)
+		if cerr := ctx.Err(); cerr != nil {
+			// Cancellation stops the parser mid-file and leaves a tree of
+			// whatever it had read. That tree is the caller's cancellation,
+			// not a fact about the file, so nothing from it is reported.
+			return nil, nil, stop, nil, nil, true, cerr
+		}
+		if err != nil {
+			// A failed parse is data about this file, not a run-level failure.
+			// Spec §13 requires a parser failure to be isolated to the
+			// affected file. The error is recorded ON the result so the gap
+			// stays visible; returning it here would abort the whole indexing
+			// run over one file.
+			res.Status = StatusFailed
+			res.Reason = model.ParseReasonUnspecified
+			res.Err = err
+			return nil, nil, stop, nil, nil, true, nil
+		}
+		tags, implementers, err = by.tagTree(tree, src)
+		if err != nil {
+			res.Status = StatusFailed
+			res.Reason = model.ParseReasonUnspecified
+			res.Err = err
+			return nil, nil, stop, nil, nil, true, nil
+		}
+		return by, tree, stop, tags, implementers, false, nil
 	}
 
-	tags, implementers, err := by.tagTree(tree, src)
-	if err != nil {
-		res.Status = StatusFailed
-		res.Reason = model.ParseReasonUnspecified
-		res.Err = err
-		return res, nil //nolint:nilerr // deliberate: a failed query is this file's result, not the run's
+	// The first parse of a file in a language the masks apply to gets a
+	// shorter wall-clock allowance than the ceiling; see probeMicros.
+	probe := p.cfg.probeMicros(p.entry.Name, len(src))
+	// From here on "by" is the parser whose tree this is: p, or p's alternate
+	// when the second recovery route was the one that read the file. Its
+	// queries are the ones compiled against the tree's own Language.
+	by, tree, stop, tags, implementers, done, cerr := readTree(probe)
+	if done {
+		return doneResult(res, cerr)
 	}
-	// C, C++ and Objective-C: a declaration written behind a macro the grammar
-	// does not know is retried once with the macros masked, and the retry is
-	// kept only if the guard in cmacro.go says it is better. A nil answer is
-	// every file with no candidate and every file that parsed cleanly.
-	if mp := by.retryMasked(ctx, tree, stop, src, tags); mp != nil {
+	// C, C++, Objective-C and C#: a declaration written behind a macro the
+	// grammar does not know, or cut apart by a conditional-compilation group,
+	// is retried once with the macros masked and the groups resolved, and the
+	// retry is kept only if the guard in cmacro.go says it is better. A nil
+	// answer is every file with nothing to mask and every file that parsed
+	// cleanly. The two masks share that one retry.
+	mp := by.retryMaskedWithin(ctx, tree, stop, src, tags, probe)
+	if mp == nil && probe < p.cfg.ceilingMicros() && stop.early && stop.reason == ts.ParseStopTimeout && ctx.Err() == nil {
+		// The first parse ran out of its shorter allowance and no mask
+		// rescued it: it gets the whole ceiling, as every file does.
+		if by, tree, stop, tags, implementers, done, cerr = readTree(p.cfg.ceilingMicros()); done {
+			return doneResult(res, cerr)
+		}
+	}
+	if mp != nil {
 		tree, stop, src, tags, implementers = mp.tree, mp.stop, mp.src, mp.tags, mp.implementers
 		res.MacrosMasked = mp.count
+		res.BranchesBlanked = mp.branches
 	}
 	if cerr := ctx.Err(); cerr != nil {
 		return nil, cerr
@@ -527,6 +555,12 @@ func (p *genericParser) Parse(ctx context.Context, path string, src []byte) (*Re
 
 	// The verdict on the parse itself, also read from the tree.
 	p.describeParse(res, tree, stop, src)
+	if res.Status == StatusOK && res.BranchesBlanked > 0 {
+		// A clean masked parse has no error to carry the note, and a reader
+		// asking why a definition is missing must be able to see that a
+		// branch was blanked. The status stays ok: the file was read.
+		res.Err = errors.New(strings.TrimPrefix(res.maskNote(), "; "))
+	}
 
 	// Drop the tree as soon as the last consumer is done with it.
 	//
@@ -672,6 +706,16 @@ func (p *genericParser) Parse(ctx context.Context, path string, src []byte) (*Re
 	return res, nil
 }
 
+// doneResult is what Parse returns when the first parse ended it: the
+// context's error and no result when it was cancelled, else the result that
+// records the failure.
+func doneResult(res *Result, cerr error) (*Result, error) {
+	if cerr != nil {
+		return nil, cerr
+	}
+	return res, nil
+}
+
 // skip records that no tree was attempted, and why.
 func skip(res *Result, reason model.ParseReason, detail string) {
 	res.Status = StatusSkipped
@@ -704,6 +748,47 @@ func (c parserConfig) wallClockCeiling() time.Duration {
 		return DefaultParseCeiling
 	}
 	return c.ceiling
+}
+
+// The first parse of a file in a language the masks apply to is given
+// probeBase plus probePerKiB for each KiB of source, when that is less than
+// the ceiling.
+const (
+	probeBase   = 2 * time.Second
+	probePerKiB = 10 * time.Millisecond
+)
+
+// probeMicros is the wall-clock allowance of the first parse of a file, in
+// microseconds.
+//
+// WHY LESS THAN THE CEILING. In google/benchmark, test/benchmark_test.cc held
+// one worker for the whole 60 s ceiling and was recorded as incomplete. The
+// time was not in the work limits' reach: it was one dispatch of the library's
+// third retry pass, entered at iteration 2,299 of a limit of 295,950, which
+// does not return and does not count. The trigger is a macro between a return
+// type and a name (`int BENCHMARK_NOINLINE Factorial(int n) {`) that makes the
+// first two passes die with no live stack; the file parses in 107 ms once the
+// macro is blanked. So a file in a masked language that outruns this allowance
+// is offered to the masks (a retry takes milliseconds) before it is given the
+// rest of the ceiling.
+//
+// WHAT IT DOES NOT CHANGE. Every file that finishes inside the allowance gets
+// exactly the result it got before. A file that does not finish and is not
+// rescued is parsed again with the whole ceiling, so no file is stopped sooner
+// than it was; the only cost of a file near the allowance is a second parse. The
+// allowance is far above anything measured (the slowest masked-language file,
+// 700 KB of C, takes 0.3 s; 5 s plus 10 ms per KiB is 17 times that and
+// 10 times the slowest file of any language per byte), so which side of it a
+// file falls on does not depend on machine speed for any file seen; and a
+// file that runs out of it is, in every case seen, one the parser cannot
+// finish at all.
+func (c parserConfig) probeMicros(language string, srcLen int) uint64 {
+	full := c.ceilingMicros()
+	if !maskedLanguages[language] && !condLanguages[language] {
+		return full
+	}
+	probe := uint64((probeBase + time.Duration(srcLen>>10)*probePerKiB).Microseconds())
+	return min(full, probe)
 }
 
 // ceilingMicros is the ceiling in the unit the parser takes it in, never zero:
@@ -749,7 +834,14 @@ type stopInfo struct {
 // A parse stopped by the wall-clock ceiling is NOT retried. The ceiling exists
 // to bound the time one file can take, and a second attempt would double it.
 func (p *genericParser) parseTree(ctx context.Context, src []byte) (*genericParser, *ts.Tree, stopInfo, error) {
-	tree, stop, err := p.parseOnce(ctx, src)
+	return p.parseTreeWithin(ctx, src, p.cfg.ceilingMicros())
+}
+
+// parseTreeWithin is parseTree with the wall-clock allowance given in
+// microseconds. See probeMicros for why a first parse may be given less than
+// the ceiling.
+func (p *genericParser) parseTreeWithin(ctx context.Context, src []byte, micros uint64) (*genericParser, *ts.Tree, stopInfo, error) {
+	tree, stop, err := p.parseOnceWithin(ctx, src, micros)
 	if err != nil || !stop.early || !stop.retryable() || ctx.Err() != nil {
 		return p, tree, stop, err
 	}
@@ -758,7 +850,7 @@ func (p *genericParser) parseTree(ctx context.Context, src []byte) (*genericPars
 		return p, tree, stop, nil
 	}
 
-	tree2, stop2, err2 := alt.parseOnce(ctx, src)
+	tree2, stop2, err2 := alt.parseOnceWithin(ctx, src, micros)
 	if err2 != nil || tree2 == nil {
 		// The second route failed outright. The first attempt's partial tree
 		// is still the best reading there is.
@@ -849,9 +941,24 @@ func (p *genericParser) alternate() *genericParser {
 // execution has its own per-pattern work budget in the library but no clock.
 // Both are bounded in practice by the size limit on the source.
 func (p *genericParser) parseOnce(ctx context.Context, src []byte) (tree *ts.Tree, stop stopInfo, err error) {
+	return p.parseOnceWithin(ctx, src, p.cfg.ceilingMicros())
+}
+
+// parseOnceCalls counts every tree-sitter parse started by parseOnceWithin.
+// Tests read it to assert how many parses a file costs (one when nothing needs
+// masking, two at most when the masks apply); nothing else does.
+var parseOnceCalls atomic.Uint64
+
+// parseOnceWithin is parseOnce with the wall-clock allowance given in
+// microseconds (never zero, which the parser reads as no limit).
+func (p *genericParser) parseOnceWithin(ctx context.Context, src []byte, micros uint64) (tree *ts.Tree, stop stopInfo, err error) {
+	parseOnceCalls.Add(1)
 	ps := p.getParser()
 	if ps == nil {
 		return nil, stop, fmt.Errorf("parser unavailable for %q", p.entry.Name)
+	}
+	if micros == 0 {
+		micros = p.cfg.ceilingMicros()
 	}
 
 	// A fresh flag per parse, never one stored on the pooled parser: the
@@ -860,7 +967,7 @@ func (p *genericParser) parseOnce(ctx context.Context, src []byte) (tree *ts.Tre
 	// handed next.
 	var cancelFlag uint32
 	ps.SetCancellationFlag(&cancelFlag)
-	ps.SetTimeoutMicros(p.cfg.ceilingMicros())
+	ps.SetTimeoutMicros(micros)
 	if p.cfg.iterationLimit > 0 {
 		ps.SetParseWorkLimits(ts.ParseWorkLimits{IterationLimit: p.cfg.iterationLimit})
 	}
@@ -916,6 +1023,19 @@ func (p *genericParser) parseOnce(ctx context.Context, src []byte) (tree *ts.Tre
 		}
 		if stop.parsedBytes > len(src) {
 			stop.parsedBytes = len(src)
+		}
+		if rt.StopReason == ts.ParseStopAcceptedPrefix && stop.parsedBytes >= len(src) {
+			// The parser accepted a prefix and left the rest outside the
+			// root, but it had read every token to the end of the file: no
+			// budget ran out and nothing was left unread, it is a file the
+			// grammar could not make sense of at its tail. That is a syntax
+			// error (the tree carries the error flag and error nodes), not
+			// an incomplete parse. Two 17-byte files of rack, `### TestFile
+			// ###`, were recorded as incomplete this way, with 2 of 10,000
+			// iterations used, and that alone made the index DEGRADED.
+			stop = stopInfo{}
+			reusable = true
+			return tree, stop, nil
 		}
 		// A parser that was stopped mid-file is not pooled. It is cheap to
 		// rebuild and its arena is sized to a file that was by definition

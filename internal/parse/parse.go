@@ -140,6 +140,14 @@ type Result struct {
 	// Zero for every other file, and for every file the plain parse served.
 	MacrosMasked int
 
+	// BranchesBlanked is how many conditional-compilation branches (the text
+	// after an `#else`, an `#elif`, or an `#if` that was not kept) were
+	// overwritten with spaces before the tree that produced this result was
+	// parsed, for a C, C++, Objective-C or C# file whose masked parse the
+	// guard in cond.go and cmacro.go kept. A definition that exists only in
+	// such a branch is not in Symbols. Zero for every other file.
+	BranchesBlanked int
+
 	// Err explains a status other than ok. Its text starts with Reason, so it
 	// can be stored as files.parse_error unchanged. It is diagnostic text for
 	// the file's record, never a reason to abort the indexing run.
