@@ -42,3 +42,4 @@ tools.mk	32	function	run-tool
 tools.mk	47	variable	LEVEL
 tools.mk	48	variable	QUIET
 spaces.mk	3	variable	SRC_X
+bsd.mk	2	variable	PROG

@@ -12,15 +12,19 @@ import "strings"
 //
 // A `+=` appends to a variable that is defined elsewhere, so it is not
 // captured: a variable is recorded where it is first assigned, not at every
-// append. Make's own settings (SHELL, MAKEFLAGS, VPATH, .DEFAULT_GOAL and the
-// like) are configuration of make, not names of the project, and are not
-// captured. A target-specific assignment (`app: CFLAGS = -O0`) is scoped to
-// that target and is not captured. Not captured: prerequisites; pattern rules (a target containing %),
-// suffix rules and special targets such as .PHONY (a target starting with a
-// dot); a name that begins with - @ or + or contains a backslash (a recipe
-// line of a non-GNU makefile indented with spaces, which the grammar reads as
-// a rule); a target spelled with a variable reference ($(BUILD)/out); include and
-// vpath directives; conditionals.
+// append. Make's own settings (SHELL, MAKEFLAGS, MAKEFILES, VPATH) and every
+// name that begins with a dot (.DEFAULT_GOAL, and the BSD directives .if,
+// .else, .endif and .include, which the grammar reads as assignments) are
+// configuration of make, not names of the project, and are not captured. A
+// target-specific assignment (`app: CFLAGS = -O0`) is scoped to that target
+// and is not captured either.
+//
+// Not captured: prerequisites; pattern rules (a target containing %), suffix
+// rules and special targets such as .PHONY (a target starting with a dot); a
+// name that begins with - @ or + or contains a backslash (a recipe line of a
+// non-GNU makefile indented with spaces, which the grammar reads as a rule); a
+// target spelled with a variable reference ($(BUILD)/out); include and vpath
+// directives; conditionals.
 func init() {
 	registerDefinitions("make", makeDefinitions, false)
 	registerNameFix("make", makeName)
@@ -42,9 +46,9 @@ const makeDefinitions = `
 (define_directive (word) @name) @definition.function
 
 ((variable_assignment . (word) @name) @definition.variable
-  (#not-match? @name "^(SHELL|MAKEFLAGS|MAKEFILES|VPATH|\\.[A-Z_]+)$")
+  (#not-match? @name "^(SHELL|MAKEFLAGS|MAKEFILES|VPATH|\\..*)$")
   (#not-match? @definition.variable "^[^=:]*\\+="))
 
 ((shell_assignment . (word) @name) @definition.variable
-  (#not-match? @name "^(SHELL|MAKEFLAGS|MAKEFILES|VPATH|\\.[A-Z_]+)$"))
+  (#not-match? @name "^(SHELL|MAKEFLAGS|MAKEFILES|VPATH|\\..*)$"))
 `

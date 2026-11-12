@@ -26,3 +26,6 @@
   word like `wlib` cannot be told from a real target.
 - **Repeated names.** `all`, `clean`, `test` and `install` appear in nearly
   every Makefile; each is recorded once per file.
+- **BSD make** (`.if`, `.else`, `.endif`, `.include`) is not understood: the grammar reads
+  some directive lines as variable assignments, so every name that begins with
+  a dot is dropped (`bsd.mk`).
