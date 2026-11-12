@@ -96,6 +96,7 @@ const (
 	ruleQualifiedModule   = "qualified by an imported package that defines it"
 	ruleQualifiedPackage  = "qualified by an imported package that re-exports it"
 	ruleQualifiedFile     = "qualified by the module whose file defines it"
+	ruleOwnExports        = "qualified by exports: defined at the top level of the same file"
 	ruleStatedType        = "declared on the receiver's stated type"
 	ruleNamedType         = "declared on the type the receiver names"
 	ruleConstructs        = "constructs the type the receiver names"
@@ -143,6 +144,15 @@ func (r *Resolver) resolveCall(c call, stats *Stats) decision {
 	case model.ReceiverPath:
 		return r.callPath(c, stats)
 	case model.ReceiverValue:
+		// `const util = require('./util')` is a declaration to the parser's walk
+		// and an import to the file: the walk can say the name was declared and
+		// not that it was declared by a require. A name the file's imports bind
+		// is read as that import.
+		if c.spec.Calls.Imports == ImportsNameModules {
+			if _, _, ok := r.scriptQualifier(c.fr, c.imports, c.ref.Receiver); ok {
+				return r.callNamed(c, stats)
+			}
+		}
 		return r.memberByName(c, model.ConfidenceHigh, stats)
 	default:
 		// An expression with no name, or a shape nothing recorded.
@@ -652,7 +662,10 @@ func (r *Resolver) bareByName(c call, reach []registry.SymbolIndexEntry, stats *
 	// nowhere else, whatever the repository also defines.
 	switch c.spec.Calls.Imports {
 	case ImportsNameModules:
-		if m, member, ok := r.scriptQualifier(c.fr, c.imports, c.ref.Name); ok && member {
+		// A module imported whole and then called (`const debug =
+		// require('debug')`, `module.exports = function`) is called by the name
+		// it was imported under, so it reads like a member imported by name.
+		if m, _, ok := r.scriptQualifier(c.fr, c.imports, c.ref.Name); ok {
 			if m.where == presenceExternal {
 				return externalCall
 			}
@@ -790,6 +803,15 @@ func callableFirst(ref registry.Reference, group []registry.SymbolIndexEntry) (r
 func (r *Resolver) callSelf(c call, stats *Stats) decision {
 	t, ok := c.enclosingType()
 	if !ok {
+		// An ES5 constructor is a type whose methods are assigned to its
+		// prototype: `this.describe()` written in `function Shape` reaches
+		// `Shape.prototype.describe`, which is indexed as a member of Shape.
+		if c.spec.Calls.Imports == ImportsNameModules && c.scope != "" && !strings.Contains(c.scope, ".") {
+			ctor := typeRef{name: c.scope, fileID: c.fr.FileID, filePath: c.fr.Path, qual: c.scope, strong: true}
+			if d, found := c.bindMember(ctor, ruleEnclosingType); found {
+				return d
+			}
+		}
 		// `this` in a function that belongs to no type the index knows: an
 		// object literal's method, a callback. A value of unknown type.
 		return r.memberByName(c, model.ConfidenceMedium, stats)
@@ -906,6 +928,11 @@ func (r *Resolver) importedFromOutside(c call, name string) bool {
 func (r *Resolver) callNamed(c call, stats *Stats) decision {
 	name := c.ref.Receiver
 
+	// CommonJS: `exports.f()` is a call of what this module exports.
+	if c.spec.Calls.Imports == ImportsNameModules && name == "exports" {
+		return ownExports(c)
+	}
+
 	// An import says what the name is before anything else is asked.
 	switch c.spec.Calls.Imports {
 	case ImportsNameDirectories:
@@ -929,6 +956,23 @@ func (r *Resolver) callNamed(c call, stats *Stats) decision {
 		}
 	}
 	return r.callOnTypeOrValue(c, name, stats)
+}
+
+// ownExports binds `exports.f()` and `module.exports.f()`: the module is the
+// file the call is written in, and f is a function it defines at its top
+// level. A name the file does not define (`exports.x = require(...)`, an
+// assignment from elsewhere) is not a call of anything the index holds.
+func ownExports(c call) decision {
+	var here []registry.SymbolIndexEntry
+	for _, s := range c.cands {
+		if s.FileID == c.fr.FileID && isModuleLevel(s) {
+			here = append(here, s)
+		}
+	}
+	if first, ok := callableFirst(c.ref, here); ok {
+		return bound(candidate{first, model.ConfidenceHigh, ruleOwnExports})
+	}
+	return unresolvedCall
 }
 
 // qualifiedBy binds a call qualified by a module to what that module defines.
@@ -1198,6 +1242,11 @@ func (r *Resolver) callPath(c call, stats *Stats) decision {
 		return externalCall
 	}
 	head, last := segs[0], segs[len(segs)-1]
+
+	// CommonJS: `module.exports.f()` is the same call as `exports.f()`.
+	if c.spec.Calls.Imports == ImportsNameModules && len(segs) == 2 && head == "module" && last == "exports" {
+		return ownExports(c)
+	}
 
 	// Anything reached through a package that is not here is not here.
 	switch c.spec.Calls.Imports {
