@@ -476,6 +476,16 @@ func (p *genericParser) Parse(ctx context.Context, path string, src []byte) (*Re
 		res.Err = err
 		return res, nil //nolint:nilerr // deliberate: a failed query is this file's result, not the run's
 	}
+	// C, C++ and Objective-C: a declaration written behind a macro the grammar
+	// does not know is retried once with the macros masked, and the retry is
+	// kept only if the guard in cmacro.go says it is better. A nil answer is
+	// every file with no candidate and every file that parsed cleanly.
+	if mp := by.retryMasked(ctx, tree, stop, src, tags); mp != nil {
+		tree, stop, src, tags, res.MacrosMasked = mp.tree, mp.stop, mp.src, mp.tags, mp.count
+	}
+	if cerr := ctx.Err(); cerr != nil {
+		return nil, cerr
+	}
 	res.Imports = by.extractImports(tree, src)
 
 	// Python's scope-dependent facts: what each call was made on, each nested
@@ -965,8 +975,8 @@ func (p *genericParser) describeParse(res *Result, tree *ts.Tree, stop stopInfo,
 	res.Reason = model.ParseReasonSyntaxErrors
 	res.ErrorNodes, res.MissingTokens, res.FirstErrorLine = errNodes, missing, firstLine
 	res.Err = errors.New(model.FormatParseError(res.Reason, fmt.Sprintf(
-		"%s and %s, first at line %d; definitions inside the regions the parser could not read may be missing",
-		plural(errNodes, "error node"), plural(missing, "missing token"), firstLine)))
+		"%s and %s, first at line %d; definitions inside the regions the parser could not read may be missing%s",
+		plural(errNodes, "error node"), plural(missing, "missing token"), firstLine, res.maskNote())))
 }
 
 // isBudget reports whether the stop was one of the limits that bound a parse,
