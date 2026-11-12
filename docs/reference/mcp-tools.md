@@ -504,7 +504,7 @@ A function handed to something by name (`.then(handleResponse)`, `register("x", 
 When there are such places the first line leads `INCOMPLETE` and says so:
 
 ```text
-INCOMPLETE — respond: its name appears in at least 48 other place(s) that are not recorded as calls: it may be passed as a value; handleResponse, on the path to it, is named in 1 other place(s) not recorded as calls (it may be passed as a value), so what reaches handleResponse is not listed. respond (lib/application.js:288): 1 direct, 0 indirect. Risk low or higher (...)
+INCOMPLETE — respond: its name appears in at least 9 other place(s) that are not recorded as calls: it may be passed as a value; handleResponse, on the path to it, is named in 1 other place(s) not recorded as calls (it may be passed as a value), so what reaches handleResponse is not listed. respond (lib/application.js:288): 1 direct, 0 indirect. Risk low or higher (...)
 ```
 
 Three things follow. The verdict cannot be `strong`. Certainty is never `high`. And no tool says "no test reaches this" as a fact: `find_tests` says whether one does is `NOT KNOWN`, and `analyze_impact` adds no points for missing tests.
