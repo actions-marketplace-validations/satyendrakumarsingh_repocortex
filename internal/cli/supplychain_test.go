@@ -340,8 +340,11 @@ func vulnsReportsTheThreeStates(t *testing.T, root string) {
 		"T-REFERENCED":   {status: "affected", state: "referenced", version: "v1.8.0", files: 1, refs: 1},
 		"T-IMPORTED":     {status: "affected", state: "imported_symbol_use_unknown", version: "v3.0.1", files: 1},
 		"T-NOT-IMPORTED": {status: "affected", state: "not_imported", version: "v1.4.0"},
-		// require("express") is recorded as a call; its argument is read back.
-		"T-REQUIRE": {status: "affected", state: "imported_symbol_use_unknown", version: "4.18.2", files: 1, via: "require"},
+		// require("express") was recorded as a call whose argument was read
+		// back from the text, and the site said it was a require. The index
+		// now records a top-level require as an import (parse/import_bindings.go),
+		// so the same site arrives as an import and carries no via.
+		"T-REQUIRE": {status: "affected", state: "imported_symbol_use_unknown", version: "4.18.2", files: 1},
 		// "^1.3.0" with no lockfile entry: the advisory would clear any real
 		// release, and it still cannot be said to.
 		"T-RANGE": {status: "could_not_compare", state: "not_imported"},
@@ -399,7 +402,6 @@ func vulnsReportsTheThreeStates(t *testing.T, root string) {
 		"IMPORTED, SYMBOL USE UNKNOWN",
 		"NOT IMPORTED in the indexed code",
 		"main.go:9",
-		"(require)",
 		"name no DECLARED dependency",
 		"What this report covers",
 		"Only DECLARED dependencies were checked",

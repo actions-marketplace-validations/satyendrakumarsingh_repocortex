@@ -210,7 +210,9 @@ type ruleTiers struct {
 	//	c_sharp     22/24                                     medium
 	//	java        11/12                                     medium
 	//	rust        9/12                                      medium
-	//	typescript  7/12                                      low
+	//	typescript  7/12, then 24/30 on zod (docs/accuracy.md,
+	//	            "JavaScript, TypeScript and TSX")         medium
+	//	javascript  1/5 on express                            low
 	//	ruby        4/8                                       low
 	//	cpp         3/12                                      low
 	//
@@ -221,7 +223,9 @@ type ruleTiers struct {
 
 	// NamedAfterType is the tier of "the receiver is named after the type that
 	// declares the member". Zero means medium. Measured 54 right of 55 across
-	// Go, Java, C++, Rust and Ruby, and high in those five.
+	// Go, Java, C++, Rust and Ruby, and high in those five; 33 right of 33 on
+	// express, where the owner of a prototype or object method is the name its
+	// callers give the object (`res.send`, `app.use`), and high in JavaScript.
 	NamedAfterType model.Confidence
 
 	// UniqueTypeName is the tier of a member binding whose type was identified
@@ -322,8 +326,8 @@ var callTraitsByLanguage = map[string]CallTraits{
 	"kotlin":     {CallConstructs: true, ImplicitSelf: true, Overloads: true, TypesAreCapitalised: true, Imports: ImportsNameClasses, ExternalRoots: []string{"java", "javax", "kotlin"}, Builtins: javaBuiltins},
 	"scala":      {CallConstructs: true, ImplicitSelf: true, Overloads: true, TypesAreCapitalised: true, Imports: ImportsNameClasses, ExternalRoots: []string{"java", "javax", "scala"}, Builtins: javaBuiltins},
 	"python":     {CallConstructs: true, TypesAreCapitalised: true, Imports: ImportsNameModules},
-	"javascript": {CallConstructs: true, ValuesAreCallable: true, TypesAreCapitalised: true, Imports: ImportsNameModules, Builtins: scriptBuiltins},
-	"typescript": {CallConstructs: true, ValuesAreCallable: true, TypesAreCapitalised: true, Imports: ImportsNameModules, Builtins: scriptBuiltins},
+	"javascript": {Measured: ruleTiers{NamedAfterType: model.ConfidenceHigh}, CallConstructs: true, ValuesAreCallable: true, TypesAreCapitalised: true, Imports: ImportsNameModules, Builtins: scriptBuiltins},
+	"typescript": {Measured: ruleTiers{UnknownReceiver: model.ConfidenceMedium}, CallConstructs: true, ValuesAreCallable: true, TypesAreCapitalised: true, Imports: ImportsNameModules, Builtins: scriptBuiltins},
 	"tsx":        {CallConstructs: true, ValuesAreCallable: true, TypesAreCapitalised: true, Imports: ImportsNameModules, Builtins: scriptBuiltins},
 	"vue":        {TypesAreCapitalised: true, Imports: ImportsNameModules, Builtins: scriptBuiltins},
 	"svelte":     {TypesAreCapitalised: true, Imports: ImportsNameModules, Builtins: scriptBuiltins},
