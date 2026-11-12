@@ -47,6 +47,15 @@ func buildCoreMembers() map[string]map[string]struct{} {
 		toFixed toPrecision toExponential bigint getTime getFullYear getMonth getDate getHours
 		toISOString toDateString next return throw copyWithin subarray isArray from of assign
 		freeze resolve reject all race any now parse stringify log warn error info debug`)
+	// The platform's other everyday types: fetch's Request, Response and
+	// Headers (`res.clone()`, `req.json()`), Blob and FormData, DOM events and
+	// AbortController, and Node's EventEmitter. Measured on hono, three of the
+	// four wrong `medium` edges were `clone()` on a standard Request or Response
+	// bound to the one `clone` the repository declares.
+	script = merge(script, words(`
+		clone text json arrayBuffer blob formData getAll abort addEventListener
+		removeEventListener dispatchEvent preventDefault stopPropagation
+		emit once addListener removeListener removeAllListeners`))
 	for _, lang := range []string{"javascript", "typescript", "tsx", "vue", "svelte", "astro"} {
 		coreMembers[lang] = script
 	}
@@ -94,7 +103,8 @@ func buildCoreMembers() map[string]map[string]struct{} {
 		sortedBy sortedWith sortedDescending sortBy sortWith minOrNull maxOrNull minBy maxBy
 		sumOf fold foldRight onEach takeWhile dropWhile takeLast dropLast chunked windowed
 		asSequence asList asIterable coerceAtLeast coerceAtMost coerceIn isNaN isInfinite
-		isDigit isLetter isLetterOrDigit isWhitespace isUpperCase isLowerCase digitToInt`))
+		isDigit isLetter isLetterOrDigit isWhitespace isUpperCase isLowerCase digitToInt
+		require check error requireNotNull checkNotNull assert`))
 
 	coreMembers["ruby"] = words(`
 		to_s to_i to_f to_a to_h to_sym to_str to_proc to_json inspect class is_a? kind_of?
@@ -107,7 +117,14 @@ func buildCoreMembers() map[string]map[string]struct{} {
 		capitalize start_with? end_with? match match? scan index rindex slice push pop shift
 		unshift append prepend insert delete delete_if delete_at clear concat key? has_key?
 		value? keys values fetch dig merge merge! update store any? all? none? one? times upto
-		downto step call new lock unlock synchronize join raise puts print p format`)
+		downto step call new lock unlock synchronize join raise puts print p format
+		include extend prepend require require_relative load attr_reader attr_writer
+		attr_accessor private public protected module_function alias_method instance_eval
+		class_eval module_eval define_singleton_method bytesize bytes force_encoding
+		encode unpack unpack1 pack escape unescape chars lines ljust rjust
+		center rewind eof? getc gets readline readlines binmode sync close_write close_read
+		must_equal must_be_nil must_be must_include must_match must_raise
+		wont_equal wont_be_nil wont_include`)
 
 	coreMembers["rust"] = words(`
 		clone to_string to_owned into from as_ref as_mut borrow borrow_mut deref eq ne cmp
@@ -148,7 +165,15 @@ func buildCoreMembers() map[string]map[string]struct{} {
 		get setdefault update popitem add discard union intersection difference join split
 		rsplit strip lstrip rstrip replace format startswith endswith lower upper title
 		capitalize encode decode find rfind isdigit isalpha isspace zfill splitlines partition
-		read write readline readlines close flush seek tell`)
+		read write readline readlines close flush seek tell
+		start stop is_alive isatty fileno readable writable seekable truncate getvalue
+		detach wait poll communicate terminate kill send recv sendall accept bind listen
+		connect mkdir exists is_file is_dir stat glob rglob iterdir read_text write_text
+		read_bytes write_bytes unlink rmdir touch readinto read1 peek acquire release
+		notify notify_all is_set cancel submit shutdown put put_nowait get_nowait
+		task_done qsize search group groups span findall finditer fullmatch dumps loads
+		dump load readouterr raises setattr setenv delenv delattr chdir
+		setUp tearDown setUpClass tearDownClass skipTest subTest addCleanup fail`)
 
 	// PHP: the language's own interfaces and classes, then the two things
 	// nearly every PHP repository calls into without declaring: PSR-7/17/18
@@ -221,7 +246,7 @@ func (s LanguageSpec) isCoreMember(name string) bool {
 	for _, p := range corePrefixes[s.Name] {
 		// A family, not a word: assertSame, assertCount, assertStringContainsString.
 		// The letter after the prefix is a capital, so `assertion` is not one.
-		if len(name) > len(p) && strings.HasPrefix(name, p) && name[len(p)] >= 'A' && name[len(p)] <= 'Z' {
+		if len(name) > len(p) && strings.HasPrefix(name, p) && (strings.HasSuffix(p, "_") || name[len(p)] >= 'A' && name[len(p)] <= 'Z') {
 			return true
 		}
 	}
@@ -234,4 +259,8 @@ func (s LanguageSpec) isCoreMember(name string) bool {
 // would be a list nobody could keep current.
 var corePrefixes = map[string][]string{
 	"php": {"assert", "expect", "markTest"},
+	// unittest's TestCase and unittest.mock.
+	"python": {"assert", "assert_"},
+	// Minitest: `assert_equal`, `refute_nil`.
+	"ruby": {"assert_", "refute_"},
 }

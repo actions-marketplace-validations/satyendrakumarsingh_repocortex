@@ -433,7 +433,7 @@ func (s LanguageSpec) canBind(c registry.SymbolIndexEntry, kind model.EdgeKind) 
 	switch kind {
 	case model.EdgeCalls:
 		return isCallableKind(c.Kind) || (isConstructibleKind(c.Kind) && (s.Calls.CallConstructs || s.Calls.NewConstructs)) ||
-			(s.Calls.ValuesAreCallable && isValueKind(c.Kind))
+			(s.Calls.ValuesAreCallable && isValueKind(c.Kind)) || c.Kind == macroSymbolKind
 	case model.EdgeExtends, model.EdgeImplements:
 		return isTypeKind(c.Kind)
 	default:

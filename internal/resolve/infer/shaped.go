@@ -135,6 +135,10 @@ func (r *Resolver) resolveCall(c call, stats *Stats) decision {
 		c.class = c.scope
 	}
 
+	if isMacroInvocation(c.ref.Kind) {
+		return r.callMacro(c)
+	}
+	c.cands = withoutMacros(c.cands)
 	if isConstruction(c.ref.Kind) {
 		return r.callNew(c, stats)
 	}
@@ -513,6 +517,11 @@ func (r *Resolver) inherit(c call, t typeRef, super bool, fallback decision, sta
 
 // callBare binds `f()`.
 func (r *Resolver) callBare(c call, stats *Stats) decision {
+	if c.spec.isCoreSyntax(c.ref.Name) {
+		// `format!(...)`: the parser records a macro invocation as a call with
+		// no receiver, and a macro is not a function of the same name.
+		return externalCall
+	}
 	// What a bare name can reach at all: a definition that is not a member of
 	// anything, and — in a file the call is in — one local to a function the
 	// call is inside.
@@ -602,6 +611,11 @@ func (r *Resolver) callBare(c call, stats *Stats) decision {
 func (r *Resolver) bareBeyondType(c call, reach []registry.SymbolIndexEntry, stats *Stats) decision {
 	rest := r.bareByName(c, reach, stats)
 	if rest.verdict == verdictBound || rest.verdict == verdictExternal {
+		return rest
+	}
+	if c.spec.isCoreFunction(c.ref.Name) {
+		// `require(x)`, `include Mod`: the language's own, and the method of
+		// that name some other type declares is not what the call reaches.
 		return rest
 	}
 	if c.spec.Calls.DynamicSelf {
@@ -760,6 +774,11 @@ func (r *Resolver) bareByName(c call, reach []registry.SymbolIndexEntry, stats *
 	}
 	if best, ok := r.pickImported(c.imports, c.ref, reach); ok {
 		return bound(best)
+	}
+	if c.spec.isCoreFunction(c.ref.Name) {
+		// What is left are the rules that go by the name alone, and the name is
+		// the language's own (corefunctions.go).
+		return unresolvedCall
 	}
 	if !c.spec.PackageIsDirectory {
 		if best, ok := r.pickSameDir(c.spec, c.fr, reach); ok && !r.callsTestHelper(c, best.entry) {
