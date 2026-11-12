@@ -200,6 +200,20 @@ func (v ValueUse) Detail() string {
 // callable reports whether a kind can be passed around as a value.
 func callable(kind string) bool { return kind == "function" || kind == "method" }
 
+// constructorLike reports whether a qualified name ends in the same word twice,
+// `LoggerConfiguration.LoggerConfiguration`: a constructor, whose name is the
+// name of its type and so occurs wherever the type is written. It is never
+// passed as a value, and counting its mentions would count every use of the type.
+func constructorLike(fqn string) bool {
+	rest := fqn
+	if i := strings.Index(fqn, ":"); i >= 0 {
+		rest = fqn[i+1:]
+	}
+	segs := strings.Split(rest, ".")
+	n := len(segs)
+	return n >= 2 && segs[n-1] == segs[n-2]
+}
+
 // ValueUse checks tgt, and the few symbols on its path that have few recorded
 // callers, for a name that occurs in code the index does not record as a
 // reference. reached is the symbols the answer walked through, strongest path
@@ -243,7 +257,7 @@ func (d Deps) ValueUse(ctx context.Context, runID int64, tgt Target, idx *Symbol
 		return nil
 	}
 
-	if callable(tgt.Kind) {
+	if callable(tgt.Kind) && !constructorLike(tgt.FQN) {
 		if err := check(tgt.SymbolID, tgt.Name, tgt.FilePath, tgt.Line, false); err != nil {
 			return out, err
 		}
@@ -261,7 +275,8 @@ func (d Deps) ValueUse(ctx context.Context, runID int64, tgt Target, idx *Symbol
 			break
 		}
 		sym, ok := idx.Lookup(id)
-		if !ok || id == tgt.SymbolID || !callable(sym.Kind) || IsTestSymbol(sym.Kind, sym.Name, sym.FilePath) {
+		if !ok || id == tgt.SymbolID || !callable(sym.Kind) || constructorLike(sym.FQN) ||
+			IsTestSymbol(sym.Kind, sym.Name, sym.FilePath) {
 			continue
 		}
 		cands = append(cands, sym)

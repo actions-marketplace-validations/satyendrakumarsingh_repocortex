@@ -108,7 +108,7 @@ func (r *Registry) UnrecordedMentions(ctx context.Context, runID int64, name str
 	for _, f := range files {
 		for _, line := range identifierLinesText(f.content, name) {
 			p := Place{Path: f.path, Line: line.n}
-			if recorded[p] || insideAny(p, defs) || importLine(line.text) {
+			if recorded[p] || insideAny(p, defs) || importLine(line.text) || !identifierInCode(line.text, name) {
 				continue
 			}
 			places = append(places, p)
@@ -149,6 +149,36 @@ func importLine(text string) bool {
 	for _, p := range importPrefixes {
 		if strings.HasPrefix(t, p) {
 			return true
+		}
+	}
+	return false
+}
+
+// identifierInCode reports whether name occurs in line as a whole identifier
+// outside a string literal. A test description or a message that says the name
+// ("must have context when called with ExecuteContext") is prose and not a use.
+//
+// Crude and one-sided like commentOnly: a quote opens a string until the same
+// quote closes it, so an apostrophe that is not a quote (a Rust lifetime) can
+// hide the rest of a line. That loses a mention and never invents one.
+func identifierInCode(line, name string) bool {
+	var quote byte
+	for i := 0; i < len(line); i++ {
+		c := line[i]
+		switch {
+		case quote != 0:
+			if c == '\\' {
+				i++
+			} else if c == quote {
+				quote = 0
+			}
+		case c == '"' || c == '\'' || c == '`':
+			quote = c
+		case strings.HasPrefix(line[i:], name):
+			end := i + len(name)
+			if (i == 0 || !identByte(line[i-1])) && (end == len(line) || !identByte(line[end])) {
+				return true
+			}
 		}
 	}
 	return false
