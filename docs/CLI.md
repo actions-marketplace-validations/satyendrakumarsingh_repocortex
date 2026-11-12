@@ -2180,6 +2180,19 @@ See [protocols](guides/protocols.md).
 **Answers:** runs an MCP server on stdio, or on Streamable HTTP with `--http`,
 exposing the index to a coding agent.
 
+**On a project with no index.** What happens depends on who started it:
+
+| Started by | Behaviour |
+|---|---|
+| An MCP client, over a pipe (Claude Desktop, an editor, any agent) | Starts. Lists its tools. Every call is answered, not as an error, with the project directory and the commands to run in it (`repocortex init`, `repocortex index`, `repocortex resolve`) and `index_status: absent`. The server's `instructions` say the same at connect time. When the index exists, the same process answers from it. |
+| A person at a terminal (standard input is a terminal) | Exits 1 with `no index at ... run 'repocortex init' and 'repocortex index' first` |
+| `--http` | Exits 1 with the same message |
+
+It does not index implicitly in any of the three, and writes nothing to the
+project. A client-launched server that exited was shown by the client as a
+server that failed to start, with the message that says what to do left in a
+log; that is why the stdio case differs.
+
 | Flag | Effect |
 |---|---|
 | `--list-tools` | print the exposed tools and exit |

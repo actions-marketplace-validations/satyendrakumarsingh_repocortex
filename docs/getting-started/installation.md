@@ -140,7 +140,7 @@ An `.mcpb` file is a one-file extension for Claude Desktop and other clients tha
 | Linux x86_64 | `repocortex_<tag>_linux_amd64.mcpb` |
 | Linux ARM64 | `repocortex_<tag>_linux_arm64.mcpb` |
 
-The bundle serves an index; it does not build one. The repository you pick must already have been indexed with `repocortex init`, `repocortex index` and `repocortex resolve`, which needs the command-line tool from one of the methods above. Pointed at a repository with no index, the server exits with `no index at … run 'repocortex init' and 'repocortex index' first`.
+The bundle serves an index; it does not build one. The repository you pick must already have been indexed with `repocortex init`, `repocortex index` and `repocortex resolve`, which needs the command-line tool from one of the methods above. Pointed at a repository with no index, the server still starts: it lists its tools and answers every call with the commands to run and the directory to run them in, and it begins answering from the index as soon as one exists, with no restart. It never starts indexing on its own. (Releases up to v1.0.1 exit instead, with `no index at … run 'repocortex init' and 'repocortex index' first`, which a client shows only as a server that disconnected.)
 
 ---
 

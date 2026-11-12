@@ -17,7 +17,17 @@ and why. An entry with no such note describes current behaviour.
 
 **Cause.** `index`, `resolve` and `watch` all require the database file to exist.
 `init` creates it. `serve` reports the same condition with a slightly longer
-message: `no index at ... — run 'repocortex init' and 'repocortex index' first`.
+message, `no index at ... — run 'repocortex init' and 'repocortex index' first`,
+when it is run from a terminal or with `--http`.
+
+A `serve` that an MCP client launched (its standard input is a pipe) does not
+exit: the client could only show that as "server disconnected". It starts,
+lists its tools, and answers every call with "RepoCortex is running, but this
+project has no index yet", the directory, and the three commands to run there.
+The answer's `index_status` is `absent`, the server's instructions say so at
+connect time, and the same line is written to its log. Once the index exists
+the running server answers from it; there is nothing to restart. It never
+indexes on its own.
 
 **Fix.** `repocortex init`. If you expected an index to be there, check the path in
 the message — you are probably in a subdirectory, or the wrong repository. Use
