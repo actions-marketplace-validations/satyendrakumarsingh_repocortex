@@ -221,6 +221,152 @@ Additionally, a file whose language has no tags query is recorded as skipped wit
 `no tags query available for "markdown"`, and a file over `parse.MaxSourceBytes`
 (256 KiB) with `source is N bytes, over the 262144 limit`.
 
+### How a file's language is decided
+
+The grammar a file is parsed with used to follow from its name alone, and when
+two grammars claimed one extension the same one always won. Every `.m` file was
+MATLAB, so an Objective-C codebase produced no symbols; every `.h` was C, so the
+classes in a C++ header were lost; every `.fs` was Forth, which has no
+definition query, so F# was skipped. Detection now looks at the file. In order:
+
+1. **An override** in `.repocortex.yml` (`index.language_overrides`, below).
+2. **An exact file name or compound suffix**: `Makefile`, `Dockerfile`,
+   `CMakeLists.txt`, `Rakefile`, `Gemfile`, `BUILD`, `WORKSPACE`, `Jenkinsfile`,
+   `Vagrantfile`, `.blade.php`. `Makefile.inc` is a makefile, not whatever
+   `.inc` is.
+3. **For an extension several languages share**, the `#!` line, then the content
+   rules in the table below, then, for `.h` only, the neighbouring files.
+4. **The extension**, for the great majority of files that have an unambiguous
+   one. Their content is never looked at.
+5. **The `#!` line**, for a name nothing above recognises. `#!/usr/bin/env bash`
+   in a file called `sbt` is a shell script; `python3.11`, `python2.7` and
+   `ruby2.7` are found under `python` and `ruby`; `exec scala "$0" "$@"` under
+   `#!/bin/sh` is Scala. The interpreter must match exactly: `shx` is not `sh`.
+
+Content rules read the first 8 KiB of the file and nothing else. They are tried
+top to bottom and the first that matches decides; each is a literal marker,
+optionally followed by a regular expression on the same line. There is no
+statistical classifier: the same bytes always give the same language.
+
+| Extension | Was | Rules, in order |
+|---|---|---|
+| `.m` | MATLAB | Objective-C: `@interface`, `@implementation`, `@protocol`, `@property`, `@end`, `#import`, any C preprocessor line. Mercury: `:- module`, `:- pred`. Limbo: `implement X;`. MUMPS: a line starting with `;`, a label followed by `;`, an indented `set`/`write`/`new`/`kill`/`quit`. Wolfram: `(* ... *)`, `BeginPackage[`. MATLAB: `function`, `classdef`, a `%` comment; failing those, an assignment ended by `;` or a bare `end` |
+| `.mm` | XML | XML: starts with `<?xml` or `<map`. Objective-C++: the Objective-C markers or any preprocessor line |
+| `.h` | C | Objective-C: the markers above. C++: `class Name`, `namespace`, `template <`, `using`, `public:`/`private:`/`protected:`, `virtual`/`explicit`/`constexpr` at the start of a line, a C++-only standard header (`<string>`, `<vector>`, `<cstdint>`), `std::`, `Name::method(`, `nullptr`, `noexcept`, `static_cast<`, `operator==(`, `__has_cpp_attribute`. Text inside an `#ifdef __cplusplus` block is ignored: a header that hides part of itself from C compilers is a C header. Otherwise the neighbours: beside `.cc`/`.cpp`/`.cxx`/`.hpp` files and no `.c` file it is C++; beside `.m`/`.mm` files and nothing else it is Objective-C. Otherwise C |
+| `.hh` | C++ | Hack: starts with `<?hh`. C++: the C++ markers or a preprocessor line. Hack: a `function name(` together with a `$variable` |
+| `.php` | PHP | Hack: starts with `<?hh`. Otherwise PHP |
+| `.fs` | Forth | Filterscript: `#pragma rs`, `#pragma version`. GLSL: `#version N`, `precision mediump`, `uniform`, `varying`, `layout(`, `void main(`. Forth: `: name` in the first column, a `\ ` comment, `variable`, `create`. F#: `namespace`, `module`, `open`, `let`, `type`, `[<Attribute>]` |
+| `.pp` | Pascal | Pascal: `unit x;`, `program x;`, `uses`, `begin`, `end.`, `{$mode`. Puppet: `class name {`, `define`, `node`, `include`, ` => `, `$var =`, a resource declaration. `Name.cs.pp` (a NuGet source transform) is whatever `Name.cs` is |
+| `.v` | V | Coq: `Proof.`, `Qed.`, `Require Import`, `Theorem`, `Lemma`, `Definition`, `Inductive`. Verilog: `endmodule`, `always @`, `assign`, a backtick directive. V: `fn name(`, `import x`, `struct X {`, `mut`, ` := `. Verilog: `module name(`, `input`, `output`, `wire`, `reg` |
+| `.inc` | Pascal | PHP: starts with `<?php`. HTML: starts with a tag. POV-Ray: `#declare`, `#macro`. Pawn: `native`, `stock`, `forward`. NASL: `include("x.inc");`. BitBake: `inherit`, `require`, `VAR = "value"`, a task body. SQL: `select`, `insert into`, `create table`, `flush x;`. Pascal: as above. C++: the C++ markers. C: `#include`, `#define`. Assembly: `mov a, b`, `db`, `equ` |
+| `.bb` | BitBake | Clojure (Babashka): `(ns `, `(def`, `(require`. BitBake: as above. BlitzBasic: `Function`, `Type`, `Local`, `Global` |
+| `.gs` | JavaScript | GLSL: `#version N`, `layout(`, `EmitVertex`. Gosu: `uses java.util.*`. Genie: `[indent=4]`, `init`, `def`. JavaScript: `function name(`, `var x =` |
+| `.tl` | Teal | Type Language: `---functions---`, `name#1cb5c415 `. Teal: a `--` comment, `local`, `function`, `record`, `return` |
+| `.es` | JavaScript | Erlang: a `%` comment, `-module(`, `main(_) ->`. JavaScript: `import`, `export`, `const`, `function`, `//` |
+| `.pl` | Perl | Raku: `use v6`. Perl: `use strict`, `package X;`, `sub name`, `my $x`. Prolog: `:- directive`, `head :- body`, `fact(x).` Perl: `$x =`, `print ` |
+| `.ts`, `.tsx` | TypeScript, TSX | XML (a Qt translation file, a Tiled tileset): starts with `<?xml`, `<!DOCTYPE` or `<TS`. Otherwise TypeScript |
+| `.mat` | MATLAB | YAML (a Unity material): starts with `%YAML` or `--- !u!` |
+| `.rd` | R | R documentation, which is markup and not R: `\name{`, `\title{`, `% Generated by roxygen2` |
+| `.re` | C++ | C++ (a re2c scanner): a preprocessor line, `template <`, `/*!re2c`. Reason: `module`, `open X;`, `let`, `type` |
+| `.lib` | nothing | Faust: `import("x.lib")`, `declare name "..."`, `library("`. Anything else stays unrecognised |
+
+`.pkb`, `.pks`, `.plsql` and `.pgsql` had no mapping and now go to the SQL
+grammar. `.cjs`, `.mjs`, `.mts` and `.cts` were already routed to JavaScript and
+TypeScript by the grammar library.
+
+GitHub Linguist's `heuristics.yml` is the public reference for telling these
+languages apart, and several rules follow it; each one that does says so in
+`internal/langdetect/rules.go`. They are not a copy: Linguist ranks several
+hundred languages, and these choose between the grammars compiled in here.
+
+**A language with no grammar is skipped under its own name.** Coq, MUMPS,
+Mercury, Type Language, Pawn and a few others are recognised so that they are
+*not* parsed as V, MATLAB or Teal. Such a file has an empty `language`,
+`parse_status = 'skipped'` and `parse_error = 'no grammar for coq'`. Before, a
+243 KB Coq proof was parsed as V for 2.5 seconds to produce nothing.
+
+**When detection cannot tell, it says so.** A file whose extension is ambiguous
+and whose content matches no rule keeps the old default and is recorded with
+`detected_by = 'extension_ambiguous'`. Its language is a guess. `repocortex
+status` counts these files, and they can be listed:
+
+```
+$ repocortex query "SELECT path, language FROM files WHERE detected_by = 'extension_ambiguous'"
+```
+
+`detected_by` is one of `override`, `filename`, `extension`, `shebang`,
+`content`, `neighbours` or `extension_ambiguous`, or empty for a file nothing
+was detected in. A plain `.h`, `.ts`, `.tsx` or `.php` that matches no rule is
+`extension`, not ambiguous: the plain reading of those is safe.
+
+What still cannot be settled from content, and needs an override if it matters:
+
+- A `.h` with no C++ or Objective-C construct in it, in a directory with no
+  source file beside it. It is read as C, which parses it correctly.
+- A file whose only marker lies beyond the first 8 KiB, typically after a very
+  long licence or a generated table.
+- Extensions with no rule here. `.cls`, `.d`, `.sc`, `.rs`, `.gd`, `.ex`,
+  `.cs`, `.sls`, `.pm`, `.t`, `.pro`, `.md`, `.x`, `.mod` and `.sql` dialects
+  are each used by more than one language and still follow the extension.
+- Angular templates. The Angular grammar has no extension, and a
+  `*.component.html` rule was considered and left out: the name is a
+  convention shared with other frameworks, and a template declares nothing a
+  definition query can extract, so routing it would only turn a file that is
+  skipped today (`html` has no tags query) into one that parses to nothing and
+  marks the index degraded. `"*.component.html": angular` in
+  `index.language_overrides` routes them if you want them parsed.
+
+**Accuracy.** Run over GitHub Linguist's sample tree (3,443 files, where the
+folder is the true language), counting a file as right when it reaches the
+grammar for its language, or no grammar when its language has none:
+
+| Extension | Files | Right before | Right now | Left ambiguous |
+|---|---|---|---|---|
+| `.m` | 96 | 39 | 96 | 0 |
+| `.h` | 66 | 37 | 66 | 0 |
+| `.v` | 38 | 9 | 38 | 0 |
+| `.inc` | 36 | 5 | 34 | 2 |
+| `.hh` | 28 | 1 | 28 | 0 |
+| `.pl` | 16 | 10 | 15 | 1 |
+| `.php` | 14 | 12 | 13 | 0 |
+| `.fs` | 13 | 1 | 12 | 1 |
+| `.pp` | 10 | 4 | 10 | 0 |
+| `.re` | 10 | 4 | 10 | 0 |
+| `.gs` | 9 | 2 | 9 | 0 |
+| `.ts` | 9 | 7 | 9 | 0 |
+| `.bb` | 6 | 2 | 6 | 0 |
+| `.tsx` | 5 | 4 | 5 | 0 |
+| `.es` | 4 | 2 | 4 | 0 |
+| `.tl` | 4 | 2 | 4 | 0 |
+| `.mm` | 3 | 1 | 3 | 0 |
+| `.rd` | 2 | 0 | 2 | 0 |
+| `.mat` | 1 | 0 | 1 | 0 |
+| `.pkb`, `.pks`, `.plsql`, `.pgsql` | 4 | 0 | 4 | 0 |
+| no extension | 134 | 97 | 133 | 0 |
+| every other extension | 2,935 | 2,513 | 2,513 | 0 |
+
+Read the "now" column with one caveat: the rules were written against these
+files, so it is an in-sample figure and a different corpus will score lower. The
+`.h` row is content only, because in this tree a file's directory is its
+language and the neighbour rule would be reading the answer. The table is
+reproduced by `TestLinguistSamples` in `internal/langdetect`, which names the
+files still wrong.
+
+Three repositories the rules were not written against, headers only, since
+`.h` is the extension where a wrong answer is easiest to give in both
+directions:
+
+| Repository | `.h` files | Result |
+|---|---|---|
+| git (C) | 346 | 346 C |
+| redis (C, with vendored dependencies) | 344 | 340 C. 4 C++: two Qt adapters and one MSVC test helper that are C++, and one CRoaring header that is C and C++ in one file |
+| leveldb (C++) | 56 | 52 C++. 4 C: the C API header and three headers that hold only macros |
+
+**Cost.** Detection runs for every file. An unambiguous extension costs about
+0.2 µs and reads nothing. An ambiguous one is decided from bytes the walker has
+already read to hash the file; no file is opened twice. A full 8 KiB window with
+no marker in it, the worst case, costs about 80 µs.
+
 ---
 
 ## Watching
@@ -1548,6 +1694,18 @@ Capabilities:   code
 All counts come from the **committed run only** — an in-flight indexing run never
 leaks partial numbers into status. Nothing is estimated.
 
+When some files' languages are guesses, one more line appears:
+
+```
+Ambiguous languages:  3  (language guessed from the extension; see index.language_overrides)
+```
+
+These are files whose extension several languages share and whose content
+matched no rule, so they were parsed with the extension's default grammar. If
+one of them has no symbols, the wrong grammar is the likeliest reason. See
+[How a file's language is decided](#how-a-files-language-is-decided). The JSON
+field is `ambiguous_languages`.
+
 `--json` emits the same report machine-readably, on every command.
 
 ---
@@ -1642,6 +1800,10 @@ project:
 index:
   include: ["**"]               # []string. REPLACES the default ["**"]
   exclude: ["generated/**"]     # []string. ADDED to the defaults; cannot remove them
+  language_overrides:           # map glob -> language. The LAST matching entry wins
+    "*.h": c                    #   every header is C ...
+    "ios/**/*.h": objc          #   ... except under ios/
+    "third_party/**": none      #   recorded, never parsed
 
 languages: [java, go]           # []string. Parsed and validated; not yet consumed
 capabilities: [code, impact]    # []string. Default ["code"]. Reported by `status`
@@ -1688,6 +1850,47 @@ unbounded traversal is a denial-of-service on a large repository:
 error: context.max_graph_depth 50: want 1..10 (unbounded traversal is a DoS on large repos)
 ```
 
+#### `index.language_overrides`
+
+For the files [language detection](#how-a-files-language-is-decided) cannot
+settle, or settles wrongly. A mapping from a glob to a language:
+
+```yaml
+index:
+  language_overrides:
+    "*.h": cpp                      # a C++ project whose headers carry no C++ marker
+    "legacy/matlab/**/*.m": matlab  # among Objective-C sources
+    "*.component.html": angular     # a grammar no extension reaches
+    "vendor-data/**": none          # not source: record the files, parse nothing
+```
+
+- **Globs** are the ones `index.include` and `index.exclude` take: a pattern
+  with no `/` matches at any depth, one with a `/` is anchored at the repository
+  root, and `**` spans directories.
+- **The last matching entry wins**, as in `.gitattributes`, so write the broad
+  rule first and narrow it below. Order in the file is kept.
+- **A language** is a grammar name as `repocortex languages --verbose` prints it
+  (`cpp`, `objc`, `fsharp`, `c_sharp`), or a common spelling of one (`C++`,
+  `Objective-C`, `F#`). `none` marks the files as having no grammar: they are
+  recorded as skipped and never parsed.
+- An override **beats everything else**, including an unambiguous extension, and
+  the file's content is not consulted. The file is recorded with
+  `detected_by = 'override'`.
+- A name no grammar has, or a negated glob, is an **error** when the repository
+  is indexed, not a setting that is quietly ignored:
+
+  ```
+  error: walker: index.language_overrides: "objective-sea" names no language RepoCortex has a grammar for (pattern "*.m"); ...
+  ```
+
+- At most 256 entries.
+
+The file is untrusted, like the rest of `.repocortex.yml`, and this key is safe
+there for the same reason architecture rules are: it is data. A glob is never
+compiled as a regular expression and the value can only name a grammar already
+compiled in. The worst a hostile entry does is route files to the wrong grammar,
+which costs the symbols in those files.
+
 #### What is wired up, and what is not
 
 An honest note, kept current against the code rather than against the last time
@@ -1696,6 +1899,8 @@ someone wrote this paragraph.
 **Consulted:**
 
 - `project.name`, `index.include`, `index.exclude` — drive discovery.
+- `index.language_overrides` — decides the grammar for the files it matches,
+  ahead of every detection rule.
 - `mcp.profile` — selects the tool set `repocortex serve` exposes.
 - `capabilities` — validated and displayed by `repocortex status`.
 - `context.max_files`, `max_symbols`, `max_lines`, `max_graph_depth` — become the
@@ -1866,6 +2071,21 @@ A variant says the index **does not record** which build wrote it. That is an
 index created before the stamp existed. It is a different claim from a version
 mismatch — unknown provenance rather than known staleness — and it is reported
 differently for that reason. Re-indexing resolves both.
+
+### A file was read as the wrong language
+
+Ask the index what it decided and how:
+
+```
+$ repocortex query "SELECT path, language, detected_by, parse_status FROM files WHERE path LIKE '%.m'"
+```
+
+`detected_by = 'extension_ambiguous'` means nothing in the first 8 KiB said what
+the file is and the extension's default was kept. `content` means a rule
+matched, and if the answer is still wrong the rule is: the table in
+[How a file's language is decided](#how-a-files-language-is-decided) lists what
+each one looks for. Either way the fix is one line of
+[`index.language_overrides`](#indexlanguage_overrides) and a re-index.
 
 ### A file failed to parse
 

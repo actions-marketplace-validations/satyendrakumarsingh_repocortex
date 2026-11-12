@@ -107,7 +107,7 @@ func (w *Writer) AddFile(ctx context.Context, f *model.File) (int64, error) {
 	}
 	res, err := w.st.file.ExecContext(ctx,
 		w.runID, f.Path, f.Language, f.ContentHash, f.SizeBytes, f.ModTimeUnix,
-		f.ParseStatus, nullString(f.ParseError))
+		f.ParseStatus, nullString(f.ParseError), f.DetectedBy)
 	if err != nil {
 		return 0, w.fail(fmt.Errorf("registry: insert file %q: %w", f.Path, err))
 	}
@@ -414,8 +414,8 @@ func prepareWriterStmts(ctx context.Context, tx *sql.Tx) (*writerStmts, error) {
 	}
 	if err := prep(&st.file, `
 		INSERT INTO files (index_run_id, path, language, content_hash, size_bytes,
-		                   mod_time_unix, parse_status, parse_error)
-		VALUES (?,?,?,?,?,?,?,?)`); err != nil {
+		                   mod_time_unix, parse_status, parse_error, detected_by)
+		VALUES (?,?,?,?,?,?,?,?,?)`); err != nil {
 		return nil, err
 	}
 	if err := prep(&st.symbol, `

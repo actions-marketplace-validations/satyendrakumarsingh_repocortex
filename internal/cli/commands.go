@@ -200,11 +200,14 @@ All figures are read from the registry. Nothing is estimated.`,
 				                                       AND parse_status = 'failed'),
 				       (SELECT count(*) FROM files   WHERE index_run_id = r.id
 				                                       AND parse_status = 'partial'),
+				       (SELECT count(*) FROM files   WHERE index_run_id = r.id
+				                                       AND detected_by = 'extension_ambiguous'),
 				       COALESCE(r.finished_unix, 0), r.accuracy_mode
 				FROM index_runs r WHERE r.id = ?`, runID)
 			var finished int64
 			if err := row.Scan(&st.IndexStatus, &st.GitRevision, &st.Files, &st.Symbols,
-				&st.Edges, &st.ParseFailures, &st.PartialParses, &finished, &st.AccuracyMode); err != nil {
+				&st.Edges, &st.ParseFailures, &st.PartialParses, &st.AmbiguousLanguages,
+				&finished, &st.AccuracyMode); err != nil {
 				return err
 			}
 			st.IndexRun = runID
@@ -235,12 +238,18 @@ type statusReport struct {
 	// is DEGRADED, and counting only outright failures left `status` printing
 	// "parse_failures: 0" beside "index_status: degraded" — a zero that meant
 	// "not the number you are looking for" rather than "none".
-	PartialParses  int64    `json:"partial_parses"`
-	LastIndexed    string   `json:"last_indexed,omitempty"`
-	IndexSizeBytes int64    `json:"index_size_bytes"`
-	AccuracyMode   string   `json:"accuracy_mode"`
-	MCPProfile     string   `json:"mcp_profile"`
-	Capabilities   []string `json:"capabilities"`
+	PartialParses int64 `json:"partial_parses"`
+	// AmbiguousLanguages is files whose language is a guess: the extension is
+	// shared by several languages and nothing in the content settled which.
+	// Such a file is parsed with the extension's default grammar, so when it
+	// yields no symbols the likeliest cause is the wrong grammar, and the fix
+	// is an index.language_overrides entry rather than a bug report.
+	AmbiguousLanguages int64    `json:"ambiguous_languages"`
+	LastIndexed        string   `json:"last_indexed,omitempty"`
+	IndexSizeBytes     int64    `json:"index_size_bytes"`
+	AccuracyMode       string   `json:"accuracy_mode"`
+	MCPProfile         string   `json:"mcp_profile"`
+	Capabilities       []string `json:"capabilities"`
 }
 
 func renderStatus(cmd *cobra.Command, g *Global, st statusReport, hint string) error {
@@ -266,6 +275,10 @@ func renderStatus(cmd *cobra.Command, g *Global, st statusReport, hint string) e
 		}
 		if st.ParseFailures > 0 {
 			_, _ = fmt.Fprintf(w, "Parse failures:\t%d\n", st.ParseFailures)
+		}
+		if st.AmbiguousLanguages > 0 {
+			_, _ = fmt.Fprintf(w, "Ambiguous languages:\t%d  (language guessed from the extension; see index.language_overrides)\n",
+				st.AmbiguousLanguages)
 		}
 		if st.LastIndexed != "" {
 			_, _ = fmt.Fprintf(w, "Last indexed:\t%s\n", st.LastIndexed)

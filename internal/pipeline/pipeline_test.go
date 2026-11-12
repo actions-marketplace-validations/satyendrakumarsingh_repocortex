@@ -361,6 +361,10 @@ func (m *trackingDrainableRegistry) ForFile(path string) parse.Parser {
 	return &mockLargeParser{}
 }
 
+func (m *trackingDrainableRegistry) ForLanguage(language string) parse.Parser {
+	return &mockLargeParser{}
+}
+
 func (m *trackingDrainableRegistry) DrainPools() {
 	m.drainCalls.Add(1)
 	if d, ok := m.Registry.(parse.Drainable); ok {

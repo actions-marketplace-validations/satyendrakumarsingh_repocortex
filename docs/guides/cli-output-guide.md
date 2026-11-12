@@ -101,7 +101,7 @@ $ repocortex --json status
   "project": "payment-platform",
   "index_path": "/work/payment-platform/.repocortex/index.db",
   "index_status": "ready",
-  "schema_version": 13,
+  "schema_version": 14,
   "index_run": 3,
   "git_revision": "eae0f8a662b912761434ed4a606c74d33f111471",
   "files": 18,
@@ -316,7 +316,7 @@ Resolved payment-platform (revision 4)
 $ repocortex status
 Project:        payment-platform
 Index:          READY
-Schema:         v13
+Schema:         v14
 Revision:       eae0f8a662b912761434ed4a606c74d33f111471
 Files:          18
 Symbols:        105

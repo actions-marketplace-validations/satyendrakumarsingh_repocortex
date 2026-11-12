@@ -118,7 +118,16 @@ type Parser interface {
 // Registry resolves a file to the parser that should handle it.
 type Registry interface {
 	// ForFile returns a parser for path, or nil when no grammar applies.
+	//
+	// It decides from the file NAME alone, and a name is not enough for an
+	// extension several languages share: `.m` is MATLAB or Objective-C, `.h`
+	// is C or C++. A caller that has the file's content detects the language
+	// first (fs.Walker does, for every file it discovers) and asks ForLanguage.
 	ForFile(path string) Parser
+
+	// ForLanguage returns the parser for a grammar by name, or nil when the
+	// name is empty or no grammar has it.
+	ForLanguage(language string) Parser
 
 	// Languages lists every language the registry can handle.
 	Languages() []string

@@ -1,0 +1,39 @@
+-- 0014_language_detection: record HOW each file's language was decided.
+--
+-- WHY THE INDEX NEEDS TO KNOW
+--
+-- `files.language` used to be a function of the file name alone, so there was
+-- nothing to record: `.m` was MATLAB, always, and an Objective-C codebase was
+-- indexed as several hundred MATLAB files with no symbols in them. Language
+-- detection now looks at the content of a file whose extension several
+-- languages share (internal/langdetect), and that makes the language a
+-- judgement with a provenance. Two files labelled `matlab` are no longer the
+-- same claim: one carried a `classdef`, the other matched nothing and kept the
+-- extension table's default.
+--
+-- The second kind is the one worth being able to list. A file whose language
+-- is a guess and whose parse then yields nothing is far more likely to be
+-- misrouted than empty, and without this column that file is indistinguishable
+-- from every other zero-symbol file in the run.
+--
+-- THE VALUES are langdetect.Method, a closed set of stable identifiers:
+--
+--   override             an index.language_overrides entry in .repocortex.yml
+--   filename             an exact name or compound suffix (Makefile, .blade.php)
+--   extension            an extension one language owns, or whose plain reading is safe
+--   shebang              the `#!` line
+--   content              an ambiguous extension settled by a content rule
+--   neighbours           a `.h` placed by the source files beside it
+--   extension_ambiguous  an ambiguous extension no rule settled: a guess
+--   ''                   nothing detected, or a row written before this migration
+--
+-- NOT NULL DEFAULT '' rather than NULL, because SQLite's ALTER TABLE ADD COLUMN
+-- backfills a constant and '' is true of every existing row: nothing recorded
+-- how those were decided. A re-index fills the column in.
+--
+-- The column is deliberately NOT part of the run digest (registry/digest.go).
+-- The digest covers what the index asserts about the code, and `language`
+-- already carries the outcome of detection; how it was reached does not change
+-- a symbol or an edge.
+
+ALTER TABLE files ADD COLUMN detected_by TEXT NOT NULL DEFAULT '';
