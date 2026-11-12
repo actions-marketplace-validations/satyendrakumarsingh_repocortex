@@ -274,6 +274,16 @@ the next session.
 - The index is opened read-only, exactly as over stdio, and request bodies are
   size-limited by the MCP SDK.
 
+With `--tokens-file` the one token becomes several named ones, stored as
+SHA-256 hashes, each limited to a profile or to named tools and optionally to
+an expiry date. A token is then accepted only as a bearer header, a tool outside
+its scope is never registered on the server that answers it, an MCP session is
+bound to the token that opened it, and the audit log records the token's name.
+The file is read once at start and a malformed one stops the server. See
+[sharing one index with a team](guides/protocols.md#sharing-one-index-with-a-team),
+including what it is not: there is no SSO, no user directory and no
+per-repository permission.
+
 What it does not protect: anyone holding the token and able to reach the port,
 including through a tunnel the user runs, can query the whole index for as long
 as the server runs. There is no TLS in the binary; a remote client should reach

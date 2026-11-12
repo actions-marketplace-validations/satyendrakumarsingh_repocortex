@@ -33,6 +33,11 @@ type AuditEvent struct {
 	// Transport is how the call arrived: "mcp" for a protocol client, "rest"
 	// or "cli" for the two in-process front ends.
 	Transport string `json:"transport"`
+	// TokenName is the NAME of the token that made the call, on a server
+	// started with a tokens file: the label the operator gave the entry. The
+	// token is never recorded and neither is its hash, because a log holding
+	// either would be a second place to take a credential from.
+	TokenName string `json:"token_name,omitempty"`
 	Tool      string `json:"tool"`
 	// Arguments are the call's arguments as sent, cut at auditArgBytes.
 	Arguments  json.RawMessage `json:"arguments,omitempty"`
@@ -98,6 +103,7 @@ func (s *Server) auditMiddleware(next sdk.MethodHandler) sdk.MethodHandler {
 		ev := AuditEvent{
 			Time:       start.UTC().Format(time.RFC3339),
 			Transport:  s.transportOf(call),
+			TokenName:  s.tokenNameOf(call),
 			Tool:       call.Params.Name,
 			DurationMS: log.now().Sub(start).Milliseconds(),
 			Outcome:    "ok",
@@ -105,15 +111,7 @@ func (s *Server) auditMiddleware(next sdk.MethodHandler) sdk.MethodHandler {
 		if call.Session != nil {
 			ev.Session = call.Session.ID()
 		}
-		if args := call.Params.Arguments; len(args) > 0 {
-			if len(args) > auditArgBytes {
-				// A cut JSON document is not JSON, so it is stored as a string.
-				cut, _ := json.Marshal(string(args[:auditArgBytes]))
-				ev.Arguments, ev.ArgsCut = cut, true
-			} else if json.Valid(args) {
-				ev.Arguments = args
-			}
-		}
+		ev.Arguments, ev.ArgsCut = auditArguments(call.Params.Arguments)
 		switch {
 		case err != nil:
 			ev.Outcome = "protocol_error"
@@ -134,12 +132,92 @@ func (s *Server) auditMiddleware(next sdk.MethodHandler) sdk.MethodHandler {
 	}
 }
 
+// auditArguments is a call's arguments as the log keeps them: whole when
+// small, cut and marked when not, and dropped when they are not JSON.
+func auditArguments(args json.RawMessage) (kept json.RawMessage, cut bool) {
+	switch {
+	case len(args) == 0:
+		return nil, false
+	case len(args) > auditArgBytes:
+		// A cut JSON document is not JSON, so it is stored as a string.
+		s, _ := json.Marshal(string(args[:auditArgBytes]))
+		return s, true
+	case json.Valid(args):
+		return args, false
+	}
+	return nil, false
+}
+
+// auditToolNameBytes bounds a recorded tool name that matched no tool. A real
+// name is under forty bytes; an unmatched one is whatever the caller typed.
+const auditToolNameBytes = 128
+
+// recordUnknownTool records a call from an in-process front end that named no
+// tool this server has.
+//
+// Over the protocol such a call reaches the middleware above and is recorded
+// as a protocol_error. A front end answers it before the protocol is involved
+// (Invoker.Call), which used to leave no trace: the one kind of call missing
+// from the log was the one that asked for something the caller may not have.
+// On a shared server that is a token probing outside its scope, which is
+// exactly what the log is read for.
+func (s *Server) recordUnknownTool(ss *sdk.ServerSession, name string, args json.RawMessage) {
+	log := s.deps.Audit
+	if log == nil {
+		return
+	}
+	if len(name) > auditToolNameBytes {
+		name = name[:auditToolNameBytes]
+	}
+	ev := AuditEvent{
+		Time:      log.now().UTC().Format(time.RFC3339),
+		Transport: "mcp",
+		Tool:      name,
+		Outcome:   "protocol_error",
+	}
+	if fe, ok := s.frontEnds.Load(ss); ok {
+		if f, ok := fe.(frontEndInfo); ok {
+			ev.Transport, ev.TokenName = f.name, f.tokenName
+		}
+	}
+	ev.Arguments, ev.ArgsCut = auditArguments(args)
+	log.Record(ev)
+}
+
 // transportOf names the front end a call arrived through.
 func (s *Server) transportOf(call *sdk.CallToolRequest) string {
 	if call != nil && call.Session != nil {
-		if name, ok := s.frontEnds.Load(call.Session); ok {
-			return name.(string)
+		if fe, ok := s.frontEnds.Load(call.Session); ok {
+			if f, ok := fe.(frontEndInfo); ok {
+				return f.name
+			}
 		}
 	}
 	return "mcp"
+}
+
+// tokenNameOf names the token behind a call, or "" on a server with no named
+// tokens.
+//
+// Both sources are set by this process and neither by the caller. An
+// in-process session carries the name it was opened with (NewInvokerAs). A
+// call over HTTP carries the identity the HTTP guard attached after checking
+// the bearer token; it is not a field of the request a client sends, and over
+// stdio there is none.
+func (s *Server) tokenNameOf(call *sdk.CallToolRequest) string {
+	if call == nil {
+		return ""
+	}
+	if call.Session != nil {
+		if fe, ok := s.frontEnds.Load(call.Session); ok {
+			if f, ok := fe.(frontEndInfo); ok {
+				return f.tokenName
+			}
+			return ""
+		}
+	}
+	if call.Extra != nil && call.Extra.TokenInfo != nil {
+		return call.Extra.TokenInfo.UserID
+	}
+	return ""
 }

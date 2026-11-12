@@ -19,6 +19,7 @@ can speak; the tools, their arguments and their answers are the same on each.
 - [Command line](#command-line)
 - [Profiles and what a tool costs](#profiles-and-what-a-tool-costs)
 - [Audit log](#audit-log)
+- [Sharing one index with a team](#sharing-one-index-with-a-team)
 - [Security](#security)
 
 ## One surface, one implementation
@@ -116,9 +117,9 @@ The response:
 |---|---|
 | 200 | The tool answered. This includes "nothing found" and a tool's own refusal; check `is_error` |
 | 400 | The body is not a JSON object |
-| 401 | The token is missing or wrong |
-| 403 | The `Host` or `Origin` is not allowed |
-| 404 | No tool has that name on the active profile |
+| 401 | The token is missing, wrong or expired. The answer does not say which |
+| 403 | The `Host` or `Origin` is not allowed, or an MCP session id belongs to another token |
+| 404 | No tool has that name on the active profile, or in the token's [scope](#sharing-one-index-with-a-team) |
 | 405 | Wrong method for the route |
 | 413 | The arguments are over 1 MB |
 
@@ -211,9 +212,10 @@ export REPOCORTEX_AUDIT_LOG=~/.repocortex-audit.jsonl    # or for every invocati
 | Field | Meaning |
 |---|---|
 | `transport` | `mcp`, `rest` or `cli` |
+| `token_name` | The name of the token that made the call, on a server started with `--tokens-file`. Never the token or its hash. Absent otherwise |
 | `tool` | The tool that was called |
 | `arguments` | As sent, cut at 2 KB and marked `arguments_truncated` |
-| `outcome` | `ok`, `tool_error` or `protocol_error` |
+| `outcome` | `ok`, `tool_error` or `protocol_error`. A call to a tool outside the token's scope is recorded as `protocol_error`, like a call to a tool that does not exist |
 | `result_bytes` | The size of the answer |
 
 The log records the call and never the answer. The answer is repository content,
@@ -224,12 +226,172 @@ The log is a flag and an environment variable, not a key in `.repocortex.yml`. T
 file is part of the repository, and a repository must not be able to switch off
 the record of what an agent read from it.
 
+## Sharing one index with a team
+
+One server, one index, several people and bots. Each gets a token of their own,
+with its own tools and its own expiry, and the audit log says which one asked.
+
+```bash
+# 1. One token per person or bot. Each is printed once.
+repocortex serve create-token --name ci       --profile minimal  --tokens-file team-tokens.jsonl
+repocortex serve create-token --name reviewer --profile standard --expires 2027-01-31 --tokens-file team-tokens.jsonl
+repocortex serve create-token --name docs-bot --profile standard \
+      --tool search_code --tool get_symbol --tokens-file team-tokens.jsonl
+
+# 2. Serve the index with that file.
+repocortex serve --http 127.0.0.1:7788 --tokens-file team-tokens.jsonl \
+      --allowed-host code-index.example.internal --audit-log audit.jsonl
+```
+
+```console
+MCP over HTTP: http://127.0.0.1:7788/mcp
+REST API:      http://127.0.0.1:7788/api/v1  (OpenAPI: http://127.0.0.1:7788/api/v1/openapi.json)
+Tokens: 3 named token(s) from team-tokens.jsonl, read once at start; restart to apply a change to the file
+  ci: profile minimal, no expiry
+  reviewer: profile standard, expires 2027-02-01T00:00:00Z
+  docs-bot: profile standard, only get_symbol, search_code, no expiry
+Send a token as 'Authorization: Bearer <token>'. The /mcp/<token> path form is off with --tokens-file.
+```
+
+Without `--tokens-file` nothing in this section applies: the server has the one
+token described under [MCP](#mcp).
+
+### The tokens file
+
+One JSON object per line. Blank lines and lines starting with `#` are skipped.
+
+```json
+{"name":"ci","sha256":"<64 hex characters>","profile":"minimal"}
+{"name":"docs-bot","sha256":"<64 hex characters>","profile":"standard","tools":["get_symbol","search_code"],"expires":"2027-01-31"}
+```
+
+| Field | Required | Meaning |
+|---|---|---|
+| `name` | yes | Who or what the token is for. 1 to 63 of `a-z`, `0-9`, `.`, `_`, `-`. Unique in the file. This is what the audit log records |
+| `sha256` | yes | The SHA-256 of the token, in hex. Never the token |
+| `profile` | yes | `minimal`, `standard` or `full`: the tools the token may use |
+| `tools` | no | Narrows the profile to these tools. Each must be a tool on that profile; the list can remove tools and never add one |
+| `expires` | no | A date (`2027-01-31`: the token works through that day, UTC) or an RFC 3339 time. Without it the token does not expire |
+
+- **The file holds hashes, not tokens.** A token is 256 random bits, shown once
+  by `create-token` and stored nowhere. A copy of the file lets nobody in. Lose
+  a token and you make another; it cannot be recovered. The hash is unsalted,
+  which is safe for a random token and not for a password: do not hash a
+  secret of your own into the file.
+- **The file is read once, when the server starts.** Adding a token, changing a
+  scope and revoking a token (delete its line) all take a restart. There is no
+  reload signal and no timer.
+- **A file that cannot be read exactly stops the server.** A missing file, an
+  empty one, a line that is not valid, an unknown field, a misspelt tool, a
+  duplicate name, an unreadable date: each is an error that names the line it
+  is on, and the server does not start. It never falls back to the single
+  token or to no token. The error does not quote the line, so a token pasted
+  where its hash belongs is not copied into a log.
+- **Keep it private.** On macOS and Linux the server warns at start if other
+  accounts can read the file, and says so differently if they can write it:
+  whoever can write it can add a token for themselves. `create-token` creates
+  it with mode 0600. Windows has no permission bits to check, so there is no
+  warning there; restrict the file with its ACL.
+
+### What a scope does
+
+- **A tool outside the scope does not exist for that token.** It is absent
+  from MCP `tools/list`, from `GET /api/v1/tools`, from the OpenAPI document
+  and from the session instructions, and calling it gets the answer a made-up
+  name gets: `404 unknown_tool` over REST, `unknown tool` over MCP. The two
+  answers differ only in the name you sent, so calling names does not reveal
+  which tools a token is being denied. Each scope is a tool server that never
+  registered the other tools, not a filter in front of one that did.
+- **The token's profile decides, not `mcp.profile`.** The profile in
+  `.repocortex.yml` is repository content; on a shared server the operator's
+  tokens file is the only thing that grants tools.
+- **A token is accepted only as `Authorization: Bearer <token>`.** Not in the
+  query string, not in a cookie, and not as `/mcp/<token>`: that path form is
+  for a client on your own machine, and behind a proxy a token in a path is a
+  token in the proxy's access log.
+- **`REPOCORTEX_MCP_TOKEN` is ignored**, with a warning, and no token is
+  generated. One unscoped token beside the scoped ones would be the way round
+  them.
+- **Missing, unknown and expired tokens get one answer**: `401`, the same body
+  and headers. Expiry is checked on every request, so an MCP session opened in
+  time stops working when its token expires.
+- **An MCP session belongs to the token that opened it.** A request that quotes
+  another token's session id gets `403`.
+- **Every tool reads.** No tool writes to the repository or the index
+  (`plan_rename` and `plan_change` return edits for the caller to make), and
+  the index is opened read-only. A shared token cannot change anything.
+
+With `--audit-log`, every call carries the token's name:
+
+```json
+{"time":"2026-11-12T09:41:07Z","transport":"rest","token_name":"ci","tool":"find_callers","arguments":{"name":"ParseConfig"},"duration_ms":4,"outcome":"ok","result_bytes":1911}
+```
+
+### Behind a reverse proxy
+
+RepoCortex does not speak TLS. A bearer token sent over plain HTTP can be read
+by anyone on the path, so a shared server belongs on loopback with a proxy that
+terminates TLS in front of it:
+
+```nginx
+server {
+    listen 443 ssl;
+    server_name code-index.example.internal;
+    ssl_certificate     /etc/ssl/code-index.crt;
+    ssl_certificate_key /etc/ssl/code-index.key;
+
+    location / {
+        proxy_pass http://127.0.0.1:7788;
+        proxy_set_header Host $host;   # checked against --allowed-host
+        proxy_http_version 1.1;
+        proxy_buffering off;           # MCP streams its responses
+        proxy_read_timeout 1h;
+    }
+}
+```
+
+- Start the server with `--allowed-host code-index.example.internal`. Requests
+  whose `Host` or `Origin` is anything else get `403`.
+- Clients use `https://code-index.example.internal/mcp` and
+  `https://code-index.example.internal/api/v1`, with the bearer header.
+- Do not log the `Authorization` header in the proxy.
+- Rate limiting, IP allowlists and client certificates belong in the proxy.
+  RepoCortex has none of them.
+- `GET /healthz` needs no token and says only `{"status":"ok"}`, for the
+  proxy's health check.
+
+Listening on another address directly (`--http 0.0.0.0:7788`) is refused unless
+you pass `--allow-remote`, the same rule as the single-token server. With a
+tokens file the refusal says why, and with the flag the server starts and warns
+that tokens cross the network in clear text. Use it only when the proxy is the
+one thing that can reach that address.
+
+### What it does not do
+
+- **No SSO, no OAuth, no user directory.** A token is a secret you hand to
+  someone. Its name is a label you chose, not an identity anything verified.
+  Two people sharing a token are one name in the audit log.
+- **No per-repository and no per-path permissions.** A server serves one index.
+  A scope limits which tools a token can call, not what they can ask about: any
+  token can ask its tools about any file in the index. To keep two repositories
+  apart, run two servers with two tokens files.
+- **No live reload.** Revoking a token is deleting its line and restarting.
+- **No rate limits or quotas**, and no lockout after failed attempts. Tokens are
+  256 random bits, so guessing is not the risk; put limits in the proxy if you
+  need them.
+- **No TLS**, as above.
+- **No URL-only clients.** A client that cannot send a header (the reason
+  `/mcp/<token>` exists) cannot use a shared server.
+
 ## Security
 
 Both HTTP surfaces sit behind one guard:
 
 - **A token on every request**, compared in constant time. REST accepts it only
-  as a bearer header: a token in a path ends up in access logs.
+  as a bearer header: a token in a path ends up in access logs. With
+  `--tokens-file` there are several named tokens, each with a
+  [scope](#sharing-one-index-with-a-team), and both surfaces take the header
+  only.
 - **A `Host` allowlist**, which blocks DNS rebinding. Loopback names are always
   allowed; `--allowed-host` adds a tunnel or proxy hostname.
 - **An `Origin` check**, so a web page in your browser cannot drive the server.

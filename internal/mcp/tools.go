@@ -599,7 +599,7 @@ func toolDescriptions() map[string]string {
 }
 
 func (s *Server) registerTools() error {
-	allowed := profileTools(s.deps.Config.MCPProfile)
+	allowed := toolFilter(s.deps.Config.MCPProfile, s.deps.AllowTools)
 	descs := toolDescriptions()
 
 	addTool(s, allowed, &sdk.Tool{

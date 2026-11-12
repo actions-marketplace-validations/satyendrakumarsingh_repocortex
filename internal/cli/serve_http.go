@@ -37,7 +37,11 @@ type httpServeOptions struct {
 	Addr         string   // host:port to listen on
 	AllowRemote  bool     // permit a non-loopback listen address
 	AllowedHosts []string // extra Host header values accepted, for a tunnel or proxy
-	Token        string   // bearer token; required
+	Token        string   // bearer token; required unless Team is set
+
+	// Team, when set, replaces the single token with the named, scoped tokens
+	// of a tokens file. See serve_team.go.
+	Team *teamAccess
 }
 
 // checkListenAddr refuses to listen beyond this machine unless the caller
@@ -114,6 +118,11 @@ const healthPath = "/healthz"
 // exists for MCP clients that accept nothing but a URL; an HTTP client that
 // can make a REST call can set a header, and a token in a path is a token in
 // every access log and proxy between the caller and here.
+//
+// With opts.Team set the single token gives way to the named tokens of a
+// tokens file. The Host and Origin checks and /healthz are unchanged and still
+// run first; api is not used, because each token has a REST handler of its own
+// over the tools in its scope.
 func newHTTPHandler(srv *sdk.Server, api http.Handler, opts httpServeOptions, logger *slog.Logger) http.Handler {
 	allowed := map[string]bool{}
 	for _, h := range opts.AllowedHosts {
@@ -130,13 +139,23 @@ func newHTTPHandler(srv *sdk.Server, api http.Handler, opts httpServeOptions, lo
 		return isLoopbackHost(host) || allowed[host] || allowed[strings.ToLower(hostport)]
 	}
 
-	mcp := sdk.NewStreamableHTTPHandler(func(*http.Request) *sdk.Server { return srv }, &sdk.StreamableHTTPOptions{
+	team := opts.Team
+	getServer := func(*http.Request) *sdk.Server { return srv }
+	if team != nil {
+		// A shared server has one tool server per scope; a new session gets
+		// the one built for the token that opened it.
+		getServer = team.serverFor
+	}
+	var mcp http.Handler = sdk.NewStreamableHTTPHandler(getServer, &sdk.StreamableHTTPOptions{
 		Logger: logger,
 		// The Host check below covers DNS rebinding for loopback and also
 		// admits the hostnames the user allowed, which the SDK's built-in
 		// check would reject.
 		DisableLocalhostProtection: true,
 	})
+	if team != nil {
+		mcp = team.bindSessions(mcp)
+	}
 	want := []byte(opts.Token)
 	tokenOK := func(got string) bool {
 		return got != "" && subtle.ConstantTimeCompare([]byte(got), want) == 1
@@ -174,6 +193,29 @@ func newHTTPHandler(srv *sdk.Server, api http.Handler, opts httpServeOptions, lo
 			w.Header().Set("Cache-Control", "no-store")
 			_, _ = io.WriteString(w, `{"status":"ok"}`+"\n")
 			return
+		case team != nil:
+			// Shared mode. The routes are the same three; what differs is
+			// that a token is read from the Authorization header and nowhere
+			// else, and that it decides which tool server answers.
+			isMCP := path == mcpPath
+			isMCPPathToken := strings.HasPrefix(path, mcpPath+"/")
+			isAPI := path == restapi.BasePath || strings.HasPrefix(path, restapi.BasePath+"/")
+			if !isMCP && !isMCPPathToken && !isAPI {
+				http.NotFound(w, r)
+				return
+			}
+			// /mcp/<token> is never authorized here, whatever follows the
+			// slash: see serve_team.go for why the path form is off.
+			if !isMCPPathToken {
+				var who *teamPrincipal
+				if r, who = team.authenticate(r); who != nil {
+					authorized = true
+					next = mcp
+					if isAPI {
+						next = who.backend.api
+					}
+				}
+			}
 		case path == mcpPath:
 			next, authorized = mcp, bearerOK()
 		case strings.HasPrefix(path, mcpPath+"/"):
@@ -223,12 +265,17 @@ func serveHTTP(ctx context.Context, srv *sdk.Server, api http.Handler, opts http
 	base := "http://" + ln.Addr().String()
 	endpoint := base + mcpPath
 	_, _ = fmt.Fprintf(out, "MCP over HTTP: %s\n", endpoint)
-	if api != nil {
+	if api != nil || opts.Team != nil {
 		_, _ = fmt.Fprintf(out, "REST API:      %s%s  (OpenAPI: %s%s/openapi.json)\n",
 			base, restapi.BasePath, base, restapi.BasePath)
 	}
-	_, _ = fmt.Fprintf(out, "Token: %s\n", tokenFrom)
-	_, _ = fmt.Fprintf(out, "Send it as 'Authorization: Bearer <token>', or use %s/<token> if an MCP client cannot set headers.\n", endpoint)
+	if opts.Team != nil {
+		_, _ = fmt.Fprintf(out, "Tokens: %s\n", tokenFrom)
+		_, _ = fmt.Fprintln(out, "Send a token as 'Authorization: Bearer <token>'. The /mcp/<token> path form is off with --tokens-file.")
+	} else {
+		_, _ = fmt.Fprintf(out, "Token: %s\n", tokenFrom)
+		_, _ = fmt.Fprintf(out, "Send it as 'Authorization: Bearer <token>', or use %s/<token> if an MCP client cannot set headers.\n", endpoint)
+	}
 
 	errc := make(chan error, 1)
 	go func() { errc <- hs.Serve(ln) }()

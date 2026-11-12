@@ -60,6 +60,12 @@ type Deps struct {
 
 	// Audit, when set, receives one record per tool call. See audit.go.
 	Audit *AuditLog
+
+	// AllowTools, when not empty, narrows the profile to these tool names: a
+	// tool is registered only if the profile exposes it AND it is listed here.
+	// It can only remove tools, never add one the profile lacks. This is how a
+	// shared server gives one token fewer tools than another; see scope.go.
+	AllowTools []string
 }
 
 // Server wraps the SDK server with RepoCortex's tool set.
@@ -142,6 +148,12 @@ type runMeta struct {
 // New builds an MCP server exposing the tools allowed by the configured
 // profile.
 func New(deps Deps) (*Server, error) {
+	return newServer(deps, nil)
+}
+
+// newServer builds a server. share, when set, is a server over the same index
+// whose caches the new one reuses instead of building its own; see Scoped.
+func newServer(deps Deps, share *Server) (*Server, error) {
 	if deps.Registry == nil {
 		return nil, fmt.Errorf("mcp: registry is required")
 	}
@@ -161,15 +173,31 @@ func New(deps Deps) (*Server, error) {
 	// open failure (unreadable path, corrupt repository) is not fatal to the
 	// server — it just means HEAD reads as unknown, same as a non-repository
 	// — so the error is deliberately not propagated.
-	headRepo, _ := acquiregit.Open(deps.Config.RepoRoot)
+	//
+	// A scoped view of another server (see Scoped) shares that server's handle
+	// and caches. They are safe for concurrent use and keyed by run, so three
+	// scopes over one index cost one symbol table in memory and not three.
+	var (
+		headRepo  *acquiregit.Repo
+		assembler *devctx.Assembler
+		capDeps   capability.Deps
+	)
+	if share != nil {
+		headRepo, assembler, capDeps = share.headRepo, share.assembler, share.capDeps
+	} else {
+		headRepo, _ = acquiregit.Open(deps.Config.RepoRoot)
+		assembler = devctx.NewAssembler()
+		capDeps = capability.NewDeps(deps.Registry, deps.Graph)
+	}
 
+	allowed := toolFilter(deps.Config.MCPProfile, deps.AllowTools)
 	s := &Server{
-		sdk:       sdk.NewServer(impl, &sdk.ServerOptions{Instructions: serverInstructions(deps.Config.MCPProfile)}),
+		sdk:       sdk.NewServer(impl, &sdk.ServerOptions{Instructions: instructionsFor(allowed)}),
 		deps:      deps,
 		limits:    limits,
-		assembler: devctx.NewAssembler(),
+		assembler: assembler,
 		ledgers:   newLedgerBook(),
-		capDeps:   capability.NewDeps(deps.Registry, deps.Graph),
+		capDeps:   capDeps,
 		runMeta:   make(map[int64]runMeta),
 		headRepo:  headRepo,
 	}
@@ -177,11 +205,11 @@ func New(deps Deps) (*Server, error) {
 	if err := s.registerTools(); err != nil {
 		return nil, err
 	}
-	s.registerTaskContext(profileTools(deps.Config.MCPProfile))
-	s.registerCapabilities(profileTools(deps.Config.MCPProfile))
-	s.registerStructure(profileTools(deps.Config.MCPProfile))
-	s.registerChange(profileTools(deps.Config.MCPProfile))
-	s.registerOwners(profileTools(deps.Config.MCPProfile))
+	s.registerTaskContext(allowed)
+	s.registerCapabilities(allowed)
+	s.registerStructure(allowed)
+	s.registerChange(allowed)
+	s.registerOwners(allowed)
 	s.registerPrompts()
 
 	s.sdk.AddReceivingMiddleware(s.auditMiddleware)

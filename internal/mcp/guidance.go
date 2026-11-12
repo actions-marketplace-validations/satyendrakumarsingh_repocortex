@@ -29,13 +29,47 @@ const maxInstructionBytes = 900
 // call: an instruction to use analyze_impact on a profile without it sends the
 // model looking for a tool that is not there.
 func serverInstructions(p config.MCPProfile) string {
+	return instructionsFor(profileTools(p))
+}
+
+// instructionsFor writes the guidance for an exact tool set (nil means every
+// tool). A profile always holds the tools named below together, so for a
+// profile the text is fixed; a token whose scope is an allow-list may hold only
+// some of them, and its sessions are told about those and no others.
+func instructionsFor(allowed map[string]bool) string {
+	has := func(name string) bool { return allowed == nil || allowed[name] }
+
 	var b strings.Builder
 	b.WriteString("RepoCortex is a code graph of this repository: definitions, calls, routes, tables and tests. " +
-		"Ask it before searching or reading files. " +
-		"Start a task with get_task_context; look up one thing with find_symbol or get_symbol; " +
-		"use find_callers before changing a signature.")
-	if p == config.MCPStandard || p == config.MCPFull {
+		"Ask it before searching or reading files.")
+
+	var first []string
+	if has("get_task_context") {
+		first = append(first, "start a task with get_task_context")
+	}
+	switch {
+	case has("find_symbol") && has("get_symbol"):
+		first = append(first, "look up one thing with find_symbol or get_symbol")
+	case has("find_symbol"):
+		first = append(first, "look up one thing with find_symbol")
+	case has("get_symbol"):
+		first = append(first, "look up one thing with get_symbol")
+	}
+	if has("find_callers") {
+		first = append(first, "use find_callers before changing a signature")
+	}
+	if len(first) > 0 {
+		text := strings.Join(first, "; ") + "."
+		b.WriteString(" " + strings.ToUpper(text[:1]) + text[1:])
+	}
+
+	switch {
+	case has("analyze_impact") && has("find_tests"):
 		b.WriteString(" Before editing, call analyze_impact for what the change can reach and find_tests for what to run.")
+	case has("analyze_impact"):
+		b.WriteString(" Before editing, call analyze_impact for what the change can reach.")
+	case has("find_tests"):
+		b.WriteString(" Before editing, call find_tests for what to run.")
 	}
 	b.WriteString(" Every relationship is marked exact (a compiler proved it), high, medium or low: " +
 		"act on exact and high, verify medium, ignore low. " +
@@ -61,12 +95,17 @@ type promptSpec struct {
 	description string
 	args        []*sdk.PromptArgument
 	build       func(s *Server, args map[string]string) string
+	// needs are the tools the prompt's steps name unconditionally. Every
+	// profile has them, so this matters only for a token whose scope is an
+	// allow-list: see registerPrompts.
+	needs []string
 }
 
 func promptSpecs() []promptSpec {
 	return []promptSpec{
 		{
 			name:        "plan_refactor",
+			needs:       []string{"get_symbol", "find_callers"},
 			title:       "Plan a refactor",
 			description: "Work out what a change to a symbol touches, what could break and which tests to run, before editing anything.",
 			args: []*sdk.PromptArgument{
@@ -97,6 +136,7 @@ func promptSpecs() []promptSpec {
 		},
 		{
 			name:        "analyze_change",
+			needs:       []string{"find_callers"},
 			title:       "Review a change",
 			description: "Check the symbols a change touched against their callers and tests, and report what the change could break.",
 			args: []*sdk.PromptArgument{
@@ -119,6 +159,7 @@ func promptSpecs() []promptSpec {
 		},
 		{
 			name:        "get_oriented",
+			needs:       []string{"get_project_overview", "get_task_context"},
 			title:       "Get oriented",
 			description: "Build a first picture of an unfamiliar repository: what it is, how it is laid out and where to start reading.",
 			build: func(s *Server, _ map[string]string) string {
@@ -146,6 +187,13 @@ func promptSpecs() []promptSpec {
 // registerPrompts adds the workflow prompts.
 func (s *Server) registerPrompts() {
 	for _, spec := range promptSpecs() {
+		// A prompt is a list of tool calls. Under an allow-list a tool it
+		// cannot do without may be missing, and a workflow that tells the
+		// model to call a tool it does not have is worse than no workflow, so
+		// the prompt is left out. Servers without an allow-list are untouched.
+		if len(s.deps.AllowTools) > 0 && !s.hasEvery(spec.needs) {
+			continue
+		}
 		s.sdk.AddPrompt(&sdk.Prompt{
 			Name:        spec.name,
 			Title:       spec.title,
@@ -173,6 +221,16 @@ func (s *Server) registerPrompts() {
 		})
 		s.prompts = append(s.prompts, spec.name)
 	}
+}
+
+// hasEvery reports whether every named tool is registered.
+func (s *Server) hasEvery(names []string) bool {
+	for _, n := range names {
+		if !s.hasTool(n) {
+			return false
+		}
+	}
+	return true
 }
 
 // Prompts lists the registered prompt names.
