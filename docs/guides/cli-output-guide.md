@@ -76,7 +76,7 @@ their answer, so CI can act on them:
 |---|---|---|---|---|
 | `verify` | pass, or only leads found | at least one fact found | nothing to check against | – |
 | `rename` | would apply, or applied and verified | error, or verify failed | refused, nothing written | applied, but the old name still appears |
-| `system` | every member read | error | at least one member could not be read | – |
+| `system`, `system contracts` | every member read | error | at least one member could not be read | – |
 | `arch --fail-on`, `missed --fail-on` | nothing at or above the level | something at or above the level | – | – |
 | `docs --check`, `licenses --check` | up to date | drifted | – | – |
 | `bench --fail-on-regression` | every case passed | a case failed | – | – |
@@ -142,6 +142,7 @@ $ repocortex --json status
 | | Declared but unused dependencies | [`deps`](#repocortex-deps) |
 | | What ran in production? | [`trace`](#repocortex-trace) |
 | | Calls between repositories | [`system`](#repocortex-system) |
+| | Client calls that no longer match a route | [`system contracts`](#repocortex-system-contracts) |
 | **Quality and governance** | Does the code break declared rules? | [`arch`](#repocortex-arch) |
 | | Where is the index blind? | [`missed`](#repocortex-missed) |
 | | How accurate is the index here? | [`accuracy`](#repocortex-accuracy) |
@@ -1415,6 +1416,123 @@ WHAT THIS IS NOT
 
 **Exit codes:** `0` all members read; `2` at least one member was missing or
 unreadable, so the report is incomplete.
+
+### `repocortex system contracts`
+
+**Answers:** Does each client still call a route that exists, with the right
+method?
+
+**Use it when:** You are about to release a service or a client and want the
+calls that no longer line up with the routes, across repositories.
+
+**Run:** With two tiny repositories that are not under git, so `REVISION` is
+empty. `orders-api` is Go and declares six routes with `mux.HandleFunc`. `web`
+is TypeScript and makes nine calls with `fetch` and `axios`, one of them to a
+misspelt path and one with the wrong method, plus one call in a test file:
+
+```console
+$ repocortex system contracts --member web=web/.repocortex/index.db --member orders-api=orders-api/.repocortex/index.db
+CONTRACTS: 2 member repositories, 2 readable
+  MEMBER      REVISION  INDEXED  ROUTES  CALLS  CALLS READ IN  CALLS NOT READ IN
+  orders-api  —         0h ago   6       0      go             —
+  web         —         0h ago   0       10     typescript     —
+…
+CALLS EXAMINED: 9
+  method and path agree with a declared route          2
+  literal prefix of a run-time target starts a route   1
+  path matches a route, method does not                1
+  path-variable count differs from the nearest route   1
+  no route in any member                               2
+  agree only under a base path nothing indexed states  1
+  not compared                                         1
+  1 further call in test files was set aside: a test calling a server it
+  started is not a client of this system.
+ROUTES EXAMINED: 6, of which no indexed call reaches 1
+
+METHOD MISMATCH (1)
+
+  [medium] web  DELETE /api/orders/42
+    call   src/orders.ts:24  in cancelOrder  via axios
+    route  orders-api  GET /api/orders/{id}  internal/httpapi/routes.go:8  handler GetOrder
+    the path matches a parameterised route that accepts GET; no route matching
+    this path accepts DELETE. A path variable absorbed a segment, so which
+    resource the call names is not proven.
+
+PATH-VARIABLE MISMATCH (1)
+
+  [medium] web  GET /api/orders/42/items
+    call   src/orders.ts:29  in firstItem  via fetch
+    route  orders-api  GET /api/orders/{id}/items/{item}  internal/httpapi/routes.go:10  handler GetItem
+    the nearest route declares 1 path variable after /api/orders/42/items and
+    the call supplies none: it has 4 path segments where the route has 5.
+
+NO MATCHING ROUTE (2)
+
+  [high] web  GET /api/order
+    call   src/orders.ts:19  in listOrdersTypo  via fetch
+    no route declared by any member matches this path; the call is broken, or
+    it is answered by something outside this system (a static file, a third
+    party, a service absent from the member list).
+
+  [high] web  POST https://collector.example.com/v1/traces
+    call   src/orders.ts:44  in track  via fetch
+    no route declared by any member matches this path; the target names the
+    host collector.example.com, so this is an external call unless that host
+    is one of these members — no index records which service a host is.
+
+BASE PATH UNVERIFIED (1)
+
+  [low] web  GET /orders-service/health
+    call   src/orders.ts:34  in health  via fetch
+    route  orders-api  GET /health  internal/httpapi/routes.go:12  handler Health
+    the call matches this route only if the service is reached under
+    /orders-service — a mount point, context path or gateway prefix that no
+    indexed file states.
+
+NOT COMPARED (1)
+
+  web  GET <unresolved>
+    call   src/orders.ts:39  in configured  via fetch
+    the target begins with a run-time value — most often a base URL read from
+    configuration or the environment, which this tool does not read — and the
+    index keeps only the literal text before the first run-time part, so the
+    path that follows was not indexed and cannot be compared.
+
+ROUTES NO INDEXED CALL REACHES (1) — informational, the weakest section
+  ! 1 call could not be compared at all (see NOT COMPARED) and may reach any
+    route listed here.
+  [low] orders-api  DELETE /api/admin/cache  internal/httpapi/routes.go:11  handler PurgeCache
+
+WHAT THIS IS NOT
+  Matching is a HEURISTIC over two pieces of source text written by two teams.
+  …
+```
+
+**How to read it:**
+
+- **Member table first.** `CALLS NOT READ IN` lists the languages a member
+  holds whose outbound calls are not extracted. A member with entries there
+  makes calls this report cannot see.
+- **CALLS EXAMINED.** Every call lands in exactly one row, so the rows add up
+  to the total. The first two rows are the calls that line up.
+- **The four finding sections.** Each finding shows its confidence, the call
+  with file and line, and each route it is about with file and line. The
+  confidence is never `exact` and never above `high`. `(one tier weaker: see
+  above)` after a finding means part of the route side was not read; the
+  member section says which part.
+- **NOT COMPARED.** `fetch(` `` `${API_BASE}/api/orders` `` `)` is here: the
+  path after a run-time base URL is not in the index, so it is not guessed at.
+- **ROUTES NO INDEXED CALL REACHES.** Leads only. A mobile app, a cron job or a
+  caller in Java or Python would not appear.
+- The misspelt `/api/order` and the call to another company's host are both
+  `no_matching_route`. The index cannot tell a broken call from one that
+  leaves the system, so the second names its host.
+
+**Useful flags:** the member flags of `system`, `-n`/`--limit 50` (rows per
+section), `--json`.
+
+**Exit codes:** `0` all members read; `2` at least one member was missing or
+unreadable. Findings do not change the exit code.
 
 ---
 

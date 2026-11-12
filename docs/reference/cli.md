@@ -1322,6 +1322,72 @@ the report is a floor rather than a total.
 A single member is refused: one repository is already answered by `api` and
 `db`.
 
+### `system contracts`
+
+**Answers:** does each client still call a route that exists, with the right
+method? Compares the outbound HTTP calls indexed in every member with the
+routes indexed in every member, and reports what does not line up.
+
+```bash
+repocortex system contracts --member web=../web/.repocortex/index.db \
+                            --member orders=../orders/.repocortex/index.db
+repocortex system contracts --members ./repocortex.system.yml
+```
+
+| Flag | Effect |
+|---|---|
+| `--member`, `--members`, `--stale-after` | the same flags as `system`, with the same meaning |
+| `-n`, `--limit N` | most rows to list in each section (default 50); what was cut is counted |
+| `--json` | the report as JSON, with the keys named below |
+
+| Finding (`kind`) | Meaning | Strongest confidence |
+|---|---|---|
+| `method_mismatch` | the call's path matches a route, and no route with that path in any member accepts the call's method | `high` on a literal path, `medium` when a path variable absorbed a segment |
+| `path_variable_mismatch` | a route starts where the call starts and the two differ in how many path segments follow | `medium` when the route needs a variable the call does not supply, `low` otherwise |
+| `no_matching_route` | nothing any member declares matches the call: a broken call, or a call out of this system | `high` for a literal path, `low` for a run-time target |
+| `base_path_unverified` | the call and a route agree only if a mount point, gateway prefix or client base URL is assumed | always `low` |
+
+Every finding carries the file and line of the call and of each route it is
+about; `no_matching_route` has no route side by definition. After the findings
+come two weaker lists: `not_compared`, the calls the index holds too little of
+to compare, and `uncalled_routes`, the routes no indexed call reaches. The
+second is informational and always `low`: a mobile app, a cron job, a partner,
+or a caller in a language whose calls are not extracted would not appear.
+
+No finding is ever `exact` or above `high`. Only a compiler index can make
+`exact`, and none spans two repositories.
+
+What is compared is the method, the path and the number of path segments. Path
+variables match across syntaxes (`{id}`, `:id`, `<int:id>`), and case, a
+trailing slash, a query string and a fragment are ignored. Three things are not
+guessed:
+
+- **Hosts.** The host of an absolute URL is shown and never used, because no
+  index records which member a hostname is.
+- **Base URLs.** A target that begins with a run-time value, such as
+  `` `${API_BASE}/orders` ``, keeps none of its path in the index. It is listed
+  under `not_compared` with that reason.
+- **Mount prefixes.** A service mounted under `/api`, or reached through a
+  gateway prefix, declares its routes without it. A call that matches only if
+  such a prefix is assumed is reported as `base_path_unverified`, naming the
+  prefix that would have to be true.
+
+Query, header and body parameters are in the index on neither side, so they
+are not compared. Calls made from test files are counted and set aside: a test
+calling a server it started is not a client of this system.
+
+The report begins with the members. For each it lists the languages its
+outbound calls were read in and the ones they were not: calls are extracted
+from Go and the JavaScript family (`fetch`, `axios`, `net/http`), so a Java or
+Python member makes calls this report cannot see, and says so. When the route
+side is incomplete — a member whose index is missing, partial or older than
+`--stale-after`, or a member holding a language routes are not extracted from
+— every finding loses one confidence tier and the report names the member that
+cost it.
+
+Exit status is 0 when every member was read and 2 when one was not. Findings do
+not change it: they are leads to check, not a gate.
+
 ### `licenses`
 
 **Answers:** regenerate `THIRD_PARTY.md` from the module graph, or verify it.
