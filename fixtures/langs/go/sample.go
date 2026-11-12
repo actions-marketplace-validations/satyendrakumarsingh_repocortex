@@ -56,5 +56,11 @@ func unexported(
 func use() error {
 	_ = unexported(1, 2) // a call is not a definition
 	_ = Map([]int{1}, func(i int) ID { return ID(i) })
+	var scratch int // a var or const declared inside a function is a local
+	const ceiling = 10
+	var (
+		first, second = 1, 2
+	)
+	_, _, _ = scratch, ceiling, first+second
 	return ErrEmpty
 }

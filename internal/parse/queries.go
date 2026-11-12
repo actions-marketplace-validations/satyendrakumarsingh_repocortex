@@ -57,13 +57,20 @@ var supplements = map[string]string{
 	// general rule matches interfaces too, so the two compete and specificity
 	// decides — see kindSpecificity, where KindInterface outranks KindClass for
 	// exactly this reason.
+	//
+	// A const or var is a definition only at the package level, as a child of
+	// the file: `var local = 1` inside a function, a closure or a block is a
+	// local, and cobra had 13 of them indexed as variables in two files. The
+	// grouped form `var ( ... )` wraps its specs in a var_spec_list; a grouped
+	// const does not.
 	"go": `
 (type_spec name: (type_identifier) @name type: (struct_type)) @definition.class
 (type_spec name: (type_identifier) @name type: (interface_type)) @definition.interface
 (type_spec name: (type_identifier) @name) @definition.type
 (type_alias name: (type_identifier) @name) @definition.type_alias
-(const_spec name: (identifier) @name) @definition.constant
-(var_spec name: (identifier) @name) @definition.variable
+(source_file (const_declaration (const_spec name: (identifier) @name) @definition.constant))
+(source_file (var_declaration (var_spec name: (identifier) @name) @definition.variable))
+(source_file (var_declaration (var_spec_list (var_spec name: (identifier) @name) @definition.variable)))
 `,
 
 	// Interfaces, enums, records and fields are how Java expresses most
