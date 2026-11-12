@@ -213,3 +213,20 @@ func TestSFCDefinitionsDoNotLeakIntoScriptFiles(t *testing.T) {
 		t.Errorf("a .ts file gained definitions: %v", defs(res))
 	}
 }
+
+// Object shorthand methods are the component's only in its own options object:
+// an object that is an argument of a call, returned from a callback or bound
+// to a name defines nothing, and a class is untouched.
+func TestSFCMethodsOutsideOptionsObject(t *testing.T) {
+	res := parse(t, "A.vue", "<script setup>\nconst rows = computed(() => ({\n  async onClick() {},\n}))\nconst table = createTable({\n  get data() { return 1 },\n  state: { get sel() { return 2 } },\n})\nclass K { m() {} }\n</script>\n<script>\nexport default { get title() { return 1 }, methods: { run() {} } }\n</script>\n")
+	for _, n := range []string{"onClick", "data", "sel"} {
+		if hasSymbol(res, n, "") {
+			t.Errorf("%s is in an object that is not the options object: %v", n, defs(res))
+		}
+	}
+	for _, n := range []string{"m", "title", "run"} {
+		if !hasSymbol(res, n, model.KindMethod) {
+			t.Errorf("%s should be a method: %v", n, defs(res))
+		}
+	}
+}

@@ -147,11 +147,120 @@ func (p *sfcParser) Parse(ctx context.Context, path string, src []byte) (*Result
 		if sub == nil {
 			continue
 		}
+		dropForeignMethods(ctx, inner, body, sub)
 		adoptBlockStatus(res, sub, offset)
 		mergeShifted(res, sub, offset)
 	}
 	res.Symbols = dropShadowedBindings(res.Symbols)
 	return res, nil
+}
+
+// dropForeignMethods removes from a script block's symbols the methods of an
+// object literal that is not the component's own options object.
+//
+// The script language's inferred query records every method written in object
+// shorthand, `get data() {}` and `onClick() {}`, wherever the object is. In a
+// component that is wrong for `createTable({ get data() {} })`, for
+// `computed(() => ({ onClick() {} }))` and for any object bound to a name:
+// those are arguments and values, not what the component defines. Methods of
+// a class are untouched, and so are the methods of the options object: the
+// object of `export default {}`, `defineComponent({})` or `Vue.extend({})`,
+// the object of `module.exports =`, and an object one level down in it
+// (`methods: { go() {} }`).
+func dropForeignMethods(ctx context.Context, inner *genericParser, body []byte, sub *Result) {
+	hasMethod := false
+	for _, s := range sub.Symbols {
+		if s.Kind == model.KindMethod {
+			hasMethod = true
+			break
+		}
+	}
+	if !hasMethod {
+		return
+	}
+	_, tree, _, err := inner.parseTree(ctx, body)
+	if err != nil || tree == nil {
+		return
+	}
+	lang := tree.Language()
+	root := tree.RootNode()
+
+	type span struct{ start, end uint32 }
+	own := map[span]bool{}
+	ownObject := func(n *ts.Node) {
+		if n == nil || n.Type(lang) != "object" {
+			return
+		}
+		own[span{n.StartByte(), n.EndByte()}] = true
+		for i := 0; i < n.ChildCount(); i++ {
+			if pair := n.Child(i); pair.Type(lang) == "pair" {
+				if v := pair.ChildByFieldName("value", lang); v != nil && v.Type(lang) == "object" {
+					own[span{v.StartByte(), v.EndByte()}] = true
+				}
+			}
+		}
+	}
+	// the object itself, or the object a call such as defineComponent({}) is given
+	optionsOf := func(v *ts.Node) {
+		if v == nil {
+			return
+		}
+		switch v.Type(lang) {
+		case "object":
+			ownObject(v)
+		case "call_expression":
+			if args := v.ChildByFieldName("arguments", lang); args != nil {
+				for i := 0; i < args.ChildCount(); i++ {
+					ownObject(args.Child(i))
+				}
+			}
+		}
+	}
+	for i := 0; i < root.ChildCount(); i++ {
+		top := root.Child(i)
+		switch top.Type(lang) {
+		case "export_statement":
+			optionsOf(top.ChildByFieldName("value", lang))
+		case "expression_statement":
+			for j := 0; j < top.ChildCount(); j++ {
+				assign := top.Child(j)
+				if assign.Type(lang) != "assignment_expression" {
+					continue
+				}
+				if left := assign.ChildByFieldName("left", lang); left != nil && strings.TrimSpace(left.Text(body)) == "module.exports" {
+					optionsOf(assign.ChildByFieldName("right", lang))
+				}
+			}
+		}
+	}
+
+	// Walk the tree for object-shorthand methods outside those objects.
+	foreign := map[string]bool{}
+	var walk func(n *ts.Node)
+	walk = func(n *ts.Node) {
+		if n.Type(lang) == "method_definition" {
+			if parent := n.Parent(); parent != nil && parent.Type(lang) == "object" && !own[span{parent.StartByte(), parent.EndByte()}] {
+				if name := n.ChildByFieldName("name", lang); name != nil {
+					foreign[fmt.Sprintf("%d %s", int(n.StartPoint().Row)+1, strings.TrimSpace(name.Text(body)))] = true
+				}
+			}
+		}
+		for i := 0; i < n.ChildCount(); i++ {
+			walk(n.Child(i))
+		}
+	}
+	walk(root)
+	if len(foreign) == 0 {
+		return
+	}
+	kept := sub.Symbols[:0]
+	for _, s := range sub.Symbols {
+		if s.Kind == model.KindMethod && foreign[fmt.Sprintf("%d %s", s.Range.Start.Line, s.Name)] {
+			continue
+		}
+		kept = append(kept, s)
+	}
+	sub.Symbols = kept
 }
 
 // adoptBlockStatus folds one script block's parse verdict into the file's.

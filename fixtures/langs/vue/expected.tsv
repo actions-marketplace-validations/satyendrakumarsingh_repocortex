@@ -8,6 +8,10 @@
 #   the names destructured from defineProps() -> field;
 #   in the default-exported options object (export default {}, defineComponent({}),
 #     module.exports = {}), a function-valued property, directly or one object down -> method.
+# A method written in object shorthand (get x() {}, onClick() {}) or a function-valued property is a
+#   method only in the component's own options object; in an object that is an argument of a call
+#   (createTable({ get data() {} }), computed(() => ({ f() {} }))) or is bound to a name it is not
+#   (Arguments.vue). Methods of a class are always methods.
 # Not definitions: anything inside a function body, imports, destructured bindings other than
 # props, a script inside an HTML comment, the template and style blocks.
 Classic.vue	1	class	Classic
@@ -54,3 +58,10 @@ Plain.vue	1	class	Plain
 [id].vue	4	constant	route
 [id].vue	5	constant	id
 [id].vue	7	function	back
+Arguments.vue	1	class	Arguments
+Arguments.vue	4	constant	rows
+Arguments.vue	11	constant	table
+Arguments.vue	26	constant	lookup
+Arguments.vue	30	function	save
+Arguments.vue	36	method	title
+Arguments.vue	40	method	run
