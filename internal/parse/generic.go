@@ -1,6 +1,7 @@
 package parse
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -8,6 +9,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/satyendrakumarsingh/repocortex/pkg/model"
@@ -16,39 +18,67 @@ import (
 	"github.com/odvcencio/gotreesitter/grammars"
 )
 
-// DefaultParseTimeout bounds a single file's parse.
+// DefaultParseCeiling is the wall-clock time after which a single file's parse
+// is stopped. It is a LAST-RESORT SAFETY NET, not the parse budget.
 //
-// Not theoretical: a file of 10,000 unbalanced braces took ~2s in testing.
-// Pathological inputs exist in real repositories (minified bundles, generated
-// code, fuzzer corpora) and one of them must not stall an indexing run.
-const DefaultParseTimeout = 5 * time.Second
+// The budget is work, not time: gotreesitter stops a parse on its own
+// iteration, node, stack-depth and arena-memory limits, every one of which is
+// derived from the source length and counted by the parser. Those give the same
+// verdict for the same bytes on any machine at any load, which is what keeps
+// the index a function of the repository.
+//
+// A clock cannot do that. The limit used to be five seconds of wall time, and
+// the same file failed on a busy machine and parsed on a quiet one: four redis
+// files, 19 of 43 Newtonsoft.Json files and a 2,945-byte kernel header were
+// measured flipping between runs. So the clock is now set far above anything a
+// real parse needs (the slowest file measured, 1.9 MB of C#, takes 4 s) and
+// exists only so that an input the work limits do not catch cannot hold a
+// worker forever. A file it stops is recorded as incomplete and its error text
+// says the limit was the clock, because that verdict, unlike the others, can
+// differ between machines.
+//
+// What the work limits do not count is time spent inside one parser step.
+// gotreesitter v0.50.1 had such a case: after a file-scope macro call, error
+// recovery in an array initialiser took time that grew sevenfold each time the
+// array doubled, and a 1.6 KB C file took eight seconds while staying far
+// inside every limit. v0.57.0 bounds that path; the ceiling is what remains if
+// another is found.
+const DefaultParseCeiling = 60 * time.Second
 
-// PoolReturnLimit is the largest source a Tagger may have parsed and still be
-// returned to the pool. See tagWithGuards for why.
+// PoolReturnLimit is the largest source a parser may have read and still be
+// returned to the pool. See putParser for why.
 const PoolReturnLimit = 128 << 10
 
-// MaxSourceBytes caps what is handed to a parser.
+// DefaultMaxSourceBytes is the largest file handed to a parser, and the largest
+// whose text is indexed for search. It equals fs.DefaultMaxFileSize, so there
+// is one size limit and not two.
 //
-// 256 KiB, chosen from measurement rather than intuition. Peak heap indexing a
-// 2,110-file Go corpus, varying only this cap:
+// It was 256 KiB, chosen when a megabyte of source cost several hundred
+// megabytes of parser arena, and that limit silently dropped the centre of real
+// programs: in redis, server.c, server.h, module.c, redis-cli.c, t_stream.c,
+// t_hash.c and cluster_legacy.c are all between 256 KiB and 700 KiB, and all
+// hand-written.
 //
-//	 64 KiB   1807 files    962 MB
-//	256 KiB   2088 files  2,260 MB
-//	  2 MiB   2110 files  6,667 MB
+// Measured with gotreesitter v0.57.0, one file per process, peak resident
+// memory of the whole process:
 //
-// Twenty-two files cost 4.4 GB. Tree-sitter's node arenas scale super-linearly
-// with input, and that cost is internal to the library — it cannot be bounded
-// from outside, only avoided.
+//	  693 KB  C     redis src/module.c         0.3 s   ~130 MB allocated
+//	1,647 KB  C     five redis sources joined  0.9 s    170 MB
+//	2,080 KB  C     module.c three times       0.9 s    298 MB
+//	1,897 KB  C#    a 316 KB test file, x6     4.2 s    269 MB
 //
-// 256 KiB is chosen because it is far above any hand-written source file and
-// below essentially all generated code. A quarter-megabyte source file is a
-// generated parser table, a minified bundle, or embedded data — none of which
-// yield symbols worth 200 MB of arena. Such files are still recorded, with
-// StatusSkipped and a reason, so the gap is visible rather than silent.
+// So a file at the limit costs about 300 MB while it is parsed. The pipeline
+// admits large files against a memory budget (see pipeline.admissionWeight), so
+// that cost is paid for one or two files at a time, not for every worker.
 //
-// Raise it deliberately if you must index generated code, and expect the memory
-// cost above.
-const MaxSourceBytes = 256 << 10
+// Raise or lower it per repository with index.max_file_bytes in .repocortex.yml.
+// A file over the limit is recorded as skipped with reason too_large, counted,
+// and named by `repocortex index` and `repocortex status`.
+const DefaultMaxSourceBytes = 2 << 20
+
+// MaxSourceBytes is the default limit under its old name, kept because the
+// CGO backend and callers outside this package compile against it.
+const MaxSourceBytes = DefaultMaxSourceBytes
 
 // genericParser extracts symbols for any of the 206 registered grammars using
 // tree-sitter tags queries.
@@ -91,36 +121,98 @@ type genericParser struct {
 	arity    arityDialect
 	hasArity bool
 
-	// Taggers are pooled because gotreesitter's Parser is documented unsafe for
-	// concurrent use and constructing one recompiles the tags query.
+	// tagsQ is the compiled definitions-and-references query. One per language,
+	// shared: gotreesitter documents Query as safe for concurrent Execute.
+	tagsQ *ts.Query
+
+	// cfg carries the limits this parser enforces.
+	cfg parserConfig
+
+	// Parsers are pooled because gotreesitter's Parser is documented unsafe for
+	// concurrent use and building one is not free.
 	//
 	// A channel, not sync.Pool, because this pool must be DRAINABLE. Each
-	// Tagger owns a Parser whose node arena grows to fit the largest input it
-	// has seen and never shrinks, and profiling a 10,896-file run showed 3 GB
-	// of live arenas held by pooled taggers alone. sync.Pool offers no way to
-	// evict on demand — only the GC decides, and it will not, because the pool
-	// holds strong references. Draining is the only way to give that memory
-	// back mid-run.
-	pool chan *ts.Tagger
+	// Parser owns a node arena that grows to fit the largest input it has seen
+	// and never shrinks, and profiling a 10,896-file run showed 3 GB of live
+	// arenas held by pooled parsers alone. sync.Pool offers no way to evict on
+	// demand: only the GC decides, and it will not, because the pool holds
+	// strong references. Draining is the only way to give that memory back
+	// mid-run.
+	pool chan *ts.Parser
 
 	// initErr is recorded rather than returned at construction so a single
 	// broken grammar degrades that language instead of failing the run.
-	initErr error
+	// initReason says which kind of gap it is: a grammar with no definition
+	// query (text only, by design) or one that failed to load or compile.
+	initErr    error
+	initReason model.ParseReason
+
+	// alt is this language's parser on the other error-recovery route, built
+	// on first need; see alternate. isAlternate marks that parser itself, so
+	// it never builds one of its own.
+	altOnce     sync.Once
+	alt         atomic.Pointer[genericParser]
+	isAlternate bool
 }
 
 // ParserOption configures a parser.
 type ParserOption func(*parserConfig)
 
 type parserConfig struct {
-	timeout time.Duration
+	// ceiling is the wall-clock safety net. See DefaultParseCeiling.
+	ceiling time.Duration
+
+	// maxSourceBytes is the largest source parsed or text-indexed.
+	maxSourceBytes int
+
+	// iterationLimit, when positive, replaces the parser's source-derived
+	// iteration limit. Zero keeps the library default.
+	iterationLimit int
 }
 
-// WithTimeout overrides the per-file parse timeout.
-func WithTimeout(d time.Duration) ParserOption {
-	return func(c *parserConfig) { c.timeout = d }
+// WithParseCeiling overrides the wall-clock safety net. A value <= 0 restores
+// the default rather than removing the ceiling: an unbounded parse is the
+// failure this option exists beside.
+func WithParseCeiling(d time.Duration) ParserOption {
+	return func(c *parserConfig) {
+		if d <= 0 {
+			d = DefaultParseCeiling
+		}
+		c.ceiling = d
+	}
 }
 
-var defaultParserConfig = parserConfig{timeout: DefaultParseTimeout}
+// WithMaxSourceBytes overrides the size limit. A value <= 0 restores the
+// default rather than disabling the limit.
+func WithMaxSourceBytes(n int) ParserOption {
+	return func(c *parserConfig) {
+		if n <= 0 {
+			n = DefaultMaxSourceBytes
+		}
+		c.maxSourceBytes = n
+	}
+}
+
+// WithIterationLimit replaces the parser's iteration limit, which is otherwise
+// derived from the source length (30 iterations per byte, 10,000 at least).
+//
+// The limit counts parser steps, so the verdict it gives is the same on every
+// machine. It exists for tests, which need a small file to exceed its budget on
+// purpose, and for an operator who wants a tighter deterministic bound than the
+// library's.
+func WithIterationLimit(n int) ParserOption {
+	return func(c *parserConfig) {
+		if n < 0 {
+			n = 0
+		}
+		c.iterationLimit = n
+	}
+}
+
+var defaultParserConfig = parserConfig{
+	ceiling:        DefaultParseCeiling,
+	maxSourceBytes: DefaultMaxSourceBytes,
+}
 
 // registry implements Registry over the embedded grammar set.
 type registry struct {
@@ -168,7 +260,7 @@ func (r *registry) ForFile(path string) Parser {
 	if p, ok := r.parsers[entry.Name]; ok {
 		return p
 	}
-	p = newGenericParser(*entry)
+	p = newGenericParser(*entry, r.cfg)
 	r.parsers[entry.Name] = p
 	return p
 }
@@ -189,12 +281,18 @@ func (r *registry) Languages() []string {
 	return out
 }
 
-func newGenericParser(entry grammars.LangEntry) *genericParser {
-	p := &genericParser{entry: entry}
+func newGenericParser(entry grammars.LangEntry, cfg parserConfig) *genericParser {
+	return buildGenericParser(entry, cfg, entry.Language())
+}
 
-	lang := entry.Language()
+// buildGenericParser builds a parser over a given Language value. The registry
+// passes the grammar's shared one; alternate passes a private copy.
+func buildGenericParser(entry grammars.LangEntry, cfg parserConfig, lang *ts.Language) *genericParser {
+	p := &genericParser{entry: entry, cfg: cfg}
+
 	if lang == nil {
-		p.initErr = fmt.Errorf("grammar %q failed to load", entry.Name)
+		p.initReason = model.ParseReasonGrammarUnavailable
+		p.initErr = fmt.Errorf("grammar %q failed to load; text is indexed for search, no symbols are extracted", entry.Name)
 		return p
 	}
 	p.lang = lang
@@ -207,7 +305,11 @@ func newGenericParser(entry grammars.LangEntry) *genericParser {
 		query = query + "\n" + sup
 	}
 	if strings.TrimSpace(query) == "" {
-		p.initErr = fmt.Errorf("no tags query available for %q", entry.Name)
+		// Not a fault. 120 of the embedded grammars ship no definition query,
+		// so their files have a syntax tree nobody can ask anything of. The
+		// file is still worth finding by its text.
+		p.initReason = model.ParseReasonTextOnly
+		p.initErr = fmt.Errorf("no definition query for %q; text is indexed for search, no symbols are extracted", entry.Name)
 		return p
 	}
 
@@ -225,21 +327,26 @@ func newGenericParser(entry grammars.LangEntry) *genericParser {
 
 	// Fail fast if the combined query is invalid, so a bad supplement surfaces
 	// at construction rather than silently yielding zero symbols per file.
-	if _, err := ts.NewTagger(lang, query); err != nil {
+	tagsQ, err := ts.NewQuery(query, lang)
+	if err != nil {
 		if query == withoutInheritance {
+			p.initReason = model.ParseReasonGrammarUnavailable
 			p.initErr = fmt.Errorf("tags query for %q rejected: %w", entry.Name, err)
 			return p
 		}
 		// Retry without the supertype patterns: losing EXTENDS/IMPLEMENTS
 		// edges for this language is a recall cost; losing its symbols is a
 		// correctness cliff.
-		if _, err2 := ts.NewTagger(lang, withoutInheritance); err2 != nil {
+		var err2 error
+		if tagsQ, err2 = ts.NewQuery(withoutInheritance, lang); err2 != nil {
+			p.initReason = model.ParseReasonGrammarUnavailable
 			p.initErr = fmt.Errorf("tags query for %q rejected: %w", entry.Name, err2)
 			return p
 		}
 		query = withoutInheritance
 	}
 	p.tagsQuery = query
+	p.tagsQ = tagsQ
 
 	// A broken import query degrades imports for this language; it must not
 	// cost us symbols, so the error is swallowed deliberately and the parser
@@ -283,45 +390,47 @@ func newGenericParser(entry grammars.LangEntry) *genericParser {
 		}
 	}
 
-	// Capacity tracks parallelism: more taggers than parsing goroutines would
+	// Capacity tracks parallelism: more parsers than parsing goroutines would
 	// only park grown arenas.
-	p.pool = make(chan *ts.Tagger, runtime.NumCPU())
+	p.pool = make(chan *ts.Parser, runtime.NumCPU())
 	return p
 }
 
-// getTagger takes a pooled Tagger or builds one.
-func (p *genericParser) getTagger() *ts.Tagger {
+// getParser takes a pooled Parser or builds one.
+func (p *genericParser) getParser() *ts.Parser {
 	select {
-	case tg := <-p.pool:
-		return tg
+	case ps := <-p.pool:
+		return ps
 	default:
-		tg, err := ts.NewTagger(p.lang, p.tagsQuery)
-		if err != nil {
-			return nil
-		}
-		return tg
+		return ts.NewParser(p.lang)
 	}
 }
 
-// putTagger returns a Tagger, unless it has grown too large to be worth keeping.
-func (p *genericParser) putTagger(tg *ts.Tagger, parsedBytes int) {
-	if tg == nil || parsedBytes > PoolReturnLimit {
+// putParser returns a Parser, unless it has grown too large to be worth keeping.
+func (p *genericParser) putParser(ps *ts.Parser, parsedBytes int) {
+	if ps == nil || parsedBytes > PoolReturnLimit {
 		// Dropped rather than pooled: its arena is sized to a large file and
 		// pooling it would pin that memory for the life of the process.
 		return
 	}
 	select {
-	case p.pool <- tg:
+	case p.pool <- ps:
 	default:
 		// Pool full; let this one go.
 	}
 }
 
-// DrainPool discards every pooled Tagger, releasing the arenas they own.
+// DrainPool discards every pooled Parser, releasing the arenas they own.
 //
-// Called periodically during indexing. Costs a query recompilation on the next
+// Called periodically during indexing. Costs a parser construction on the next
 // parse per language, which is negligible against the memory it returns.
 func (p *genericParser) DrainPool() {
+	if alt := p.alt.Load(); alt != nil {
+		alt.DrainPool()
+	}
+	if p.pool == nil {
+		return
+	}
 	for {
 		select {
 		case <-p.pool:
@@ -336,49 +445,63 @@ func (p *genericParser) Language() string { return p.entry.Name }
 func (p *genericParser) Parse(ctx context.Context, path string, src []byte) (*Result, error) {
 	res := &Result{Language: p.entry.Name, Status: StatusOK}
 
-	if p.initErr != nil {
-		// A grammar that failed to load degrades THAT LANGUAGE, not the run.
-		// The failure is recorded on the result so the gap is visible in the
-		// index; returning it would abort indexing over one bad grammar.
-		res.Status = StatusSkipped
-		res.Err = p.initErr
-		return res, nil //nolint:nilerr // deliberate: see above
-	}
 	if len(src) == 0 {
-		res.Status = StatusSkipped
+		skip(res, model.ParseReasonEmpty, "")
 		return res, nil
 	}
-	if len(src) > MaxSourceBytes {
-		res.Status = StatusSkipped
-		res.Err = fmt.Errorf("source is %d bytes, over the %d limit", len(src), MaxSourceBytes)
+	// Size before grammar: a file whose text is all that can be indexed obeys
+	// the same limit as one that would be parsed.
+	if limit := p.cfg.sourceLimit(); len(src) > limit {
+		skip(res, model.ParseReasonTooLarge, tooLargeDetail(int64(len(src)), int64(limit)))
 		return res, nil
+	}
+	if p.initErr != nil {
+		// A grammar that yields no definitions degrades THAT LANGUAGE, not the
+		// run. The gap is recorded on the result so it is visible in the
+		// index; returning it would abort indexing over one grammar.
+		skip(res, p.initReason, p.initErr.Error())
+		return res, nil //nolint:nilerr // deliberate: the gap is recorded on the result, see above
 	}
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
 
-	tags, tree, err := p.tagWithGuards(ctx, src)
-	if err != nil {
-		if errors.Is(err, context.Canceled) || errors.Is(ctx.Err(), context.Canceled) {
-			return nil, ctx.Err()
-		}
-		// A failed parse is data about this file, not a run-level failure.
-		res.Status = StatusFailed
-		res.Err = err
-		// Deliberate, and load-bearing: spec §13 requires a parser failure to
-		// be isolated to the affected file. The error is recorded ON the
-		// result so the gap stays visible; returning it here would abort the
-		// whole indexing run over one bad file.
-		return res, nil //nolint:nilerr // see above
+	// From here on "by" is the parser whose tree this is: p, or p's alternate
+	// when the second recovery route was the one that read the file. Its
+	// queries are the ones compiled against the tree's own Language.
+	by, tree, stop, err := p.parseTree(ctx, src)
+	if cerr := ctx.Err(); cerr != nil {
+		// Cancellation stops the parser mid-file and leaves a tree of whatever
+		// it had read. That tree is the caller's cancellation, not a fact
+		// about the file, so nothing from it is reported.
+		return nil, cerr
 	}
-	res.Imports = p.extractImports(tree, src)
+	if err != nil {
+		// A failed parse is data about this file, not a run-level failure.
+		// Spec §13 requires a parser failure to be isolated to the affected
+		// file. The error is recorded ON the result so the gap stays visible;
+		// returning it here would abort the whole indexing run over one file.
+		res.Status = StatusFailed
+		res.Reason = model.ParseReasonUnspecified
+		res.Err = err
+		return res, nil //nolint:nilerr // deliberate: recorded on the result, see above
+	}
+
+	tags, err := by.tagTree(tree, src)
+	if err != nil {
+		res.Status = StatusFailed
+		res.Reason = model.ParseReasonUnspecified
+		res.Err = err
+		return res, nil //nolint:nilerr // deliberate: a failed query is this file's result, not the run's
+	}
+	res.Imports = by.extractImports(tree, src)
 	// Before the tree is dropped below: this is the last consumer of it, and
 	// running after the drop is how the first version of this silently
 	// extracted nothing at all.
-	receivers := p.extractReceivers(tree, src)
+	receivers := by.extractReceivers(tree, src)
 	// Rewrite each receiver from the variable that names it to the type it was
 	// declared as, where the file says so. `b.build()` becomes Builder.build().
-	if types := p.extractVarTypes(tree, src); len(types) > 0 {
+	if types := by.extractVarTypes(tree, src); len(types) > 0 {
 		for k, v := range receivers {
 			if t, ok := types[v]; ok {
 				receivers[k] = t
@@ -388,15 +511,17 @@ func (p *genericParser) Parse(ctx context.Context, path string, src []byte) (*Re
 
 	// A4 — arity, read from the same tree, for the same reason imports and
 	// receivers are: it is the last chance before the tree is dropped.
-	argCounts := p.extractCounts(p.argCountQuery, "args", tree, src)
-	paramCounts := p.extractCounts(p.paramCountQuery, "params", tree, src)
+	argCounts := by.extractCounts(by.argCountQuery, "args", tree, src)
+	paramCounts := by.extractCounts(by.paramCountQuery, "params", tree, src)
+
+	// The verdict on the parse itself, also read from the tree.
+	p.describeParse(res, tree, stop, src)
 
 	// Drop the tree as soon as the last consumer is done with it.
 	//
 	// A tree-sitter tree is one to two orders of magnitude larger than its
-	// source — a megabyte of generated code measured at roughly 200 MB. Holding
-	// one for even a moment longer than needed multiplies across every parsing
-	// goroutine, and the Tagger returning to the pool must not carry it along.
+	// source. Holding one for even a moment longer than needed multiplies
+	// across every parsing goroutine.
 	tree = nil
 	_ = tree
 
@@ -442,107 +567,430 @@ func (p *genericParser) Parse(ctx context.Context, path string, src []byte) (*Re
 
 	res.Symbols = dedupeSymbols(res.Symbols)
 
-	if len(res.Symbols) == 0 && len(res.References) == 0 && !isBenignSymbolless(path) {
-		// Parsed cleanly but produced nothing on an actionable source file.
-		// Usually a grammar whose inferred query has no useful patterns.
-		// Recording this as partial keeps the gap visible instead of looking
-		// like an empty file.
-		res.Status = StatusPartial
-	}
+	// The status was decided by describeParse and is NOT revisited here.
+	// "Parsed cleanly and declared nothing" is a complete, correct reading of
+	// a file of constants, a package comment or a migration; it used to be
+	// recorded as partial, which made a healthy repository degraded and left
+	// the word meaning two unrelated things.
 	return res, nil
 }
 
-// isBenignSymbolless reports whether path represents a file that legitimately
-// contains no code symbol declarations or references (such as Go package
-// documentation files, database migrations, stylesheets, or simple utility scripts).
+// skip records that no tree was attempted, and why.
+func skip(res *Result, reason model.ParseReason, detail string) {
+	res.Status = StatusSkipped
+	res.Reason = reason
+	res.Err = errors.New(model.FormatParseError(reason, detail))
+}
+
+// tooLargeDetail is the text stored for a file over the size limit. Shared
+// with the pipeline, which writes the same reason for a file discovery refused
+// to read, so the two cannot describe one limit in two ways.
+func tooLargeDetail(size, limit int64) string {
+	return fmt.Sprintf("%d bytes, over the %d byte limit (index.max_file_bytes)", size, limit)
+}
+
+// TooLargeError is the files.parse_error text for a file of size bytes that is
+// over limit.
+func TooLargeError(size, limit int64) string {
+	return model.FormatParseError(model.ParseReasonTooLarge, tooLargeDetail(size, limit))
+}
+
+func (c parserConfig) sourceLimit() int {
+	if c.maxSourceBytes <= 0 {
+		return DefaultMaxSourceBytes
+	}
+	return c.maxSourceBytes
+}
+
+func (c parserConfig) wallClockCeiling() time.Duration {
+	if c.ceiling <= 0 {
+		return DefaultParseCeiling
+	}
+	return c.ceiling
+}
+
+// ceilingMicros is the ceiling in the unit the parser takes it in, never zero:
+// zero means "no timeout" to the parser, so a ceiling below a microsecond must
+// round up, not away.
+func (c parserConfig) ceilingMicros() uint64 {
+	us := c.wallClockCeiling().Microseconds()
+	if us < 1 {
+		return 1
+	}
+	return uint64(us)
+}
+
+// stopInfo is what the parser reported about a parse that ended before the end
+// of the input. The zero value means it ran to completion.
+type stopInfo struct {
+	early       bool
+	reason      ts.ParseStopReason
+	memSource   string // which memory guard, when reason is the memory budget
+	parsedBytes int
+	iterations  int
+	iterLimit   int
+	nodes       int
+	nodeLimit   int
+}
+
+// parseTree parses src, and when the parser stops short of the end, tries once
+// more by its other recovery route and keeps whichever attempt read further.
+// It returns the parser whose queries match the tree, which is p or p's
+// alternate.
 //
-// Marking these as StatusPartial degrades the overall index status to DEGRADED on
-// healthy repositories that simply document packages or include migration DDL.
-// StatusPartial is reserved for source files where executable language constructs
-// were present but grammar queries failed to extract them.
-func isBenignSymbolless(path string) bool {
-	lower := strings.ToLower(path)
-	base := lower
-	if idx := strings.LastIndex(lower, "/"); idx >= 0 {
-		base = lower[idx+1:]
+// WHY A SECOND ATTEMPT. gotreesitter has two ways of recovering from input its
+// grammar does not accept: a port of the C runtime's cost-based recovery, on by
+// default for the grammars certified for it, and the older resynchronising
+// recovery it replaced. They fail on different files. With v0.57.0 the first
+// one gives up outright ("invariant_violation") on eleven of redis's 1,025 C
+// files, at a `#define` inside an array initialiser, 1,870 bytes into the
+// 115 KB of src/bitops.c; the second reads every one of them to the end. And it
+// was the first that took quadratic time in v0.50.1 where the second did not.
+// So a parse the default route abandons is retried on the other, and a file is
+// recorded as incomplete only when both stop early.
+//
+// A parse stopped by the wall-clock ceiling is NOT retried. The ceiling exists
+// to bound the time one file can take, and a second attempt would double it.
+func (p *genericParser) parseTree(ctx context.Context, src []byte) (*genericParser, *ts.Tree, stopInfo, error) {
+	tree, stop, err := p.parseOnce(ctx, src)
+	if err != nil || !stop.early || !stop.retryable() || ctx.Err() != nil {
+		return p, tree, stop, err
 	}
-	if base == "doc.go" {
-		return true
+	alt := p.alternate()
+	if alt == nil {
+		return p, tree, stop, nil
 	}
-	if strings.Contains(base, ".example.") || strings.HasSuffix(base, ".example") ||
-		strings.Contains(base, ".sample.") || strings.HasSuffix(base, ".sample") {
-		return true
+
+	tree2, stop2, err2 := alt.parseOnce(ctx, src)
+	if err2 != nil || tree2 == nil {
+		// The second route failed outright. The first attempt's partial tree
+		// is still the best reading there is.
+		return p, tree, stop, nil //nolint:nilerr // deliberate: the first attempt's result stands
 	}
-	if strings.Contains(lower, "/fixtures/") || strings.Contains(lower, "/testdata/") ||
-		strings.Contains(lower, "/e2e/support/") || strings.Contains(lower, "/test/support/") {
-		return true
+	if !stop2.early || stop2.parsedBytes > stop.parsedBytes {
+		return alt, tree2, stop2, nil
 	}
-	switch {
-	case strings.HasSuffix(lower, ".sql"):
-		return true
-	case strings.HasSuffix(lower, ".css"), strings.HasSuffix(lower, ".scss"), strings.HasSuffix(lower, ".sass"), strings.HasSuffix(lower, ".less"):
-		return true
-	case strings.HasSuffix(lower, ".sh"), strings.HasSuffix(lower, ".bash"), strings.HasSuffix(lower, ".zsh"), strings.HasSuffix(lower, ".ps1"), strings.HasSuffix(lower, ".bat"), strings.HasSuffix(lower, ".cmd"):
+	return p, tree, stop, nil
+}
+
+// retryable reports whether a stopped parse is worth a second attempt on the
+// other recovery route.
+func (s stopInfo) retryable() bool {
+	switch s.reason {
+	case ts.ParseStopTimeout, ts.ParseStopCancelled:
+		return false
+	}
+	return true
+}
+
+// alternate returns the parser for this language's other recovery route, or
+// nil when the language has only one.
+//
+// HOW THE ROUTE IS SELECTED. gotreesitter chooses the recovery route per
+// Language value, from two exported fields: the cost-based port runs when the
+// grammar is CRecoveryCostCompetitionCapable and
+// CRecoveryCostCompetitionEnabledByDefault. So the alternate is a SECOND
+// Language value for the same grammar, loaded from the same embedded blob, with
+// the second field cleared before anything parses with it. Nothing global is
+// touched: the registry's own Language, and every parse on the default route,
+// are unaffected. (The library also reads a GOT_C_RECOVERY environment
+// variable, but it caches what it derives from it per Language on first use, so
+// flipping it at run time changes nothing reliably. This does not use it.)
+//
+// The alternate has its own queries, compiled against its own Language, and its
+// own parser pool. It is built on first need, so a repository none of whose
+// files stop early never pays for it.
+func (p *genericParser) alternate() *genericParser {
+	if p.isAlternate || p.lang == nil || !p.lang.CRecoveryCostCompetitionCapable ||
+		!p.lang.CRecoveryCostCompetitionEnabledByDefault {
+		return nil
+	}
+	p.altOnce.Do(func() {
+		blob := grammars.BlobByName(p.entry.Name)
+		if len(blob) == 0 {
+			return
+		}
+		lang, err := grammars.LoadLanguage(p.entry.Name, blob)
+		if err != nil || lang == nil {
+			return
+		}
+		lang.CRecoveryCostCompetitionEnabledByDefault = false
+		alt := buildGenericParser(p.entry, p.cfg, lang)
+		if alt.initErr != nil {
+			return
+		}
+		alt.isAlternate = true
+		p.alt.Store(alt)
+	})
+	return p.alt.Load()
+}
+
+// parseOnce runs one parse, in the calling goroutine, under three guards.
+//
+// IN THE CALLING GOROUTINE is the point. This used to start a goroutine, wait
+// five seconds and return, leaving the parse running: gotreesitter was thought
+// to have no cancellation hook. It has two, and both are used here, so a parse
+// that is stopped actually stops and nothing outlives this call. Abandoned
+// parses were why a pool of four workers was measured using 6.8 cores and tens
+// of gigabytes on the Linux kernel: each kept its core and its arena while the
+// worker that started it moved on.
+//
+//  1. Work limits. The parser counts its own iterations, nodes, stack depth and
+//     arena bytes against limits derived from the source length, and stops
+//     itself when one is reached. These are deterministic.
+//  2. A cancellation flag, set when ctx is cancelled. The parser polls it.
+//  3. A wall-clock ceiling (Parser.SetTimeoutMicros), polled the same way. A
+//     last resort; see DefaultParseCeiling.
+//
+// All three stop the parser from inside its own loop, between steps. The
+// parser returns the tree it had built so far, and the caller extracts what it
+// can from it.
+//
+// WHAT IS NOT BOUNDED: the time of a single parser step, and the queries that
+// run over the finished tree. The flag and the clock are polled about once per
+// thousand steps, so a step that itself runs long delays the stop; and query
+// execution has its own per-pattern work budget in the library but no clock.
+// Both are bounded in practice by the size limit on the source.
+func (p *genericParser) parseOnce(ctx context.Context, src []byte) (tree *ts.Tree, stop stopInfo, err error) {
+	ps := p.getParser()
+	if ps == nil {
+		return nil, stop, fmt.Errorf("parser unavailable for %q", p.entry.Name)
+	}
+
+	// A fresh flag per parse, never one stored on the pooled parser: the
+	// cancellation callback below may run a moment after this call decides to
+	// return, and it must not be able to cancel whatever parse the parser is
+	// handed next.
+	var cancelFlag uint32
+	ps.SetCancellationFlag(&cancelFlag)
+	ps.SetTimeoutMicros(p.cfg.ceilingMicros())
+	if p.cfg.iterationLimit > 0 {
+		ps.SetParseWorkLimits(ts.ParseWorkLimits{IterationLimit: p.cfg.iterationLimit})
+	}
+
+	fired := make(chan struct{})
+	unregister := context.AfterFunc(ctx, func() {
+		atomic.StoreUint32(&cancelFlag, 1)
+		close(fired)
+	})
+
+	reusable := false
+	defer func() {
+		if !unregister() {
+			// The callback has started. Wait for it, so that no goroutine
+			// this call caused is still running when it returns.
+			<-fired
+		}
+		if r := recover(); r != nil {
+			// The parser's internal state is unknown after a panic, so it is
+			// dropped and not returned to the pool.
+			tree, stop, err = nil, stopInfo{}, fmt.Errorf("parser panicked: %v", r)
+			return
+		}
+		if reusable {
+			ps.SetCancellationFlag(nil)
+			p.putParser(ps, len(src))
+		}
+	}()
+
+	tree, err = ps.Parse(src)
+	if err != nil {
+		return nil, stop, fmt.Errorf("parser error: %w", err)
+	}
+	if tree == nil || tree.RootNode() == nil {
+		reason := ts.ParseStopNone
+		if tree != nil {
+			reason = tree.ParseStopReason()
+		}
+		return nil, stop, fmt.Errorf("parser produced no tree (stop reason %q)", reason)
+	}
+
+	if tree.ParseStoppedEarly() {
+		rt := tree.ParseRuntime()
+		stop = stopInfo{
+			early:       true,
+			reason:      rt.StopReason,
+			memSource:   rt.MemoryBudgetStopSource,
+			parsedBytes: int(rt.LastTokenEndByte),
+			iterations:  rt.Iterations,
+			iterLimit:   rt.IterationLimit,
+			nodes:       rt.NodesAllocated,
+			nodeLimit:   rt.NodeLimit,
+		}
+		if stop.parsedBytes > len(src) {
+			stop.parsedBytes = len(src)
+		}
+		// A parser that was stopped mid-file is not pooled. It is cheap to
+		// rebuild and its arena is sized to a file that was by definition
+		// unusual.
+		return tree, stop, nil
+	}
+
+	reusable = true
+	return tree, stop, nil
+}
+
+// tagTree runs the definitions-and-references query over a parsed tree.
+//
+// Behind a panic barrier for the same reason parsing is: the tree was built
+// from a file this project did not write, and a query walking a malformed tree
+// must cost that file's result, never the indexing run.
+func (p *genericParser) tagTree(tree *ts.Tree, src []byte) (tags []ts.Tag, err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			tags, err = nil, fmt.Errorf("tags query panicked: %v", r)
+		}
+	}()
+
+	matches := p.tagsQ.Execute(tree)
+	tags = make([]ts.Tag, 0, len(matches))
+	for _, m := range matches {
+		var tag ts.Tag
+		for _, c := range m.Captures {
+			switch {
+			case c.Name == "name":
+				tag.Name = c.Node.Text(src)
+				tag.NameRange = c.Node.Range()
+			case strings.HasPrefix(c.Name, "definition.") || strings.HasPrefix(c.Name, "reference."):
+				tag.Kind = c.Name
+				tag.Range = c.Node.Range()
+			}
+		}
+		if tag.Kind == "" {
+			continue
+		}
+		if tag.Name == "" {
+			// A pattern with no @name names the whole tagged node, which is
+			// what gotreesitter's own Tagger does.
+			if int(tag.Range.EndByte) <= len(src) && tag.Range.StartByte <= tag.Range.EndByte {
+				tag.Name = string(src[tag.Range.StartByte:tag.Range.EndByte])
+			}
+			tag.NameRange = tag.Range
+		}
+		tags = append(tags, tag)
+	}
+	return tags, nil
+}
+
+// describeParse sets the result's status from what the parser reported.
+//
+// Three outcomes, each a statement about the parse and none about what was
+// extracted:
+//
+//   - the parser stopped before the end of the file: partial, with how far it
+//     got and which limit stopped it;
+//   - it reached the end and reported error or missing nodes: partial, with
+//     how many and where the first one is;
+//   - it reached the end with neither: ok.
+func (p *genericParser) describeParse(res *Result, tree *ts.Tree, stop stopInfo, src []byte) {
+	if stop.early {
+		res.Status = StatusPartial
+		res.ParsedBytes = stop.parsedBytes
+		res.Reason = model.ParseReasonBudgetExceeded
+		if !stop.isBudget() {
+			res.Reason = model.ParseReasonStoppedEarly
+		}
+		line := 1 + bytes.Count(src[:stop.parsedBytes], []byte{'\n'})
+		res.Err = errors.New(model.FormatParseError(res.Reason, fmt.Sprintf(
+			"parser stopped at byte %d of %d (line %d) on %s; definitions after that point are missing",
+			stop.parsedBytes, len(src), line, stop.describe(p.cfg.wallClockCeiling()))))
+		return
+	}
+
+	root := tree.RootNode()
+	if root == nil || !root.HasError() {
+		return
+	}
+	errNodes, missing, firstLine := countSyntaxErrors(root)
+	if errNodes == 0 && missing == 0 {
+		// HasError without a node to show for it. Reported as it is and not
+		// rounded down to "clean": the parser said the tree has an error.
+		firstLine = int(root.StartPoint().Row) + 1
+	}
+	res.Status = StatusPartial
+	res.Reason = model.ParseReasonSyntaxErrors
+	res.ErrorNodes, res.MissingTokens, res.FirstErrorLine = errNodes, missing, firstLine
+	res.Err = errors.New(model.FormatParseError(res.Reason, fmt.Sprintf(
+		"%s and %s, first at line %d; definitions inside the regions the parser could not read may be missing",
+		plural(errNodes, "error node"), plural(missing, "missing token"), firstLine)))
+}
+
+// isBudget reports whether the stop was one of the limits that bound a parse,
+// as opposed to the parser giving up for a reason of its own.
+func (s stopInfo) isBudget() bool {
+	switch s.reason {
+	case ts.ParseStopIterationLimit, ts.ParseStopNodeLimit, ts.ParseStopStackDepthLimit,
+		ts.ParseStopMemoryBudget, ts.ParseStopTimeout:
 		return true
 	}
 	return false
 }
 
-// tagWithGuards runs the tagger under a timeout and a panic barrier.
+// describe names the limit that stopped the parse, in words a person can act
+// on, and says so when the limit is one that depends on the machine.
+func (s stopInfo) describe(ceiling time.Duration) string {
+	switch s.reason {
+	case ts.ParseStopIterationLimit:
+		return fmt.Sprintf("its iteration limit (%d of %d)", s.iterations, s.iterLimit)
+	case ts.ParseStopNodeLimit:
+		return fmt.Sprintf("its node limit (%d of %d)", s.nodes, s.nodeLimit)
+	case ts.ParseStopStackDepthLimit:
+		return "its stack depth limit"
+	case ts.ParseStopMemoryBudget:
+		if s.memSource == "hard_ceiling" || strings.HasPrefix(s.memSource, "runtime") {
+			return "the process memory ceiling (a safety net that depends on what else the process held; the result can differ between runs)"
+		}
+		return "its memory budget"
+	case ts.ParseStopTimeout:
+		return fmt.Sprintf("the %s wall-clock ceiling (a safety net that depends on machine speed; the result can differ between runs)", ceiling)
+	default:
+		return fmt.Sprintf("parser stop reason %q", s.reason)
+	}
+}
+
+func plural(n int, noun string) string {
+	if n == 1 {
+		return "1 " + noun
+	}
+	return fmt.Sprintf("%d %ss", n, noun)
+}
+
+// countSyntaxErrors counts the ERROR and MISSING nodes under root and finds the
+// line of the earliest.
 //
-// Both guards are required by the threat model: RepoCortex indexes repositories
-// it did not write, and a hostile or merely broken file must cost one file's
-// result, never the indexing run.
-func (p *genericParser) tagWithGuards(ctx context.Context, src []byte) (tags []ts.Tag, tree *ts.Tree, err error) {
-	timeout := DefaultParseTimeout
-	ctx, cancel := context.WithTimeout(ctx, timeout)
-	defer cancel()
-
-	type outcome struct {
-		tags []ts.Tag
-		tree *ts.Tree
-		err  error
-	}
-	// Buffered so the worker can always publish and exit even after a timeout,
-	// rather than blocking forever on an abandoned channel.
-	done := make(chan outcome, 1)
-
-	go func() {
-		var out outcome
-		defer func() {
-			if r := recover(); r != nil {
-				out = outcome{err: fmt.Errorf("parser panicked: %v", r)}
+// Only subtrees the parser flagged are entered, so a clean tree costs one
+// check and a tree with one error costs a walk down to it. An explicit stack,
+// not recursion: a file of fifty thousand unbalanced braces produces a tree
+// that deep.
+func countSyntaxErrors(root *ts.Node) (errNodes, missing, firstLine int) {
+	stack := []*ts.Node{root}
+	for len(stack) > 0 {
+		n := stack[len(stack)-1]
+		stack = stack[:len(stack)-1]
+		if n == nil {
+			continue
+		}
+		switch {
+		case n.IsMissing():
+			missing++
+		case n.IsError():
+			errNodes++
+		}
+		if n.IsMissing() || n.IsError() {
+			if line := int(n.StartPoint().Row) + 1; firstLine == 0 || line < firstLine {
+				firstLine = line
 			}
-			done <- out
-		}()
-
-		tg := p.getTagger()
-		if tg == nil {
-			out.err = fmt.Errorf("tagger unavailable for %q", p.entry.Name)
-			return
 		}
-		defer p.putTagger(tg, len(src))
-
-		// TagIncremental with a nil prior tree parses from scratch and returns
-		// the syntax tree alongside the tags. Reusing it for the import query
-		// avoids parsing the file twice, and avoids reimplementing the
-		// TokenSource plumbing that real grammars require.
-		out.tags, out.tree = tg.TagIncremental(src, nil)
-	}()
-
-	select {
-	case o := <-done:
-		return o.tags, o.tree, o.err
-	case <-ctx.Done():
-		if errors.Is(ctx.Err(), context.Canceled) {
-			return nil, nil, ctx.Err()
+		if n.IsMissing() || !n.HasError() {
+			continue
 		}
-		// The worker is left to finish on its own; gotreesitter exposes no
-		// cancellation hook we can safely reach here. It is bounded by the
-		// source-size cap, so it terminates. Returning now keeps the indexer
-		// moving rather than stalling on one pathological file.
-		return nil, nil, fmt.Errorf("parse exceeded %s: %w", timeout, ctx.Err())
+		for i := n.ChildCount() - 1; i >= 0; i-- {
+			if c := n.Child(i); c != nil && (c.HasError() || c.IsError() || c.IsMissing()) {
+				stack = append(stack, c)
+			}
+		}
 	}
+	return errNodes, missing, firstLine
 }
 
 // extractImports runs the language's import query against an already-parsed

@@ -189,7 +189,11 @@ func (s *RegistrySink) writeFileRows(ctx context.Context, facts FileFacts) error
 	// Search rows only for files that actually carry text. Skipped files
 	// (binary, oversized) are recorded in `files` so the gap stays visible,
 	// but they must not pollute the search index.
-	if len(facts.Content) > 0 && f.ParseStatus != string(statusSkipped) {
+	//
+	// A file whose grammar yields no definitions is the exception among the
+	// skipped: it has text and nothing else, and a function name that appears
+	// only in a Perl or Haskell file must still be findable.
+	if len(facts.Content) > 0 && model.TextIndexed(f.ParseStatus, f.ParseError) {
 		// REDACT BEFORE STORING. This is the first of two barriers, and the
 		// more important one: a credential that never enters the index cannot
 		// leak from it later, through search results, an excerpt, a backup of
@@ -320,10 +324,6 @@ func (s *RegistrySink) Flush(ctx context.Context) error {
 	defer s.mu.Unlock()
 	return s.writer.Flush(ctx)
 }
-
-// statusSkipped mirrors parse.StatusSkipped without importing the parse
-// package here, keeping the persistence adapter free of parser concerns.
-const statusSkipped = "skipped"
 
 // ExpandForSearch is exposed so callers can pre-compute identifier expansion
 // when they already hold the text. The registry does this internally; this

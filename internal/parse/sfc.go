@@ -2,6 +2,8 @@ package parse
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"regexp"
 	"strings"
 
@@ -46,6 +48,18 @@ func (p *sfcParser) Language() string { return p.language }
 func (p *sfcParser) Parse(ctx context.Context, path string, src []byte) (*Result, error) {
 	res := &Result{Language: p.language, Status: StatusOK}
 
+	if len(src) == 0 {
+		skip(res, model.ParseReasonEmpty, "")
+		return res, nil
+	}
+	// The size limit is on the FILE. Each script block would pass it on its
+	// own, and the regular expression below would still scan every byte of a
+	// component nobody wrote by hand.
+	if limit := p.registry.cfg.sourceLimit(); len(src) > limit {
+		skip(res, model.ParseReasonTooLarge, tooLargeDetail(int64(len(src)), int64(limit)))
+		return res, nil
+	}
+
 	blocks := scriptBlock.FindAllSubmatchIndex(src, -1)
 	if len(blocks) == 0 {
 		// A component with no script is template and style only. That is a
@@ -72,18 +86,70 @@ func (p *sfcParser) Parse(ctx context.Context, path string, src []byte) (*Result
 		offset := strings.Count(string(src[:b[4]]), "\n")
 
 		sub, err := inner.Parse(ctx, path, body)
-		if err != nil || sub == nil {
-			// One unparsable block must not discard the others, and must not
-			// fail the file: the component still exists.
-			res.Status = StatusPartial
+		if err != nil {
+			// Only cancellation comes back as an error; a block that would
+			// not parse is reported in sub.
+			return nil, err
+		}
+		if sub == nil {
 			continue
 		}
-		if sub.Status == StatusPartial || sub.Status == StatusFailed {
-			res.Status = StatusPartial
-		}
+		adoptBlockStatus(res, sub, offset)
 		mergeShifted(res, sub, offset)
 	}
 	return res, nil
+}
+
+// adoptBlockStatus folds one script block's parse verdict into the file's.
+//
+// The component's status is the worst any of its blocks reported: a block the
+// parser stopped in outranks one with syntax errors, which outranks a clean
+// one. A block that failed outright leaves the component partial, not failed,
+// because the other blocks and the component itself are still in the index.
+// The first-error line is moved into the file's coordinates.
+func adoptBlockStatus(res, sub *Result, offset int) {
+	rank := func(r *Result) int {
+		switch {
+		case r.Status == StatusFailed:
+			return 3
+		case r.Status == StatusPartial && r.Reason != model.ParseReasonSyntaxErrors:
+			return 2
+		case r.Status == StatusPartial:
+			return 1
+		}
+		return 0
+	}
+	res.ErrorNodes += sub.ErrorNodes
+	res.MissingTokens += sub.MissingTokens
+	if sub.FirstErrorLine > 0 {
+		if line := sub.FirstErrorLine + offset; res.FirstErrorLine == 0 || line < res.FirstErrorLine {
+			res.FirstErrorLine = line
+		}
+	}
+	if sub.Status == StatusSkipped || rank(sub) < rank(res) || rank(sub) == 0 {
+		return
+	}
+	res.Status = StatusPartial
+	switch {
+	case sub.Status == StatusFailed:
+		// A block the parser produced nothing for: the component's index
+		// entry stops short, which is what stopped_early says.
+		res.Reason = model.ParseReasonStoppedEarly
+		detail := "a script block could not be parsed"
+		if sub.Err != nil {
+			detail += ": " + sub.Err.Error()
+		}
+		res.Err = errors.New(model.FormatParseError(res.Reason, detail))
+	case sub.Reason == model.ParseReasonSyntaxErrors:
+		res.Reason = sub.Reason
+		res.Err = errors.New(model.FormatParseError(res.Reason, fmt.Sprintf(
+			"%s and %s in the script, first at line %d; definitions inside the regions the parser could not read may be missing",
+			plural(res.ErrorNodes, "error node"), plural(res.MissingTokens, "missing token"), res.FirstErrorLine)))
+	default:
+		res.Reason = sub.Reason
+		res.Err = sub.Err
+		res.ParsedBytes = sub.ParsedBytes
+	}
 }
 
 // scriptExt maps a script block's lang attribute to a file extension the
@@ -129,6 +195,3 @@ func mergeShifted(res, sub *Result, offset int) {
 
 // interface assertion: sfcParser is a Parser.
 var _ Parser = (*sfcParser)(nil)
-
-// unusedModelRef keeps the model import honest if the merge helpers change.
-var _ = model.Symbol{}

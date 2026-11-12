@@ -8,7 +8,7 @@ require (
 	github.com/fsnotify/fsnotify v1.10.1
 	github.com/go-git/go-git/v5 v5.19.2
 	github.com/modelcontextprotocol/go-sdk v1.7.0
-	github.com/odvcencio/gotreesitter v0.50.1
+	github.com/odvcencio/gotreesitter v0.57.0
 	github.com/scip-code/scip/bindings/go/scip v0.9.0
 	github.com/spf13/cobra v1.10.2
 	github.com/tree-sitter/go-tree-sitter v0.25.0

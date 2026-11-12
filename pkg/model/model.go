@@ -157,7 +157,10 @@ type File struct {
 	ContentHash string `json:"content_hash"` // sha256 of bytes
 	SizeBytes   int64  `json:"size_bytes"`
 	ModTimeUnix int64  `json:"mod_time_unix"`
-	ParseStatus string `json:"parse_status"` // ok | partial | failed | skipped
+	// ParseStatus is ok | partial | failed | skipped and describes what the
+	// parser did, not what was extracted. ParseError starts with a
+	// ParseReason token whenever the status is not ok. See parsestatus.go.
+	ParseStatus string `json:"parse_status"`
 	ParseError  string `json:"parse_error,omitempty"`
 }
 

@@ -254,13 +254,20 @@ func insertFiles(tb testing.TB, db *store.DB, runID int64, paths []string, parti
 	ctx := context.Background()
 	out := make(map[string]int64, len(paths))
 	for _, p := range paths {
-		status := "ok"
+		// A partial file is written the way the indexer writes one: with the
+		// reason it is partial. A bare "partial" with no reason is what an
+		// older build wrote for "nothing was extracted", and readers treat it
+		// as that, not as a damaged parse.
+		status, reason := model.ParseStatusOK, any(nil)
 		if partial[p] {
-			status = "partial"
+			status = model.ParseStatusPartial
+			reason = model.FormatParseError(model.ParseReasonSyntaxErrors,
+				"1 error node and 0 missing tokens, first at line 1; "+
+					"definitions inside the regions the parser could not read may be missing")
 		}
 		r, err := db.ExecContext(ctx,
-			`INSERT INTO files (index_run_id, path, language, content_hash, parse_status) VALUES (?,?,?,?,?)`,
-			runID, p, langOf(p), "hash-"+p, status)
+			`INSERT INTO files (index_run_id, path, language, content_hash, parse_status, parse_error) VALUES (?,?,?,?,?,?)`,
+			runID, p, langOf(p), "hash-"+p, status, reason)
 		if err != nil {
 			tb.Fatalf("insert file %s: %v", p, err)
 		}

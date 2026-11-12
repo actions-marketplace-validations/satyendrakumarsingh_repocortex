@@ -20,24 +20,34 @@ import (
 	"github.com/satyendrakumarsingh/repocortex/pkg/model"
 )
 
-// Status describes how completely a file was parsed.
+// Status describes what the parser did with a file. It says nothing about
+// what was extracted: a file that parses cleanly and declares nothing is
+// StatusOK, and a file full of definitions the parser stumbled through is
+// StatusPartial.
+//
+// The values are the ones stored in files.parse_status; see
+// pkg/model/parsestatus.go for the contract and for how old rows read.
 type Status string
 
 const (
-	// StatusOK means the file parsed and symbols were extracted.
-	StatusOK Status = "ok"
+	// StatusOK means the parser read the whole file and reported no syntax
+	// error.
+	StatusOK Status = model.ParseStatusOK
 
-	// StatusPartial means the file parsed with errors, or the grammar's tag
-	// coverage is known to be incomplete. Symbols found are still usable.
-	StatusPartial Status = "partial"
+	// StatusPartial means a tree was built but it is not a clean reading of
+	// the whole file: the parser reported syntax errors, or the parse stopped
+	// before the end because it exceeded its budget. Result.Reason says which,
+	// and what was extracted is still usable.
+	StatusPartial Status = model.ParseStatusPartial
 
 	// StatusFailed means nothing usable came out. The file is recorded so the
 	// gap is visible rather than silently absent.
-	StatusFailed Status = "failed"
+	StatusFailed Status = model.ParseStatusFailed
 
-	// StatusSkipped means the file was deliberately not parsed (binary,
-	// oversized, or no grammar available).
-	StatusSkipped Status = "skipped"
+	// StatusSkipped means no tree was attempted: the file is oversized or
+	// empty, or its grammar has no definition query (Result.Reason is then
+	// model.ParseReasonTextOnly and the file is indexed for search alone).
+	StatusSkipped Status = model.ParseStatusSkipped
 )
 
 // Reference is a use of a name that has not yet been bound to a definition.
@@ -94,9 +104,39 @@ type Result struct {
 	References []Reference
 	Imports    []Import
 
-	// Err explains a partial or failed parse. It is diagnostic text for the
-	// file's record, never a reason to abort the indexing run.
+	// Reason is why Status is not StatusOK, as a stable token.
+	// model.ParseReasonNone for a clean parse.
+	Reason model.ParseReason
+
+	// ErrorNodes and MissingTokens count what the parser reported when
+	// Reason is model.ParseReasonSyntaxErrors: ERROR nodes (text it could not
+	// fit into the grammar) and MISSING nodes (tokens it had to invent to
+	// continue). FirstErrorLine is the 1-based line of the earliest of them.
+	ErrorNodes     int
+	MissingTokens  int
+	FirstErrorLine int
+
+	// ParsedBytes is how far into the source the parser got when Reason is
+	// model.ParseReasonBudgetExceeded. Definitions past it are absent.
+	ParsedBytes int
+
+	// Err explains a status other than ok. Its text starts with Reason, so it
+	// can be stored as files.parse_error unchanged. It is diagnostic text for
+	// the file's record, never a reason to abort the indexing run.
 	Err error
+}
+
+// TextIndexable reports whether the pipeline should put this file's text in
+// the full-text index.
+func (r *Result) TextIndexable() bool {
+	if r == nil {
+		return false
+	}
+	msg := ""
+	if r.Err != nil {
+		msg = r.Err.Error()
+	}
+	return model.TextIndexed(string(r.Status), msg)
 }
 
 // Parser extracts facts from one language's source.

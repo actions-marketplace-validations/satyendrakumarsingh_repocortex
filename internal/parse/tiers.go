@@ -8,7 +8,12 @@ package parse
 // down. A language cannot be promoted by editing a table; it is promoted by
 // gaining the query, which is the only thing that changes what a user gets.
 
-import "sort"
+import (
+	"sort"
+	"strings"
+
+	"github.com/odvcencio/gotreesitter/grammars"
+)
 
 // Tier is how far RepoCortex can go on a language. Ordered: higher is more.
 type Tier int
@@ -66,6 +71,39 @@ func TierFor(language string) Tier {
 	default:
 		return TierParsed
 	}
+}
+
+// HasDefinitionQuery reports whether a language's files yield symbols at all.
+//
+// It is false for the grammars that ship no definition query, which is most of
+// the parsed tier: a file in one of those languages is indexed for full-text
+// search and nothing else, and is recorded with reason text_only. Asked of the
+// same query construction the parsers use, so it cannot disagree with them.
+//
+// Unknown languages report false: there is no grammar to ask.
+func HasDefinitionQuery(language string) bool {
+	entry := grammars.DetectLanguageByName(language)
+	if entry == nil {
+		return false
+	}
+	if isSFC(entry.Name) {
+		// Read through the script block, by the parser for that block's
+		// language; see sfc.go.
+		return true
+	}
+	return strings.TrimSpace(grammars.ResolveTagsQuery(*entry)+Supplement(entry.Name)) != ""
+}
+
+// TextOnlyLanguages lists the languages with no definition query, sorted.
+func TextOnlyLanguages() []string {
+	var out []string
+	for _, lang := range PureGoBackend().Languages() {
+		if !HasDefinitionQuery(lang) {
+			out = append(out, lang)
+		}
+	}
+	sort.Strings(out)
+	return out
 }
 
 // Tiers reports the tier of every grammar the shipping backend carries.

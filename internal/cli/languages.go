@@ -19,6 +19,11 @@ type languageReport struct {
 	Resolved []string `json:"resolved"`
 	Parsed   []string `json:"parsed"`
 	Total    int      `json:"total"`
+
+	// TextOnly is the subset of Parsed whose grammar has no definition query.
+	// Files in these languages are indexed for full-text search and yield no
+	// symbols; the index records them with reason text_only.
+	TextOnly []string `json:"text_only"`
 }
 
 func newLanguagesCmd(g *Global) *cobra.Command {
@@ -41,6 +46,7 @@ this output always matches what the binary can actually do.`,
 				Typed:    parse.LanguagesInTier(parse.TierTyped),
 				Resolved: parse.LanguagesInTier(parse.TierResolved),
 				Parsed:   parse.LanguagesInTier(parse.TierParsed),
+				TextOnly: parse.TextOnlyLanguages(),
 			}
 			rep.Total = len(rep.Typed) + len(rep.Resolved) + len(rep.Parsed)
 
@@ -58,10 +64,19 @@ this output always matches what the binary can actually do.`,
 				return err
 			}
 
+			// The parsed tier's one-line description promises definitions. For
+			// the languages below that is not true, and the gap is stated here
+			// rather than left for a reader to find in an empty result.
+			fmt.Fprintf(cmd.OutOrStdout(),
+				"\nOf the %d parsed-tier languages, %d have no definition query: their files are indexed\n"+
+					"for full-text search only and yield no symbols (parse status: skipped, reason text_only).\n",
+				len(rep.Parsed), len(rep.TextOnly))
+
 			fmt.Fprintf(cmd.OutOrStdout(), "\ntyped:    %v\n", rep.Typed)
 			fmt.Fprintf(cmd.OutOrStdout(), "resolved: %v\n", rep.Resolved)
 			if verbose {
 				fmt.Fprintf(cmd.OutOrStdout(), "parsed:   %v\n", rep.Parsed)
+				fmt.Fprintf(cmd.OutOrStdout(), "text only (within parsed): %v\n", rep.TextOnly)
 			} else {
 				fmt.Fprintf(cmd.OutOrStdout(), "\n(%d parsed-tier languages not listed; pass --verbose)\n", len(rep.Parsed))
 			}

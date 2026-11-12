@@ -44,7 +44,13 @@ import (
 // DefaultMaxFileSize is the largest file that will be hashed and offered to the
 // parsers. Generated bundles and checked-in datasets dominate the tail of every
 // real repository and yield nothing useful per byte spent.
-const DefaultMaxFileSize int64 = 2 << 20 // 2 MiB
+//
+// It is the same number as parse.DefaultMaxSourceBytes on purpose: there is one
+// size limit. A file under it is read, hashed, parsed and text-indexed; a file
+// over it is recorded as skipped with reason too_large and its size, and is
+// named by `repocortex index` and `repocortex status`. A repository changes the
+// limit with index.max_file_bytes in .repocortex.yml (config.Config.MaxFileBytes).
+const DefaultMaxFileSize int64 = config.DefaultMaxFileBytes
 
 // binarySniffLen is git's own heuristic window: a NUL byte within the first
 // 8000 bytes means binary. Matching git matters more than being clever here,
@@ -85,8 +91,9 @@ type Discovered struct {
 }
 
 // Option adjusts a Walker. The knobs here are operational rather than
-// repository-scoped, which is why they are not in config.Config: a hostile
-// repo must not be able to raise its own size ceiling or spawn workers.
+// repository-scoped: a hostile repo must not be able to spawn workers, and the
+// size ceiling it CAN set (index.max_file_bytes) is validated against a hard
+// maximum in config.Config.Validate before it reaches this package.
 type Option func(*Walker)
 
 // WithMaxFileSize overrides DefaultMaxFileSize. A value <= 0 restores the
@@ -155,6 +162,9 @@ func NewWalker(root string, cfg config.Config, opts ...Option) (*Walker, error) 
 		maxFileSize: DefaultMaxFileSize,
 		workers:     runtime.NumCPU(),
 	}
+	if cfg.MaxFileBytes > 0 {
+		w.maxFileSize = cfg.MaxFileBytes
+	}
 
 	include := cfg.Include
 	if len(include) == 0 {
@@ -200,6 +210,11 @@ func NewWalker(root string, cfg config.Config, opts ...Option) (*Walker, error) 
 
 // Root reports the absolute, symlink-resolved repository root.
 func (w *Walker) Root() string { return w.root }
+
+// MaxFileSize reports the size limit this walker enforces, so the parsers can
+// be given the same one and a skipped file can be recorded with the limit it
+// exceeded.
+func (w *Walker) MaxFileSize() int64 { return w.maxFileSize }
 
 // Walk discovers every indexable file beneath the root.
 //

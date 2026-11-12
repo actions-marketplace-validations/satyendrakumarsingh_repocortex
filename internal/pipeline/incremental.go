@@ -13,6 +13,7 @@ import (
 	"github.com/satyendrakumarsingh/repocortex/internal/analyze/infra"
 	"github.com/satyendrakumarsingh/repocortex/internal/parse"
 	"github.com/satyendrakumarsingh/repocortex/internal/registry"
+	"github.com/satyendrakumarsingh/repocortex/internal/security"
 	"github.com/satyendrakumarsingh/repocortex/pkg/model"
 )
 
@@ -189,7 +190,7 @@ func Incremental(
 
 	parsers := opts.Parsers
 	if parsers == nil {
-		parsers = parse.NewRegistry()
+		parsers = parse.NewRegistry(parse.WithMaxSourceBytes(int(walker.MaxFileSize())))
 	}
 
 	for _, ch := range changes {
@@ -239,8 +240,17 @@ func Incremental(
 			// Incremental updates mutate the live run by design; see
 			// registry/inplace.go for the consistency trade this makes.
 			replaceOpts := []registry.ReplaceOption{registry.AllowCommittedRun()}
-			if len(facts.Content) > 0 && f.ParseStatus != string(parse.StatusSkipped) {
-				replaceOpts = append(replaceOpts, registry.WithContent(string(facts.Content)))
+			if len(facts.Content) > 0 && model.TextIndexed(f.ParseStatus, f.ParseError) {
+				// REDACTED, exactly as the full path redacts (see
+				// RegistrySink.writeFileRows). This path used to hand the raw
+				// bytes to the search index, so a credential in a file edited
+				// under `repocortex watch` was stored unredacted until the next
+				// full index. That was a gap for source files, and it could not
+				// be left open once configuration formats (YAML, JSON, INI,
+				// properties: text-only languages) became searchable, because
+				// those are where credentials are written down.
+				text, _ := security.RedactFile(f.Path, string(facts.Content))
+				replaceOpts = append(replaceOpts, registry.WithContent(text))
 			}
 			if err := reg.ReplaceFile(ctx, runID, &f, symbols, nil, replaceOpts...); err != nil {
 				return stats, fmt.Errorf("replace %s: %w", ch.Path, err)
@@ -282,6 +292,21 @@ func reindexOne(ctx context.Context, walker *fs.Walker, parsers parse.Registry, 
 	info, err := os.Stat(abs)
 	if err != nil {
 		return FileFacts{}, err
+	}
+
+	// The size limit, checked BEFORE the read. The full path never reads a
+	// file discovery refused; this path is handed bare paths, so without the
+	// check an edit to a multi-gigabyte file would be read into memory whole
+	// in order to be told it is too large.
+	if limit := walker.MaxFileSize(); info.Size() > limit {
+		return FileFacts{File: model.File{
+			Path:        relPath,
+			Language:    languageForPath(parsers, relPath),
+			SizeBytes:   info.Size(),
+			ModTimeUnix: info.ModTime().Unix(),
+			ParseStatus: string(parse.StatusSkipped),
+			ParseError:  parse.TooLargeError(info.Size(), limit),
+		}}, nil
 	}
 
 	//nolint:gosec // Reading discovered repository files IS this package's
@@ -537,4 +562,13 @@ func writeIncrementalReferences(
 		})
 	}
 	return reg.ReplaceFileReferences(ctx, runID, fileID, refs, imports)
+}
+
+// languageForPath names the language a path would be parsed as, or "" when no
+// grammar claims it. Used for a file that is recorded without being read.
+func languageForPath(parsers parse.Registry, relPath string) string {
+	if p := parsers.ForFile(relPath); p != nil {
+		return p.Language()
+	}
+	return ""
 }

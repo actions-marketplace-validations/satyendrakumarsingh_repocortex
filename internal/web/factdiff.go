@@ -463,8 +463,8 @@ func diffCoverage(rep *diffgraph.Report) FactDiffCoverage {
 			c.FilesDelta, c.HeadFiles, c.BaseFiles)
 	}
 	if c.HeadParseFailures > 0 {
-		c.Detail += fmt.Sprintf(" %d file(s) failed to parse in the head run; every relationship "+
-			"through one of them is missing rather than absent.", c.HeadParseFailures)
+		c.Detail += fmt.Sprintf(" %d file(s) failed to parse or were stopped early in the head run; "+
+			"every relationship through what was not read is missing rather than absent.", c.HeadParseFailures)
 	}
 	return c
 }

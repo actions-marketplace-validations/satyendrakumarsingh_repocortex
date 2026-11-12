@@ -92,7 +92,7 @@ Consult each module's own repository for its licence text.
 | `github.com/modelcontextprotocol/go-sdk` | v1.7.0 | yes |
 | `github.com/ncruces/go-strftime` | v1.0.0 | no |
 | `github.com/oapi-codegen/runtime` | v1.6.0 | no |
-| `github.com/odvcencio/gotreesitter` | v0.50.1 | yes |
+| `github.com/odvcencio/gotreesitter` | v0.57.0 | yes |
 | `github.com/oklog/ulid/v2` | v2.1.1 | no |
 | `github.com/onsi/gomega` | v1.34.1 | no |
 | `github.com/pjbgf/sha1cd` | v0.6.0 | no |
