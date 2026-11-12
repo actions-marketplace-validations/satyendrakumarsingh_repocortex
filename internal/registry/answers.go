@@ -218,7 +218,7 @@ func (r *Registry) NameBinding(ctx context.Context, runID, symbolID int64, name 
 
 	rows, err := r.db.QueryContext(ctx, `
 		SELECT sr.resolution, COALESCE(sr.resolved_symbol_id, 0) = ?, COUNT(*)
-		  FROM symbol_references sr INDEXED BY idx_refs_run_name
+		  FROM symbol_references sr INDEXED BY idx_refs_name_binding
 		 WHERE sr.index_run_id = ? AND sr.name = ?
 		 GROUP BY 1, 2
 		 ORDER BY 1, 2`, symbolID, runID, name)
@@ -523,7 +523,7 @@ func (r *Registry) BoundSites(ctx context.Context, runID, symbolID int64, limit 
 	}
 	rows, err := r.db.QueryContext(ctx, `
 		SELECT f.path, sr.start_line, sr.receiver, sr.receiver_kind
-		  FROM symbol_references sr
+		  FROM symbol_references sr INDEXED BY idx_refs_bound_sites
 		  JOIN files f ON f.id = sr.file_id
 		 WHERE sr.resolved_symbol_id = ? AND sr.index_run_id = ? AND sr.resolution = 'resolved'
 		 ORDER BY f.path, sr.start_line, sr.id

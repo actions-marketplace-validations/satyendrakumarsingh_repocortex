@@ -266,7 +266,7 @@ func TestUnreferencedSymbolsUsesItsIndexes(t *testing.T) {
 		plan = append(plan, detail)
 	}
 	joined := strings.Join(plan, "\n")
-	for _, index := range []string{"idx_edges_dst", "idx_edges_src", "idx_refs_run_name"} {
+	for _, index := range []string{"idx_edges_dst", "idx_edges_src", "idx_refs_name_binding"} {
 		if !strings.Contains(joined, index) {
 			t.Errorf("the plan does not use %s:\n%s", index, joined)
 		}
@@ -400,6 +400,54 @@ func names(us []UnreferencedSymbol) []string {
 		out[i] = u.Name
 	}
 	return out
+}
+
+// TestUnreferencedSymbolsInIsThePlainFormRestrictedToTheDirectory: reading one
+// directory through its files returns the plain form's rows for that prefix,
+// in order, with the same signals, and the stored count is the number the plain
+// form returns for the whole run.
+func TestUnreferencedSymbolsInIsThePlainFormRestrictedToTheDirectory(t *testing.T) {
+	r, runID, _ := structureFixture(t)
+	ctx := context.Background()
+
+	all, err := r.UnreferencedSymbols(ctx, runID, 0, 100)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, stored, _ := r.StoredUnreferencedCount(ctx, runID); stored {
+		t.Fatal("a count was reported before anything stored it")
+	}
+	if err := r.RefreshRunStats(ctx, runID); err != nil {
+		t.Fatal(err)
+	}
+	n, stored, err := r.StoredUnreferencedCount(ctx, runID)
+	if err != nil || !stored || n != len(all) {
+		t.Fatalf("stored count = %d (stored %v, err %v), want %d", n, stored, err, len(all))
+	}
+
+	for _, prefix := range []string{"a/", "b/", "a/a.go", "nothing/"} {
+		var want []UnreferencedSymbol
+		for _, u := range all {
+			if strings.HasPrefix(u.FilePath, prefix) {
+				want = append(want, u)
+			}
+		}
+		got, err := r.UnreferencedSymbolsIn(ctx, runID, 0, 100, prefix)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !reflect.DeepEqual(got, want) {
+			t.Errorf("prefix %q:\n got  %+v\n want %+v", prefix, got, want)
+		}
+	}
+
+	// A write clears the stored count with the rest of the figures.
+	if _, err := r.db.ExecContext(ctx, `DELETE FROM edges`); err != nil {
+		t.Fatal(err)
+	}
+	if _, stored, _ := r.StoredUnreferencedCount(ctx, runID); stored {
+		t.Error("the stored count survived a write to edges")
+	}
 }
 
 // TestUnreferencedSymbolsUnderReturnsTheSameRows: the prefix form exists so a

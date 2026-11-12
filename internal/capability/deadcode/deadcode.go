@@ -252,6 +252,14 @@ type prefixSource interface {
 	UnreferencedSymbolsUnder(ctx context.Context, runID, afterID int64, limit int, prefix string) ([]registry.UnreferencedSymbol, error)
 }
 
+// directorySource is a Source that can read one directory's unreferenced
+// definitions without visiting the rest of the run, and knows how many a full
+// scan would have examined.
+type directorySource interface {
+	UnreferencedSymbolsIn(ctx context.Context, runID, afterID int64, limit int, prefix string) ([]registry.UnreferencedSymbol, error)
+	StoredUnreferencedCount(ctx context.Context, runID int64) (int, bool, error)
+}
+
 // Options bounds and filters a scan.
 type Options struct {
 	// Limit is the most candidates to return. Zero means DefaultLimit.
@@ -354,6 +362,18 @@ func Find(ctx context.Context, deps capability.Deps, src Source, runID int64, op
 	// best rather than leave the answer short.
 	keep := newTopN(shortlistSize(limit))
 
+	// A scan of one directory of an index whose full scan fits the budget reads
+	// that directory's definitions only. What it reports as examined is still
+	// the number the whole scan would have examined, which was stored when the
+	// index was written, so nothing it says depends on which way it was read.
+	var dir directorySource
+	wholeScan := 0
+	if ds, ok := src.(directorySource); ok && opts.PathPrefix != "" {
+		if n, stored, err := ds.StoredUnreferencedCount(ctx, runID); err == nil && stored && n <= budget {
+			dir, wholeScan = ds, n
+		}
+	}
+
 	var after int64
 	examined := 0
 	truncated := false
@@ -361,7 +381,9 @@ scan:
 	for {
 		var page []registry.UnreferencedSymbol
 		var err error
-		if ps, ok := src.(prefixSource); ok && opts.PathPrefix != "" {
+		if dir != nil {
+			page, err = dir.UnreferencedSymbolsIn(ctx, runID, after, pageSize, opts.PathPrefix)
+		} else if ps, ok := src.(prefixSource); ok && opts.PathPrefix != "" {
 			// The rows outside the prefix are discarded below, so their probes
 			// are not worked out. The rows and their order are unchanged.
 			page, err = ps.UnreferencedSymbolsUnder(ctx, runID, after, pageSize, opts.PathPrefix)
@@ -430,6 +452,9 @@ scan:
 		}
 	}
 
+	if dir != nil {
+		examined = wholeScan
+	}
 	shortlist := keep.sorted()
 	graphLikely := rep.Likely
 	checked, err := verifyAgainstText(ctx, src, runID, shortlist, limit, rep)

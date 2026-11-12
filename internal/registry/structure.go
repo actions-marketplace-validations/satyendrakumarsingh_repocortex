@@ -130,7 +130,7 @@ const (
 		                      AND e.kind <> 'CONTAINS'
 		                      AND e.src_id <> s.id`
 
-	nameUnboundProbe = `EXISTS (SELECT 1 FROM symbol_references sr INDEXED BY idx_refs_run_name
+	nameUnboundProbe = `EXISTS (SELECT 1 FROM symbol_references sr INDEXED BY idx_refs_name_binding
 		                WHERE sr.index_run_id = s.index_run_id
 		                  AND sr.name = s.name
 		                  AND sr.resolution IN ('pending','ambiguous','unresolved'))`
@@ -203,6 +203,61 @@ func (r *Registry) UnreferencedSymbolsUnder(ctx context.Context, runID, afterID 
 	rows, err := r.db.QueryContext(ctx, unreferencedSQLUnder(len(unreferencedKinds), under), args...)
 	if err != nil {
 		return nil, fmt.Errorf("registry: unreferenced symbols for run %d: %w", runID, err)
+	}
+	defer rows.Close()
+
+	var out []UnreferencedSymbol
+	for rows.Next() {
+		var u UnreferencedSymbol
+		if err := rows.Scan(&u.ID, &u.Kind, &u.Name, &u.FQN, &u.FilePath, &u.Language,
+			&u.StartLine, &u.EndLine, &u.Exported,
+			&u.PartialParse, &u.NameUnbound, &u.Overrides, &u.ConsumesEvent); err != nil {
+			return nil, fmt.Errorf("registry: scan unreferenced symbol: %w", err)
+		}
+		out = append(out, u)
+	}
+	return out, rows.Err()
+}
+
+// UnreferencedSymbolsIn is UnreferencedSymbols restricted to the definitions in
+// files whose path begins with prefix, reached through those files instead of
+// through every symbol of the run.
+//
+// For a caller that knows how many definitions a full scan would have
+// examined (StoredUnreferencedCount) and wants one directory of a large index:
+// it reads that directory's definitions and nothing else. The rows are the plain
+// form's rows for that prefix, in the same order, with the same signals.
+func (r *Registry) UnreferencedSymbolsIn(ctx context.Context, runID, afterID int64, limit int, prefix string) ([]UnreferencedSymbol, error) {
+	if limit <= 0 {
+		limit = 500
+	}
+	args := make([]any, 0, len(unreferencedKinds)+6)
+	args = append(args, runID, runID, prefix, prefix, afterID)
+	for _, k := range unreferencedKinds {
+		args = append(args, k)
+	}
+	args = append(args, limit)
+
+	rows, err := r.db.QueryContext(ctx, `
+		SELECT s.id, s.kind, s.name, s.fqn, f.path, f.language,
+		       s.start_line, s.end_line, s.exported,
+		       f.parse_status <> 'ok',
+		       `+nameUnboundProbe+`,
+		       `+overridesProbe+`,
+		       `+consumesEventProbe+`
+		  FROM files f
+		 CROSS JOIN symbols s INDEXED BY idx_symbols_file ON s.file_id = f.id
+		 WHERE f.index_run_id = ?
+		   AND s.index_run_id = ?
+		   AND substr(f.path, 1, length(?)) = ?
+		   AND s.id > ?
+		   AND s.kind IN (`+placeholders(len(unreferencedKinds))+`)
+		   AND NOT EXISTS (SELECT 1 FROM edges e INDEXED BY idx_edges_dst
+		                    WHERE `+incomingEdge+`)
+		 ORDER BY s.id
+		 LIMIT ?`, args...)
+	if err != nil {
+		return nil, fmt.Errorf("registry: unreferenced symbols under %q for run %d: %w", prefix, runID, err)
 	}
 	defer rows.Close()
 

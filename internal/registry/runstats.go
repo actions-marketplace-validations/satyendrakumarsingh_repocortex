@@ -40,6 +40,11 @@ func (r *Registry) RefreshRunStats(ctx context.Context, runID int64) error {
 		return fmt.Errorf("registry: run stats: %w", err)
 	}
 
+	unreferenced, err := r.countUnreferenced(ctx, runID)
+	if err != nil {
+		return err
+	}
+
 	tx, err := r.db.BeginTx(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("registry: run stats: %w", err)
@@ -62,10 +67,10 @@ func (r *Registry) RefreshRunStats(ctx context.Context, runID int64) error {
 	// Written last, in the same transaction, so a reader never sees valid = 1
 	// beside rows from an earlier computation.
 	if _, err := tx.ExecContext(ctx, `
-		INSERT INTO run_stats (index_run_id, valid, by_compiler, computed_unix) VALUES (?, 1, ?, ?)
+		INSERT INTO run_stats (index_run_id, valid, by_compiler, computed_unix, unreferenced) VALUES (?, 1, ?, ?, ?)
 		ON CONFLICT(index_run_id) DO UPDATE SET valid = 1, by_compiler = excluded.by_compiler,
-		       computed_unix = excluded.computed_unix`,
-		runID, byCompiler, time.Now().Unix()); err != nil {
+		       computed_unix = excluded.computed_unix, unreferenced = excluded.unreferenced`,
+		runID, byCompiler, time.Now().Unix(), unreferenced); err != nil {
 		return fmt.Errorf("registry: run stats: %w", err)
 	}
 	return tx.Commit()
@@ -136,4 +141,43 @@ func (r *Registry) storedResolutionStats(ctx context.Context, runID int64) (Reso
 	}
 	s.ByCompiler = byCompiler
 	return s, true, nil
+}
+
+// countUnreferenced is how many definitions UnreferencedSymbols would return for
+// the run: the number a full dead-code scan examines.
+func (r *Registry) countUnreferenced(ctx context.Context, runID int64) (int64, error) {
+	args := make([]any, 0, len(unreferencedKinds)+1)
+	args = append(args, runID)
+	for _, k := range unreferencedKinds {
+		args = append(args, k)
+	}
+	var n int64
+	if err := r.db.QueryRowContext(ctx, `
+		SELECT COUNT(*) FROM symbols s NOT INDEXED
+		 WHERE s.index_run_id = ?
+		   AND s.kind IN (`+placeholders(len(unreferencedKinds))+`)
+		   AND NOT EXISTS (SELECT 1 FROM edges e INDEXED BY idx_edges_dst
+		                    WHERE `+incomingEdge+`)`, args...).Scan(&n); err != nil {
+		return 0, fmt.Errorf("registry: count unreferenced symbols: %w", err)
+	}
+	return n, nil
+}
+
+// StoredUnreferencedCount is how many definitions a full scan for unreferenced
+// ones would examine, when the run's stored figures are valid. False means
+// "not stored": an index written by an older build, or changed since.
+func (r *Registry) StoredUnreferencedCount(ctx context.Context, runID int64) (int, bool, error) {
+	var valid int
+	var n int64
+	err := r.db.QueryRowContext(ctx,
+		`SELECT valid, unreferenced FROM run_stats WHERE index_run_id = ?`, runID).Scan(&valid, &n)
+	switch {
+	case errors.Is(err, sql.ErrNoRows):
+		return 0, false, nil
+	case err != nil && (strings.Contains(err.Error(), "no such table") || strings.Contains(err.Error(), "no such column")):
+		return 0, false, nil
+	case err != nil:
+		return 0, false, fmt.Errorf("registry: stored unreferenced count: %w", err)
+	}
+	return int(n), valid == 1 && n >= 0, nil
 }
