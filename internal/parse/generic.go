@@ -764,24 +764,28 @@ const (
 // WHY LESS THAN THE CEILING. In google/benchmark, test/benchmark_test.cc held
 // one worker for the whole 60 s ceiling and was recorded as incomplete. The
 // time was not in the work limits' reach: it was one dispatch of the library's
-// third retry pass, entered at iteration 2,299 of a limit of 295,950, which
-// does not return and does not count. The trigger is a macro between a return
-// type and a name (`int BENCHMARK_NOINLINE Factorial(int n) {`) that makes the
-// first two passes die with no live stack; the file parses in 107 ms once the
-// macro is blanked. So a file in a masked language that outruns this allowance
-// is offered to the masks (a retry takes milliseconds) before it is given the
-// rest of the ceiling.
+// third full-parse retry pass, entered at iteration 2,299 of a limit of
+// 295,950, which neither returns nor counts. The first two passes die with no
+// live stack at a macro between a return type and a name
+// (`int BENCHMARK_NOINLINE Factorial(int n) {`), the third recovers past it
+// and stalls at `std::complex<double>>` 8,000 bytes later. The first pass takes
+// 80 ms; with the macro blanked the whole file parses in 107 ms. A cut of the
+// file to five lines (see TestAStalledParseIsRescuedByTheMask) stalls the same
+// way. So a file in a masked language that outruns this allowance is offered
+// to the masks, whose retry takes milliseconds, before it is given the rest of
+// the ceiling.
 //
-// WHAT IT DOES NOT CHANGE. Every file that finishes inside the allowance gets
-// exactly the result it got before. A file that does not finish and is not
-// rescued is parsed again with the whole ceiling, so no file is stopped sooner
-// than it was; the only cost of a file near the allowance is a second parse. The
-// allowance is far above anything measured (the slowest masked-language file,
-// 700 KB of C, takes 0.3 s; 5 s plus 10 ms per KiB is 17 times that and
-// 10 times the slowest file of any language per byte), so which side of it a
-// file falls on does not depend on machine speed for any file seen; and a
-// file that runs out of it is, in every case seen, one the parser cannot
-// finish at all.
+// WHAT IT DOES NOT CHANGE. A file that finishes inside the allowance gets the
+// result it got before. A file that does not finish and is not rescued is
+// parsed again with the whole ceiling, so no file is stopped sooner than it
+// was; what a file near the allowance pays is a second parse. The allowance
+// is generous against what was measured here (redis src/module.c, 693 KB of
+// C, takes 0.3 s in the table above and is allowed 9 s; the first pass of
+// benchmark_test.cc takes 80 ms and is allowed 2 s), but it is a wall-clock
+// figure, and a file that ran out of it on a slow machine and not on a fast
+// one would get the masked reading on the first and the plain one on the
+// second. None was seen: the files that run out of it here are ones the
+// parser does not finish at all.
 func (c parserConfig) probeMicros(language string, srcLen int) uint64 {
 	full := c.ceilingMicros()
 	if !maskedLanguages[language] && !condLanguages[language] {

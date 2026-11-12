@@ -810,7 +810,12 @@ func (p *genericParser) retryMaskedWithin(ctx context.Context, tree *ts.Tree, st
 		return nil
 	}
 	var mc *maskContext
-	if condDue {
+	if condDue || stop.early {
+		// A plain parse that stopped early is judged by how far each parse
+		// got, whichever mask was applied; see maskGuard.
+		if plainErrs == nil && root != nil {
+			plainErrs = errorSpans(root)
+		}
 		mc = &maskContext{
 			plan: plan, plainErrs: plainErrs, language: lang,
 			plainEarly: stop.early, maskedEarly: stop2.early,
