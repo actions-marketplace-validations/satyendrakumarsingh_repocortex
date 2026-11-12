@@ -1,0 +1,1190 @@
+{
+ "group": "R6",
+ "binary": "repocortex version dev (scratchpad build)",
+ "date": "2026-11-12",
+ "languages": [
+  {
+   "language": "c_sharp",
+   "project": "https://github.com/JamesNK/Newtonsoft.Json",
+   "commit": "52fa3aef1f2cadcd3a3f874251eddc98d3efbbaa",
+   "timing": {
+    "index_wall_seconds": 131.07,
+    "index_cpu_user_seconds": 715.65,
+    "index_reported_ms": 130488,
+    "resolve_wall_seconds": 0.82,
+    "resolve_reported_ms": 693,
+    "workers": "default (4)",
+    "note": "Kotlin repo of 437 files indexed in 7.8s; this repo needed 131s wall / 716s CPU. C# parse cost is not proportional to size: a 21.7KB file (Schema/JsonSchemaGenerator.cs) exceeds 5s alone while a 77KB file (DefaultContractResolver.cs) takes 1.6s."
+   },
+   "index_stats": {
+    "files_discovered": 1176,
+    "files_indexed_cli": 912,
+    "files_skipped_cli": 221,
+    "c_sharp_files": 951,
+    "c_sharp_ok": 902,
+    "c_sharp_partial": 5,
+    "c_sharp_failed": 43,
+    "c_sharp_skipped_oversize": 1,
+    "symbols_cli": 6432,
+    "symbols_rows_total": 6745,
+    "symbols_c_sharp": 6402,
+    "symbols_c_sharp_by_kind": {
+     "method": 4928,
+     "class": 1431,
+     "interface": 43
+    },
+    "references": 13342,
+    "imports": 4870,
+    "parse_failures_cli": 43,
+    "parse_failures_index_runs_row": 48,
+    "run_status": "degraded",
+    "partial_meaning": "'partial' = file parsed but produced zero symbols (parse_error is empty). All 5: Properties/AssemblyInfo.cs x2 (only assembly attributes), Schema/ValidationEventHandler.cs, Serialization/ObjectConstructor.cs, Utilities/MethodCall.cs (each contains only a delegate declaration, which is never extracted).",
+    "oversize_skipped": {
+     "file": "Src/Newtonsoft.Json.Tests/Serialization/JsonSerializerTest.cs",
+     "bytes": 316248,
+     "reason": "source is 316248 bytes, over the 262144 limit"
+    }
+   },
+   "parse_failures": [
+    {
+     "file": "Src/Newtonsoft.Json/Serialization/JsonSerializerInternalReader.cs",
+     "bytes": 127949,
+     "error": "parse exceeded 5s: context deadline exceeded (in the full 4-worker run)",
+     "seconds_alone": 5.05,
+     "status_alone": "ok",
+     "error_alone": null
+    },
+    {
+     "file": "Src/Newtonsoft.Json.Tests/Converters/XmlNodeConverterTest.cs",
+     "bytes": 121708,
+     "error": "parse exceeded 5s: context deadline exceeded (in the full 4-worker run)",
+     "seconds_alone": 5.35,
+     "status_alone": "failed",
+     "error_alone": "parse exceeded 5s: context deadline exceeded"
+    },
+    {
+     "file": "Src/Newtonsoft.Json/Linq/JToken.cs",
+     "bytes": 112215,
+     "error": "parse exceeded 5s: context deadline exceeded (in the full 4-worker run)",
+     "seconds_alone": 4.85,
+     "status_alone": "ok",
+     "error_alone": null
+    },
+    {
+     "file": "Src/Newtonsoft.Json.Tests/Serialization/TypeNameHandlingTests.cs",
+     "bytes": 89629,
+     "error": "parse exceeded 5s: context deadline exceeded (in the full 4-worker run)",
+     "seconds_alone": 5.22,
+     "status_alone": "failed",
+     "error_alone": "parse exceeded 5s: context deadline exceeded"
+    },
+    {
+     "file": "Src/Newtonsoft.Json/Utilities/LinqBridge.cs",
+     "bytes": 89278,
+     "error": "parse exceeded 5s: context deadline exceeded (in the full 4-worker run)",
+     "seconds_alone": 5.21,
+     "status_alone": "failed",
+     "error_alone": "parse exceeded 5s: context deadline exceeded"
+    },
+    {
+     "file": "Src/Newtonsoft.Json.Tests/JsonTextWriterAsyncTests.cs",
+     "bytes": 83893,
+     "error": "parse exceeded 5s: context deadline exceeded (in the full 4-worker run)",
+     "seconds_alone": 5.22,
+     "status_alone": "failed",
+     "error_alone": "parse exceeded 5s: context deadline exceeded"
+    },
+    {
+     "file": "Src/Newtonsoft.Json/JsonTextWriter.Async.cs",
+     "bytes": 79479,
+     "error": "parse exceeded 5s: context deadline exceeded (in the full 4-worker run)",
+     "seconds_alone": 5.23,
+     "status_alone": "failed",
+     "error_alone": "parse exceeded 5s: context deadline exceeded"
+    },
+    {
+     "file": "Src/Newtonsoft.Json/JsonTextReader.Async.cs",
+     "bytes": 79476,
+     "error": "parse exceeded 5s: context deadline exceeded (in the full 4-worker run)",
+     "seconds_alone": 4.65,
+     "status_alone": "ok",
+     "error_alone": null
+    },
+    {
+     "file": "Src/Newtonsoft.Json.Tests/Bson/BsonReaderTests.cs",
+     "bytes": 73178,
+     "error": "parse exceeded 5s: context deadline exceeded (in the full 4-worker run)",
+     "seconds_alone": 5.21,
+     "status_alone": "failed",
+     "error_alone": "parse exceeded 5s: context deadline exceeded"
+    },
+    {
+     "file": "Src/Newtonsoft.Json.Tests/JsonConvertTest.cs",
+     "bytes": 72573,
+     "error": "parse exceeded 5s: context deadline exceeded (in the full 4-worker run)",
+     "seconds_alone": 5.2,
+     "status_alone": "failed",
+     "error_alone": "parse exceeded 5s: context deadline exceeded"
+    },
+    {
+     "file": "Src/Newtonsoft.Json.Tests/JsonTextReaderTests/ReadAsyncTests.cs",
+     "bytes": 70793,
+     "error": "parse exceeded 5s: context deadline exceeded (in the full 4-worker run)",
+     "seconds_alone": 5.37,
+     "status_alone": "failed",
+     "error_alone": "parse exceeded 5s: context deadline exceeded"
+    },
+    {
+     "file": "Src/Newtonsoft.Json.Tests/Linq/JObjectTests.cs",
+     "bytes": 69919,
+     "error": "parse exceeded 5s: context deadline exceeded (in the full 4-worker run)",
+     "seconds_alone": 6.29,
+     "status_alone": "failed",
+     "error_alone": "parse exceeded 5s: context deadline exceeded"
+    },
+    {
+     "file": "Src/Newtonsoft.Json.Tests/JsonValidatingReaderTests.cs",
+     "bytes": 64013,
+     "error": "parse exceeded 5s: context deadline exceeded (in the full 4-worker run)",
+     "seconds_alone": 5.26,
+     "status_alone": "failed",
+     "error_alone": "parse exceeded 5s: context deadline exceeded"
+    },
+    {
+     "file": "Src/Newtonsoft.Json.Tests/JsonTextReaderTests/ReadTests.cs",
+     "bytes": 63218,
+     "error": "parse exceeded 5s: context deadline exceeded (in the full 4-worker run)",
+     "seconds_alone": 5.2,
+     "status_alone": "failed",
+     "error_alone": "parse exceeded 5s: context deadline exceeded"
+    },
+    {
+     "file": "Src/Newtonsoft.Json.Tests/JsonTextWriterTest.cs",
+     "bytes": 61981,
+     "error": "parse exceeded 5s: context deadline exceeded (in the full 4-worker run)",
+     "seconds_alone": 5.21,
+     "status_alone": "failed",
+     "error_alone": "parse exceeded 5s: context deadline exceeded"
+    },
+    {
+     "file": "Src/Newtonsoft.Json/Utilities/ConvertUtils.cs",
+     "bytes": 61262,
+     "error": "parse exceeded 5s: context deadline exceeded (in the full 4-worker run)",
+     "seconds_alone": 5.2,
+     "status_alone": "failed",
+     "error_alone": "parse exceeded 5s: context deadline exceeded"
+    },
+    {
+     "file": "Src/Newtonsoft.Json.Tests/Serialization/TraceWriterTests.cs",
+     "bytes": 60926,
+     "error": "parse exceeded 5s: context deadline exceeded (in the full 4-worker run)",
+     "seconds_alone": 3.51,
+     "status_alone": "ok",
+     "error_alone": null
+    },
+    {
+     "file": "Src/Newtonsoft.Json.Tests/Bson/BsonReaderAsyncTests.cs",
+     "bytes": 59227,
+     "error": "parse exceeded 5s: context deadline exceeded (in the full 4-worker run)",
+     "seconds_alone": 5.32,
+     "status_alone": "failed",
+     "error_alone": "parse exceeded 5s: context deadline exceeded"
+    },
+    {
+     "file": "Src/Newtonsoft.Json.Tests/Linq/JTokenTests.cs",
+     "bytes": 58296,
+     "error": "parse exceeded 5s: context deadline exceeded (in the full 4-worker run)",
+     "seconds_alone": 5.23,
+     "status_alone": "failed",
+     "error_alone": "parse exceeded 5s: context deadline exceeded"
+    },
+    {
+     "file": "Src/Newtonsoft.Json.Tests/Linq/LinqToJsonTest.cs",
+     "bytes": 54143,
+     "error": "parse exceeded 5s: context deadline exceeded (in the full 4-worker run)",
+     "seconds_alone": 5.25,
+     "status_alone": "failed",
+     "error_alone": "parse exceeded 5s: context deadline exceeded"
+    },
+    {
+     "file": "Src/Newtonsoft.Json/JsonSerializer.cs",
+     "bytes": 50876,
+     "error": "parse exceeded 5s: context deadline exceeded (in the full 4-worker run)",
+     "seconds_alone": 5.24,
+     "status_alone": "failed",
+     "error_alone": "parse exceeded 5s: context deadline exceeded"
+    },
+    {
+     "file": "Src/Newtonsoft.Json.Tests/Linq/JsonPath/JPathExecuteTests.cs",
+     "bytes": 49878,
+     "error": "parse exceeded 5s: context deadline exceeded (in the full 4-worker run)",
+     "seconds_alone": 5.23,
+     "status_alone": "failed",
+     "error_alone": "parse exceeded 5s: context deadline exceeded"
+    },
+    {
+     "file": "Src/Newtonsoft.Json.Tests/JsonTextReaderTests/ExceptionHandlingAsyncTests.cs",
+     "bytes": 45653,
+     "error": "parse exceeded 5s: context deadline exceeded (in the full 4-worker run)",
+     "seconds_alone": 5.19,
+     "status_alone": "failed",
+     "error_alone": "parse exceeded 5s: context deadline exceeded"
+    },
+    {
+     "file": "Src/Newtonsoft.Json.Tests/JsonTextReaderTests/MiscAsyncTests.cs",
+     "bytes": 43117,
+     "error": "parse exceeded 5s: context deadline exceeded (in the full 4-worker run)",
+     "seconds_alone": 5.21,
+     "status_alone": "failed",
+     "error_alone": "parse exceeded 5s: context deadline exceeded"
+    },
+    {
+     "file": "Src/Newtonsoft.Json.Tests/JsonTextReaderTests/ExceptionHandlingTests.cs",
+     "bytes": 42402,
+     "error": "parse exceeded 5s: context deadline exceeded (in the full 4-worker run)",
+     "seconds_alone": 4.71,
+     "status_alone": "ok",
+     "error_alone": null
+    },
+    {
+     "file": "Src/Newtonsoft.Json.Tests/JsonTextReaderTests/MiscTests.cs",
+     "bytes": 41992,
+     "error": "parse exceeded 5s: context deadline exceeded (in the full 4-worker run)",
+     "seconds_alone": 5.19,
+     "status_alone": "failed",
+     "error_alone": "parse exceeded 5s: context deadline exceeded"
+    },
+    {
+     "file": "Src/Newtonsoft.Json.Tests/Linq/JValueTests.cs",
+     "bytes": 40352,
+     "error": "parse exceeded 5s: context deadline exceeded (in the full 4-worker run)",
+     "seconds_alone": 5.19,
+     "status_alone": "failed",
+     "error_alone": "parse exceeded 5s: context deadline exceeded"
+    },
+    {
+     "file": "Src/Newtonsoft.Json.Tests/Serialization/PreserveReferencesHandlingTests.cs",
+     "bytes": 39140,
+     "error": "parse exceeded 5s: context deadline exceeded (in the full 4-worker run)",
+     "seconds_alone": 3.63,
+     "status_alone": "ok",
+     "error_alone": null
+    },
+    {
+     "file": "Src/Newtonsoft.Json.Tests/Converters/StringEnumConverterTests.cs",
+     "bytes": 37626,
+     "error": "parse exceeded 5s: context deadline exceeded (in the full 4-worker run)",
+     "seconds_alone": 3.92,
+     "status_alone": "ok",
+     "error_alone": null
+    },
+    {
+     "file": "Src/Newtonsoft.Json.Tests/Bson/BsonWriterTests.cs",
+     "bytes": 36460,
+     "error": "parse exceeded 5s: context deadline exceeded (in the full 4-worker run)",
+     "seconds_alone": 5.25,
+     "status_alone": "failed",
+     "error_alone": "parse exceeded 5s: context deadline exceeded"
+    },
+    {
+     "file": "Src/Newtonsoft.Json.Tests/Converters/UnionConverterTests.cs",
+     "bytes": 36164,
+     "error": "parse exceeded 5s: context deadline exceeded (in the full 4-worker run)",
+     "seconds_alone": 3.87,
+     "status_alone": "ok",
+     "error_alone": null
+    },
+    {
+     "file": "Src/Newtonsoft.Json.Tests/Serialization/ExtensionDataTests.cs",
+     "bytes": 35072,
+     "error": "parse exceeded 5s: context deadline exceeded (in the full 4-worker run)",
+     "seconds_alone": 2.69,
+     "status_alone": "ok",
+     "error_alone": null
+    },
+    {
+     "file": "Src/Newtonsoft.Json.Tests/Documentation/SerializationTests.cs",
+     "bytes": 34891,
+     "error": "parse exceeded 5s: context deadline exceeded (in the full 4-worker run)",
+     "seconds_alone": 3.63,
+     "status_alone": "ok",
+     "error_alone": null
+    },
+    {
+     "file": "Src/Newtonsoft.Json.Tests/Linq/JTokenReaderTest.cs",
+     "bytes": 33802,
+     "error": "parse exceeded 5s: context deadline exceeded (in the full 4-worker run)",
+     "seconds_alone": 4.99,
+     "status_alone": "ok",
+     "error_alone": null
+    },
+    {
+     "file": "Src/Newtonsoft.Json.Tests/Serialization/ContractResolverTests.cs",
+     "bytes": 32054,
+     "error": "parse exceeded 5s: context deadline exceeded (in the full 4-worker run)",
+     "seconds_alone": 3.59,
+     "status_alone": "ok",
+     "error_alone": null
+    },
+    {
+     "file": "Src/Newtonsoft.Json.Tests/Linq/JsonPath/JPathParseTests.cs",
+     "bytes": 31454,
+     "error": "parse exceeded 5s: context deadline exceeded (in the full 4-worker run)",
+     "seconds_alone": 4.25,
+     "status_alone": "ok",
+     "error_alone": null
+    },
+    {
+     "file": "Src/Newtonsoft.Json.Tests/Linq/JTokenReaderAsyncTests.cs",
+     "bytes": 31436,
+     "error": "parse exceeded 5s: context deadline exceeded (in the full 4-worker run)",
+     "seconds_alone": 4.7,
+     "status_alone": "ok",
+     "error_alone": null
+    },
+    {
+     "file": "Src/Newtonsoft.Json/Bson/BsonReader.cs",
+     "bytes": 30797,
+     "error": "parse exceeded 5s: context deadline exceeded (in the full 4-worker run)",
+     "seconds_alone": 2.84,
+     "status_alone": "ok",
+     "error_alone": null
+    },
+    {
+     "file": "Src/Newtonsoft.Json.Tests/Bson/BsonWriterAsyncTests.cs",
+     "bytes": 22860,
+     "error": "parse exceeded 5s: context deadline exceeded (in the full 4-worker run)",
+     "seconds_alone": 3.38,
+     "status_alone": "ok",
+     "error_alone": null
+    },
+    {
+     "file": "Src/Newtonsoft.Json.Tests/JsonTextReaderTests/ParseAsyncTests.cs",
+     "bytes": 22399,
+     "error": "parse exceeded 5s: context deadline exceeded (in the full 4-worker run)",
+     "seconds_alone": 3.25,
+     "status_alone": "ok",
+     "error_alone": null
+    },
+    {
+     "file": "Src/Newtonsoft.Json/Schema/JsonSchemaGenerator.cs",
+     "bytes": 21692,
+     "error": "parse exceeded 5s: context deadline exceeded (in the full 4-worker run)",
+     "seconds_alone": 5.19,
+     "status_alone": "failed",
+     "error_alone": "parse exceeded 5s: context deadline exceeded"
+    },
+    {
+     "file": "Src/Newtonsoft.Json.Tests/Linq/JArrayTests.cs",
+     "bytes": 20561,
+     "error": "parse exceeded 5s: context deadline exceeded (in the full 4-worker run)",
+     "seconds_alone": 2.49,
+     "status_alone": "ok",
+     "error_alone": null
+    },
+    {
+     "file": "Src/Newtonsoft.Json.Tests/Issues/Issue2176.cs",
+     "bytes": 18590,
+     "error": "parse exceeded 5s: context deadline exceeded (in the full 4-worker run)",
+     "seconds_alone": 4.27,
+     "status_alone": "ok",
+     "error_alone": null
+    }
+   ],
+   "parse_failures_summary": {
+    "failed_in_full_run": 43,
+    "of_which_library_source_not_tests": 9,
+    "of_which_test_files": 34,
+    "parse_ok_when_indexed_alone": 19,
+    "still_fail_alone": 24,
+    "library_files_lost": [
+     "Serialization/JsonSerializerInternalReader.cs",
+     "Linq/JToken.cs",
+     "Utilities/LinqBridge.cs",
+     "JsonTextWriter.Async.cs",
+     "JsonTextReader.Async.cs",
+     "Utilities/ConvertUtils.cs",
+     "JsonSerializer.cs",
+     "Bson/BsonReader.cs",
+     "Schema/JsonSchemaGenerator.cs"
+    ],
+    "note": "The 5s deadline is wall-clock per file, so the outcome depends on machine load: 19 of the 43 parse in 2.5-5.05s when alone and failed only because 4 workers ran concurrently; 24 fail even alone. Failed files contribute zero symbols and zero references (regex estimate: about 601 library methods + 2,282 test methods in the 43 files)."
+   },
+   "references": {
+    "total": 13342,
+    "resolved": 4785,
+    "ambiguous": 6385,
+    "unresolved": 2172,
+    "resolved_pct_of_all": 35.9,
+    "resolved_pct_of_in_index_names_cli": 42.8,
+    "ambiguous_over_candidate_cap": 2702,
+    "arg_count_populated": 0,
+    "kinds": {
+     "reference.call": 13342
+    }
+   },
+   "edges_by_confidence": {
+    "CALLS": {
+     "high": 3010,
+     "medium": 940,
+     "low": 780,
+     "total": 4730
+    },
+    "EXTENDS": 0,
+    "IMPLEMENTS": 0,
+    "resolve_cli_reference_counts": {
+     "high": 3036,
+     "medium": 955,
+     "low": 794
+    },
+    "by_detail": {
+     "defined in the same file (high)": 1876,
+     "receiver type matches (high)": 623,
+     "single match in an imported package (high)": 511,
+     "multiple matches among imports (medium)": 563,
+     "same directory, but the language requires an import (medium)": 269,
+     "receiver matches, overloaded (medium)": 108,
+     "unique name in repository, no import evidence (low)": 780
+    }
+   },
+   "definitions": {
+    "files": [
+     "Src/Newtonsoft.Json/JsonConverter.cs",
+     "Src/Newtonsoft.Json/Utilities/StringBuffer.cs",
+     "Src/Newtonsoft.Json/Linq/JTokenType.cs",
+     "Src/Newtonsoft.Json/Serialization/JsonPropertyCollection.cs",
+     "Src/Newtonsoft.Json/Utilities/DateTimeParser.cs"
+    ],
+    "per_file": [
+     {
+      "file": "JsonConverter.cs",
+      "expected": 12,
+      "extracted": 10,
+      "correct": 10,
+      "wrong": 0,
+      "missed": 2
+     },
+     {
+      "file": "StringBuffer.cs",
+      "expected": 12,
+      "extracted": 9,
+      "correct": 9,
+      "wrong": 0,
+      "missed": 3
+     },
+     {
+      "file": "JTokenType.cs",
+      "expected": 1,
+      "extracted": 1,
+      "correct": 1,
+      "wrong": 0,
+      "missed": 0
+     },
+     {
+      "file": "JsonPropertyCollection.cs",
+      "expected": 7,
+      "extracted": 7,
+      "correct": 7,
+      "wrong": 0,
+      "missed": 0
+     },
+     {
+      "file": "DateTimeParser.cs",
+      "expected": 12,
+      "extracted": 11,
+      "correct": 11,
+      "wrong": 0,
+      "missed": 1
+     }
+    ],
+    "expected": 44,
+    "extracted": 38,
+    "correct": 38,
+    "wrong": 0,
+    "missed": 6,
+    "precision": 1.0,
+    "recall": 0.864,
+    "standard": "correct = right name at the right line with a kind in the right family (type vs callable). Enum members, fields and static readonly fields were NOT counted as expected (18 enum members and 26 fields in these files are also absent). 8 of the 38 correct rows carry a coarser kind: struct->class (2), enum->class (2), constructor->method (4).",
+    "examples": {
+     "missed": [
+      "JsonConverter.CanRead / CanWrite (expression-bodied properties, JsonConverter.cs:70,76)",
+      "StringBuffer.Position / IsEmpty / InternalBuffer (properties)",
+      "DateTimeParser.MaxFractionDigits (const, DateTimeParser.cs:89)"
+     ],
+     "wrong": []
+    },
+    "index_wide_findings": {
+     "spurious_return_type_methods": {
+      "count": 546,
+      "of_method_symbols": 4928,
+      "pct": 11.1,
+      "what": "every method whose return type is a plain identifier also yields a second 'method' symbol named after the RETURN TYPE at the same line/col, e.g. method 'IXmlNode' at Converters/XmlNodeConverter.cs:57 (really CreateComment), method 'T' at Converters/CustomCreationConverter.cs:82, five methods named 'PathFilter' in Linq/JsonPath/JPath.cs. Not present in the 5 sampled files (their return types are predefined/nullable), so the sample's 100% precision overstates the index: index-wide method precision is at most 4382/4928 = 88.9%."
+     },
+     "silent_loss_in_ok_files": {
+      "what": "Files with status 'ok' can lose most of their definitions. Linq/JContainer.cs (42.5KB, #if blocks inside the class base list and bodies) is 'ok' with 14 symbols: the class JContainer itself is absent and every member after line 360 is gone (InsertItem, RemoveItemAt, GetItem, SetItem, Add, Merge...; regex finds 46 method declarations, 13 extracted).",
+      "regex_estimate_library_ok_files": "1922 of 2023 method declarations found (95.0%); 303 of 307 type declarations",
+      "regex_estimate_library_including_failed_files": "1922 of 2624 methods (73.2%)",
+      "regex_estimate_tests": "2309 of 5236 methods (44.1%) because 34 test files failed and 1 was skipped",
+      "regex_estimate_all": "4231 of 7860 methods (53.8%)",
+      "caveat": "regex estimate, not hand-verified"
+     },
+     "never_extracted": [
+      "properties (0 of roughly 2,300 by regex)",
+      "fields and constants",
+      "enum members",
+      "delegates",
+      "events/indexers/operators not checked"
+     ],
+     "fqn": "fqn is '<path>:<Name>' with no namespace or containing type, so all overloads and same-named members of different classes in one file share an fqn."
+    }
+   },
+   "precision": {
+    "standard": "strict = exactly the declaration the C# compiler binds (static type's most-derived visible override, right overload). lenient = strict OR same virtual/interface slot (base declaration, or an override in some subtype of the receiver's static type) with a compatible overload. Calls to Assert.X/CollectionAssert.X were counted correct when bound to the in-repo XUnitAssert/CollectionAssert shim, which is the real target only under the DNXCORE50 build (alias 'using Assert = Newtonsoft.Json.Tests.XUnitAssert'); under the NUnit build the target is external.",
+    "sampling": "all CALLS edges with a .cs evidence file, ordered by id, per tier every k-th id with k=floor(N/20) starting at offset k/2",
+    "high": {
+     "population": 3010,
+     "sampled": 20,
+     "ids": [
+      163,
+      454,
+      785,
+      1374,
+      1677,
+      1938,
+      2117,
+      2304,
+      2485,
+      2669,
+      2854,
+      3092,
+      3287,
+      3467,
+      3646,
+      3841,
+      4016,
+      4194,
+      4357,
+      4623
+     ],
+     "correct": 17,
+     "wrong": 3,
+     "unverifiable": 0,
+     "precision": 0.85,
+     "lenient_correct": 18,
+     "lenient_wrong": 2,
+     "precision_lenient": 0.9,
+     "wrong_examples": [
+      "163: Assert.IsNull(obj2.Object2) in a test -> private static JObject.IsNull(JToken) ('single match in an imported package')",
+      "785: propertyDescriptor1.ResetValue(o) -> the enclosing TEST METHOD ResetValue() in the same file ('defined in the same file'); real target JPropertyDescriptor.ResetValue(object)",
+      "2304 (strict only): writer.WriteEndObject() with writer: JsonWriter -> TraceJsonWriter.WriteEndObject override instead of JsonWriter.WriteEndObject"
+     ]
+    },
+    "medium": {
+     "population": 940,
+     "sampled": 20,
+     "ids": [
+      80,
+      187,
+      471,
+      919,
+      1096,
+      1184,
+      1328,
+      1616,
+      1821,
+      2152,
+      2506,
+      2734,
+      2928,
+      3003,
+      3379,
+      3691,
+      4101,
+      4414,
+      4526,
+      4655
+     ],
+     "correct": 12,
+     "wrong": 8,
+     "unverifiable": 0,
+     "precision": 0.6,
+     "lenient_correct": 16,
+     "lenient_wrong": 4,
+     "precision_lenient": 0.8,
+     "wrong_examples": [
+      "1184: JToken.FromObject(...) -> JArray.FromObject (JToken.cs failed to parse, so the real target is not in the index)",
+      "1616: j.WriteTo(writer) with j: JToken -> JArray.WriteTo(JsonWriter, params JsonConverter[]) instead of JToken.WriteTo(JsonWriter)",
+      "2152: ReflectionObjectPerType.Get(value.GetType()) (a ThreadSafeStore) -> BoxedPrimitives.Get(bool)",
+      "3379: parentObject.GetItem(i) with parentObject: JObject -> JProperty.GetItem (JContainer.GetItem silently missing from the index)"
+     ],
+     "lenient_only": [
+      "80: JsonTextWriter.WritePropertyNameAsync bound to base JsonWriter virtual (override's file failed to parse)",
+      "471: new DefaultContractResolver().ResolveContract bound to CamelCasePropertyNamesContractResolver override (cannot be the runtime target here)",
+      "919: IList<JToken>.IndexOf on a JProperty bound to JArray.IndexOf (cannot be the runtime target here)",
+      "3691: JsonWriter.WriteStartObject bound to JTokenWriter override"
+     ]
+    },
+    "low": {
+     "population": 780,
+     "sampled": 20,
+     "ids": [
+      128,
+      260,
+      363,
+      508,
+      572,
+      644,
+      684,
+      815,
+      854,
+      930,
+      1063,
+      1149,
+      1212,
+      1343,
+      1432,
+      1572,
+      1771,
+      2076,
+      3245,
+      3835
+     ],
+     "correct": 16,
+     "wrong": 4,
+     "unverifiable": 0,
+     "precision": 0.8,
+     "lenient_correct": 16,
+     "lenient_wrong": 4,
+     "precision_lenient": 0.8,
+     "caveat": "14 of the 16 correct are Assert.IsTrue/IsNotNull/CollectionAssert.AreEquivalent bound to the in-repo xUnit shim (TestFixtureBase.cs), true only for the DNXCORE50 build. Counting those as wrong gives 2/20 = 10%.",
+     "wrong_examples": [
+      "363: newValue.GetType().Name -> ReflectionObject.GetType(string)",
+      "1149: a.Merge(a, settings) with a: JArray -> test class ModelStateDictionary.Merge (JContainer.Merge silently missing from the index)",
+      "1572: DataContractSerializer.ReadObject(stream) -> private ExpandoObjectConverter.ReadObject",
+      "3835: MethodInfo.IsDefined(type, false) -> TypeExtensions.IsDefined(this Type, ...)"
+     ]
+    },
+    "weighted_by_population": {
+     "strict": 0.792,
+     "lenient": 0.864
+    },
+    "documented_claim": "94-100%",
+    "verdict": "not met on this repository in any tier, under either standard (n=20 per tier, so each tier figure carries roughly +/-18 points)"
+   },
+   "recall": {
+    "files": [
+     "Utilities/StringBuffer.cs",
+     "JsonConverter.cs",
+     "Linq/JsonPath/ArraySliceFilter.cs",
+     "Serialization/JsonPropertyCollection.cs",
+     "Converters/UnixDateTimeConverter.cs"
+    ],
+    "per_file": [
+     {
+      "file": "StringBuffer.cs",
+      "call_sites": 9,
+      "bound_correct": 7,
+      "bound_wrong": 0,
+      "ambiguous": 1,
+      "unbound": 1
+     },
+     {
+      "file": "JsonConverter.cs",
+      "call_sites": 7,
+      "bound_correct": 1,
+      "bound_wrong": 0,
+      "ambiguous": 2,
+      "unbound": 4
+     },
+     {
+      "file": "ArraySliceFilter.cs",
+      "call_sites": 7,
+      "bound_correct": 2,
+      "bound_wrong": 0,
+      "ambiguous": 0,
+      "unbound": 5
+     },
+     {
+      "file": "JsonPropertyCollection.cs",
+      "call_sites": 13,
+      "bound_correct": 7,
+      "bound_wrong": 0,
+      "ambiguous": 0,
+      "unbound": 6
+     },
+     {
+      "file": "UnixDateTimeConverter.cs",
+      "call_sites": 13,
+      "bound_correct": 1,
+      "bound_wrong": 0,
+      "ambiguous": 3,
+      "unbound": 9
+     }
+    ],
+    "call_sites": 49,
+    "bound_correct": 18,
+    "bound_wrong": 0,
+    "ambiguous": 6,
+    "unbound": 25,
+    "recall": 0.367,
+    "constructor_call_sites": 10,
+    "recall_excluding_constructor_calls": 0.462,
+    "unbound_breakdown": {
+     "constructor calls (new X(...), : this(...)) never recorded": 10,
+     "extension call on a string literal (\"...\".FormatWith(...)) never recorded": 9,
+     "call through a member chain (a.B.M()) never recorded": 4,
+     "JsonSerializationException.Create(...) at UnixDateTimeConverter.cs:139 and :159 not recorded although the identical form at :118 and :134 is": 2
+    },
+    "false_bindings_seen_in_same_files": "Not part of recall, but in these 5 files 6 calls to EXTERNAL methods were bound to in-repo definitions: Math.Max x2 -> MathUtils.Max (medium), Math.Min x2 -> MathUtils.Min (HIGH), t.GetType() -> ReflectionObject.GetType (HIGH), KeyedCollection.Dictionary.TryGetValue -> DictionaryWrapper.TryGetValue (HIGH).",
+    "caveat": "All 5 files parsed. Repository-wide recall is lower: 43 failed files contribute no call sites at all."
+   },
+   "weak_spots": [
+    {
+     "case": "overloaded methods",
+     "example": "probe: e.Run(1), e.Run(1,2), e.Run(\"x\") with three Run overloads; real: StringBuffer.cs:105 ToString(0,_position), JsonConverter.cs:97 WriteJson(...)",
+     "outcome": "All left ambiguous. arg_count is 0 for all 13,342 C# references, so arity is never used. When overloads DO get bound, the edge always points at the first-declared one in the file: true for all 479 edges (10.1%) whose target has same-name siblings (e.g. edge 1821 -> DateTimeUtils.cs:180, right by luck)."
+    },
+    {
+     "case": "interface / base-class dispatch",
+     "example": "probe: shape.Area() (IShape), b.Area() (ShapeBase); real edge 2304: writer.WriteEndObject() with writer: JsonWriter",
+     "outcome": "Probe calls ambiguous. Real edge bound at HIGH to an arbitrary override (TraceJsonWriter.WriteEndObject), not the base declaration. No EXTENDS/IMPLEMENTS edges exist for C# (0 in the index), so hierarchy is unknown to the resolver."
+    },
+    {
+     "case": "extension methods",
+     "example": "type.IsValueType() -> TypeExtensions.IsValueType(this Type) (edges 4526, 4655, correct); \"...\".FormatWith(CultureInfo.InvariantCulture, x) (JsonConverter.cs:95); method.IsDefined(t,false) (edge 3835)",
+     "outcome": "Bound correctly when the name is unique and the receiver is a simple identifier. Extension calls on a literal or member chain are never recorded (FormatWith: 9 of 9 missed in the recall files). An instance method on a BCL type is bound to a same-named in-repo extension (MethodInfo.IsDefined -> TypeExtensions.IsDefined)."
+    },
+    {
+     "case": "properties versus methods",
+     "example": "ArraySliceFilter.Start/End/Step; JsonConverter.CanRead",
+     "outcome": "Properties are never extracted (0 property symbols in the whole index) and property reads produce no reference, so 'who uses this property' cannot be answered."
+    },
+    {
+     "case": "same-named methods on different classes",
+     "example": "probe: c.Size() (Circle) vs q.Size() (Square); real edges 3517/3518: sb.Append(x) with sb: StringBuilder; ArraySliceFilter.cs:44 Math.Min(...)",
+     "outcome": "Probe: both ambiguous (declared parameter type not used; C# has no variable-type query). Real: StringBuilder.Append bound to in-repo StringBuffer.Append (medium), Math.Min bound to MathUtils.Min at HIGH, x.GetType() bound to ReflectionObject.GetType at HIGH."
+    },
+    {
+     "case": "generic methods",
+     "example": "probe: e.Echo<int>(3) vs e.Echo(\"s\"); real: AsyncUtils.cs:51 FromCanceled<T>(cancellationToken)",
+     "outcome": "Calls with explicit type arguments are not recorded at all; the inferred form is recorded and bound. Definition side: a generic method 'T Echo<T>(T v)' also yields a spurious method symbol named 'T'."
+    },
+    {
+     "case": "partial classes",
+     "example": "probe: Engine.Stop() in Engine.Part2.cs calls Start() defined in Shapes.cs; real edge 2928: JsonWriter.Async.cs:457 WriteEndObject() -> JsonWriter.cs:430",
+     "outcome": "Bound correctly, but only at medium ('same directory, but the language requires an import') - the resolver does not know the two files are one class. Each part is a separate class symbol."
+    },
+    {
+     "case": "call through a returned value a.B().C()",
+     "example": "probe: Engine.Create().Start(); c.Scale(2).Area()",
+     "outcome": "First call (Create, Scale) recorded and bound; the chained call (.Start(), .Area()) is not recorded at all."
+    },
+    {
+     "case": "other unrecorded call forms",
+     "example": "probe: new Circle(1.0); this.Helper(); e?.Start(); Probe.Engine.Create()",
+     "outcome": "None recorded: constructor calls, this-qualified calls, null-conditional calls and namespace-qualified calls produce no reference. Only 'Name(...)' and 'identifier.Name(...)' are captured."
+    }
+   ],
+   "tool_answers": [
+    {
+     "command": "repocortex tool call find_callers name=RentBuffer",
+     "rows": 7,
+     "right": 7,
+     "missing": "2 of 9 call sites: JsonTextWriter.Async.cs:1374 and :1382 (file failed to parse). Output correctly carries a 'COVERAGE TOO LOW' note."
+    },
+    {
+     "command": "repocortex tool call find_callers name=ArgumentNotNull (extra)",
+     "rows": 50,
+     "right": "not individually checked",
+     "missing": "output capped at 50 and says so; index holds 154 edges for 179 grep call sites (21 are in failed files)"
+    },
+    {
+     "command": "repocortex tool call analyze_impact symbol=RentBuffer",
+     "rows": 33,
+     "right": "6 of 6 direct; of 12 indirect rows checked, 10 right and 2 wrong (JPath.TryParseValue and JPath.ReadQuotedString reach the target only through StringBuilder.Append mis-bound to StringBuffer.Append)",
+     "missing": "EnsureWriteBuffer(int,int) in JsonTextWriter.Async.cs and everything upstream of it (unparsed file)"
+    },
+    {
+     "command": "repocortex tool call find_implementations name=PathFilter",
+     "rows": 0,
+     "right": 0,
+     "missing": "all 10 subclasses (ArrayIndexFilter, ArrayMultipleIndexFilter, ArraySliceFilter, FieldFilter, FieldMultipleFilter, QueryFilter, QueryScanFilter, RootFilter, ScanFilter, ScanMultipleFilter). The tool also resolved the name to a spurious method symbol at JPath.cs:201 (return type of CreatePathFilter) instead of the class in PathFilter.cs, and passing path=.../PathFilter.cs did not change that. name=IContractResolver also returns 0."
+    }
+   ],
+   "notes": [
+    "Resolve output itself reports the index as 'degraded' and every tool answer carries a COVERAGE TOO LOW note; that warning is accurate and useful.",
+    "The tool's 'Run repocortex resolve to raise it' hint is shown even though resolve has already run.",
+    "CLI 'Symbols: 6432' disagrees with index_runs.symbols_found = 6745 (= rows in symbols); 'Parse failures: 43' disagrees with index_runs.parse_failures = 48 (43 failed + 5 zero-symbol 'partial')."
+   ]
+  },
+  {
+   "language": "kotlin",
+   "project": "https://github.com/square/okio",
+   "commit": "f0e3f479f83531332de076ed39bc001a5618d538",
+   "timing": {
+    "index_wall_seconds": 7.8,
+    "index_cpu_user_seconds": 3.94,
+    "index_reported_ms": 7455,
+    "resolve_wall_seconds": 0.36,
+    "resolve_reported_ms": 215
+   },
+   "index_stats": {
+    "files_discovered": 437,
+    "files_indexed_cli": 362,
+    "files_skipped_cli": 75,
+    "kotlin_files": 327,
+    "kotlin_kt": 313,
+    "kotlin_kts": 14,
+    "kotlin_ok": 296,
+    "kotlin_partial": 31,
+    "kotlin_failed": 0,
+    "symbols_cli": 4785,
+    "symbols_rows_total": 4973,
+    "symbols_kotlin": 4485,
+    "symbols_kotlin_by_kind": {
+     "function": 4194,
+     "class": 275,
+     "interface": 16
+    },
+    "references_total_repo": 852,
+    "references_from_kotlin_files": 0,
+    "imports": 2518,
+    "run_status": "degraded",
+    "partial_meaning": "'partial' = parsed but zero symbols. 14 are *.gradle.kts build scripts; 17 are .kt files whose only declarations are things the extractor never captures. Three examined: okio/src/systemFileSystemMain/kotlin/okio/FileSystem.System.kt (one 'expect val' extension property), okio/src/commonMain/kotlin/okio/ExperimentalFileSystem.kt (one 'annotation class' - not extracted), okio/src/jsMain/kotlin/okio/JsPlatform.kt (only top-level properties with getters)."
+   },
+   "parse_failures": [],
+   "references": {
+    "from_kotlin_files": {
+     "total": 0,
+     "resolved": 0,
+     "ambiguous": 0,
+     "unresolved": 0
+    },
+    "repo_wide_all_from_28_java_files": {
+     "total": 852,
+     "resolved": 343,
+     "ambiguous": 255,
+     "unresolved": 254
+    },
+    "note": "Not one call reference is extracted from any of the 327 Kotlin files (also 0 in a hand-written probe containing top-level, extension, companion, object and this-qualified calls). Every reference in this index comes from the 28 Java sample/benchmark files."
+   },
+   "edges_by_confidence": {
+    "with_kotlin_evidence_file": {
+     "CALLS": {
+      "high": 0,
+      "medium": 0,
+      "low": 0
+     }
+    },
+    "repo_wide_java_callers": {
+     "CALLS": {
+      "high": 177,
+      "medium": 150,
+      "low": 1
+     },
+     "EXTENDS": {
+      "high": 3,
+      "medium": 1,
+      "low": 1
+     },
+     "IMPLEMENTS": {
+      "high": 1,
+      "low": 2
+     }
+    },
+    "java_caller_to_kotlin_definition": {
+     "CALLS": {
+      "high": 41,
+      "medium": 149,
+      "low": 1
+     }
+    }
+   },
+   "definitions": {
+    "files": [
+     "okio/src/commonMain/kotlin/okio/FileMetadata.kt",
+     "okio/src/jvmMain/kotlin/okio/SegmentPool.kt",
+     "okio/src/commonMain/kotlin/okio/Source.kt",
+     "okio/src/nonJvmMain/kotlin/okio/NonJvmPlatform.kt",
+     "okio/src/commonMain/kotlin/okio/internal/RealBufferedSink.kt"
+    ],
+    "per_file": [
+     {
+      "file": "FileMetadata.kt",
+      "expected": 12,
+      "extracted": 4,
+      "correct": 4,
+      "wrong": 0,
+      "missed": 8
+     },
+     {
+      "file": "SegmentPool.kt",
+      "expected": 9,
+      "extracted": 4,
+      "correct": 3,
+      "wrong": 1,
+      "missed": 5
+     },
+     {
+      "file": "Source.kt",
+      "expected": 4,
+      "extracted": 4,
+      "correct": 4,
+      "wrong": 0,
+      "missed": 0
+     },
+     {
+      "file": "NonJvmPlatform.kt",
+      "expected": 18,
+      "extracted": 9,
+      "correct": 9,
+      "wrong": 0,
+      "missed": 9
+     },
+     {
+      "file": "RealBufferedSink.kt",
+      "expected": 25,
+      "extracted": 24,
+      "correct": 24,
+      "wrong": 0,
+      "missed": 1
+     }
+    ],
+    "expected": 68,
+    "extracted": 45,
+    "correct": 44,
+    "wrong": 1,
+    "missed": 23,
+    "precision": 0.978,
+    "recall": 0.647,
+    "standard": "correct = right name at the right line with a kind in the right family; 'missed' = no row at all; the wrong row (object recorded as a function) also counts against recall. Primary constructors and local variables not counted as expected; properties (including constructor val/var), secondary constructors and companion objects are.",
+    "examples": {
+     "wrong": [
+      "SegmentPool.kt:44 'internal actual object SegmentPool' recorded with kind=function (all 12 object declarations in the repo are kind=function)"
+     ],
+     "missed": [
+      "FileMetadata.kt: all 8 properties (isRegularFile ... extras)",
+      "SegmentPool.kt: MAX_SIZE, LOCK, HASH_BUCKET_COUNT, hashBuckets, byteCount",
+      "NonJvmPlatform.kt: classes ArrayIndexOutOfBoundsException, ProtocolException, FileNotFoundException (classes with no body), the companion object, 3 secondary constructors, 2 properties",
+      "RealBufferedSink.kt:33 commonWrite(source: Buffer, byteCount: Long) - the first top-level function after the import list"
+     ]
+    },
+    "index_wide_findings": {
+     "regex_estimate": "functions 4013 of 4043 found (99.3%); classes 249 of 284 (87.7%); interfaces 15 of 15; objects 12 of 12 but all with kind=function. Regex estimate, not hand-verified.",
+     "missing_central_class": "class ByteString is absent from the index in every source set (commonMain expect, jvmMain/appleMain/nonAppleMain actual): 'actual open class ByteString / internal actual constructor(...)' is not extracted. Its member functions are present but ownerless.",
+     "bodiless_classes": "classes without a body are not extracted (probe: 'class NoBody(val x: Int)', 'data class Data(...)', 'annotation class Ann'; real: FakeFileSystem.kt:614 PathLookupResult, AsyncSocket.kt:82 data class Write).",
+     "first_function_dropped": "in 10 files the first top-level function after the imports is missing (e.g. CommonPlatform.kt:22 toUtf8String, RealBufferedSource.kt:38 commonRead, -JvmPlatform.kt:24).",
+     "kind_errors": "enum entries are recorded as functions (probe: RED, GREEN); typealias is recorded as class; every method is kind=function.",
+     "never_extracted": [
+      "properties and constants (val/var/const val)",
+      "companion objects",
+      "secondary constructors",
+      "annotation classes"
+     ],
+     "fqn": "'<path>:<name>'; an extension function 'RealBufferedSink.commonWrite' is stored as 'commonWrite' with no receiver type; the 6 commonWrite overloads share one fqn."
+    }
+   },
+   "precision": {
+    "standard": "same as C#. No Kotlin-language edge exists to sample.",
+    "high": {
+     "population": 0,
+     "sampled": 0,
+     "ids": [],
+     "correct": 0,
+     "wrong": 0,
+     "unverifiable": 0,
+     "precision": null
+    },
+    "medium": {
+     "population": 0,
+     "sampled": 0,
+     "ids": [],
+     "correct": 0,
+     "wrong": 0,
+     "unverifiable": 0,
+     "precision": null
+    },
+    "low": {
+     "population": 0,
+     "sampled": 0,
+     "ids": [],
+     "correct": 0,
+     "wrong": 0,
+     "unverifiable": 0,
+     "precision": null
+    },
+    "supplement_java_callers_into_kotlin_definitions": {
+     "what": "The only edges touching Kotlin are calls made from Java files that land on Kotlin definitions. Sampled every k-th id (10 per tier where available). This measures Java-side resolution onto Kotlin symbols, not Kotlin call resolution.",
+     "high": {
+      "population": 41,
+      "sampled": 10,
+      "ids": [
+       23,
+       68,
+       74,
+       114,
+       123,
+       215,
+       235,
+       288,
+       304,
+       318
+      ],
+      "correct": 0,
+      "wrong": 10,
+      "precision": 0.0,
+      "why": "6 are Java getter calls (buffer.size(), byteString.size(), hashingSource.hash(), buffer.getByte()) bound to the hidden '@JvmName(\"-deprecated_size\") @Deprecated(level=ERROR) fun size()' shims because the real target (the property, or '@JvmName(\"getByte\") operator fun get') is not in the index; 123: encode(bitmap, sink) has two overloads in its own Java class but is bound to ByteString.kt:261; 288: java.util.Set.remove -> AsyncTimeout.remove; 114: edge points at the object BenchmarkUtils instead of the called encodeUtf8."
+     },
+     "medium": {
+      "population": 149,
+      "sampled": 10,
+      "ids": [
+       39,
+       78,
+       119,
+       136,
+       161,
+       201,
+       217,
+       237,
+       268,
+       312
+      ],
+      "correct": 0,
+      "wrong": 10,
+      "precision": 0.0,
+      "lenient_correct": 6,
+      "precision_lenient": 0.6,
+      "why": "strict = the JVM 'actual' declaration. 6 land on the commonMain 'expect' declaration of the right member (accepted as lenient); 3 land on the appleMain actual, a platform Java can never call (ByteString.encodeUtf8, sha512, hex); 39: TimeUnit.sleep -> FakeClock.sleep."
+     },
+     "low": {
+      "population": 1,
+      "sampled": 1,
+      "ids": [
+       99
+      ],
+      "correct": 0,
+      "wrong": 1,
+      "precision": 0.0,
+      "why": "Options.of(byteStrings) bound to class Options rather than the companion function 'of'."
+     }
+    },
+    "documented_claim": "94-100%",
+    "verdict": "not measurable for Kotlin: there is no call graph"
+   },
+   "recall": {
+    "files": [
+     "okio/src/commonMain/kotlin/okio/internal/RealBufferedSink.kt (lines 33-113)",
+     "okio/src/jvmMain/kotlin/okio/ForwardingTimeout.kt",
+     "okio/src/jvmMain/kotlin/okio/SegmentPool.kt",
+     "okio/src/nonJvmMain/kotlin/okio/NonJvmPlatform.kt",
+     "okio/src/commonMain/kotlin/okio/FileMetadata.kt"
+    ],
+    "per_file": [
+     {
+      "file": "RealBufferedSink.kt",
+      "call_sites": 21
+     },
+     {
+      "file": "ForwardingTimeout.kt",
+      "call_sites": 12
+     },
+     {
+      "file": "SegmentPool.kt",
+      "call_sites": 6
+     },
+     {
+      "file": "NonJvmPlatform.kt",
+      "call_sites": 9
+     },
+     {
+      "file": "FileMetadata.kt",
+      "call_sites": 1
+     }
+    ],
+    "call_sites": 49,
+    "bound_correct": 0,
+    "bound_wrong": 0,
+    "ambiguous": 0,
+    "unbound": 49,
+    "recall": 0.0,
+    "constructor_call_sites": 13,
+    "note": "0 symbol_references rows exist for these five files (and for every Kotlin file). Examples: RealBufferedSink.kt:35 buffer.write(source, byteCount); :36 emitCompleteSegments(); ForwardingTimeout.kt:35 delegate.timeout(timeout, unit); SegmentPool.kt:73 firstRef().",
+    "documented_claim": "33-66%"
+   },
+   "weak_spots": [
+    {
+     "case": "any Kotlin call at all",
+     "example": "probe A.kt: fun call() { top(); \"x\".ext(); make(); Single.g(); this.call() }",
+     "outcome": "0 references extracted. Kotlin has receiver and variable-type queries in internal/parse/queries.go but nothing emits a reference.call capture for the grammar, so they are unreachable."
+    },
+    {
+     "case": "overloaded functions",
+     "example": "RealBufferedSink.kt has 6 commonWrite overloads; calls buffer.write(source, byteCount) / buffer.write(byteString)",
+     "outcome": "Definitions: 5 of 6 extracted (the first is dropped), all sharing one fqn. Calls: not recorded."
+    },
+    {
+     "case": "interface / base-class dispatch",
+     "example": "ForwardingTimeout.kt:35 delegate.timeout(timeout, unit) (delegate: Timeout)",
+     "outcome": "Not recorded. Type hierarchy from Kotlin sources is also empty: find_implementations name=Source returns only 3 Java classes and none of the 25 Kotlin implementers."
+    },
+    {
+     "case": "extension functions",
+     "example": "NonJvmPlatform.kt:26 'internal actual fun ByteArray.toUtf8String()' calling commonToUtf8String()",
+     "outcome": "Definition extracted by bare name without its receiver type; the call is not recorded."
+    },
+    {
+     "case": "properties versus methods",
+     "example": "Buffer.size (property, '@get:JvmName(\"size\")') vs hidden deprecated 'fun size()'; Java edge 23: buffer.size()",
+     "outcome": "Properties are never extracted, so the Java getter call is bound at HIGH to the deprecated shim function - the wrong declaration."
+    },
+    {
+     "case": "same-named functions on different classes / expect-actual",
+     "example": "emitCompleteSegments is defined 9 times (Buffer, BufferedSink, RealBufferedSink across commonMain/jvmMain/nonJvmMain)",
+     "outcome": "find_callers silently answers for one of the nine (commonMain Buffer.kt:113) with 0 callers; analyze_impact refuses with error_code: internal and exit status 1 until given '<path>:<name>'. Java callers get bound to the appleMain actual (edges 78, 201, 217)."
+    },
+    {
+     "case": "generic functions",
+     "example": "FileMetadata.kt:118 'fun <T : Any> extra(type: KClass<out T>): T?'; NonJvmPlatform.kt:42 'actual inline fun <T> Lock.withLock(action: () -> T): T'",
+     "outcome": "Definitions extracted correctly by name. Calls not recorded."
+    },
+    {
+     "case": "companion-object and top-level functions",
+     "example": "NonJvmPlatform.kt:35 'companion object { val instance = Lock() }'; probe: Host.Companion.make(); Java edge 99: Options.of(byteStrings)",
+     "outcome": "The companion object itself is not a symbol; functions inside it are extracted as plain functions; top-level functions are extracted (except the first-after-imports loss). Calls not recorded; the Java call Options.of(...) is bound to class Options, not to 'of'."
+    },
+    {
+     "case": "call through a returned value a.b().c()",
+     "example": "SegmentPool.kt:73 firstRef().get(); Java Hashing.java:54 hashingSource.hash().hex()",
+     "outcome": "Kotlin: not recorded. Java caller: hash() bound to the deprecated shim (wrong) and hex() bound to the appleMain actual (wrong platform)."
+    }
+   ],
+   "tool_answers": [
+    {
+     "command": "repocortex tool call find_callers name=emitCompleteSegments",
+     "rows": 0,
+     "right": 0,
+     "missing": "all 33 Kotlin call-site lines (grep 'emitCompleteSegments()' excluding declarations). The answer carries a COVERAGE TOO LOW note, but it attributes the problem to '57% of the 598 references' - those are Java references; the real cause (no Kotlin references extracted at all) is not stated, and it advises running 'repocortex resolve', which had already run."
+    },
+    {
+     "command": "repocortex tool call analyze_impact symbol=emitCompleteSegments",
+     "rows": 0,
+     "right": 0,
+     "missing": "fails: 'error_code: internal ... matches 9 symbols; re-ask with a fully-qualified name', exit status 1. With symbol=okio/src/commonMain/kotlin/okio/RealBufferedSink.kt:emitCompleteSegments it returns '0 direct, 0 indirect. Risk low (score 20)' - every real caller is missing; 'Risk low' is a misleading headline for one of the most-called functions in the library, though the notes do say the result is a lower bound."
+    },
+    {
+     "command": "repocortex tool call find_implementations name=Source",
+     "rows": 3,
+     "right": 3,
+     "missing": "the 3 rows are Java sample classes (RandomSource, ByteChannelSource, FileChannelSource) and are correct; all 25 named Kotlin implementers/extenders in non-test code are missing (BufferedSource, ForwardingSource, GzipSource, InflaterSource, HashingSource, PeekSource, RealBufferedSource, CipherSource, InputStreamSource, FileSource, ...) plus 2 anonymous objects."
+    }
+   ],
+   "notes": [
+    "Suggested project used as-is.",
+    "The first-pass observation 'only 3 symbols from 2 Kotlin files' is explained: files containing only properties, annotation classes or body-less classes yield zero symbols and are marked 'partial'.",
+    "Function and interface extraction is good (regex estimate 99.3% of functions); the gaps are properties, body-less classes, companion objects, secondary constructors, and wrong kinds for objects and enum entries.",
+    "phaseA.json labels Kotlin tier as 'resolved'; on this evidence Kotlin is definitions-only."
+   ]
+  }
+ ]
+}

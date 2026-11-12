@@ -1,0 +1,509 @@
+{
+ "group": "G6",
+ "languages": [
+  {
+   "language": "starlark",
+   "sources": [
+    "Linguist samples/Starlark/closure_js_binary.bzl",
+    "Linguist samples/Starlark/drone.star",
+    "Linguist samples/Starlark/filenames/BUILD",
+    "github.com/bazelbuild/bazel-skylib lib/partial.bzl",
+    "github.com/bazelbuild/bazel-skylib lib/new_sets.bzl"
+   ],
+   "detected_language_ok": true,
+   "files_checked": 5,
+   "parse": {
+    "ok": 5,
+    "partial": 0,
+    "failed": 0,
+    "errors": []
+   },
+   "convention": "def functions plus module-level assignments (constants, rule()/struct() exports). BUILD-file rule invocations (targets) are not counted as definitions; docstring example code not counted.",
+   "expected": 32,
+   "extracted": 24,
+   "correct": 24,
+   "wrong": 0,
+   "missed": 8,
+   "wrong_kind": 0,
+   "precision": 1.0,
+   "recall": 0.75,
+   "wrong_examples": [],
+   "missed_examples": [
+    "closure_js_binary.bzl:110 closure_js_binary = rule(...)  (the public rule the file exists to define)",
+    "closure_js_binary.bzl:42 _COMPILATION_LEVELS = {...}",
+    "new_sets.bzl:226 sets = struct(...)  (the exported API object)",
+    "partial.bzl:172 partial = struct(...)",
+    "partial.bzl:23 _a_dict_type = type({})"
+   ],
+   "pattern": "Every def is extracted with the right name and line (24/24); no module-level assignment is ever extracted (0/8), which loses the public names of .bzl files (rule() and struct() exports). BUILD file yields 0 symbols (targets are not indexed).",
+   "verdict": "usable",
+   "imprecise_kind": 0
+  },
+  {
+   "language": "swift",
+   "sources": [
+    "github.com/apple/swift-log Sources/Logging/Handlers/SwiftLogNoOpLogHandler.swift",
+    "github.com/apple/swift-log Sources/Logging/MetadataProvider.swift",
+    "github.com/apple/swift-log Sources/InMemoryLogging/InMemoryLogHandler.swift",
+    "github.com/apple/swift-log Sources/Logging/LoggingSystem.swift",
+    "(Linguist Swift section-*.swift checked only for parse status: too small to score)"
+   ],
+   "detected_language_ok": true,
+   "files_checked": 4,
+   "parse": {
+    "ok": 4,
+    "partial": 0,
+    "failed": 0,
+    "errors": []
+   },
+   "convention": "class/struct/enum/protocol/typealias declarations, func declarations at any nesting (methods, static funcs, operator funcs) and init declarations. Not counted: stored/computed properties, enum cases, subscripts, extensions themselves.",
+   "expected": 45,
+   "extracted": 32,
+   "correct": 32,
+   "wrong": 0,
+   "missed": 13,
+   "wrong_kind": 0,
+   "precision": 1.0,
+   "recall": 0.711,
+   "wrong_examples": [],
+   "missed_examples": [
+    "InMemoryLogHandler.swift:54 public init(level:message:metadata:)  (all 10 init declarations missed)",
+    "SwiftLogNoOpLogHandler.swift:18 public init() {}",
+    "InMemoryLogHandler.swift:72 public static func == (lhs: Entry, rhs: Entry) -> Bool  (operator func)",
+    "LoggingSystem.swift:204 private typealias FactoryBox = ReplaceOnceBox<...>",
+    "LoggingSystem.swift:208 private typealias MetadataProviderBox = ..."
+   ],
+   "pattern": "Types and named funcs are found reliably, including nested types and methods in extensions (32/32 correct). Initializers (0/10), operator funcs (0/1) and typealiases (0/2) are never extracted; properties (about 20, not counted) and subscripts are not extracted either. Kinds are coarse: structs and enums are 'class' (7), every method is 'function' (21). start_line is the attribute line when a declaration has @attributes (1 line early). The 21 'partial' Linguist Swift files in the first pass are statement-only snippets with no func/type keyword at all: 'partial' there just means zero symbols, not a parse error.",
+   "verdict": "usable",
+   "imprecise_kind": 28
+  },
+  {
+   "language": "teal",
+   "sources": [
+    "Linguist samples/Teal/Emitter.tl",
+    "github.com/teal-language/cyan src/cyan/sandbox.tl",
+    "github.com/teal-language/cyan src/cyan/interaction.tl",
+    "github.com/teal-language/cyan src/cyan/command.tl",
+    "github.com/teal-language/cyan src/cyan/invocation-context.tl"
+   ],
+   "detected_language_ok": true,
+   "files_checked": 5,
+   "parse": {
+    "ok": 2,
+    "partial": 3,
+    "failed": 0,
+    "errors": [
+     "parse_error is NULL for the 3 partial files; 'partial' is assigned because the file produced zero symbols and zero references"
+    ]
+   },
+   "convention": "record/interface/enum/type declarations (including nested ones), all named functions (local function, function M.f, function T:m) and module-level local constants that are not require() imports or aliases of imported members. Record fields and 'global x: T' forward declarations not counted.",
+   "expected": 58,
+   "extracted": 7,
+   "correct": 7,
+   "wrong": 0,
+   "missed": 51,
+   "wrong_kind": 0,
+   "precision": 1.0,
+   "recall": 0.121,
+   "wrong_examples": [],
+   "missed_examples": [
+    "Emitter.tl:9 local record Emitter  (records are never extracted: 0/8)",
+    "Emitter.tl:143 function Emitter.new(): Emitter  (no function of any form is extracted: 0/30)",
+    "interaction.tl:18 local function title_case(s: string): string",
+    "command.tl:42 local type CommandFn = function(...)",
+    "sandbox.tl:19 function Sandbox:run(max_instructions: integer, ...: any): boolean, string"
+   ],
+   "pattern": "Only interface and enum declarations are extracted (7 of 7 present). Records (the main Teal type construct), every function and method, type aliases and module constants are never extracted, so three of five real files yield nothing at all and are marked partial.",
+   "verdict": "poor",
+   "imprecise_kind": 1,
+   "detection_note": "Linguist 'Type Language' .tl files (Telegram TL schemas) are also detected as teal; they yield 0 symbols. scheme.tl (74 KB) takes 1.36 s alone and is the likely source of the first-pass 5 s timeout."
+  },
+  {
+   "language": "templ",
+   "sources": [
+    "Linguist samples/templ/posts.templ",
+    "github.com/a-h/templ examples/counter/components/components.templ",
+    "github.com/a-h/templ examples/suspense/main.templ",
+    "github.com/a-h/templ generator/test-css-usage/template.templ",
+    "github.com/a-h/templ generator/test-script-usage/template.templ"
+   ],
+   "detected_language_ok": true,
+   "files_checked": 5,
+   "parse": {
+    "ok": 5,
+    "partial": 0,
+    "failed": 0,
+    "errors": []
+   },
+   "convention": "templ components, css components, script components, and Go top-level func/type/const/var declarations. package clause not counted.",
+   "expected": 45,
+   "extracted": 5,
+   "correct": 4,
+   "wrong": 1,
+   "missed": 41,
+   "wrong_kind": 0,
+   "precision": 0.8,
+   "recall": 0.089,
+   "wrong_examples": [
+    "suspense_main.templ:19 'var wg sync.WaitGroup' inside func handleSuspense recorded as variable 'wg' (a local variable)"
+   ],
+   "missed_examples": [
+    "posts.templ:6 templ headerTemplate(name string)  (templ components: 0/28 extracted)",
+    "counter_components.templ:30 templ Page(global, session int)",
+    "css_usage.templ:21 css cssComponentGreen()  (css components: 0/6)",
+    "script_usage.templ:3 script withParameters(a string, b string, c int)  (script components: 0/7)",
+    "suspense_main.templ:81 templ Slot(name string)"
+   ],
+   "pattern": "Only the embedded Go declarations are extracted (func, type, const: 4 found). The constructs that make a .templ file a templ file - templ, css and script components - are never extracted (0 of 41), and a local var inside a Go func is recorded as a symbol. A file containing only templ components yields zero symbols.",
+   "verdict": "poor",
+   "imprecise_kind": 1
+  },
+  {
+   "language": "thrift",
+   "sources": [
+    "github.com/apache/thrift tutorial/tutorial.thrift",
+    "github.com/apache/thrift tutorial/shared.thrift",
+    "github.com/apache/thrift test/DocTest.thrift",
+    "github.com/apache/thrift contrib/fb303/if/fb303.thrift",
+    "(Linguist Thrift/linguist.thrift is 5 lines: not used)"
+   ],
+   "detected_language_ok": true,
+   "files_checked": 4,
+   "parse": {
+    "ok": 4,
+    "partial": 0,
+    "failed": 0,
+    "errors": []
+   },
+   "convention": "typedef, enum, struct, union, exception, service, service methods and const declarations. namespace lines, struct fields and enum members not counted.",
+   "expected": 85,
+   "extracted": 82,
+   "correct": 80,
+   "wrong": 2,
+   "missed": 5,
+   "wrong_kind": 7,
+   "precision": 0.976,
+   "recall": 0.941,
+   "wrong_examples": [
+    "tutorial.thrift:147 'service Calculator extends shared.SharedService' -> symbol 'SharedService' (function): the parent service reference, not a definition",
+    "tutorial.thrift:147 same line -> symbol 'shared' (function): the include-namespace qualifier, not a definition"
+   ],
+   "missed_examples": [
+    "tutorial.thrift:86 const i32 INT32CONSTANT = 9853",
+    "tutorial.thrift:87 const map<string,string> MAPCONSTANT = {...}",
+    "DocTest.thrift:70 const i32 INT32CONSTANT = 9853",
+    "DocTest.thrift:71 const i16 INT16CONSTANT = 1616",
+    "DocTest.thrift:73 const map<string,string> MAPCONSTANT = {...}"
+   ],
+   "pattern": "Structs, enums, typedefs, exceptions, services and all 33 service methods are found at the right line. const declarations are never extracted (0/5). The 'extends' clause of a service produces two bogus definitions. Kinds are unreliable: services (4) and exceptions (3) are labelled 'function'; typedefs (20) and enums (3) are 'class'.",
+   "verdict": "good",
+   "imprecise_kind": 23
+  },
+  {
+   "language": "tlaplus",
+   "sources": [
+    "github.com/tlaplus/Examples specifications/TwoPhase/TwoPhase.tla",
+    "github.com/tlaplus/Examples specifications/DieHard/DieHard.tla",
+    "github.com/tlaplus/Examples specifications/Paxos/Consensus.tla",
+    "github.com/tlaplus/Examples specifications/Paxos/Paxos.tla",
+    "Linguist samples/TLA/fifo.tla"
+   ],
+   "detected_language_ok": true,
+   "files_checked": 5,
+   "parse": {
+    "ok": 0,
+    "partial": 5,
+    "failed": 0,
+    "errors": [
+     "parse_error is NULL; every .tla file is 'partial' because it yields zero symbols and zero references (also true of a 6-line hand-written module)"
+    ]
+   },
+   "convention": "MODULE name, top-level operator/function definitions (Name == ..., Name(args) == ..., including INSTANCE bindings), named THEOREM/ASSUME, and declared CONSTANTS and VARIABLES. LET-local definitions and unnamed theorems not counted.",
+   "expected": 83,
+   "extracted": 0,
+   "correct": 0,
+   "wrong": 0,
+   "missed": 83,
+   "wrong_kind": 0,
+   "precision": null,
+   "recall": 0.0,
+   "wrong_examples": [],
+   "missed_examples": [
+    "DieHard.tla:1 MODULE DieHard",
+    "DieHard.tla:47 Init == /\\ big = 0",
+    "Paxos.tla:91 Phase1a(b) == ...",
+    "Consensus.tla:39 THEOREM Invariance == Spec => []Inv",
+    "Paxos.tla:11 CONSTANT Value, Acceptor, Quorum"
+   ],
+   "pattern": "Nothing is extracted from any TLA+ file: the grammar loads and the tags probe says 'ok', but the definition query matches nothing (0 of 83 definitions, 53 of them plain operator definitions).",
+   "verdict": "broken"
+  },
+  {
+   "language": "v",
+   "sources": [
+    "Linguist samples/V/nbody.v",
+    "Linguist samples/V/news_fetcher.v",
+    "Linguist samples/V/spectral.v",
+    "Linguist samples/V/json.v",
+    "Linguist samples/V/terminal_control.v",
+    "github.com/vlang/v vlib/semver/semver.v",
+    "github.com/vlang/v examples/binary_search_tree.v",
+    "github.com/vlang/v examples/mini_calculator.v"
+   ],
+   "detected_language_ok": true,
+   "files_checked": 8,
+   "parse": {
+    "ok": 8,
+    "partial": 0,
+    "failed": 0,
+    "errors": []
+   },
+   "convention": "fn declarations (functions, methods, operator overloads), struct/enum/interface/type declarations and const members. module clause, struct fields and enum members not counted.",
+   "expected": 60,
+   "extracted": 54,
+   "correct": 49,
+   "wrong": 5,
+   "missed": 11,
+   "wrong_kind": 0,
+   "precision": 0.907,
+   "recall": 0.817,
+   "wrong_examples": [
+    "news_fetcher.v:26 'fn (f mut Fetcher) fetch()' recorded as function 'Fetcher' (receiver type taken as the name; old 'mut' receiver syntax)",
+    "semver.v:17 enum member 'major' of enum Increment recorded as function",
+    "semver.v:18 enum member 'minor' recorded as function",
+    "semver.v:19 enum member 'patch' recorded as function",
+    "nbody.v:8 const N (really on line 11) stamped with the line of the enclosing 'const (' block, 3 lines off (counted wrong and missed under the 2-line rule; SolarMass and DaysPerYear on the same block are within 2 lines and counted correct)"
+   ],
+   "missed_examples": [
+    "binary_search_tree.v:14 fn (tree Tree[T]) size[T]() int  (all 5 generic methods missed)",
+    "binary_search_tree.v:127 fn main()  (missed after the generic methods)",
+    "binary_search_tree.v:11 type Tree[T] = Empty | &Node[T]  (sum type alias)",
+    "semver.v:88 pub fn (v1 Version) == (v2 Version) bool  (operator overload)",
+    "news_fetcher.v:26 fn (f mut Fetcher) fetch()"
+   ],
+   "pattern": "Plain functions, methods, structs and consts are found. Generic code breaks extraction (binary_search_tree.v: 2 of 9), operator overloads and type aliases are missed, enum members are emitted as functions, and all members of a const block share the block's line. Structs and enums are 'class' (12), methods are 'function'.",
+   "verdict": "usable",
+   "imprecise_kind": 12,
+   "detection_note": "Every .v file is detected as V. All 16 Linguist Verilog .v files and all 13 Linguist Rocq Prover (Coq) .v files are indexed as language 'v' with parse_status 'partial' and 0 symbols (no garbage symbols, but no extraction either; there is a 'verilog' grammar but .v never reaches it and it has no tags query). Rocq Prover/JsCorrectness.v (243 KB, 5944 lines) takes 2.4-2.5 s alone as 'v' and is the likely first-pass 5 s timeout."
+  },
+  {
+   "language": "vhdl",
+   "sources": [
+    "Linguist samples/VHDL/foo.vhd",
+    "github.com/kevinpt/vhdl-extras rtl/extras/gray_code.vhdl",
+    "github.com/kevinpt/vhdl-extras rtl/extras/random.vhdl",
+    "github.com/kevinpt/vhdl-extras rtl/extras/interrupt_ctl.vhdl",
+    "github.com/kevinpt/vhdl-extras rtl/extras/muxing.vhdl"
+   ],
+   "detected_language_ok": true,
+   "files_checked": 5,
+   "parse": {
+    "ok": 0,
+    "partial": 5,
+    "failed": 0,
+    "errors": [
+     "parse_error is NULL; every file is 'partial' because it yields zero symbols and zero references (also true of a 16-line hand-written entity/architecture). Three of the vhdl-extras files are ISO-8859-1 encoded, but the ASCII and UTF-8 files fail the same way"
+    ]
+   },
+   "convention": "entity, architecture, package, package body, component declarations and function/procedure bodies (nested ones included). Subprogram prototypes in package headers, signals, local constants/aliases/variables not counted.",
+   "expected": 39,
+   "extracted": 0,
+   "correct": 0,
+   "wrong": 0,
+   "missed": 39,
+   "wrong_kind": 0,
+   "precision": null,
+   "recall": 0.0,
+   "wrong_examples": [],
+   "missed_examples": [
+    "foo.vhd:6 entity inverter is",
+    "foo.vhd:11 architecture rtl of inverter is",
+    "gray_code.vhdl:66 package gray_code is",
+    "gray_code.vhdl:137 function to_gray( Binary : std_ulogic_vector ) return std_ulogic_vector is",
+    "random.vhdl:144 procedure seed(s : in positive) is"
+   ],
+   "pattern": "Nothing is extracted from any VHDL file (.vhd or .vhdl): the tags probe says 'ok' but the definition query matches nothing (0 of 39).",
+   "verdict": "broken"
+  },
+  {
+   "language": "wgsl",
+   "sources": [
+    "Linguist samples/WGSL/animate_shader.wgsl",
+    "github.com/webgpu/webgpu-samples sample/particles/particle.wgsl",
+    "github.com/webgpu/webgpu-samples sample/cornell/common.wgsl",
+    "github.com/webgpu/webgpu-samples sample/normalMap/normalMap.wgsl",
+    "github.com/webgpu/webgpu-samples sample/computeBoids/updateSprites.wgsl"
+   ],
+   "detected_language_ok": true,
+   "files_checked": 5,
+   "parse": {
+    "ok": 5,
+    "partial": 0,
+    "failed": 0,
+    "errors": []
+   },
+   "convention": "fn, struct, module-scope const, and module-scope var (globals and @group/@binding resources). Struct members and function-local let/var not counted.",
+   "expected": 62,
+   "extracted": 19,
+   "correct": 19,
+   "wrong": 0,
+   "missed": 43,
+   "wrong_kind": 0,
+   "precision": 1.0,
+   "recall": 0.306,
+   "wrong_examples": [],
+   "missed_examples": [
+    "common.wgsl:4 struct Quad {  (structs: 0/18 extracted)",
+    "particle.wgsl:80 struct Particle {",
+    "common.wgsl:1 const pi = 3.14159265359;  (consts: 0/8)",
+    "normalMap.wgsl:40 @group(0) @binding(0) var<uniform> spaceTransform : SpaceTransforms;  (module vars: 0/17)",
+    "animate_shader.wgsl:25 struct FragmentInput {"
+   ],
+   "pattern": "Functions only: all 19 fn declarations are found with correct name and line (start_line is the @vertex/@fragment/@compute attribute line, 1 early). Structs (0/18), module constants (0/8) and module-scope variables/bindings (0/17) are never extracted. Functions-and-structs-only recall would be 19/37 = 0.51.",
+   "verdict": "poor",
+   "imprecise_kind": 0
+  },
+  {
+   "language": "zig",
+   "sources": [
+    "Linguist samples/Zig/cat.zig",
+    "Linguist samples/Zig/guess_number.zig",
+    "github.com/Hejsil/zig-clap clap/parsers.zig",
+    "github.com/Hejsil/zig-clap clap/codepoint_counting_writer.zig",
+    "github.com/Hejsil/zig-clap example/subcommands.zig"
+   ],
+   "detected_language_ok": true,
+   "files_checked": 5,
+   "parse": {
+    "ok": 5,
+    "partial": 0,
+    "failed": 0,
+    "errors": []
+   },
+   "convention": "fn declarations at any nesting, named container types (const X = struct/enum/union/error{...}) at any nesting, and top-level const/var declarations that are not @import or plain aliases of an imported namespace (const io = std.io) or @This(). test blocks not counted.",
+   "expected": 27,
+   "extracted": 22,
+   "correct": 22,
+   "wrong": 0,
+   "missed": 5,
+   "wrong_kind": 0,
+   "precision": 1.0,
+   "recall": 0.815,
+   "wrong_examples": [],
+   "missed_examples": [
+    "parsers.zig:1 pub const default = .{ ... }  (the exported parser table)",
+    "parsers.zig:97 pub const EnumError = error{ ... }  (error set)",
+    "subcommands.zig:7 const main_parsers = .{ ... }",
+    "subcommands.zig:12 const main_params = clap.parseParamsComptime(...)",
+    "subcommands.zig:20 const MainArgs = clap.ResultEx(...)  (type produced by a comptime call)"
+   ],
+   "pattern": "All functions (19/19, including functions nested in returned structs) and struct/enum container types (3/3) are found. Top-level constants, error sets and comptime-computed type aliases are never extracted (0/5); test blocks (6 in these files, not counted) are not extracted either. Structs and enums are labelled 'class' (3).",
+   "verdict": "usable",
+   "imprecise_kind": 3
+  },
+  {
+   "language": "vue",
+   "sources": [
+    "Linguist samples/Vue/basic.vue (plain JS, module.exports)",
+    "Linguist samples/Vue/pre-processors.vue (lang=babel)",
+    "github.com/vuejs/vue-hackernews-2.0 src/views/ItemList.vue (plain JS Options API)",
+    "github.com/vuejs/vue-hackernews-2.0 src/components/Comment.vue",
+    "github.com/vuejs/vue-hackernews-2.0 src/components/ProgressBar.vue",
+    "github.com/antfu-collective/vitesse src/pages/index.vue (script setup lang=ts)",
+    "github.com/antfu-collective/vitesse src/components/TheCounter.vue",
+    "github.com/antfu-collective/vitesse src/pages/hi/[name].vue (copied as hi_name.vue)",
+    "github.com/vuejs/vitepress src/client/theme-default/components/VPAlgoliaSearchBox.vue (script setup lang=ts)",
+    "...VPFeatures.vue",
+    "...VPLocalNavOutlineDropdown.vue",
+    "...VPSidebarItem.vue"
+   ],
+   "detected_language_ok": true,
+   "files_checked": 12,
+   "parse": {
+    "ok": 11,
+    "partial": 1,
+    "failed": 0,
+    "errors": [
+     "basic.vue is 'partial' with NULL parse_error: it yielded no symbols (its only definition is 'data: function () {...}')"
+    ]
+   },
+   "convention": "In the <script> block: function declarations, const/let bound to an arrow or function expression, class/interface/type/enum, methods of the component options object (data, computed, watch, lifecycle hooks, methods, including function-valued properties), object-literal shorthand methods, and top-level const/let declarations with a simple identifier (in <script setup> these are the component's bindings). Destructured bindings, imports and callback properties inside call arguments not counted.",
+   "expected": 71,
+   "extracted": 38,
+   "correct": 38,
+   "wrong": 0,
+   "missed": 33,
+   "wrong_kind": 0,
+   "precision": 1.0,
+   "recall": 0.535,
+   "wrong_examples": [],
+   "missed_examples": [
+    "VPLocalNavOutlineDropdown.vue:18 const open = ref(false)  (top-level const/let state: 0/31 extracted)",
+    "VPAlgoliaSearchBox.vue:18 const props = defineProps<{...}>()",
+    "VPSidebarItem.vue:24 const linkTag = computed(() => ...)",
+    "basic.vue:15 data: function () {  (function-valued property)",
+    "Comment.vue:36 pluralize: n => n + ...  (arrow-valued method in methods: {})"
+   ],
+   "pattern": "The <script> block is extracted for plain JS, lang=babel, lang=ts and <script setup>; line numbers are file lines. Function declarations, arrow consts, shorthand methods and TS interfaces are all found (38/40 = 0.95 if only functions, methods and types are expected). Never extracted: top-level const/let variables (0/31), and methods written as 'name: function () {}' or 'name: () => ...' properties (0/2).",
+   "verdict": "usable",
+   "imprecise_kind": 0,
+   "expected_functions_methods_types_only": 40,
+   "recall_functions_methods_types_only": 0.95,
+   "synthetic_probe_note": "Hand-written probes (not scored): <script lang=ts> without setup, <script setup> in plain JS, and a file with both <script> and <script setup> all extract functions, classes, methods, interfaces and type aliases; enum is labelled 'class'; 'export const LIMIT = 10', 'load: function () {}' and 'clear: () => {}' are missed."
+  },
+  {
+   "language": "svelte",
+   "sources": [
+    "Linguist samples/Svelte/TodoMVC.svelte (plain JS)",
+    "github.com/sveltejs/realworld src/routes/editor/Editor.svelte (plain JS, runes)",
+    "github.com/sveltejs/realworld src/routes/PreloadingIndicator.svelte",
+    "github.com/sveltejs/realworld src/routes/settings/+page.svelte (copied as settings_page.svelte)",
+    "github.com/sveltejs/svelte-devtools workspace/extension/src/lib/panel/Editable.svelte (lang=ts)",
+    "...src/routes/SearchBox.svelte (lang=ts)",
+    "...src/lib/components/Resizable.svelte (lang=ts)",
+    "...src/routes/Profiler.svelte (lang=ts)",
+    "...src/lib/nodes/Node.svelte (lang=ts)"
+   ],
+   "detected_language_ok": true,
+   "files_checked": 9,
+   "parse": {
+    "ok": 9,
+    "partial": 0,
+    "failed": 0,
+    "errors": []
+   },
+   "convention": "Same as Vue: function declarations (including nested named ones), const/let bound to arrow functions, class/interface/type/enum and interface method signatures, object-literal shorthand methods, plus top-level const/let declarations with a simple identifier and '$: name = ...' reactive declarations. Destructured $props() bindings and imports not counted.",
+   "expected": 43,
+   "extracted": 20,
+   "correct": 20,
+   "wrong": 0,
+   "missed": 23,
+   "wrong_kind": 0,
+   "precision": 1.0,
+   "recall": 0.465,
+   "wrong_examples": [],
+   "missed_examples": [
+    "TodoMVC.svelte:2 const ENTER_KEY = 13;  (top-level const/let: 0/20 extracted)",
+    "TodoMVC.svelte:71 $: filtered = currentFilter === 'all' ? ...  (reactive declarations: 0/3)",
+    "Profiler.svelte:27 const children = $derived(...)",
+    "SearchBox.svelte:5 let position = $state(-1);",
+    "Editor.svelte:9 let tagList = $state(article.tagList);"
+   ],
+   "pattern": "The <script> block is extracted for both plain JS and lang=ts; every function, arrow const, object method and interface is found at the right file line (20/20 if only functions, methods and types are expected). Top-level const/let state and '$:' reactive declarations are never extracted (0/23), so components that are mostly state (Editor.svelte, settings page) yield nothing.",
+   "verdict": "usable",
+   "imprecise_kind": 0,
+   "expected_functions_methods_types_only": 20,
+   "recall_functions_methods_types_only": 1.0,
+   "synthetic_probe_note": "Hand-written probe (not scored): <script context=\"module\" lang=\"ts\"> plus an instance script in one file: type alias, enum (as 'class'), class, method and functions from both blocks extracted; 'export let row: Row' missed."
+  }
+ ],
+ "notes": [
+  "Binary: scratchpad/langs/repocortex. Each language indexed in its own empty directory under scratchpad/langs/work/G6/t/<lang> (v2, vue2, svelte2 hold the extra files); raw file/symbol dumps are in scratchpad/langs/work/G6/out_<dir>.json. Nothing in the repocortex repository was modified.",
+  "parse_status 'partial' with NULL parse_error does not mean a syntax error: internal/parse/generic.go sets it when a file parses but yields zero symbols and zero references. That is why TLA+, VHDL, three Teal files, statement-only Swift snippets, and all Verilog/Coq .v files show as partial.",
+  "wrong_kind counts only cross-category kinds (e.g. a service or exception labelled 'function'). imprecise_kind counts struct/enum/typedef labelled 'class' and, for Swift only, methods labelled 'function'; these are reported separately and not counted as wrong.",
+  "Line rule: a symbol whose start_line is the attribute/decorator line directly above the declaration (Swift @available, WGSL @fragment) is within 2 lines and counted correct. V const-block members are stamped with the 'const (' line; one (nbody.v N) falls 3 lines away and is counted wrong and missed.",
+  "Vue and Svelte: tags_probe.tsv says 'no tags query', but the tool extracts from the <script> block with the JS/TS extractor. Two recall figures are given: the primary one counts top-level const/let bindings as expected definitions (per the task wording); *_functions_methods_types_only excludes them.",
+  "Timeouts from the first pass were not reproduced on single files with this binary. Slowest: Linguist 'Rocq Prover/JsCorrectness.v' (243 KB Coq, mis-detected as V) 2.4-2.5 s; Linguist 'Type Language/scheme.tl' (74 KB Telegram schema, mis-detected as Teal) 1.36 s. Every genuine file in this group indexed in under 0.3 s. Linguist Teal/teal-cyan-example.tl indexes in 0.14 s (partial, 0 symbols).",
+  "Totals over the 12 languages: expected 650, extracted 303, correct 295, wrong 8, missed 355."
+ ]
+}

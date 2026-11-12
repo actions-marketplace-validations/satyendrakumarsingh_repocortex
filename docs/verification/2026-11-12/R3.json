@@ -1,0 +1,710 @@
+{
+ "group": "R3",
+ "languages": [
+  {
+   "language": "javascript",
+   "project": "https://github.com/expressjs/express",
+   "commit": "43fca52d28a422c8be48fd489cbd4f2d6152bab6",
+   "timing": {
+    "index_wall_s": 1.08,
+    "index_reported_ms": 1027,
+    "resolve_wall_s": 0.18,
+    "resolve_reported_ms": 162
+   },
+   "index_stats": {
+    "files_discovered": 216,
+    "files_indexed": 146,
+    "files_skipped": 70,
+    "files_failed": 0,
+    "language_files": {
+     "ok": 140,
+     "partial": 2,
+     "failed": 0,
+     "skipped": 0,
+     "partial_files": [
+      "examples/static-files/public/js/app.js (a single comment line)",
+      "test/support/env.js (two top-level assignments)"
+     ]
+    },
+    "run_status": "degraded",
+    "symbols_reported": 129,
+    "symbols_by_kind": {
+     "function": 129,
+     "endpoint": 54,
+     "dependency": 44,
+     "configuration": 207
+    },
+    "symbols_note": "All 129 code symbols are kind=function; no class, method or constant rows exist for JavaScript in this index. By area: lib 19, examples 17, test 93.",
+    "references": 11832,
+    "imports": 0
+   },
+   "references": {
+    "total": 11832,
+    "resolved": 347,
+    "ambiguous": 696,
+    "unresolved": 10789,
+    "resolved_pct_of_all": 2.93,
+    "resolved_pct_of_bindable_as_reported": 33.3,
+    "resolved_by_tier_reported": {
+     "high": 163,
+     "medium": 59,
+     "low": 125
+    },
+    "note": "'Bindable' (1043) is the tool's own denominator: references whose name matches any symbol in the index, including package.json dependency names and YAML keys. 410 of the 696 ambiguous are calls named 'send' (only candidate: the package.json dependency 'send'); 205 are createApp() calls dropped by the candidate cap although each has a same-file definition; 13 are .on() calls whose candidates are the 'on:' keys of five GitHub workflow YAML files. All 678 express() calls (module.exports = createApplication) are unresolved."
+   },
+   "edges_by_confidence": {
+    "CALLS": {
+     "exact": 0,
+     "high": 13,
+     "medium": 0,
+     "low": 4,
+     "total": 17
+    },
+    "EXPOSES": {
+     "high": 7,
+     "medium": 2,
+     "total": 9
+    },
+    "note": "347 references are marked resolved but only 17 became CALLS edges: an edge is written only when the call site sits inside an extracted symbol, and most JavaScript call sites here sit in anonymous callbacks, at module top level, or inside 'x.y = function(){}' bodies that are not extracted. The tier of a resolved reference is not stored in symbol_references; tiers for the reference sample were reconstructed from the resolver rule (same-file or receiver=file name => high 163; cross-file 'render' => medium 59; package.json dependency target => low 125) and match the counts resolve printed exactly."
+   },
+   "definitions": {
+    "files": [
+     "lib/express.js",
+     "lib/utils.js",
+     "lib/view.js",
+     "examples/auth/index.js",
+     "examples/mvc/lib/boot.js"
+    ],
+    "expected": 22,
+    "extracted": 9,
+    "correct": 9,
+    "wrong": 0,
+    "missed": 13,
+    "precision": 1.0,
+    "recall": 0.409,
+    "per_file": {
+     "lib/express.js": {
+      "expected": 2,
+      "extracted": 2
+     },
+     "lib/utils.js": {
+      "expected": 12,
+      "extracted": 3
+     },
+     "lib/view.js": {
+      "expected": 5,
+      "extracted": 2
+     },
+     "examples/auth/index.js": {
+      "expected": 2,
+      "extracted": 2
+     },
+     "examples/mvc/lib/boot.js": {
+      "expected": 1,
+      "extracted": 0
+     }
+    },
+    "counting_rule": "Expected = function declarations, function expressions bound to a variable, exports.x / module.exports / X.prototype.y assignments defined in the file (including exports.etag = createETagGenerator(...) and the exported constant exports.methods). Not counted: pure re-exports of other modules (exports.json = bodyParser.json), anonymous callbacks, named callback expressions passed inline, module-level data variables. The 5 endpoint rows for examples/auth/index.js (GET /, GET /restricted, GET /logout, GET /login, POST /login at lines 84, 88, 92, 100, 104) are correct but are a different symbol kind and are not in these counts.",
+    "examples": {
+     "wrong": [],
+     "missed": [
+      "lib/utils.js:61 exports.normalizeType = function(type){...}",
+      "lib/utils.js:130 exports.compileETag = function(val){...}",
+      "lib/utils.js:162 exports.compileQueryParser = function compileQueryParser(val){...}",
+      "lib/utils.js:29 exports.methods (constant)",
+      "lib/view.js:104 View.prototype.lookup = function lookup(name){...}",
+      "lib/view.js:133 View.prototype.render",
+      "lib/view.js:169 View.prototype.resolve",
+      "examples/mvc/lib/boot.js:11 module.exports = function(parent, options){...}"
+     ]
+    },
+    "supplementary_all_lib": {
+     "note": "All six lib/*.js files (three are longer than the 400-line limit so they are outside the sample above): 74 definitions by the same rule (43 of them 'app.x = function x(){}', 'req.x = ...', 'res.x = ...' in application.js, request.js, response.js), 19 extracted, all 19 correct. None of the 43 public Express API methods (app.use, app.set, app.render, res.send, res.json, res.cookie, req.accepts ...) is in the index.",
+     "expected": 74,
+     "extracted": 19,
+     "correct": 19,
+     "recall": 0.257
+    },
+    "other": "exported flag is 0 for createApplication although it is module.exports; param_count is 0 for every JavaScript function."
+   },
+   "precision": {
+    "edge_table_census": {
+     "note": "The edges table holds only 17 CALLS edges for this project, so all of them were checked instead of a 60-row sample. No medium CALLS edge exists.",
+     "high": {
+      "sampled": 13,
+      "correct": 7,
+      "wrong": 6,
+      "unverifiable": 0,
+      "precision": 0.538,
+      "edge_ids": [
+       8,
+       9,
+       10,
+       11,
+       12,
+       13,
+       14,
+       15,
+       16,
+       17,
+       18,
+       23,
+       24
+      ],
+      "wrong_ids": [
+       8,
+       10,
+       12,
+       13,
+       17,
+       18
+      ]
+     },
+     "medium": {
+      "sampled": 0,
+      "correct": 0,
+      "wrong": 0,
+      "unverifiable": 0,
+      "precision": null,
+      "edge_ids": []
+     },
+     "low": {
+      "sampled": 4,
+      "correct": 4,
+      "wrong": 0,
+      "unverifiable": 0,
+      "precision": 1.0,
+      "precision_strict_definition_only": 0.0,
+      "edge_ids": [
+       19,
+       20,
+       21,
+       22
+      ],
+      "note": "All four point at a package.json dependency line (etag, debug, debug, after), not at a function definition. The package named is the right one for each call; counted correct on that reading, 0/4 if a manifest line is not accepted as a definition."
+     },
+     "wrong_examples": [
+      "edge 8: lib call res.format(obj) at examples/content-negotiation/index.js:36 bound to the local function format() that contains it (self-edge); real target is res.format in lib/response.js:574",
+      "edge 10: console.error(err.stack) at examples/error/index.js:22 bound to the local function error()",
+      "edges 12,13: User.count(...) at examples/view-locals/index.js:49 and :87 bound to local middleware count(); real target is User.count in examples/view-locals/user.js",
+      "edges 17,18: JSON.stringify(...) at lib/response.js:1030-1031 bound to the local stringify() that contains it"
+     ]
+    },
+    "resolved_reference_sample": {
+     "note": "Supplementary 60-row sample from symbol_references (resolution='resolved'), because the edge table is too small to stratify. Every k-th row by id within each tier (k=8 high, k=2 medium, k=6 low), first 20.",
+     "high": {
+      "sampled": 20,
+      "correct": 15,
+      "wrong": 5,
+      "unverifiable": 0,
+      "precision": 0.75,
+      "reference_ids": [
+       16,
+       593,
+       724,
+       765,
+       930,
+       1086,
+       2284,
+       4804,
+       5660,
+       6788,
+       6841,
+       7793,
+       8970,
+       9271,
+       9871,
+       9883,
+       9895,
+       10415,
+       10521,
+       11279
+      ],
+      "wrong_ids": [
+       16,
+       593,
+       930,
+       1086,
+       2284
+      ]
+     },
+     "medium": {
+      "sampled": 20,
+      "correct": 0,
+      "wrong": 20,
+      "unverifiable": 0,
+      "precision": 0.0,
+      "reference_ids": [
+       2919,
+       2935,
+       2947,
+       2963,
+       2982,
+       2999,
+       3018,
+       3037,
+       3054,
+       3072,
+       3093,
+       3114,
+       3131,
+       3145,
+       3159,
+       3173,
+       3189,
+       3200,
+       3214,
+       10061
+      ],
+      "note": "Every medium binding is app.render(...) or res.render(...) in a test file bound to a private helper function render() in a different test file (test/app.engine.js:8). The real targets are app.render (lib/application.js:522) and res.render (lib/response.js:897), neither of which is in the index."
+     },
+     "low": {
+      "sampled": 20,
+      "correct": 12,
+      "wrong": 8,
+      "unverifiable": 0,
+      "precision": 0.6,
+      "precision_strict_definition_only": 0.0,
+      "reference_ids": [
+       99,
+       718,
+       840,
+       906,
+       1577,
+       2475,
+       2862,
+       3488,
+       3726,
+       4379,
+       7310,
+       7988,
+       8742,
+       8791,
+       8845,
+       9041,
+       11064,
+       11121,
+       11174,
+       11707
+      ],
+      "wrong_ids": [
+       99,
+       2475,
+       3488,
+       7310,
+       8742,
+       8791,
+       8845,
+       11707
+      ],
+      "note": "Every low binding targets a package.json dependency line. 12 name the right package (after(n, done), accepts(this), debug(...)). 8 are wrong: res.cookie / req.accepts / res.vary are Express's own methods in lib/response.js and lib/request.js, other.once is EventEmitter.once, and after(function(){...}) in test/app.js is the mocha hook (that file does not require 'after')."
+     }
+    },
+    "resolved_reference_census": {
+     "note": "All 347 resolved references classified by (receiver, name, target) group, reading at least one site of each group and every site of the mixed groups.",
+     "high": {
+      "total": 163,
+      "correct": 148,
+      "wrong": 15,
+      "precision": 0.908,
+      "wrong_groups": {
+       "JSON.stringify -> local stringify": 5,
+       "app.render -> same-file helper render": 4,
+       "User.count -> local count": 3,
+       "res.format -> local format": 2,
+       "console.error -> local error": 1
+      }
+     },
+     "medium": {
+      "total": 59,
+      "correct": 0,
+      "wrong": 59,
+      "precision": 0.0
+     },
+     "low": {
+      "total": 125,
+      "correct": 63,
+      "wrong": 62,
+      "precision": 0.504,
+      "precision_strict_definition_only": 0.0,
+      "wrong_groups": {
+       "res.cookie": 24,
+       "req.accepts": 10,
+       "res.vary": 9,
+       "utils.etag (lib/utils.js exports.etag)": 5,
+       "x.once (EventEmitter)": 9,
+       "this.cookie": 1,
+       "this.vary": 1,
+       "mocha after() hook": 3
+      }
+     },
+     "all": {
+      "total": 347,
+      "correct": 211,
+      "wrong": 136,
+      "precision": 0.608,
+      "precision_strict_definition_only": 0.427
+     }
+    }
+   },
+   "recall": {
+    "files": [
+     "lib/express.js",
+     "lib/view.js",
+     "lib/utils.js",
+     "lib/application.js (lines 66-371)",
+     "lib/response.js (first 10 in-repo call sites, lines 99-163)"
+    ],
+    "call_sites": 40,
+    "bound_correct": 5,
+    "bound_wrong": 0,
+    "ambiguous": 0,
+    "unbound": 35,
+    "recall": 0.125,
+    "edge_level": {
+     "bound_correct": 0,
+     "recall": 0.0,
+     "note": "None of the 5 correctly bound references produced a CALLS edge, because each call site is at module top level or inside an unextracted function expression. Caller queries answer from edges."
+    },
+    "bound_correct_sites": [
+     "lib/utils.js:40 createETagGenerator",
+     "lib/utils.js:51 createETagGenerator",
+     "lib/utils.js:63 acceptParams",
+     "lib/view.js:174 tryStat",
+     "lib/view.js:182 tryStat"
+    ],
+    "unbound_examples": [
+     "lib/express.js:38 app.handle(req, res, next)",
+     "lib/express.js:54 app.init()",
+     "lib/view.js:94 this.lookup(fileName)",
+     "lib/view.js:119 this.resolve(dir, file)",
+     "lib/application.js:66 this.defaultConfiguration()",
+     "lib/application.js:95 this.set('etag', 'weak')",
+     "lib/application.js:365 compileETag(val) (required from ./utils)",
+     "lib/response.js:141 setCharset(type, 'utf-8') (required from ./utils)",
+     "lib/response.js:156 this.json(chunk)"
+    ],
+    "excluded": "Calls to app.get(setting) and other verbs defined by 'app[method] = function' in a loop, calls into the router/debug/etc. packages, and 'new View(...)' (constructor calls are not recorded as references at all)."
+   },
+   "weak_spots": [
+    {
+     "case": "CommonJS require plus module.exports",
+     "example": "lib/application.js:21 'var compileETag = require(\"./utils\").compileETag' then compileETag(val) at :365; examples/*/index.js 'var express = require(\"../..\")' then express()",
+     "outcome": "Not handled. file_imports has 0 rows for the whole repository (only ES 'import' is captured). compileETag is unresolved because 'exports.compileETag = function' is not extracted. All 678 express() call sites are unresolved (module.exports = createApplication is not followed). The one case that works does so by coincidence of naming: utils.shouldNotHaveHeader(...) binds because the receiver variable 'utils' matches the file name test/support/utils.js (49 references, all correct)."
+    },
+    {
+     "case": "prototype methods",
+     "example": "lib/view.js:104 View.prototype.lookup = function lookup(name){...}; called at lib/view.js:94 this.lookup(fileName)",
+     "outcome": "Definition not extracted; call unresolved. Same for every 'app.x = function', 'res.x = function', 'req.x = function' (43 definitions in lib)."
+    },
+    {
+     "case": "methods added to an object literal",
+     "example": "examples/route-map/index.js:31-53 'var users = { list: function(req,res){...}, get: ..., delete: ... }' and 'var pets = { list: ..., delete: ... }', used as users.list at :57",
+     "outcome": "No symbol extracted for any of the five literal methods nor for 'app.map = function'; the file contributes zero symbols."
+    },
+    {
+     "case": "same-named methods on different objects",
+     "example": "render exists as app.render (lib/application.js:522), res.render (lib/response.js:897), View.prototype.render (lib/view.js:133) and a test helper function render (test/app.engine.js:8)",
+     "outcome": "Wrong. Only the test helper is in the index, so 37 app.render and 22 res.render calls in other test files bind to it at medium confidence, and 4 app.render calls in its own file bind to it at high. view.render(options, callback) at lib/application.js:627 is left ambiguous."
+    },
+    {
+     "case": "methods called through a parent / mixed-in prototype",
+     "example": "lib/express.js:42 mixin(app, proto, false) then app.init() at :54 and app.handle(req, res, next) at :38",
+     "outcome": "Unresolved (targets app.init and app.handle are not extracted). The repository has no ES 'class ... extends', so class inheritance could not be probed here."
+    },
+    {
+     "case": "receiver ignored when a same-file function shares the name",
+     "example": "lib/response.js:1030 JSON.stringify(value, replacer, spaces) inside function stringify",
+     "outcome": "Wrong at high confidence: bound to the local stringify (a self-call edge). Same pattern for console.error -> local error, res.format -> local format, User.count -> local count. 15 of 163 high references."
+    },
+    {
+     "case": "calls through a returned value",
+     "example": "examples/error-pages/index.js:74 res.type('txt').send('Not found'); examples/mvc/index.js:83 res.status(500).render('5xx')",
+     "outcome": "Not bound. The chained call is recorded with an empty receiver; .send is ambiguous (its only candidate is the package.json dependency 'send'), res.status is unresolved."
+    },
+    {
+     "case": "candidate cap versus same-file definition",
+     "example": "test/express.json.js:722 function createApp(options) and 32 createApp() calls in the same file; nine test files each define their own createApp",
+     "outcome": "All 205 createApp() calls are left ambiguous ('more candidates than the cap allows') although each has exactly one same-file definition."
+    },
+    {
+     "case": "route handler bound by name across unrelated files",
+     "example": "examples/route-separation/index.js:40 app.get('/users', user.list) with user = require('./user')",
+     "outcome": "Wrong EXPOSES edge (medium) to function list in examples/online/index.js:40, a different example application. The real handler exports.list in examples/route-separation/user.js:10 is not extracted. Same for GET /posts (post.list)."
+    }
+   ],
+   "tool_answers": [
+    {
+     "command": "repocortex tool call find_callers name=defineGetter",
+     "rows": 0,
+     "right": 0,
+     "missing": "All 12 callers (lib/request.js lines 230, 297, 326, 340, 357, 383, 403, 418, 444, 469, 497, 508). The 12 references are marked resolved in symbol_references but sit at module top level, so no edge exists. The answer carries a 'COVERAGE TOO LOW ... do not present as an answer' note."
+    },
+    {
+     "command": "repocortex tool call find_callers name=stringify",
+     "rows": 2,
+     "right": 0,
+     "missing": "Both rows are JSON.stringify calls inside stringify itself (lib/response.js:1030, 1031), reported as 'verdict: strong (high=2)' with no low-coverage note. The two real callers, res.json at lib/response.js:242 and res.jsonp at :270, are missing."
+    },
+    {
+     "command": "repocortex tool call find_callers name=onaborted",
+     "rows": 2,
+     "right": 2,
+     "missing": "Nothing (onfinish calls it at lib/response.js:969 and :975)."
+    },
+    {
+     "command": "repocortex tool call analyze_impact symbol=defineGetter",
+     "rows": 0,
+     "right": 0,
+     "missing": "Reports '0 direct, 0 indirect. Risk low (score 20)'. In the source, defineGetter installs all 12 request getters (req.query, req.ip, req.protocol, req.hostname ...). The low-coverage and lower-bound notes are present."
+    },
+    {
+     "command": "repocortex tool call analyze_impact symbol=onaborted",
+     "rows": 1,
+     "right": 1,
+     "missing": "Nothing direct (onfinish). sendfile registers onfinish as a callback and is not listed as indirect."
+    },
+    {
+     "command": "repocortex tool call find_implementations name=View",
+     "rows": 0,
+     "right": 0,
+     "missing": "Nothing to find: express has no class that is extended (no ES classes at all; inheritance is by Object.create and mixin). The tool answers for lib/view.js:52 and notes that 4 other definitions share the name; there are 6 others (all in test/app.render.js)."
+    }
+   ],
+   "notes": [
+    "Documentation claim (94-100% precision, 33-66% recall without a compiler index) is not met on this project: CALLS-edge precision at high is 7/13 (53.8%); resolved-reference precision is 90.8% high, 0% medium, 50.4% low (0% if a package.json line is not accepted as a definition); recall on 40 hand-listed in-repo call sites is 12.5% at reference level and 0% at edge level.",
+    "Root cause on this codebase is definition extraction: only 'function name(){}' declarations and 'var name = function' are extracted. Express defines its API as 'app.use = function use(fn){}', so the call graph has almost nothing to bind to.",
+    "README line 445 lists JavaScript in the 'resolved' tier ('Definitions and imports; references bind across files'); for CommonJS code zero imports were recorded.",
+    "Nothing crashed, hung or timed out."
+   ]
+  },
+  {
+   "language": "php",
+   "project": "https://github.com/guzzle/guzzle",
+   "commit": "7d9b1f430bb65ac664e120af227bf9a795ad6333",
+   "timing": {
+    "index_wall_s": 1.21,
+    "index_reported_ms": 1163,
+    "resolve_wall_s": 0.05,
+    "resolve_reported_ms": 23
+   },
+   "index_stats": {
+    "files_discovered": 184,
+    "files_indexed": 144,
+    "files_skipped": 40,
+    "files_failed": 0,
+    "language_files": {
+     "ok": 142,
+     "partial": 2,
+     "failed": 0,
+     "skipped": 1,
+     "partial_files": [
+      ".php-cs-fixer.dist.php",
+      "tests/Handler/tls-http-server.php"
+     ],
+     "skipped_files": [
+      "tests/Handler/CurlFactoryTest.php (406,636 bytes, over the 262,144-byte limit)"
+     ]
+    },
+    "run_status": "degraded",
+    "symbols_reported": 2713,
+    "symbols_by_kind": {
+     "class": 163,
+     "interface": 8,
+     "method": 2532,
+     "function": 10,
+     "configuration": 106,
+     "deployment_unit": 2
+    },
+    "references": 0,
+    "imports": 827
+   },
+   "references": {
+    "total": 0,
+    "resolved": 0,
+    "ambiguous": 0,
+    "unresolved": 0,
+    "note": "The indexer extracted zero references of any kind from 144 PHP files. Confirmed on a 2-file synthetic project covering $this->m(), Foo::bar(), parent::, new, a namespaced function imported with 'use function', and chained calls: 18 symbols, 0 references, 0 edges."
+   },
+   "edges_by_confidence": {
+    "CALLS": {
+     "exact": 0,
+     "high": 0,
+     "medium": 0,
+     "low": 0,
+     "total": 0
+    },
+    "all_kinds_total": 0,
+    "note": "The edges table is empty for this project: no CALLS, no EXTENDS, no IMPLEMENTS."
+   },
+   "definitions": {
+    "files": [
+     "src/RetryMiddleware.php",
+     "src/MessageFormatter.php",
+     "src/Cookie/CookieJarInterface.php",
+     "src/Utils.php",
+     "src/TransferStats.php"
+    ],
+    "expected": 44,
+    "extracted": 41,
+    "correct": 41,
+    "wrong": 0,
+    "missed": 3,
+    "precision": 1.0,
+    "recall": 0.932,
+    "per_file": {
+     "src/RetryMiddleware.php": {
+      "expected": 6,
+      "extracted": 6
+     },
+     "src/MessageFormatter.php": {
+      "expected": 7,
+      "extracted": 4
+     },
+     "src/Cookie/CookieJarInterface.php": {
+      "expected": 7,
+      "extracted": 7
+     },
+     "src/Utils.php": {
+      "expected": 14,
+      "extracted": 14
+     },
+     "src/TransferStats.php": {
+      "expected": 10,
+      "extracted": 10
+     }
+    },
+    "examples": {
+     "wrong": [],
+     "missed": [
+      "src/MessageFormatter.php:49 public const CLF",
+      "src/MessageFormatter.php:50 public const DEBUG",
+      "src/MessageFormatter.php:51 public const SHORT"
+     ]
+    },
+    "supplementary_all_src": {
+     "note": "Regex count over all 74 files in src/ compared with index rows (not read line by line): classes 66 of 66, interfaces 6 of 6, methods 713 of 713, class constants 0 of 146, traits 2 of 2 extracted but labelled kind=interface (ClientTrait, NonSerializableTrait).",
+     "expected": 933,
+     "extracted": 787,
+     "correct_name_and_kind": 785,
+     "wrong_kind": 2,
+     "missed": 146,
+     "recall": 0.841
+    },
+    "other": "fqn is '<file>:<method>' (e.g. 'src/Pool.php:__construct'); it carries neither the namespace nor the owning class. On the synthetic file an enum case was extracted as kind=function, and a namespace-level 'const LIMIT' and define('OLD_CONST') were missed. 'use X as P' aliases are stored with an empty alias column."
+   },
+   "precision": {
+    "high": {
+     "sampled": 0,
+     "correct": 0,
+     "wrong": 0,
+     "unverifiable": 0,
+     "precision": null,
+     "edge_ids": []
+    },
+    "medium": {
+     "sampled": 0,
+     "correct": 0,
+     "wrong": 0,
+     "unverifiable": 0,
+     "precision": null,
+     "edge_ids": []
+    },
+    "low": {
+     "sampled": 0,
+     "correct": 0,
+     "wrong": 0,
+     "unverifiable": 0,
+     "precision": null,
+     "edge_ids": []
+    },
+    "note": "Not measurable: there are no bound relationships to sample. Precision is undefined, not 100%."
+   },
+   "recall": {
+    "files": [
+     "src/RetryMiddleware.php",
+     "src/Utils.php",
+     "src/Cookie/FileCookieJar.php",
+     "src/Exception/RequestException.php",
+     "src/HandlerStack.php (lines 58-63)"
+    ],
+    "call_sites": 40,
+    "bound_correct": 0,
+    "bound_wrong": 0,
+    "ambiguous": 0,
+    "unbound": 40,
+    "recall": 0.0,
+    "per_file": {
+     "src/RetryMiddleware.php": 4,
+     "src/Utils.php": 16,
+     "src/Cookie/FileCookieJar.php": 7,
+     "src/Exception/RequestException.php": 2,
+     "src/HandlerStack.php": 11
+    },
+    "examples": [
+     "src/RetryMiddleware.php:94 $this->doRetry($request, $options, $value)",
+     "src/Utils.php:76 self::isTransportSharingRequired($sharingMode)",
+     "src/Utils.php:179 Proxy::wrapSync(...)",
+     "src/Cookie/FileCookieJar.php:47 parent::__construct()",
+     "src/Cookie/FileCookieJar.php:165 $this->setCookie($cookie)",
+     "src/HandlerStack.php:59 $stack->push(Middleware::httpErrors(), 'http_errors')"
+    ],
+    "excluded": "Calls into guzzlehttp/psr7 and guzzlehttp/promises, PHP built-ins, and 'new X(...)' constructor calls."
+   },
+   "weak_spots": [
+    {
+     "case": "same-named methods on different classes",
+     "example": "load() and save() exist on both FileCookieJar and SessionCookieJar; $this->load($cookieFile) at src/Cookie/FileCookieJar.php:52",
+     "outcome": "Not bound: no reference row is recorded for the call."
+    },
+    {
+     "case": "methods called through an interface or a parent class",
+     "example": "src/Cookie/FileCookieJar.php:165 $this->setCookie($cookie) (inherited from CookieJar, declared on CookieJarInterface); :47 parent::__construct()",
+     "outcome": "Not bound. In addition no EXTENDS or IMPLEMENTS edge exists, so 'class CookieJar implements CookieJarInterface' and 'class FileCookieJar extends CookieJar' are invisible."
+    },
+    {
+     "case": "static calls Foo::bar() with a use import",
+     "example": "src/Utils.php:12 'use GuzzleHttp\\Handler\\Proxy;' then Proxy::wrapSync($multiHandler, new CurlHandler(...)) at :179; self::createCurlHandler(...) at :93",
+     "outcome": "Not bound. The use statement is stored in file_imports (827 rows repository-wide) but nothing consumes it because no call reference is extracted."
+    },
+    {
+     "case": "namespaced functions with use function",
+     "example": "Guzzle src/ has no namespaced functions at this commit, so probed on a synthetic file: 'use function App\\Util\\helper_fn;' then helper_fn($x)",
+     "outcome": "Definition extracted (function helper_fn), import row stored, call not recorded, no edge."
+    },
+    {
+     "case": "calls through a returned value",
+     "example": "src/Exception/RequestException.php:75 ($bodySummarizer ?? new BodySummarizer())->summarize($response); synthetic: Helper::make()->run()->done()",
+     "outcome": "Not bound: no reference rows."
+    }
+   ],
+   "tool_answers": [
+    {
+     "command": "repocortex tool call find_callers name=chooseHandler",
+     "rows": 0,
+     "right": 0,
+     "missing": "All 14 call sites found by grep: src/HandlerStack.php:58, src/Client.php:197 and 12 in tests. The answer carries 'COVERAGE UNKNOWN - relationship lookup for PHP cannot be judged: this index recorded no reference resolution at all'."
+    },
+    {
+     "command": "repocortex tool call analyze_impact symbol=chooseHandler",
+     "rows": 0,
+     "right": 0,
+     "missing": "Headline is '0 direct, 0 indirect. Risk low (score 20)' for the function that selects the HTTP handler for every default Client and HandlerStack; the same COVERAGE UNKNOWN note follows."
+    },
+    {
+     "command": "repocortex tool call find_implementations name=CookieJarInterface",
+     "rows": 0,
+     "right": 0,
+     "missing": "CookieJar (implements, src/Cookie/CookieJar.php:15) and its subclasses FileCookieJar and SessionCookieJar. find_implementations name=ClientInterface also returns 0 and misses Client (src/Client.php:29)."
+    }
+   ],
+   "notes": [
+    "PHP call resolution does not function in this build: 0 references extracted, 0 edges, so precision is undefined and recall is 0 of 40. The documented 94-100% precision / 33-66% recall does not apply to PHP at all.",
+    "README line 445 lists PHP in the 'resolved' tier ('Definitions and imports; references bind across files'). Definitions and imports are extracted; no reference exists to bind.",
+    "resolve prints 'Resolved: 0 (0.0% of the 0 that name something this index defines)' and exits 0 with no warning that a language with 144 indexed files produced no references. The agent tools do say COVERAGE UNKNOWN.",
+    "Definition extraction for classes, interfaces and methods is accurate (41/41 in the sample, start lines match). Class constants are never extracted; traits are labelled interface.",
+    "One PHP file was skipped for size (tests/Handler/CurlFactoryTest.php). Nothing crashed, hung or timed out."
+   ]
+  }
+ ]
+}

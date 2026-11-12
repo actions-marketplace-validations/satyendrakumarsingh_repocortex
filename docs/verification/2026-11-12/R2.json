@@ -1,0 +1,815 @@
+{
+ "group": "R2",
+ "languages": [
+  {
+   "language": "typescript",
+   "project": "https://github.com/colinhacks/zod",
+   "commit": "19c40d2072288b4cafec851e9d056a72a88e5973",
+   "timing": {
+    "index_wall_s": 5.45,
+    "index_reported_ms": 5387,
+    "resolve_wall_s": 1.28,
+    "resolve_reported_ms": 1241,
+    "note": "whole repository (all languages), one run each, warm disk"
+   },
+   "index_stats": {
+    "repo_files_discovered": 743,
+    "repo_files_indexed": 528,
+    "repo_files_skipped": 215,
+    "run_status": "degraded",
+    "parse_failures_reported": 21,
+    "language_files": 481,
+    "language_files_ok": 462,
+    "language_files_partial": 19,
+    "language_files_failed": 0,
+    "partial_explanation": "all 19 'partial' TypeScript files produced 0 symbols with an empty parse_error: 17 are barrel/re-export files (index.ts, external.ts, checks.ts with only `export {..} from` / `export *`), versions.ts holds only an exported const, tsc/extend.ts is entirely commented out. They are not parse failures, yet they make the run 'degraded'.",
+    "symbols_language": 4408,
+    "symbols_repo_printed_by_index": 4488,
+    "symbols_repo_in_table_incl_json_yaml": 6255,
+    "symbol_kinds_ts_plus_tsx": {
+     "function": 1593,
+     "method": 988,
+     "type_alias": 990,
+     "interface": 707,
+     "class": 110,
+     "field": 88
+    },
+    "references_language": 54011,
+    "references_repo": 54269,
+    "imports_repo": 1412
+   },
+   "references": {
+    "resolved": 7110,
+    "ambiguous": 23500,
+    "unresolved": 23401,
+    "by_kind": {
+     "call": {
+      "resolved": 6499,
+      "ambiguous": 23496,
+      "unresolved": 23392
+     },
+     "extends": {
+      "resolved": 610,
+      "ambiguous": 4,
+      "unresolved": 9
+     },
+     "implementation": {
+      "resolved": 1
+     }
+    },
+    "resolved_share_of_all_refs": 0.1316,
+    "tool_reported_repo": "Resolved 7142 = 23.3% of the 30692 references that name something this index defines; ambiguous 23550; unresolved 23577",
+    "non_test_source_call_refs": {
+     "resolved": 2441,
+     "ambiguous": 2482,
+     "unresolved": 1038,
+     "note": "TypeScript files outside tests/bench/docs/scripts/play"
+    },
+    "resolved_call_refs_without_edge": "4080 of 6499 resolved call references (62.8%) lie outside any extracted function/method (module top level, test callbacks, anonymous initializer arrows) and therefore produce no CALLS edge; only 2444 CALLS edges exist"
+   },
+   "edges_by_confidence": {
+    "CALLS": {
+     "high": 1742,
+     "medium": 674,
+     "low": 1
+    },
+    "EXTENDS": {
+     "high": 605,
+     "medium": 5
+    },
+    "IMPLEMENTS": {
+     "low": 1
+    },
+    "calls_by_detail": {
+     "high: defined in the same file": 1296,
+     "high: receiver type matches": 463,
+     "high: single match in an imported package": 10,
+     "medium: same directory, but the language requires an import": 285,
+     "medium: receiver matches, overloaded; argument count selects one": 248,
+     "medium: receiver matches, overloaded": 141,
+     "low: unique name in repository, no import evidence": 1,
+     "note": "detail counts are repo-wide (2444 CALLS incl. 12 JS + 15 TSX)"
+    },
+    "calls_dst_kind_repo": {
+     "function": 1799,
+     "method": 629,
+     "field": 8,
+     "dependency": 8
+    }
+   },
+   "definitions": {
+    "standard": "expected = functions, const-bound arrow functions, class/object-literal methods, interface method signatures, class fields, classes, interfaces, type aliases, enums, namespaces, exported constants. Non-exported plain consts and interface property signatures not expected.",
+    "files": [
+     {
+      "file": "packages/zod/src/v4/core/registries.ts",
+      "expected": 21,
+      "extracted": 18,
+      "correct": 18,
+      "wrong": 0,
+      "missed": 3
+     },
+     {
+      "file": "packages/zod/src/v4/classic/errors.ts",
+      "expected": 19,
+      "extracted": 17,
+      "correct": 17,
+      "wrong": 0,
+      "missed": 2
+     },
+     {
+      "file": "packages/zod/src/v3/helpers/parseUtil.ts",
+      "expected": 30,
+      "extracted": 28,
+      "correct": 28,
+      "wrong": 0,
+      "missed": 2
+     },
+     {
+      "file": "packages/zod/src/v4/core/core.ts",
+      "expected": 25,
+      "extracted": 21,
+      "correct": 21,
+      "wrong": 0,
+      "missed": 4
+     },
+     {
+      "file": "packages/zod/src/v3/helpers/util.ts",
+      "expected": 36,
+      "extracted": 31,
+      "correct": 31,
+      "wrong": 0,
+      "missed": 5
+     }
+    ],
+    "expected": 131,
+    "extracted": 115,
+    "correct": 115,
+    "wrong": 0,
+    "missed": 16,
+    "precision": 1.0,
+    "recall": 0.878,
+    "examples": {
+     "wrong": [],
+     "missed": [
+      "exported constants are never extracted: `export const globalRegistry` (registries.ts:105), `export const $output`/`$input` (registries.ts:4,6), `export const ZodError = core.$constructor(...)` and `ZodRealError` (classic/errors.ts:76-77, the v4 error classes), `EMPTY_PATH`, `INVALID` (parseUtil.ts:51,158), `NEVER`, `$brand`, `globalConfig` (core.ts:18,148,225), `ZodParsedType` (v3/helpers/util.ts:129)",
+      "`function _(this: any, def: D)` at core.ts:118 (the constructor body of every v4 schema) is not extracted although sibling nested functions `Internals` and `init` are",
+      "`export const objectKeys = cond ? (obj) => ... : (object) => ...` and `export const isInteger = cond ? ... : ...` (v3/helpers/util.ts:39,64): function-valued consts behind a conditional",
+      "`export namespace util` and `export namespace objectUtil` (v3/helpers/util.ts:1,81) are not symbols"
+     ],
+     "quality_issues": [
+      "FQNs carry no class/namespace qualifier: `util.identity` and `objectUtil.identity` both get fqn `packages/zod/src/v3/helpers/util.ts:identity`; 37 methods share fqn `packages/zod/src/v3/types.ts:_parse`; 337 distinct FQNs are duplicated in TS/TSX",
+      "`exported` flag follows a capitalised-first-letter rule, not the `export` keyword: only 14 of 1539 TS functions are flagged exported (e.g. the nested, non-exported `Internals` at core.ts:62 is flagged exported; `export function finalizeIssue`, `config`, `registry`, `mergeDefs` are flagged not exported). grep finds about 527 `export function` declarations.",
+      "overload signatures are three separate `function`/`method` symbols (e.g. doc.ts write at 25, 26, 27)"
+     ]
+    }
+   },
+   "precision": {
+    "standard": "correct = the edge's destination is the definition the call invokes at runtime; for overloads the implementation signature or the matching overload declaration counts; for interface/base-class calls the declaring member or a legitimately possible implementation counts. A call into the JS runtime or a third-party package that is bound to an in-repo symbol is wrong.",
+    "sampling": "CALLS edges whose evidence_file is a typescript file, ordered by id, every k-th row starting at the first (k = floor(population / n)). Only 1 low edge exists, so the sample is 30 high + 29 medium + 1 low = 60.",
+    "high": {
+     "population": 1742,
+     "sampled": 30,
+     "correct": 27,
+     "wrong": 3,
+     "unverifiable": 0,
+     "precision": 0.9,
+     "every_kth": 58,
+     "edge_ids": [
+      3,
+      111,
+      234,
+      339,
+      400,
+      471,
+      550,
+      631,
+      717,
+      871,
+      983,
+      1047,
+      1105,
+      1243,
+      1349,
+      1446,
+      1579,
+      1708,
+      1878,
+      1944,
+      2230,
+      2305,
+      2385,
+      2453,
+      2511,
+      2622,
+      2717,
+      2809,
+      2949,
+      3034
+     ],
+     "wrong_edges": {
+      "631": "v3/types.ts:4165 `values.includes(opt)` (Array.prototype.includes) bound to ZodString.includes at v3/types.ts:1175 ('defined in the same file')",
+      "2385": "v4/core/to-json-schema.ts:458 `types.includes(member)` (array named `types`) bound to v3/types.ts:1175 ZodString.includes ('receiver type matches': the variable name equals a file basename)",
+      "2453": "v4/core/util.ts:708 `Reflect.deleteProperty(target, prop)` bound to the enclosing proxy-handler method deleteProperty at util.ts:706 (self edge)"
+     }
+    },
+    "medium": {
+     "population": 674,
+     "sampled": 29,
+     "correct": 16,
+     "wrong": 13,
+     "unverifiable": 0,
+     "precision": 0.552,
+     "every_kth": 23,
+     "edge_ids": [
+      1,
+      90,
+      147,
+      180,
+      325,
+      735,
+      775,
+      968,
+      1248,
+      1298,
+      1346,
+      1415,
+      1457,
+      1506,
+      1541,
+      1582,
+      1628,
+      1666,
+      1711,
+      1760,
+      1803,
+      1842,
+      2102,
+      2356,
+      2568,
+      2619,
+      2686,
+      2738,
+      2803
+     ],
+     "by_detail": {
+      "same directory, but the language requires an import": {
+       "sampled": 12,
+       "correct": 4,
+       "wrong": 8
+      },
+      "receiver matches, overloaded; argument count selects one": {
+       "sampled": 12,
+       "correct": 12,
+       "wrong": 0
+      },
+      "receiver matches, overloaded": {
+       "sampled": 5,
+       "correct": 0,
+       "wrong": 5
+      }
+     },
+     "wrong_edges": {
+      "1,90,180": "packages/bench/*.ts `zod3.parse(_)` / `z4Schema.parse(\"a\")` (zod schema .parse) bound to an object-literal method `parse()` at packages/bench/safeparse.ts:23 (34 such edges in the index)",
+      "325": "v3/types.ts:347 `ctx.addIssue({...})` (RefinementCtx, declared at types.ts:46) bound to the ZodError class field addIssue at v3/ZodError.ts:298",
+      "735,775": "v4/classic/from-json-schema.ts `type.map(...)`, `schema.oneOf.map(...)` (Array.map) bound to the schema factory `map()` at classic/schemas.ts:2044",
+      "968": "cyclic-data.test.ts:560 `Node.readonly()` bound to a getter `get readonly()` in a different test file (recursive-types.test.ts:492)",
+      "2356": "compile-generative.test.ts:417 `g.corrupt(...)` (property of a local generator object) bound to function corrupt in compile-differential.test.ts:929",
+      "2568,2619,2686,2738,2803": "v4/locales/*.ts `util.joinValues(...)` with `import * as util from \"../core/util.js\"` bound to v3/helpers/util.ts:69 instead of v4/core/util.ts:284. 121 of the 126 edges to the v3 joinValues come from v4/locales and are all wrong for the same reason."
+     }
+    },
+    "low": {
+     "population": 1,
+     "sampled": 1,
+     "correct": 0,
+     "wrong": 1,
+     "unverifiable": 0,
+     "precision": 0.0,
+     "edge_ids": [
+      2366
+     ],
+     "wrong_edges": {
+      "2366": "v4/core/tests/compile.test.ts:1738 `effect(o)` calls a callback parameter named effect; bound to the npm dependency `effect` declared in packages/bench/package.json:9"
+     }
+    },
+    "overall_sample": {
+     "sampled": 60,
+     "correct": 43,
+     "wrong": 17,
+     "precision": 0.717
+    },
+    "population_weighted_estimate": 0.803
+   },
+   "recall": {
+    "standard": "every call to a function/method defined in this repository, including constructor calls with `new`; calls of callback parameters and runtime/third-party calls excluded",
+    "files": [
+     {
+      "file": "packages/zod/src/v4/classic/parse.ts",
+      "call_sites": 12,
+      "bound_correct": 0,
+      "bound_wrong": 0,
+      "ambiguous": 12,
+      "unbound": 0,
+      "note": "`core._parse(ZodRealError)` ... `core._safeDecodeAsync(ZodRealError)` through `import * as core from \"../core/index.js\"`; 10 of the 12 callee names have exactly one definition in the repository and are still ambiguous"
+     },
+     {
+      "file": "packages/zod/src/v4/core/json-schema-generator.ts",
+      "call_sites": 4,
+      "bound_correct": 4,
+      "bound_wrong": 0,
+      "ambiguous": 0,
+      "unbound": 0
+     },
+     {
+      "file": "packages/zod/src/v3/helpers/parseUtil.ts",
+      "call_sites": 6,
+      "bound_correct": 5,
+      "bound_wrong": 0,
+      "ambiguous": 1,
+      "unbound": 0,
+      "note": "`getErrorMap()` named-imported from ../errors.js is ambiguous between v3/errors.ts:11 and v4/classic/compat.ts:51"
+     },
+     {
+      "file": "packages/zod/src/v4/core/registries.ts",
+      "call_sites": 3,
+      "bound_correct": 1,
+      "bound_wrong": 0,
+      "ambiguous": 1,
+      "unbound": 1,
+      "note": "`this.get(p)` ambiguous; `new $ZodRegistry<T, S>()` has no reference row at all"
+     },
+     {
+      "file": "packages/zod/src/v4/classic/errors.ts",
+      "call_sites": 9,
+      "bound_correct": 5,
+      "bound_wrong": 1,
+      "ambiguous": 3,
+      "unbound": 0,
+      "note": "`core.$constructor(\"ZodError\", initializer)` at line 76 is bound to the interface $constructor (core.ts:8), the same call with 4 args at line 77 to the function (core.ts:51); `core.formatError`/`core.flattenError` (3 overload declarations each) and `$ZodError.init` ambiguous"
+     }
+    ],
+    "call_sites": 34,
+    "bound_correct": 15,
+    "bound_wrong": 1,
+    "ambiguous": 17,
+    "unbound": 1,
+    "recall": 0.441,
+    "sensitivity": "without classic/parse.ts: 15 of 22 = 0.682"
+   },
+   "weak_spots": [
+    {
+     "case": "overload signatures",
+     "example": "`core.formatError(self, mapper)` (classic/errors.ts:58); formatError has two overload declarations plus the implementation at v4/core/errors.ts:349-351. Also `doc.write(...)` on class Doc (doc.ts:25-27).",
+     "outcome": "formatError: left ambiguous (each declaration is a separate candidate). doc.write: bound at medium to the implementation line 27, correct in 12 of 12 sampled. Mixed: methods with a typed receiver resolve, namespace-qualified overloaded functions do not."
+    },
+    {
+     "case": "methods called through an interface or a base class",
+     "example": "`this._getOrReturnCtx(input, ctx)` in ZodDate._parse (v3/types.ts:1908) -> ZodType method at :176; `this._parse(input)` in ZodType._parseSync (:211); `ctx.addIssue(...)` on RefinementCtx (:347)",
+     "outcome": "inherited call bound correctly (high, by same-file unique name, not by type); abstract `_parse` with 37 overrides left ambiguous; interface call `ctx.addIssue` bound WRONG to ZodError.addIssue field in another file (medium)"
+    },
+    {
+     "case": "same-named functions in different modules",
+     "example": "`util.joinValues(issue.values, \"|\")` in v4/locales/eo.ts:78 with `import * as util from \"../core/util.js\"`; candidates v4/core/util.ts:284 and v3/helpers/util.ts:69",
+     "outcome": "bound WRONG to the v3 one (medium, 'receiver matches, overloaded') for 121 edges in v4/locales; the import path is not used to choose. Named import `getErrorMap` (two definitions) is left ambiguous."
+    },
+    {
+     "case": "re-exports through an index (barrel) file",
+     "example": "`core._encode(ZodRealError)` in v4/classic/parse.ts:43, `import * as core from \"../core/index.js\"`, _encode defined once (v4/core/parse.ts:198)",
+     "outcome": "ambiguous. By contrast `core.config()` (classic/compat.ts:45) resolves 'high: receiver type matches' because config lives in a file named core.ts; the receiver is matched against file basenames, not followed through the barrel."
+    },
+    {
+     "case": "default exports",
+     "example": "`export default function () {...}` in v4/locales/en.ts, called as `core.config(en())` at v4/classic/schemas.ts:15 after `import en from \"../locales/en.js\"`",
+     "outcome": "the anonymous default-exported function is not a symbol and `en()` is unresolved; no caller relationship exists"
+    },
+    {
+     "case": "calls through a returned value (a.b().c())",
+     "example": "`z.string().min(5, \"min5\")` and `z.string().min(1).max(3)` in v4/classic/tests/string.test.ts:6,17",
+     "outcome": "every link ambiguous (string: 7 candidates, min: 18 candidates); nothing bound. No return-type tracking."
+    },
+    {
+     "case": "JSX component usage",
+     "example": "n/a for .ts files; see tsx",
+     "outcome": "not applicable"
+    },
+    {
+     "case": "built-in method names colliding with repo symbols (extra)",
+     "example": "`Object.defineProperty(inst, \"_zod\", _zodDesc)` at v4/core/core.ts:77 -> proxy-handler method defineProperty at util.ts:718 (15 edges); `(n / 1e6).toFixed(2)` -> bench/benchUtil.ts:69 toFixed (13 edges); `v0.trim()` -> bench/compile-output.ts:115 trim; `this._map.has(schema)` (WeakMap) inside $ZodRegistry.has resolved to itself",
+     "outcome": "bound WRONG at medium/high; the receiver is ignored when a same-file or same-directory name exists"
+    },
+    {
+     "case": "call bound to a non-callable declaration (extra)",
+     "example": "`core.$constructor(\"ZodString\", ...)`",
+     "outcome": "255 of 259 call references to $constructor are resolved to the INTERFACE $constructor (core.ts:8), 1 to the function (core.ts:51), 3 ambiguous. They sit at module top level so they yield no edge, but the reference rows count as 'resolved'."
+    }
+   ],
+   "tool_answers": [
+    {
+     "command": "repocortex tool call find_callers name=finalizeIssue",
+     "rows": 9,
+     "right": 9,
+     "missing": "4 of 13 real call sites: v4/core/schemas.ts:3311 and :3399 (inside anonymous `inst._zod.parse = (payload, ctx) => {}` initializers), packages/bench/error-construction-breakdown.ts:17 and :64 (module top level). All 13 references are 'resolved' in symbol_references; the 4 are dropped because no enclosing symbol exists. Verdict printed: 'strong (high=9)', together with a 'COVERAGE TOO LOW ... Do not present what follows as an answer' banner."
+    },
+    {
+     "command": "repocortex tool call analyze_impact symbol=finalizeIssue",
+     "rows": 10,
+     "right": 10,
+     "missing": "8 direct + 2 indirect rows are all true, but the answer stops at depth 2: finalizeIssue is called from `_parse`'s inner fn / safeParse failure path, i.e. every `schema.parse()` in the repository reaches it; none of that is reported. Two stated factors are false: 'Target is unexported' (it is `export function finalizeIssue`, util.ts:985) and 'No test symbol reaches this target' (hundreds of tests call parse/safeParse)."
+    },
+    {
+     "command": "repocortex tool call find_implementations name=ZodType",
+     "rows": 25,
+     "right": 25,
+     "missing": "11: the index holds 36 EXTENDS edges to the v3 class ZodType, the tool prints 25 and says it was truncated; there is no limit/offset argument (limit=100 is rejected: 'unexpected additional properties'). For the v4 interface ZodType (path=packages/zod/src/v4/classic/schemas.ts) it reports '0 it implements or extends' although the source says `extends core.$ZodType<...>`: qualified supertypes (`extends ns.Type`) are not recorded as extends references at all."
+    }
+   ],
+   "notes": [
+    "Documentation claim 'precision 94 to 100%' does not hold for this TypeScript project: 90.0% (27/30) at high, 55.2% (16/29) at medium, 0/1 at low; 71.7% over the 60-edge sample, about 80% weighted by tier population.",
+    "Recall 44.1% (15/34) on the 5 chosen files is inside the documented 33-66% band; the tool's own repo-wide figure is 23.3% of references that name something the index defines, and 13.2% of all TypeScript references.",
+    "Resolution does not follow import paths. 'receiver type matches' compares the receiver identifier with a file basename/type name; 'same directory' and 'defined in the same file' ignore the receiver. This yields both the systematic v3/v4 joinValues error and bindings of runtime calls (Array.includes, Array.map, Reflect.deleteProperty, Object.defineProperty, Number.toFixed) to in-repo symbols.",
+    "No reference row is recorded for `new X()` constructor calls.",
+    "param_count looks off by one for TS (finalizeIssue has 3 parameters, stored 4; registry() has 0, stored 1; variadic mergeDefs stored 0).",
+    "The first `git clone --depth 1` of zod failed with 'fatal: fetch-pack: invalid index-pack output' (network); the retry succeeded. No repocortex command crashed, hung or timed out."
+   ]
+  },
+  {
+   "language": "tsx",
+   "project": "https://github.com/shadcn-ui/taxonomy",
+   "commit": "298a8857c7128a0d121e7f699dfd729f23b3966d",
+   "timing": {
+    "index_wall_s": 0.56,
+    "index_reported_ms": 510,
+    "resolve_wall_s": 0.08,
+    "resolve_reported_ms": 42,
+    "note": "whole repository, one run each"
+   },
+   "index_stats": {
+    "repo_files_discovered": 188,
+    "repo_files_indexed": 137,
+    "repo_files_skipped": 51,
+    "run_status": "degraded",
+    "parse_failures_reported": 11,
+    "language_files": 94,
+    "language_files_ok": 92,
+    "language_files_partial": 2,
+    "language_files_failed": 0,
+    "partial_explanation": "components/ui/aspect-ratio.tsx and components/ui/collapsible.tsx contain only `const X = Primitive.Root` aliases, so 0 symbols; the other 9 'partial' files in the repo are .ts/.js config files with only exported consts",
+    "typescript_files_same_repo": {
+     "files": 31,
+     "ok": 24,
+     "partial": 7
+    },
+    "symbols_language": 157,
+    "symbols_typescript_same_repo": 53,
+    "symbols_repo_printed_by_index": 214,
+    "references_language": 564,
+    "references_repo": 799,
+    "imports_repo": 507
+   },
+   "references": {
+    "resolved": 227,
+    "ambiguous": 0,
+    "unresolved": 337,
+    "by_kind": {
+     "call": {
+      "resolved": 226,
+      "ambiguous": 0,
+      "unresolved": 329
+     },
+     "extends": {
+      "resolved": 1,
+      "ambiguous": 0,
+      "unresolved": 8
+     }
+    },
+    "resolved_share_of_all_refs": 0.402,
+    "tool_reported_repo": "Resolved 252 = 89.7% of the 281 that name something this index defines; ambiguous 29; unresolved 518",
+    "jsx_elements_recorded_as_references": 0,
+    "resolved_call_refs_without_edge": "124 of 226 resolved call references (54.9%) are `cn(...)` calls inside React.forwardRef components, which are not symbols, so they produce no CALLS edge"
+   },
+   "edges_by_confidence": {
+    "CALLS": {
+     "high": 102,
+     "medium": 0,
+     "low": 0
+    },
+    "EXTENDS": {
+     "high": 1
+    },
+    "READS": {
+     "low": 1
+    },
+    "typescript_files_same_repo": {
+     "CALLS": {
+      "high": 20,
+      "low": 3
+     }
+    },
+    "calls_detail_note": "tsx CALLS edges are 'single match in an imported package' or 'defined in the same file'"
+   },
+   "definitions": {
+    "standard": "expected = functions, const-bound arrow functions, React components however declared (function, arrow, forwardRef, named function expression assigned to a member), interfaces, type aliases, exported constants (including `export { X }` lists)",
+    "files": [
+     {
+      "file": "components/pager.tsx",
+      "expected": 4,
+      "extracted": 4,
+      "correct": 4,
+      "wrong": 0,
+      "missed": 0
+     },
+     {
+      "file": "components/empty-placeholder.tsx",
+      "expected": 8,
+      "extracted": 5,
+      "correct": 5,
+      "wrong": 0,
+      "missed": 3
+     },
+     {
+      "file": "components/ui/dialog.tsx",
+      "expected": 9,
+      "extracted": 3,
+      "correct": 3,
+      "wrong": 0,
+      "missed": 6
+     },
+     {
+      "file": "components/toc.tsx",
+      "expected": 5,
+      "extracted": 5,
+      "correct": 5,
+      "wrong": 0,
+      "missed": 0
+     },
+     {
+      "file": "components/post-operations.tsx",
+      "expected": 3,
+      "extracted": 3,
+      "correct": 3,
+      "wrong": 0,
+      "missed": 0
+     }
+    ],
+    "expected": 29,
+    "extracted": 20,
+    "correct": 20,
+    "wrong": 0,
+    "missed": 9,
+    "precision": 1.0,
+    "recall": 0.69,
+    "examples": {
+     "wrong": [],
+     "missed": [
+      "React.forwardRef components: `const DialogOverlay = React.forwardRef<...>((props, ref) => ...)`, DialogContent, DialogTitle, DialogDescription (components/ui/dialog.tsx:26,41,93,108). This is the dominant component style in components/ui/*.tsx.",
+      "compound components assigned to a member: `EmptyPlaceholder.Icon = function EmptyPlaceHolderIcon(...)`, `.Title`, `.Description` (components/empty-placeholder.tsx:33,54,66)",
+      "exported const aliases: `const Dialog = DialogPrimitive.Root`, `const DialogTrigger = DialogPrimitive.Trigger` (dialog.tsx:9,11); also `export const Icons = {...}` (components/icons.tsx:31) and `const buttonVariants = cva(...)` (components/ui/button.tsx:6)"
+     ],
+     "quality_issues": [
+      "`exported` is set by capitalised first letter: `export async function getCurrentUser` is reported as unexported by analyze_impact"
+     ]
+    }
+   },
+   "precision": {
+    "standard": "same as typescript; each edge checked by reading the call line and confirming the evidence file imports the name from the destination module (44 edges) or that the destination is the only definition of that name in the same file (7 edges)",
+    "sampling": "only the high tier exists for tsx CALLS edges (102). To keep a useful denominator, every 2nd edge by id was taken: 51 edges. 0 medium and 0 low edges exist for .tsx evidence files.",
+    "high": {
+     "population": 102,
+     "sampled": 51,
+     "correct": 51,
+     "wrong": 0,
+     "unverifiable": 0,
+     "precision": 1.0,
+     "every_kth": 2,
+     "edge_ids": [
+      1,
+      3,
+      5,
+      7,
+      9,
+      11,
+      13,
+      15,
+      17,
+      19,
+      21,
+      23,
+      25,
+      27,
+      29,
+      31,
+      33,
+      40,
+      42,
+      44,
+      46,
+      48,
+      50,
+      52,
+      54,
+      56,
+      58,
+      60,
+      62,
+      65,
+      67,
+      69,
+      71,
+      73,
+      75,
+      77,
+      79,
+      81,
+      83,
+      85,
+      87,
+      89,
+      91,
+      93,
+      95,
+      97,
+      99,
+      111,
+      113,
+      115,
+      117
+     ]
+    },
+    "medium": {
+     "population": 0,
+     "sampled": 0,
+     "correct": 0,
+     "wrong": 0,
+     "unverifiable": 0,
+     "precision": null,
+     "edge_ids": []
+    },
+    "low": {
+     "population": 0,
+     "sampled": 0,
+     "correct": 0,
+     "wrong": 0,
+     "unverifiable": 0,
+     "precision": null,
+     "edge_ids": [],
+     "note": "the 3 low CALLS edges in this repo are in .ts files: `req.text()` (app/api/webhooks/stripe/route.ts:9) bound to a Prisma COLUMN named text (wrong); `remark()` and `clsx()` bound to their package.json dependency entries"
+    },
+    "overall_sample": {
+     "sampled": 51,
+     "correct": 51,
+     "wrong": 0,
+     "precision": 1.0
+    },
+    "caveat": "all 102 edges are plain function/hook calls (cn, toast, formatDate, getCurrentUser, ...); none is a JSX component usage, because JSX elements are not recorded"
+   },
+   "recall": {
+    "standard": "calls to functions/hooks defined in the repo plus JSX elements whose component is defined in the repo as a function, arrow or forwardRef component. Excluded: next/link, lucide icons reached through `Icons.x`, pure aliases of third-party primitives (`const AlertDialog = AlertDialogPrimitive.Root`), React state setters, runtime calls.",
+    "files": [
+     {
+      "file": "components/pager.tsx",
+      "call_sites": 7,
+      "bound_correct": 5,
+      "bound_wrong": 0,
+      "ambiguous": 0,
+      "unbound": 2,
+      "note": "`buttonVariants(...)` x2 unresolved (const defined with cva in components/ui/button.tsx, not a symbol)"
+     },
+     {
+      "file": "components/toc.tsx",
+      "call_sites": 7,
+      "bound_correct": 5,
+      "bound_wrong": 0,
+      "ambiguous": 0,
+      "unbound": 2,
+      "note": "`<Tree .../>` x2 (component defined in the same file) has no reference row"
+     },
+     {
+      "file": "app/(dashboard)/dashboard/page.tsx",
+      "call_sites": 10,
+      "bound_correct": 1,
+      "bound_wrong": 0,
+      "ambiguous": 0,
+      "unbound": 9,
+      "note": "9 JSX usages (DashboardShell, DashboardHeader, PostCreateButton x2, PostItem, EmptyPlaceholder, .Icon, .Title, .Description) have no reference row"
+     },
+     {
+      "file": "components/post-operations.tsx",
+      "call_sites": 13,
+      "bound_correct": 2,
+      "bound_wrong": 0,
+      "ambiguous": 0,
+      "unbound": 11,
+      "note": "11 JSX usages of in-repo ui components have no reference row"
+     },
+     {
+      "file": "components/post-item.tsx",
+      "call_sites": 4,
+      "bound_correct": 1,
+      "bound_wrong": 0,
+      "ambiguous": 0,
+      "unbound": 3,
+      "note": "`<PostOperations/>`, `<Skeleton/>` x2 not recorded"
+     }
+    ],
+    "call_sites": 41,
+    "bound_correct": 14,
+    "bound_wrong": 0,
+    "ambiguous": 0,
+    "unbound": 27,
+    "recall": 0.341,
+    "split": {
+     "function_or_hook_calls": {
+      "call_sites": 16,
+      "bound_correct": 14,
+      "recall": 0.875
+     },
+     "jsx_component_usages": {
+      "call_sites": 25,
+      "bound_correct": 0,
+      "recall": 0.0
+     }
+    }
+   },
+   "weak_spots": [
+    {
+     "case": "JSX component usage",
+     "example": "`<DashboardShell>` is used in 6 files (app/(dashboard)/dashboard/page.tsx:39, settings/page.tsx:22, billing/page.tsx:44 and three loading.tsx)",
+     "outcome": "no reference row exists for any JSX element in the index (0 rows for DashboardShell, PostItem, Tree, Skeleton, Button...). `find_callers name=DashboardShell` returns '0 caller(s)' (with a lower-bound note). Component-to-component relationships are entirely absent for TSX."
+    },
+    {
+     "case": "default exports",
+     "example": "`export default async function DashboardPage()` (app/(dashboard)/dashboard/page.tsx:16); 27 default exports in .tsx, all Next.js pages/layouts",
+     "outcome": "named default-exported functions are extracted as ordinary function symbols. The project has no in-repo default import that is called, so call binding through a default import could not be exercised here (see typescript: anonymous default export is lost)."
+    },
+    {
+     "case": "same-named functions in different modules",
+     "example": "`onSubmit` is defined in 5 components, `generateMetadata` in 4 pages, `GET` in 3 routes",
+     "outcome": "none of them is called by name (they are passed as values, e.g. `handleSubmit(onSubmit)`, or invoked by the framework), so no binding is attempted; value references are not recorded. Not exercised."
+    },
+    {
+     "case": "re-exports through an index (barrel) file",
+     "example": "the project has no barrel files; ui files end with `export { Button, buttonVariants }`",
+     "outcome": "not exercised. The const-defined names in those export lists are not symbols, so `buttonVariants(...)` (24 call sites in .tsx files) is unresolved."
+    },
+    {
+     "case": "overload signatures",
+     "example": "none in this project",
+     "outcome": "not exercised"
+    },
+    {
+     "case": "methods called through an interface or a base class",
+     "example": "the only class is `RequiresProPlanError extends Error` (lib/exceptions.ts), used as `new RequiresProPlanError()` (app/api/posts/route.ts:62)",
+     "outcome": "not exercised for methods; the constructor call has no reference row"
+    },
+    {
+     "case": "calls through a returned value (a.b().c())",
+     "example": "`cn(buttonVariants({ variant: \"ghost\" }))` (components/pager.tsx:25); `post.createdAt?.toDateString()`",
+     "outcome": "outer `cn` bound correctly, inner `buttonVariants` unresolved; no in-repo method chain exists to test return-type tracking"
+    },
+    {
+     "case": "cross-language name collisions (extra)",
+     "example": "`z.string()` (zod package) in lib/validations/*.ts and app/api/**/route.ts; `req.text()` in app/api/webhooks/stripe/route.ts:9",
+     "outcome": "`z.string()` is marked ambiguous against Prisma columns named `string`; `req.text()` is bound (low) to a Prisma column named `text`"
+    }
+   ],
+   "tool_answers": [
+    {
+     "command": "repocortex tool call find_callers name=getCurrentUser",
+     "rows": 5,
+     "right": 5,
+     "missing": "none (grep finds the same 5 call sites)"
+    },
+    {
+     "command": "repocortex tool call analyze_impact symbol=getCurrentUser",
+     "rows": 5,
+     "right": 5,
+     "missing": "no missing caller; the risk note 'Target is unexported' is false (`export async function getCurrentUser`, lib/session.ts:5)"
+    },
+    {
+     "command": "repocortex tool call find_implementations name=ButtonProps",
+     "rows": 1,
+     "right": 1,
+     "missing": "none (PostCreateButtonProps is the only interface extending it)"
+    },
+    {
+     "command": "repocortex tool call find_callers name=cn (extra)",
+     "rows": 50,
+     "right": "not individually checked",
+     "missing": "grep finds 180 call sites and all 180 references are 'resolved', but only 56 CALLS edges exist; the tool prints 50 with a truncation note. The 124 call sites inside forwardRef components are absent because those components are not symbols."
+    },
+    {
+     "command": "repocortex tool call find_callers name=DashboardShell (extra)",
+     "rows": 0,
+     "right": 0,
+     "missing": "all 6 JSX usages"
+    }
+   ],
+   "notes": [
+    "Suggested zustand was not used; shadcn-ui/taxonomy was chosen from the suggestions because it has 94 .tsx files (zustand's library source is mostly .ts). The repository has 188 files, 125 of them .ts/.tsx.",
+    "Precision 100% (51/51) at high is consistent with the documented 94-100%, but the edges cover only plain function and hook calls.",
+    "Recall 34.1% (14/41) when JSX component usages count as call sites, at the bottom edge of the documented 33-66%; 87.5% (14/16) for function/hook calls alone and 0% (0/25) for JSX usages.",
+    "No medium or low CALLS edges and no ambiguous references exist for .tsx files in this project, so those tiers could not be measured for tsx.",
+    "No repocortex command crashed, hung or timed out."
+   ]
+  }
+ ]
+}

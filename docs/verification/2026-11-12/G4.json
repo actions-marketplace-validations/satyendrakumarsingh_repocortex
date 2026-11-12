@@ -1,0 +1,602 @@
+{
+ "group": "G4",
+ "languages": [
+  {
+   "language": "hlsl",
+   "sources": [
+    "linguist/samples/HLSL/accelerated_surface_win.hlsl",
+    "linguist/samples/HLSL/bloom.cginc",
+    "linguist/samples/HLSL/corridor.fx",
+    "linguist/samples/HLSL/jellyfish.fx",
+    "linguist/samples/HLSL/noise.fx"
+   ],
+   "detected_language_ok": true,
+   "files_checked": 5,
+   "parse": {
+    "ok": 5,
+    "partial": 0,
+    "failed": 0,
+    "errors": []
+   },
+   "convention": "Functions, structs, techniques and their named passes, top-level global declarations (uniforms, textures, samplers) and non-guard #define macros; struct fields and locals not counted.",
+   "expected": 54,
+   "extracted": 28,
+   "correct": 28,
+   "wrong": 0,
+   "missed": 26,
+   "wrong_kind": 6,
+   "precision": 1.0,
+   "recall": 0.519,
+   "wrong_examples": [],
+   "missed_examples": [
+    "corridor.fx:1 `float4x4 matWorldView : WORLDVIEW;` (global)",
+    "corridor.fx:38 `sampler albedo_samp = sampler_state {` (global sampler)",
+    "jellyfish.fx:6 `uniform float4 vViewPosition;`",
+    "jellyfish.fx:66 `#define PS_INPUT VS_OUTPUT` (macro used as a type name)",
+    "noise.fx:1 `float alpha = 1.f;`"
+   ],
+   "pattern": "Every function (15/15), struct (9/9), technique (3/3) and pass (3/3) is extracted at the right line; no top-level global (0/25) or macro (0/1) is. Techniques and passes are labelled kind=function (6 wrong kinds); structs are labelled class.",
+   "verdict": "usable",
+   "recall_functions_structs_techniques_only": 1.0
+  },
+  {
+   "language": "jq",
+   "sources": [
+    "linguist/samples/jq/builtin.jq",
+    "linguist/samples/jq/sample.jq",
+    "github.com/01mf02/jaq jaq-std/src/defs.jq (as jaq_std_defs.jq)",
+    "github.com/01mf02/jaq examples/tar.jq (as jaq_tar.jq)",
+    "github.com/wader/jq-lsp lsp/gen_docs.jq"
+   ],
+   "detected_language_ok": true,
+   "files_checked": 5,
+   "parse": {
+    "ok": 5,
+    "partial": 0,
+    "failed": 0,
+    "errors": []
+   },
+   "convention": "Every `def name` is a definition, including nested local defs and each arity overload separately; `def` text inside string literals is not.",
+   "expected": 222,
+   "extracted": 221,
+   "correct": 214,
+   "wrong": 7,
+   "missed": 8,
+   "wrong_kind": 0,
+   "precision": 0.968,
+   "recall": 0.964,
+   "wrong_examples": [
+    "builtin.jq:21 `def recurse_down: recurse;` also emits function `recurse` (the body)",
+    "builtin.jq:58 `def fromdate: fromdateiso8601;` also emits `fromdateiso8601`",
+    "builtin.jq:59 `def todate: todateiso8601;` also emits `todateiso8601`",
+    "sample.jq:3 `def nothing: empty;` also emits `empty`",
+    "jaq_std_defs.jq:41 `def gamma: tgamma;` also emits `tgamma`"
+   ],
+   "missed_examples": [
+    "jaq_std_defs.jq:122 `def @sh: ...` (jaq format-filter definition)",
+    "jaq_std_defs.jq:123 `def @text: \"\\(.)\";`",
+    "jaq_std_defs.jq:124 `def @html   : tostring | escape_html;`",
+    "jaq_std_defs.jq:128 `def @base64 : ...`",
+    "jaq_std_defs.jq:129 `def @base64d: ...`"
+   ],
+   "pattern": "All ordinary defs are found, nested ones included. When a def body is a single bare identifier (`def a: b;`) the body identifier is recorded as a second definition on the same line (7 of 7 wrong symbols). The 8 misses are all jaq-only `def @format:` definitions, which standard jq does not have.",
+   "verdict": "good"
+  },
+  {
+   "language": "julia",
+   "sources": [
+    "linguist/samples/Julia/stockcorr.jl",
+    "linguist/samples/Julia/julia (extensionless script; also copied as fullpath_script.jl to reach the grammar)",
+    "github.com/JuliaCollections/OrderedCollections.jl src/OrderedCollections.jl",
+    "same repo src/dict_sorting.jl",
+    "same repo src/little_dict.jl",
+    "same repo src/ordered_set.jl"
+   ],
+   "detected_language_ok": true,
+   "files_checked": 6,
+   "parse": {
+    "ok": 6,
+    "partial": 0,
+    "failed": 0,
+    "errors": [
+     "the extensionless Linguist sample `julia` (shebang `#!/usr/bin/env julia`) was skipped: \"no grammar for this file type\"; it is scored through its .jl copy"
+    ]
+   },
+   "convention": "Each method definition counts: long-form `function f(...)`, short-form `f(...) = ...`, inner constructors; plus struct types, `const` declarations and modules. Non-const script globals and locals are not counted.",
+   "expected": 86,
+   "extracted": 19,
+   "correct": 19,
+   "wrong": 0,
+   "missed": 67,
+   "wrong_kind": 0,
+   "precision": 1.0,
+   "recall": 0.221,
+   "wrong_examples": [],
+   "missed_examples": [
+    "little_dict.jl:35 `struct LittleDict{K, V, KS<:StoreType{K}, VS<:StoreType{V}} <: AbstractDict{K, V}`",
+    "little_dict.jl:1 `const StoreType{T} = Union{...}`",
+    "ordered_set.jl:34 `isempty(s::OrderedSet) = isempty(s.dict)` (short-form method)",
+    "little_dict.jl:136 `function Base.get(dd::LittleDict, key, default)` (qualified name)",
+    "little_dict.jl:205 `function add_new!(dd::UnfrozenLittleDict{K, V}, key, value) where {K, V}` (where clause)"
+   ],
+   "pattern": "Only plain long-form `function name(args)` is extracted (19 of 36 long-form functions). A function is dropped when its name is qualified (`Base.get`), parameterised (`LittleDict{K,V}(...)`) or followed by `where`. Short-form `f(x) = ...` methods (0/45), structs (0/2) and consts (0/3) are never extracted. Modules are extracted (kind=package).",
+   "verdict": "poor",
+   "detection_note": "extensionless scripts are not detected by shebang"
+  },
+  {
+   "language": "less",
+   "sources": [
+    "linguist/samples/Less/screen.less",
+    "github.com/less/less-docs styles/highlight-js/default.less",
+    "same repo styles/components/anchors.less",
+    "same repo styles/components/sidebar.less",
+    "same repo styles/bootstrap/theme.less"
+   ],
+   "detected_language_ok": true,
+   "files_checked": 5,
+   "parse": {
+    "ok": 5,
+    "partial": 0,
+    "failed": 0,
+    "errors": []
+   },
+   "convention": "Top-level (or namespace-level) `@variable: value` declarations and parametric mixin definitions `.name(...) { }`; plain CSS rulesets and variables local to a ruleset are not counted.",
+   "expected": 28,
+   "extracted": 0,
+   "correct": 0,
+   "wrong": 0,
+   "missed": 28,
+   "wrong_kind": 0,
+   "precision": null,
+   "recall": 0.0,
+   "wrong_examples": [],
+   "missed_examples": [
+    "screen.less:1 `@blue: #3bbfce;`",
+    "default.less:47 `.-(@name, @color) {` (mixin)",
+    "default.less:60 `@blue-dark: hsl(@h - 0, @s + 25, @l + 5);`",
+    "theme.less:34 `.btn-styles(@btn-color: #555) {` (mixin)",
+    "anchors.less:21 `@anchor-width: @content-gutter;`"
+   ],
+   "pattern": "Nothing at all is extracted from Less: 5 files parse `ok`, the grammar is listed as having a definition query, and the symbol table stays empty (0 of 22 variables, 0 of 6 mixins; no selectors either).",
+   "verdict": "broken"
+  },
+  {
+   "language": "lua",
+   "sources": [
+    "github.com/rxi/classic classic.lua",
+    "github.com/kikito/middleclass middleclass.lua",
+    "github.com/rxi/lume test/util/tester.lua",
+    "linguist/samples/Lua/vidya-file-modder.pd_lua",
+    "linguist/samples/Lua/h-counter.pd_lua"
+   ],
+   "detected_language_ok": true,
+   "files_checked": 5,
+   "parse": {
+    "ok": 2,
+    "partial": 3,
+    "failed": 0,
+    "errors": [
+     "classic.lua, h-counter.pd_lua and vidya-file-modder.pd_lua are valid Lua but come back `partial` with no parse_error text; all three consist of `function Obj:method()` definitions"
+    ]
+   },
+   "convention": "Named function definitions in every form (`function f`, `local function f`, `function t.f`, `function t:m`, `name = function` inside a table constructor) plus the top-level local table that is the module or class object. Other locals and anonymous callbacks are not counted.",
+   "expected": 58,
+   "extracted": 25,
+   "correct": 25,
+   "wrong": 0,
+   "missed": 33,
+   "wrong_kind": 0,
+   "precision": 1.0,
+   "recall": 0.431,
+   "wrong_examples": [],
+   "missed_examples": [
+    "classic.lua:15 `function Object:new()`",
+    "classic.lua:19 `function Object:extend()`",
+    "vidya-file-modder.pd_lua:47 `function FileModder:in_1_bang()`",
+    "middleclass.lua:144 `new = function(self, ...)` (method defined as a table field)",
+    "middleclass.lua:124 `local DefaultMixin = {`"
+   ],
+   "pattern": "`local function f`, `function f` and `function t.f` are extracted reliably (25/25). Colon methods `function Obj:method()` are never extracted (0/18), and files made of them are marked `partial`; a minimal two-method file reproduces it. Functions assigned as table fields (0/9) and module tables (0/6) are not extracted either. Recall on function definitions alone is 25/52.",
+   "verdict": "poor",
+   "recall_functions_only": 0.481
+  },
+  {
+   "language": "luau",
+   "sources": [
+    "linguist/samples/Luau/EnumList.luau",
+    "linguist/samples/Luau/Option.luau",
+    "linguist/samples/Luau/Symbol.luau",
+    "linguist/samples/Luau/Tree.luau",
+    "linguist/samples/Luau/ser.luau"
+   ],
+   "detected_language_ok": true,
+   "files_checked": 5,
+   "parse": {
+    "ok": 4,
+    "partial": 1,
+    "failed": 0,
+    "errors": [
+     "Option.luau is `partial` with no parse_error text and yields 0 symbols"
+    ]
+   },
+   "convention": "Same as Lua, plus `type` / `export type` aliases.",
+   "expected": 57,
+   "extracted": 13,
+   "correct": 8,
+   "wrong": 5,
+   "missed": 49,
+   "wrong_kind": 0,
+   "precision": 0.615,
+   "recall": 0.14,
+   "wrong_examples": [
+    "EnumList.luau:38 `local function CreateEnumItem(name: string, value: number, enum: any): EnumItem` also emits function `EnumItem` (the return type)",
+    "Tree.luau:38 `function Tree.Find(parent: Instance, path: string, assertIsA: string?): Instance` emits function `Instance` instead of Find",
+    "Tree.luau:120 `function Tree.Await(...): Instance` emits function `Instance`",
+    "ser.luau:88 `function Ser.SerializeArgs(...: any): Args` emits function `Args`",
+    "ser.luau:116 `function Ser.DeserializeArgs(...: any): Args` emits function `Args`"
+   ],
+   "missed_examples": [
+    "Tree.luau:38 `function Tree.Find(...)`",
+    "EnumList.luau:92 `function EnumList:BelongsTo(obj: any): boolean`",
+    "Option.luau:59 `function Option.Some(value)`",
+    "Option.luau:10 `export type MatchTable<T> = {`",
+    "ser.luau:144 `function Ser.Serialize(value: any): any`"
+   ],
+   "pattern": "Only `local function name` and simple `type` aliases are extracted. Functions on a table are never extracted, neither `function M.f` (0/17) nor `function M:m` (0/21). Worse, when such a function has a named return type the return type is recorded as a function at that line (5 of 13 symbols are these wrong names). One of five files parsed `partial` and gave nothing (31 definitions lost). Type aliases are labelled kind=class.",
+   "verdict": "poor"
+  },
+  {
+   "language": "matlab",
+   "sources": [
+    "linguist/samples/MATLAB/matlab_class.m",
+    "linguist/samples/MATLAB/make_filter.m",
+    "linguist/samples/MATLAB/convert_variable.m",
+    "linguist/samples/MATLAB/plant.m",
+    "linguist/samples/MATLAB/Traj.m (script)",
+    "linguist/samples/MATLAB/example.m (script)"
+   ],
+   "detected_language_ok": true,
+   "files_checked": 6,
+   "parse": {
+    "ok": 4,
+    "partial": 2,
+    "failed": 0,
+    "errors": [
+     "the two script files (no function/classdef) are `partial` with no error text; a three-line script `x = 1; y = x + 2; disp(y)` is also `partial`"
+    ]
+   },
+   "convention": "Functions (including local and nested functions), classdef classes and class methods; properties, enumeration members and script variables are not counted, so a pure script has 0 expected definitions.",
+   "expected": 10,
+   "extracted": 10,
+   "correct": 10,
+   "wrong": 0,
+   "missed": 0,
+   "wrong_kind": 2,
+   "precision": 1.0,
+   "recall": 1.0,
+   "wrong_examples": [],
+   "missed_examples": [],
+   "pattern": "On files that really are MATLAB, extraction is exact: every function and classdef is found at the right line (10/10 by hand; as an automated cross-check, all 39 Linguist MATLAB files contain 37 `function`/`classdef` lines and the first pass produced exactly 37 symbols from them). Class methods are labelled kind=function (2). The low first-pass numbers come from detection, not extraction: of the 97 files detected as matlab only 39 are MATLAB.",
+   "verdict": "good",
+   "first_pass_97_files_breakdown": {
+    "MATLAB": {
+     "files": 39,
+     "ok": 23,
+     "partial": 16,
+     "note": "the 16 partial files are all scripts with no function/classdef"
+    },
+    "M (MUMPS)": {
+     "files": 29,
+     "partial": 28,
+     "failed": 1
+    },
+    "Objective-C": {
+     "files": 12,
+     "partial": 10,
+     "failed": 2
+    },
+    "Mercury": {
+     "files": 9,
+     "partial": 7,
+     "failed": 1,
+     "skipped": 1,
+     "note": "options.m skipped: source is 281093 bytes, over the 262144 limit"
+    },
+    "Wolfram Language": {
+     "files": 5,
+     "partial": 5
+    },
+    "Limbo": {
+     "files": 1,
+     "partial": 1
+    },
+    "MUF": {
+     "files": 1,
+     "partial": 1
+    },
+    "Unity3D Asset (.mat)": {
+     "files": 1,
+     "partial": 1
+    }
+   },
+   "really_matlab": "39 of 97 (40%); the other 58 are other languages parsed with the MATLAB grammar and yield 0 symbols",
+   "detection_cause": "Detection is by file extension only (gotreesitter grammars.DetectLanguage). The matlab grammar registers `.m` and `.mat`; no content check, so every `.m` file is MATLAB and Unity `.mat` assets (and binary MATLAB .mat data files) are too.",
+   "timeouts": [
+    {
+     "file": "linguist/samples/M/MDB.m",
+     "real_language": "M (MUMPS)",
+     "lines": 2460,
+     "bytes": 92111,
+     "alone_wall_seconds": [
+      3.83,
+      3.47,
+      3.37
+     ],
+     "status_alone": "partial, 0 symbols (no timeout when alone)"
+    },
+    {
+     "file": "linguist/samples/Mercury/code_info.m",
+     "real_language": "Mercury",
+     "lines": 4843,
+     "bytes": 185575,
+     "alone_wall_seconds": [
+      3.54,
+      2.56,
+      3.34
+     ],
+     "status_alone": "partial, 0 symbols (no timeout when alone)"
+    },
+    {
+     "file": "linguist/samples/Objective-C/ASIHTTPRequest.m",
+     "real_language": "Objective-C",
+     "lines": 5125,
+     "bytes": 184635,
+     "alone_wall_seconds": [
+      5.29,
+      5.0,
+      4.74
+     ],
+     "status_alone": "failed \"parse exceeded 5s: context deadline exceeded\" on run 1, partial on runs 2 and 3; 0 symbols every time"
+    },
+    {
+     "file": "linguist/samples/Objective-C/JSONKit.m",
+     "real_language": "Objective-C",
+     "lines": 3059,
+     "bytes": 176825,
+     "alone_wall_seconds": [
+      5.35,
+      3.85,
+      4.35
+     ],
+     "status_alone": "failed (timeout) on run 1, partial on runs 2 and 3; 0 symbols every time"
+    }
+   ],
+   "timeout_note": "None of the 4 timed-out files is MATLAB. Each needs 2.5 to 5.4 s alone (machine was shared with other jobs), which sits on the 5 s parse deadline, so the same file flips between `partial` and `failed` from run to run. For scale, the largest real MATLAB sample (create_ieee_paper_plots.m, 1119 lines) indexes in 0.10 s."
+  },
+  {
+   "language": "mojo",
+   "sources": [
+    "linguist/samples/Mojo/Bool.mojo",
+    "linguist/samples/Mojo/Matmul.mojo",
+    "github.com/tairov/llama2.mojo tests/test-transformer.mojo",
+    "same repo tests/test-tokenizer.mojo"
+   ],
+   "detected_language_ok": true,
+   "files_checked": 4,
+   "parse": {
+    "ok": 4,
+    "partial": 0,
+    "failed": 0,
+    "errors": []
+   },
+   "convention": "`fn` and `def` functions including struct methods and nested functions, structs, and top-level `alias` declarations; struct fields, local aliases and locals are not counted.",
+   "expected": 40,
+   "extracted": 34,
+   "correct": 34,
+   "wrong": 0,
+   "missed": 6,
+   "wrong_kind": 13,
+   "precision": 1.0,
+   "recall": 0.85,
+   "wrong_examples": [],
+   "missed_examples": [
+    "Bool.mojo:6 `struct OurBool:`",
+    "Matmul.mojo:14 `struct Matrix:`",
+    "Bool.mojo:1 `alias OurTrue = OurBool(__mlir_attr.`true`)`",
+    "Matmul.mojo:48 `alias matmul_fn_sig_type = fn (Matrix, Matrix, Matrix) -> None`",
+    "Matmul.mojo:59 `alias nelts = simdwidthof[DType.float32]()`"
+   ],
+   "pattern": "Every `fn`/`def` is extracted, nested and generic ones included (34/34). Structs are never extracted (0/2) and neither are top-level aliases (0/4), so the index knows a type's methods but not the type. The 13 struct methods are labelled kind=function.",
+   "verdict": "usable"
+  },
+  {
+   "language": "move",
+   "sources": [
+    "linguist/samples/Move/Main.move",
+    "linguist/samples/Move/Vector.move",
+    "github.com/sui-foundation/sui-move-intro-course unit-five/example_projects/flashloan/sources/flashloan.move",
+    "same repo unit-four/example_projects/marketplace/sources/marketplace.move",
+    "same repo unit-two/example_projects/transcript/sources/transcript.move"
+   ],
+   "detected_language_ok": true,
+   "files_checked": 5,
+   "parse": {
+    "ok": 4,
+    "partial": 1,
+    "failed": 0,
+    "errors": [
+     "marketplace.move (Move 2024 syntax) is `partial` with no error text and yields 0 symbols"
+    ]
+   },
+   "convention": "Modules, structs, constants and functions (`fun`, `native fun`, `spec fun`); `spec name { }` blocks, struct fields and locals are not counted.",
+   "expected": 78,
+   "extracted": 33,
+   "correct": 33,
+   "wrong": 0,
+   "missed": 45,
+   "wrong_kind": 0,
+   "precision": 1.0,
+   "recall": 0.423,
+   "wrong_examples": [],
+   "missed_examples": [
+    "Main.move:10 `struct Main has key, store {`",
+    "Vector.move:13 `module Vector {`",
+    "Vector.move:16 `const EINDEX_OUT_OF_BOUNDS: u64 = 0;`",
+    "flashloan.move:49 `public fun deposit_pool(pool: &mut LoanPool, deposit: Coin<SUI>) {` (file status ok, function silently missing)",
+    "marketplace.move:66 `public fun create<COIN>(ctx: &mut TxContext) {` (whole file partial)"
+   ],
+   "pattern": "Only functions are extracted: structs 0/17, modules 0/5, constants 0/6, `spec fun` 0/6. Ordinary functions are 33/44: all 8 in the `partial` file are lost, and 3 more (init, deposit_pool, borrow) are silently missing from flashloan.move although the file is reported `ok`.",
+   "verdict": "poor",
+   "recall_ordinary_functions_only": 0.75
+  },
+  {
+   "language": "nim",
+   "sources": [
+    "linguist/samples/Nim/main.nim (as linguist_main.nim)",
+    "linguist/samples/Nim/config.nims",
+    "linguist/samples/Nim/zip.nimble",
+    "github.com/treeform/flatty src/flatty/binny.nim",
+    "same repo src/flatty/hashy.nim",
+    "same repo src/flatty/hexprint.nim"
+   ],
+   "detected_language_ok": true,
+   "files_checked": 6,
+   "parse": {
+    "ok": 6,
+    "partial": 0,
+    "failed": 0,
+    "errors": []
+   },
+   "convention": "Routines (`proc`, `func`, `method`, `iterator`, `template`, `macro`), types declared in `type` sections, and top-level `const`/`let`/`var` declarations; nimble `task` blocks, object fields and locals are not counted.",
+   "expected": 130,
+   "extracted": 16,
+   "correct": 16,
+   "wrong": 0,
+   "missed": 114,
+   "wrong_kind": 0,
+   "precision": 1.0,
+   "recall": 0.123,
+   "wrong_examples": [],
+   "missed_examples": [
+    "binny.nim:21 `func readUint8*(s: Buffer, i: int): uint8 {.inline.} =` (exported)",
+    "hashy.nim:52 `proc sdbm*(p: pointer, len: int): int =` (exported)",
+    "linguist_main.nim:1 `iterator fn1: int = yield 12`",
+    "linguist_main.nim:70 `type F11 = ref object of RootRef`",
+    "config.nims:18 `root = projectDir()` (inside a top-level `let` section)"
+   ],
+   "pattern": "Any routine or type carrying the export marker `*` is dropped: 0 of 67 exported procs/funcs in three library files, so those files yield no symbols at all; a 15-line test file confirms `proc plain` is extracted and `proc exported*` is not. Since `*` is how Nim marks its public API, the index holds only private procs. Iterators, templates, macros, backtick-quoted names, `ref object` and alias types, and `let`/`var` are never extracted; only `const` is (4/4).",
+   "verdict": "poor",
+   "recall_routines_only": 0.129
+  },
+  {
+   "language": "objc",
+   "sources": [
+    "linguist/samples/Objective-C/SBJsonParser.m",
+    "linguist/samples/Objective-C/SBJsonParser.h",
+    "linguist/samples/Objective-C/MainMenuViewController.m",
+    "linguist/samples/Objective-C/MainMenuViewController.h",
+    "linguist/samples/Objective-C/StyleViewController.m"
+   ],
+   "detected_language_ok": false,
+   "detected_as": "matlab (.m files), c (.h files), xml (.mm files, skipped)",
+   "files_checked": 5,
+   "parse": {
+    "ok": 0,
+    "partial": 5,
+    "failed": 0,
+    "errors": [
+     "the three .m files are parsed with the MATLAB grammar and the two .h files with the C grammar; all five are `partial` with no error text"
+    ]
+   },
+   "convention": "`@interface` / `@implementation` classes, method declarations and implementations (`- (type)name...`), and top-level global constants; properties and ivars are not counted.",
+   "expected": 22,
+   "extracted": 0,
+   "correct": 0,
+   "wrong": 0,
+   "missed": 22,
+   "wrong_kind": 0,
+   "precision": null,
+   "recall": 0.0,
+   "wrong_examples": [],
+   "missed_examples": [
+    "SBJsonParser.m:35 `@implementation SBJsonParser`",
+    "SBJsonParser.m:50 `- (id)objectWithData:(NSData *)data {`",
+    "StyleViewController.m:33 `- (id)initWithStyleName:(NSString*)name styleType:(NSString*)styleType {`",
+    "SBJsonParser.h:41 `@interface SBJsonParser : NSObject`",
+    "StyleViewController.m:21 `NSString* kTextStyleType  = @\"text\";`"
+   ],
+   "pattern": "The objc grammar cannot be reached. Detection is by extension only; the objc grammar registers just `.m`, and the matlab grammar (which also registers `.m`) wins, so no file is ever detected as objc. Tried extensions on a copy of SBJsonParser.m: .m -> matlab, .mm -> xml (skipped, no tags query), .h -> c, .hh -> cpp, .objc / .objective-c / .pch -> no grammar. Objective-C source therefore produces 0 symbols, and the two largest samples hit the 5 s parse timeout under the MATLAB grammar.",
+   "verdict": "broken"
+  },
+  {
+   "language": "ocaml",
+   "sources": [
+    "linguist/samples/OCaml/Foo.ml",
+    "linguist/samples/OCaml/common.ml",
+    "linguist/samples/OCaml/date.ml",
+    "linguist/samples/OCaml/sigset.ml",
+    "linguist/samples/OCaml/reload.ml"
+   ],
+   "detected_language_ok": true,
+   "files_checked": 5,
+   "parse": {
+    "ok": 5,
+    "partial": 0,
+    "failed": 0,
+    "errors": []
+   },
+   "convention": "Module-level bindings (top level or inside a `module ... = struct`): `let` functions and values including operators, types, modules, classes and their methods. A `let ... in` binding inside a function body is a local, not a definition.",
+   "expected": 48,
+   "extracted": 53,
+   "correct": 45,
+   "wrong": 8,
+   "missed": 3,
+   "wrong_kind": 11,
+   "precision": 0.849,
+   "recall": 0.938,
+   "wrong_examples": [
+    "common.ml:9 `let buf = Buffer.create 100 in` (local) -> function buf",
+    "common.ml:10 `let fmt = Format.formatter_of_buffer buf in begin` (local) -> function fmt",
+    "date.ml:33 `let timep = allocate_n ~count:1 time_t in` (local inside `let () = begin`) -> function timep",
+    "sigset.ml:21 `let setp = allocate_n ~count:1 sigset_t in begin` (local) -> function setp",
+    "reload.ml:84 `then (let r = self#makereg arg.(0) in ...` (local inside a method) -> function r"
+   ],
+   "missed_examples": [
+    "Foo.ml:25 `let (@>) f k = f k` (operator definition)",
+    "Foo.ml:26 `let (|>) x k = k x`",
+    "date.ml:14 `let (-:) ty label = field tm label ty`"
+   ],
+   "pattern": "Every `let` is recorded as a function, including local `let x = ... in` bindings inside function bodies; that is all 8 wrong symbols here and the cause of the 1,304-symbol first pass. Real module-level definitions are found (45/48); the only misses are operator definitions. Plain values are labelled kind=function (11, e.g. `let tm_sec = int -: \"tm_sec\"`). Modules are kind=package, types kind=class.",
+   "verdict": "usable",
+   "over_extraction_check": {
+    "first_pass": "1,304 symbols detected as ocaml = 1,300 from the 9 OCaml .ml samples + 4 from samples/Standard ML/Foo.ML (extension .ML matched as ocaml); kinds over the 1,304: 1,117 function, 132 class, 53 package, 2 method; no duplicate (name, line) pairs in the two largest files",
+    "provable_locals_lower_bound": "304 of 1,300 (23%) sit on an indented one-line `let ... = ... in`, which can only be a local binding; multi-line locals are not in this count",
+    "hand_checked_random_sample": {
+     "cmdliner_ml": "35 symbols sampled of 388: 14 real module-level definitions, 21 locals (precision 0.40)",
+     "mirage_ml": "35 sampled of 592: 29 real, 6 locals (precision 0.83)",
+     "combined": "43 of 70 correct (0.61)"
+    },
+    "note": "Precision depends on coding style: small binding-style files score 0.85, a large library written with many `let ... in` steps scores about 0.4."
+   }
+  }
+ ],
+ "notes": [
+  "Method: each language indexed in its own empty directory with the binary under test (`repocortex init && repocortex index`); files and symbols read back with `repocortex --json query`; every source file read and definitions counted by hand, except where a note says a figure is an automated cross-check or a sample.",
+  "Kinds: the tool has no struct/enum/type kind (its vocabulary is module, package, class, interface, function, method, field, constant, variable), so struct/enum/type-alias labelled `class` and module labelled `package` were accepted; wrong_kind counts only clear mislabels (methods or techniques as function, plain values as function).",
+  "Language detection is by file name and extension only (gotreesitter grammars.DetectLanguage): no shebang or content check. Consequences seen in this group: `.m` always means MATLAB; objc is unreachable; `.mm` is XML; `.mat` is MATLAB; an extensionless Julia script with a julia shebang is skipped.",
+  "`parse_status = partial` never comes with a parse_error text, so nothing says where or why the parse degraded; in this group it coincided with total loss of symbols for the file in Lua (3 files), Luau (1) and Move (1), and with harmless script files in MATLAB.",
+  "`ok` does not mean complete: Less files are `ok` with 0 symbols, flashloan.move is `ok` with 3 functions missing, Nim library files are `ok` with 0 symbols.",
+  "Side observation: hidden files in the project directory are indexed (a `.syms.json` scratch file left in a test directory was picked up on re-index and its JSON keys became kind=configuration symbols).",
+  "Precision is high almost everywhere (1.0 in 7 of the 10 languages that extract anything; jq 0.968, ocaml 0.849, luau 0.615); the weak side is recall. Pooled over all hand-scored files: 833 expected, 452 extracted, 432 correct (precision 0.956, recall 0.519); without jq, recall is 218/611 = 0.357."
+ ],
+ "totals": {
+  "expected": 833,
+  "extracted": 452,
+  "correct": 432,
+  "wrong": 20,
+  "missed": 401,
+  "precision": 0.956,
+  "recall": 0.519,
+  "note": "pooled over the hand-scored files of all 12 languages; jq contributes 214 of the correct symbols"
+ }
+}

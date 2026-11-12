@@ -1,0 +1,762 @@
+{
+ "group": "R4",
+ "binary": "scratchpad/langs/repocortex (no compiler index imported; accuracy mode auto)",
+ "documentation_claim": "precision 94-100%, recall 33-66% without a compiler index",
+ "languages": [
+  {
+   "language": "python",
+   "project": "https://github.com/pallets/flask",
+   "commit": "49943b5a94413a530761350f04e896f76e8d620e",
+   "project_note": "Suggested project kept. It has 83 .py files (80 non-empty), slightly below the 100-file guideline; CALLS-edge population (1,550) was still large enough to sample.",
+   "timing": {
+    "index_seconds_reported": 0.679,
+    "index_seconds_wall": 0.748,
+    "resolve_seconds_reported": 0.136,
+    "resolve_seconds_wall": 0.166
+   },
+   "index_stats": {
+    "files_discovered": 235,
+    "files_indexed": 86,
+    "files_skipped": 149,
+    "files_partial": 3,
+    "files_failed": 0,
+    "python_files": {
+     "ok": 78,
+     "partial": 2,
+     "skipped_empty": 3
+    },
+    "partial_files": [
+     "src/flask/__init__.py",
+     "tests/test_apps/helloworld/wsgi.py",
+     "tests/test_apps/.flaskenv (bash)"
+    ],
+    "run_status": "degraded (parse_failures=3)",
+    "symbols_reported_by_index": 1758,
+    "symbols_in_table_after_resolve": 2155,
+    "python_symbols": {
+     "function": 1462,
+     "class": 160,
+     "constant": 134,
+     "endpoint": 20
+    },
+    "references_total": 6337,
+    "imports": 503
+   },
+   "references": {
+    "resolved": 1641,
+    "ambiguous": 2332,
+    "unresolved": 2364,
+    "resolved_share_of_all": 0.259,
+    "resolved_share_of_references_naming_an_indexed_definition": 0.413,
+    "python_call_references": {
+     "resolved": 1570,
+     "ambiguous": 2327,
+     "unresolved": 2323
+    },
+    "python_inherit_references": {
+     "resolved": 71,
+     "ambiguous": 5,
+     "unresolved": 41
+    }
+   },
+   "edges_by_confidence": {
+    "CALLS": {
+     "high": 1039,
+     "medium": 485,
+     "low": 26
+    },
+    "EXTENDS": {
+     "high": 63,
+     "medium": 7,
+     "low": 1
+    },
+    "EXPOSES": {
+     "high": 16
+    },
+    "DEPENDS_ON": {
+     "high": 2
+    },
+    "READS": {
+     "high": 6
+    },
+    "WRITES": {
+     "high": 5
+    },
+    "CALLS_by_reason": {
+     "high: defined in the same file": 412,
+     "high: single match in an imported package": 350,
+     "high: receiver type matches": 277,
+     "medium: same directory, but the language requires an import": 440,
+     "medium: multiple matches among imports": 25,
+     "medium: receiver matches, overloaded": 20,
+     "low: unique name in repository, no import evidence": 26
+    },
+    "receiver_reference_CALLS_edges": {
+     "high": 125,
+     "medium": 342,
+     "explanation": "edge points at the object a method is called ON (e.g. `client` in `client.get('/')`), recorded as reference.call and emitted as a CALLS edge"
+    },
+    "self_loop_CALLS_edges": 47
+   },
+   "definitions": {
+    "files": [
+     "src/flask/views.py",
+     "src/flask/globals.py",
+     "src/flask/json/tag.py",
+     "src/flask/wrappers.py",
+     "src/flask/config.py"
+    ],
+    "method": "Expected list built from Python's ast (functions, methods, nested functions, classes, module-level name assignments) and matched to symbols rows on (name, start line); differences read by hand.",
+    "expected": 102,
+    "extracted": 101,
+    "correct": 101,
+    "wrong": 0,
+    "missed": 1,
+    "precision": 1.0,
+    "recall": 0.99,
+    "examples": {
+     "missed": [
+      "src/flask/globals.py:15 `T = t.TypeVar(...)` (module constant nested under `if t.TYPE_CHECKING:`)"
+     ],
+     "wrong": [],
+     "kind_and_name_caveats": [
+      "All 65 methods in the 5 files are stored with kind `function`; Python has no `method` kind in this index.",
+      "FQN is `<file>:<name>` with no class qualifier, so different definitions collide: views.py has two rows with fqn `src/flask/views.py:dispatch_request` (View and MethodView), two `view`; config.py two `__get__` overloads; wrappers.py property getter and setter share a name and FQN.",
+      "Decorated definitions (@classmethod as_view, @property, @x.setter, @t.overload) are all extracted, at the `def` line."
+     ],
+     "noted_separately_not_counted": "33 class-level attributes (e.g. View.methods, View.decorators, JSONTag.key) are not extracted at all."
+    }
+   },
+   "precision": {
+    "definition_of_correct": "Strict: the edge's dst definition is the one the call at the evidence line invokes. A CALLS edge that points at the receiver object of a method call (not at any callee) is counted wrong in the strict figure and reported separately.",
+    "sampling": "CALLS edges whose evidence file is Python, ordered by id, every k-th row (k = floor(population/20)); low tier: first 20 of 26 by id.",
+    "high": {
+     "population": 1039,
+     "sampled": 20,
+     "correct": 13,
+     "wrong": 7,
+     "unverifiable": 0,
+     "precision": 0.65,
+     "wrong_breakdown": {
+      "wrong_callee": 5,
+      "receiver_reference_not_a_callee": 2
+     },
+     "precision_if_receiver_bindings_counted_correct": 0.75,
+     "edge_ids": [
+      84,
+      156,
+      211,
+      271,
+      328,
+      398,
+      453,
+      512,
+      609,
+      764,
+      877,
+      971,
+      1027,
+      1079,
+      1134,
+      1193,
+      1299,
+      1381,
+      1504,
+      1600
+     ],
+     "wrong_ids": {
+      "84": "auth.login() is AuthActions.login (tests/conftest.py); bound to view flaskr/auth.py:85 ('receiver type matches')",
+      "328": "current_app.json.load(...) is JSONProvider.load; bound to the enclosing function load itself",
+      "1027": "runner.invoke(...) is click CliRunner.invoke; bound to a pytest fixture method named invoke in the same file",
+      "1079": "Path.cwd() (stdlib) bound to module constant cwd",
+      "1134": "flask.Flask(__name__) bound to a throw-away local `class Flask(flask.Flask)` at tests/test_config.py:202",
+      "453": "receiver: edge to constant _signals for `_signals.signal(...)`",
+      "512": "receiver: edge to constant current_app for `current_app.ensure_sync(...)`"
+     }
+    },
+    "medium": {
+     "population": 485,
+     "sampled": 20,
+     "correct": 2,
+     "wrong": 18,
+     "unverifiable": 0,
+     "precision": 0.1,
+     "wrong_breakdown": {
+      "receiver_is_pytest_fixture_param_edge_to_fixture": 14,
+      "fixture_called_but_real_callee_is_inner_function": 1,
+      "receiver_is_a_local_variable_bound_to_conftest_fixture": 3
+     },
+     "precision_if_receiver_bindings_counted_correct": 0.85,
+     "edge_ids": [
+      93,
+      276,
+      550,
+      600,
+      628,
+      672,
+      701,
+      750,
+      785,
+      836,
+      887,
+      923,
+      1167,
+      1249,
+      1309,
+      1385,
+      1417,
+      1467,
+      1533,
+      1617
+     ],
+     "correct_ids": [
+      276,
+      1417
+     ],
+     "wrong_even_leniently_ids": {
+      "750": "client = app.test_client() is a local variable",
+      "836": "same",
+      "1467": "same"
+     },
+     "note": "322 of the 485 medium CALLS edges point at the conftest fixture `client`; 342 of 485 are receiver-reference edges."
+    },
+    "low": {
+     "population": 26,
+     "sampled": 20,
+     "correct": 13,
+     "wrong": 7,
+     "unverifiable": 0,
+     "precision": 0.65,
+     "edge_ids": [
+      219,
+      220,
+      446,
+      493,
+      636,
+      637,
+      691,
+      704,
+      705,
+      737,
+      799,
+      801,
+      802,
+      969,
+      970,
+      1211,
+      1214,
+      1216,
+      1220,
+      1222
+     ],
+     "wrong_ids": {
+      "219,220,493,737,969,970": "importlib.metadata.version(...) bound to the `version` key of .readthedocs.yaml",
+      "446": "blinker Namespace() bound to a local test class Namespace in tests/test_testing.py:289"
+     },
+     "whole_population": {
+      "correct": 18,
+      "wrong": 8,
+      "precision": 0.692
+     }
+    },
+    "population_weighted_estimate": {
+     "strict": 0.478,
+     "receiver_bindings_counted_correct": 0.78
+    },
+    "caveat": "n=20 per tier; each tier figure carries roughly +/-20 points of sampling error."
+   },
+   "recall": {
+    "files": [
+     "src/flask/templating.py",
+     "src/flask/blueprints.py",
+     "src/flask/json/__init__.py",
+     "src/flask/debughelpers.py",
+     "examples/tutorial/flaskr/blog.py"
+    ],
+    "rule": "Every call site (from ast) whose runtime target is defined in this repository, in source order, first 13 per file. Calls into werkzeug/jinja/stdlib excluded, including app_ctx._get_current_object() (werkzeug LocalProxy at runtime; the index binds it to an in-repo TYPE_CHECKING Protocol stub).",
+    "call_sites": 37,
+    "bound_correct": 23,
+    "bound_wrong": 4,
+    "ambiguous": 10,
+    "unbound": 0,
+    "recall": 0.622,
+    "per_file": {
+     "src/flask/templating.py": {
+      "sites": 13,
+      "correct": 13
+     },
+     "src/flask/blueprints.py": {
+      "sites": 4,
+      "correct": 3,
+      "ambiguous": 1
+     },
+     "src/flask/json/__init__.py": {
+      "sites": 5,
+      "correct": 1,
+      "wrong": 4
+     },
+     "src/flask/debughelpers.py": {
+      "sites": 2,
+      "correct": 2
+     },
+     "examples/tutorial/flaskr/blog.py": {
+      "sites": 13,
+      "correct": 4,
+      "ambiguous": 9
+     }
+    },
+    "examples": {
+     "wrong": "json/__init__.py:41 current_app.json.dumps(...) -> bound to the enclosing module function dumps (json/__init__.py:13) instead of JSONProvider.dumps (json/provider.py:41), at high",
+     "ambiguous": "blog.py:25 render_template(...) after `from flask import render_template` is ambiguous although the repository has exactly one definition (templating.py:136); same for flash, url_for, redirect, Blueprint(...), @bp.route(...)"
+    },
+    "false_positives_seen_in_the_same_files": "12 calls into external code were bound to in-repo definitions: loader.get_source x2, loader.list_templates x2, template.generate (jinja) -> same-file methods (high); _json.dumps/dump/loads/load (stdlib json) -> the wrapping function itself (high); super().__getitem__ -> the method itself (high); builtin open() x2 -> FlaskClient.open in testing.py (medium)."
+   },
+   "weak_spots": [
+    {
+     "case": "self.method() -> enclosing class",
+     "example": "src/flask/app.py:971 self.finalize_request(...) -> app.py:1056",
+     "outcome": "correct, high"
+    },
+    {
+     "case": "self.method() -> base class in another file",
+     "example": "src/flask/app.py:875 self._find_error_handler(...) -> sansio/app.py:869 (App)",
+     "outcome": "correct, high; 7 such calls in app.py all bound to sansio/app.py. But app.py:1051 self.dispatch_request(ctx) is left ambiguous (same name in views.py), and self.response_class(...) / self.jinja_environment(...) (class attributes holding classes) are unresolved."
+    },
+    {
+     "case": "from module import name",
+     "example": "blog.py: `from .db import get_db`; get_db() -> flaskr/db.py:9",
+     "outcome": "correct, high. Fails through a re-export: `from flask import render_template` (flask/__init__.py re-exports it) is left ambiguous; find_callers finds 2 of 41 render_template call sites."
+    },
+    {
+     "case": "import module as m; m.f()",
+     "example": "src/flask/app.py:719 cli.load_dotenv() (`from . import cli`) -> cli.py:698 correct. src/flask/json/__init__.py:44 `_json.dumps(obj, **kwargs)` (`import json as _json`, stdlib) -> flask's own dumps at json/__init__.py:13",
+     "outcome": "mixed: in-repo module alias correct; stdlib alias bound to the enclosing function at HIGH confidence (wrong, false recursion)"
+    },
+    {
+     "case": "ClassName(...) instantiation",
+     "example": "tests/test_cli.py:247 ScriptInfo(...) -> class ScriptInfo cli.py:293",
+     "outcome": "binds to the class symbol, never to __init__ (0 edges target any __init__). Class choice is unreliable: of 101 `Flask(...)` call references, 22 bind to src/flask/app.py:108, 63 bind to a throw-away local `class Flask(flask.Flask)` inside one test (tests/test_config.py:202), 16 are ambiguous. signals.py:6 Namespace() (blinker) -> a test-local class Namespace (low). 7 EXTENDS edges for `class X(flask.Flask)` point at the same wrong test class."
+    },
+    {
+     "case": "same-named methods on unrelated classes",
+     "example": "sansio/blueprints.py:324 state.add_url_rule(...) (BlueprintSetupState) -> App.add_url_rule sansio/app.py:606 (medium); examples/tutorial/tests/test_blog.py:32 auth.login() (AuthActions.login) -> view login in flaskr/auth.py:85 (high, 'receiver type matches')",
+     "outcome": "wrong in both; receiver matching is by variable/file name, not type"
+    },
+    {
+     "case": "decorators",
+     "example": "blog.py:61 `@login_required`; blog.py:16 `@bp.route('/')`; tests/test_templating.py:382 `@app.template_global(...)`",
+     "outcome": "bare-name decorator produces no reference row at all (find_callers login_required = 0 callers; 3 uses exist); @bp.route is ambiguous although Scaffold.route is the only `route` in the repo; @app.template_global binds to the first @overload stub (sansio/app.py:774), not the implementation (780). Decorated definitions themselves are extracted."
+    },
+    {
+     "case": "super()",
+     "example": "src/flask/testing.py:235 super().open(...) -> FlaskClient.open itself (testing.py:204); src/flask/blueprints.py:32 super().__init__(...)",
+     "outcome": "all 10 super().method() sites checked are bound at HIGH to the calling method itself (false self-recursion; the real targets are base-class methods); every super().__init__ is ambiguous, including ones whose base is in the repo"
+    },
+    {
+     "case": "call through a returned value",
+     "example": "tests/test_basic.py:1460 app.test_client().open(...) -> FlaskClient.open testing.py:204; json/__init__.py:133 current_app.json.load(fp)",
+     "outcome": "first is correct (unique name among imports, receiver chain ignored); second is wrong (bound to enclosing function). The receiver expression is dropped whenever it is not a plain identifier."
+    },
+    {
+     "case": "builtins and cross-language name matches",
+     "example": "src/flask/blueprints.py:126 open(path, mode) -> FlaskClient.open (medium); src/flask/cli.py:271 importlib.metadata.version('flask') -> key `version` in .readthedocs.yaml (low)",
+     "outcome": "wrong"
+    },
+    {
+     "case": "receiver recorded as a call",
+     "example": "tests/test_basic.py:214 client.get('/foo/') yields a CALLS edge test -> conftest fixture `client` (medium)",
+     "outcome": "not a call target; 467 of 1,550 Python CALLS edges (30%) are of this kind"
+    }
+   ],
+   "tool_answers": [
+    {
+     "command": "repocortex tool call find_callers name=get_db",
+     "rows": 17,
+     "right": 17,
+     "missing": "none (grep finds the same 17 call sites)"
+    },
+    {
+     "command": "repocortex tool call find_callers name=render_template",
+     "rows": 2,
+     "right": 2,
+     "missing": "39 of 41 call sites (ast count) in examples/ and tests/; output still says `verdict: strong (high=2)`"
+    },
+    {
+     "command": "repocortex tool call find_callers name=login_required",
+     "rows": 0,
+     "right": 0,
+     "missing": "the 3 views decorated with @login_required in examples/tutorial/flaskr/blog.py (lines 61, 87, 114)"
+    },
+    {
+     "command": "repocortex tool call analyze_impact symbol=get_db",
+     "rows": 24,
+     "right": 17,
+     "missing": "nothing obvious statically. 16 direct rows and init_db_command are right. The other 7 indirect rows rest on wrong edges: 6 tests reach it via auth.login() mis-bound to the login view, and create_app via `app.config.update(test_config)` bound to the blog `update` view. (All 7 do reach get_db at runtime through HTTP dispatch, but not along the path the tool gives.)"
+    },
+    {
+     "command": "repocortex tool call find_implementations name=JSONTag",
+     "rows": 12,
+     "right": 12,
+     "missing": "none"
+    },
+    {
+     "command": "repocortex tool call find_implementations name=View",
+     "rows": 3,
+     "right": 3,
+     "missing": "7 direct subclasses in tests/test_views.py declared as `class Index(flask.views.View)` (dotted base name)"
+    }
+   ],
+   "notes": [
+    "Every tool answer is prefixed with `COVERAGE TOO LOW ... Do not present what follows as an answer to the question asked`, yet also carries `verdict: strong`.",
+    "src/flask/__init__.py (39 valid import lines) and a one-line wsgi.py are marked parse_status=partial with an empty parse_error, which makes the whole run `degraded`.",
+    "Flask blueprint routes (`@bp.get(...)` in examples/celery/.../views.py) are labelled `fastapi route` in edge detail.",
+    "Reference status `ambiguous` is also used when exactly one candidate exists (render_template, flash, route)."
+   ]
+  },
+  {
+   "language": "ruby",
+   "project": "https://github.com/sinatra/sinatra",
+   "commit": "cb22afd7902b566b6eaba6c4ea89739494a65d12",
+   "timing": {
+    "index_seconds_reported": 0.896,
+    "index_seconds_wall": 0.954,
+    "resolve_seconds_reported": 0.254,
+    "resolve_seconds_wall": 0.294
+   },
+   "index_stats": {
+    "files_discovered": 292,
+    "files_indexed": 163,
+    "files_skipped": 129,
+    "files_partial": 0,
+    "files_failed": 0,
+    "ruby_files": {
+     "ok": 162
+    },
+    "run_status": "ready",
+    "symbols_reported_by_index": 1204,
+    "symbols_in_table_after_resolve": 1418,
+    "ruby_symbols": {
+     "method": 897,
+     "package (module)": 131,
+     "class": 126,
+     "constant": 50
+    },
+    "references_total": 14615,
+    "imports": 251
+   },
+   "references": {
+    "resolved": 2932,
+    "ambiguous": 5246,
+    "unresolved": 6437,
+    "resolved_share_of_all": 0.201,
+    "resolved_share_of_references_naming_an_indexed_definition": 0.359,
+    "note": "All Ruby references are kind reference.call; there are no inheritance/include references."
+   },
+   "edges_by_confidence": {
+    "CALLS": {
+     "high": 2073,
+     "medium": 269,
+     "low": 0
+    },
+    "EXTENDS": {},
+    "note": "resolve printed `high: 2564, medium: 367, low: 1` (sums to the 2,932 resolved references); the edges table holds 2,342 rows and no low row.",
+    "CALLS_by_reason": {
+     "high: single match in an imported package": 1040,
+     "high: defined in the same file": 1018,
+     "high: receiver type matches": 15,
+     "medium: same directory, but the language requires an import": 182,
+     "medium: multiple matches among imports": 84,
+     "medium: receiver matches, overloaded": 3
+    },
+    "self_loop_CALLS_edges": 82
+   },
+   "definitions": {
+    "files": [
+     "rack-protection/lib/rack/protection/base.rb",
+     "lib/sinatra/indifferent_hash.rb",
+     "sinatra-contrib/lib/sinatra/cookies.rb",
+     "sinatra-contrib/lib/sinatra/namespace.rb",
+     "sinatra-contrib/lib/sinatra/test_helpers.rb"
+    ],
+    "method": "Expected list read from the source: every module, class, constant assignment and `def` (including `def self.x`, operator and setter methods), matched to symbols rows on (name, start line).",
+    "expected": 150,
+    "extracted": 142,
+    "correct": 142,
+    "wrong": 0,
+    "missed": 8,
+    "precision": 1.0,
+    "recall": 0.947,
+    "examples": {
+     "missed": [
+      "lib/sinatra/indifferent_hash.rb:42 `def self.[](*args)`",
+      "indifferent_hash.rb:52 `def default=(value)`",
+      "indifferent_hash.rb:70 `def [](key)`",
+      "indifferent_hash.rb:74 `def []=(key, value)`",
+      "sinatra-contrib/lib/sinatra/cookies.rb:81 `def ==(other)`",
+      "cookies.rb:85 `def [](key)`",
+      "cookies.rb:89 `def []=(key, value)`",
+      "sinatra-contrib/lib/sinatra/test_helpers.rb:136 `def app=(base)`"
+     ],
+     "missed_pattern": "all 8 misses are operator methods ([] []= ==) or setter methods (name=); every ordinary `def`, `def self.x`, module, class and constant was found",
+     "wrong": [],
+     "kind_and_name_caveats": [
+      "FQN is `<file>:<name>` with no module/class path and no singleton marker: base.rb has `def self.default_options` and `def default_options` with identical FQNs; namespace.rb has two `prefixed`.",
+      "Modules are stored with kind `package`."
+     ],
+     "noted_separately_not_counted": {
+      "generated_or_aliased_method_names_in_these_files": 42,
+      "extracted": 0,
+      "breakdown": {
+       "alias": 19,
+       "alias_method": 1,
+       "attr_reader/attr_accessor methods": 7,
+       "def_delegators methods": 14,
+       "define_method": 1
+      },
+      "recall_if_counted": 0.74
+     }
+    }
+   },
+   "precision": {
+    "definition_of_correct": "Strict: the edge's dst definition is the one the call at the evidence line invokes.",
+    "sampling": "CALLS edges whose evidence file is Ruby, ordered by id, every k-th row (k = floor(population/20)).",
+    "high": {
+     "population": 2073,
+     "sampled": 20,
+     "correct": 18,
+     "wrong": 2,
+     "unverifiable": 0,
+     "precision": 0.9,
+     "edge_ids": [
+      104,
+      208,
+      313,
+      417,
+      557,
+      697,
+      854,
+      996,
+      1106,
+      1212,
+      1322,
+      1427,
+      1542,
+      1650,
+      1773,
+      1888,
+      2001,
+      2104,
+      2239,
+      2347
+     ],
+     "wrong_ids": {
+      "557": "rack-protection/.../json_csrf.rb:27 Request.new(env) (Rack::Request) bound to `def self.new` of Rack::Protection (protection.rb:27)",
+      "697": "cookies.rb:277 to_hash.to_a (Hash#to_a) bound to Jar#to_a itself"
+     }
+    },
+    "medium": {
+     "population": 269,
+     "sampled": 20,
+     "correct": 6,
+     "wrong": 14,
+     "unverifiable": 0,
+     "precision": 0.3,
+     "edge_ids": [
+      459,
+      496,
+      561,
+      580,
+      620,
+      728,
+      763,
+      794,
+      832,
+      882,
+      915,
+      963,
+      1192,
+      1447,
+      1687,
+      1750,
+      1824,
+      1919,
+      2165,
+      2187
+     ],
+     "correct_ids": [
+      496,
+      561,
+      580,
+      620,
+      1447,
+      1750
+     ],
+     "wrong_ids": {
+      "459": "`use` inside Rack::Builder.new block -> Sinatra::Base.use",
+      "763,794,832,915": "Array#each -> Sinatra::Response#each (base.rb:179)",
+      "728,882": "`helpers X` at `module Sinatra` level is Sinatra.helpers (base.rb:2165); bound to Base.helpers (1557) - near miss, 2165 delegates to it",
+      "963": "Sinatra.new (base.rb:2153) bound to Base.new (1662)",
+      "1192,1824": "Sinatra.use / @app.use bound to a `use` inside a test class (test/settings_test.rb:594)",
+      "1687,1919": "Object#respond_to? bound to a method inside a Module.new block in test/delegator_test.rb:122",
+      "2165,2187": "dynamic settings (@base.bar, @base.environment=) bound to unrelated methods in other test files"
+     }
+    },
+    "low": {
+     "population": 0,
+     "sampled": 0,
+     "correct": 0,
+     "wrong": 0,
+     "unverifiable": 0,
+     "precision": null
+    },
+    "population_weighted_estimate": {
+     "strict": 0.831
+    },
+    "systematic_high_confidence_errors_found_outside_the_sample": [
+     "44 of 44 high edges into Rack::Protection.new (protection.rb:27) are wrong: AcceptEntry.new, String.new, Mutex.new, IPAddr.new, TemplateCache.new, Request.new ...",
+     "61 high edges bind arbitrary `x.respond_to?(...)` to AcceptEntry#respond_to? (lib/sinatra/base.rb:128); 41 bind `x.to_s` to AcceptEntry#to_s (base.rb:124); 38 bind `x.include?` to a Rack::Builder#include? monkeypatch in test/test_helper.rb:48"
+    ],
+    "caveat": "n=20 per tier; roughly +/-20 points of sampling error per tier."
+   },
+   "recall": {
+    "files": [
+     "rack-protection/lib/rack/protection/json_csrf.rb",
+     "sinatra-contrib/lib/sinatra/multi_route.rb",
+     "sinatra-contrib/lib/sinatra/required_params.rb",
+     "rack-protection/lib/rack/protection/http_origin.rb",
+     "sinatra-contrib/lib/sinatra/custom_logger.rb"
+    ],
+    "rule": "Every call site in the file whose target is a `def` in this repository, including `super` and receiverless calls. Calls that go to attr_reader/attr_accessor-generated readers (app, options, request, params) and to dynamic settings are excluded (they would all count as unbound).",
+    "call_sites": 37,
+    "bound_correct": 21,
+    "bound_wrong": 4,
+    "ambiguous": 2,
+    "unbound": 10,
+    "recall": 0.568,
+    "per_file": {
+     "json_csrf.rb": {
+      "sites": 8,
+      "correct": 6,
+      "wrong": 1,
+      "ambiguous": 1
+     },
+     "multi_route.rb": {
+      "sites": 16,
+      "correct": 7,
+      "wrong": 1,
+      "unbound": 8
+     },
+     "required_params.rb": {
+      "sites": 6,
+      "correct": 5,
+      "wrong": 1
+     },
+     "http_origin.rb": {
+      "sites": 4,
+      "correct": 3,
+      "ambiguous": 1
+     },
+     "custom_logger.rb": {
+      "sites": 3,
+      "wrong": 1,
+      "unbound": 2
+     }
+    },
+    "examples": {
+     "unbound": "multi_route.rb:61 `super(*route_args(args), &block)` -> Sinatra::Base.head: `super` produces no reference row (0 in the whole index); custom_logger.rb:52 bare `settings` -> Base#settings: no reference row",
+     "wrong": "json_csrf.rb:48 react(env): the class has `alias react deny`, so the target is Base#deny; bound to Base#react (aliases are not extracted). `helpers X` / `register X` at `module Sinatra` level bound to Base.helpers/Base.register or NamespacedMethods#helpers instead of Sinatra.helpers/Sinatra.register",
+     "ambiguous": "json_csrf.rb:22 `default_options allow_if: nil` (Base has both `def self.default_options` and `def default_options`)"
+    },
+    "false_positives_seen_in_the_same_files": "9 calls into core/rack were bound to in-repo methods: Request.new x2 -> Rack::Protection.new (high); args.each/routes.each/keys.each/key.each -> Sinatra::Response#each (medium); k.to_s x3 -> AcceptEntry#to_s (high); p.respond_to? -> AcceptEntry#respond_to? (high); key.keys -> Cookies::Jar#keys (medium); settings.logger / request.logger -> the enclosing `logger` method itself (high)."
+   },
+   "weak_spots": [
+    {
+     "case": "receiverless call -> own or base class method",
+     "example": "rack-protection/lib/rack/protection/json_csrf.rb:31 `warn env, ...` -> Base#warn (base.rb:94); lib/sinatra/base.rb:2086 `set :logging, ...` in `class Application < Base` -> Base.set (base.rb:1347)",
+     "outcome": "correct (medium via same-directory rule; high via same file). The binding comes from file/directory proximity, not from following `<` or `include`."
+    },
+    {
+     "case": "mixin (`include Module`) + receiverless call",
+     "example": "sinatra-contrib/lib/sinatra/content_for.rb:182 `erubi?` (ContentFor includes Capture includes EngineTracking) -> engine_tracking.rb:20",
+     "outcome": "correct at medium, again by directory proximity. `include`/`extend` and `class A < B` are not recorded at all: 0 inheritance references and 0 EXTENDS edges for Ruby."
+    },
+    {
+     "case": "receiverless call without arguments or parentheses",
+     "example": "sinatra-contrib/lib/sinatra/custom_logger.rb:52 `settings.respond_to?(:logger)`",
+     "outcome": "the bare call `settings` (Base#settings) produces no reference row; the whole index has 11 references named `settings`. Calls to attr_reader-generated readers (`options[:allow_if]`, `app.call(env)`) are likewise invisible."
+    },
+    {
+     "case": "ClassName.new(...)",
+     "example": "json_csrf.rb:27 `Request.new(env)` -> Rack::Protection.new (high); sinatra-contrib/lib/sinatra/cookies.rb:340 `Jar.new(self)` -> Sinatra::Base.new (medium)",
+     "outcome": "wrong. `.new` never binds to the class or its `initialize`; a constant receiver is dropped, and the call is matched to whichever of the 5 `def self.new`/`def new` methods is reachable (76 bound, all those inspected wrong; 258 ambiguous)."
+    },
+    {
+     "case": "same-named methods on unrelated classes",
+     "example": "sinatra-contrib/lib/sinatra/multi_route.rb:74 `routes.each` -> Sinatra::Response#each (base.rb:179); required_params.rb:60 `k.to_s` -> AcceptEntry#to_s (base.rb:124, high)",
+     "outcome": "wrong; any in-repo method sharing a core-library name (each, to_s, respond_to?, include?, merge, keys, map) attracts unrelated calls"
+    },
+    {
+     "case": "super",
+     "example": "multi_route.rb:61 `super(*route_args(args), &block)`; reloader.rb:345 `result = super`",
+     "outcome": "not recorded: no reference row exists for any `super` call"
+    },
+    {
+     "case": "call through a returned value",
+     "example": "sinatra-contrib/lib/sinatra/reloader.rb:249 `Watcher::List.for(klass).updated.each`; cookies.rb:277 `to_hash.to_a`",
+     "outcome": "`for` and `updated` are bound correctly by unique name; `each` (Array#each) -> Sinatra::Response#each, and `to_a` (Hash#to_a) -> the calling method itself at high: wrong"
+    },
+    {
+     "case": "aliases and class-level DSL (closest Ruby analogue of decorators)",
+     "example": "json_csrf.rb:24 `alias react deny` then :48 `react(env)`; json_csrf.rb:22 `default_options allow_if: nil`",
+     "outcome": "alias not extracted, call bound to the overridden Base#react (wrong); DSL call ambiguous because singleton and instance methods of the same name are not distinguished"
+    },
+    {
+     "case": "module-level DSL call",
+     "example": "sinatra-contrib/lib/sinatra/custom_logger.rb:60 `helpers CustomLogger` inside `module Sinatra`",
+     "outcome": "target is Sinatra.helpers (base.rb:2165); bound to NamespacedMethods#helpers (namespace.rb:243) - wrong"
+    },
+    {
+     "case": "decorators",
+     "example": "n/a",
+     "outcome": "not applicable to Ruby"
+    }
+   ],
+   "tool_answers": [
+    {
+     "command": "repocortex tool call find_callers name=halt",
+     "rows": 13,
+     "right": 13,
+     "missing": "12 of 25 call sites: examples/chat.rb:13 and 11 in test/helpers_test.rb, test/routing_test.rb, test/filter_test.rb (all `ambiguous` although `halt` has one definition)"
+    },
+    {
+     "command": "repocortex tool call find_callers name=safe?",
+     "rows": 2,
+     "right": 2,
+     "missing": "answers only for Sinatra::Request#safe? (base.rb:70) without saying that two other `safe?` definitions exist; the 3 callers of Rack::Protection::Base#safe? are not shown"
+    },
+    {
+     "command": "repocortex tool call analyze_impact symbol=halt",
+     "rows": 15,
+     "right": 14,
+     "missing": "Helpers#not_found (base.rb:357 calls `error 404`, which calls halt; that `error` call is ambiguous), plus the examples/tests callers above. Wrong row: MappedErrorTest, reached via `base.error(FooError)` (Base.error class method) mis-bound to Helpers#error."
+    },
+    {
+     "command": "repocortex tool call find_implementations name=Base   (also with path=rack-protection/lib/rack/protection/base.rb)",
+     "rows": 0,
+     "right": 0,
+     "missing": "everything: Sinatra::Application (lib/sinatra/base.rb:2085, lib/sinatra/main.rb:30) for Sinatra::Base, and 15 direct subclasses of Rack::Protection::Base under rack-protection/lib (JsonCsrf, HttpOrigin, AuthenticityToken, ...). Same empty result for Sinatra::Error (BadRequest, NotFound)."
+    }
+   ],
+   "notes": [
+    "Type hierarchy is absent for Ruby: no EXTENDS edges, find_implementations always returns 0.",
+    "Tool answers carry `COVERAGE TOO LOW ... Do not present what follows as an answer` and `verdict: strong` together.",
+    "Reference status `ambiguous` is used even when one candidate exists (halt in tests)."
+   ]
+  }
+ ],
+ "failed_to_run": [],
+ "environment_notes": [
+  "Nothing crashed, hung or timed out.",
+  "sqlite3 CLI could not open the sinatra index read-only in place (WAL database without a -shm file); a copy was queried instead. Snapshots of both indexes are kept in work/R4/db so the sampled edge ids can be re-checked."
+ ]
+}

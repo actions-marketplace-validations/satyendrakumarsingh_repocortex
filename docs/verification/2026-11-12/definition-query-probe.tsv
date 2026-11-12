@@ -1,0 +1,206 @@
+ada	no tags query available for "ada"
+agda	no tags query available for "agda"
+angular	ok
+apex	ok
+arduino	ok
+asm	no tags query available for "asm"
+astro	no tags query available for "astro"
+authzed	ok
+awk	no tags query available for "awk"
+bash	ok
+bass	no tags query available for "bass"
+beancount	no tags query available for "beancount"
+bibtex	no tags query available for "bibtex"
+bicep	ok
+bitbake	ok
+blade	no tags query available for "blade"
+brightscript	no tags query available for "brightscript"
+c	ok
+c_sharp	ok
+caddy	no tags query available for "caddy"
+cairo	ok
+capnp	ok
+chatito	no tags query available for "chatito"
+circom	ok
+clojure	ok
+cmake	ok
+cobol	no tags query available for "cobol"
+comment	no tags query available for "comment"
+commonlisp	ok
+cooklang	no tags query available for "cooklang"
+corn	no tags query available for "corn"
+cpon	no tags query available for "cpon"
+cpp	ok
+crystal	ok
+css	ok
+csv	no tags query available for "csv"
+cuda	ok
+cue	ok
+cylc	no tags query available for "cylc"
+d	ok
+dart	ok
+desktop	no tags query available for "desktop"
+devicetree	ok
+dhall	no tags query available for "dhall"
+diff	no tags query available for "diff"
+disassembly	no tags query available for "disassembly"
+djot	no tags query available for "djot"
+dockerfile	no tags query available for "dockerfile"
+dot	no tags query available for "dot"
+doxygen	no tags query available for "doxygen"
+dtd	no tags query available for "dtd"
+earthfile	no tags query available for "earthfile"
+ebnf	no tags query available for "ebnf"
+editorconfig	no tags query available for "editorconfig"
+eds	no tags query available for "eds"
+eex	no tags query available for "eex"
+elisp	no tags query available for "elisp"
+elixir	ok
+elm	no tags query available for "elm"
+elsa	no tags query available for "elsa"
+embedded_template	no tags query available for "embedded_template"
+enforce	no tags query available for "enforce"
+erlang	ok
+facility	no tags query available for "facility"
+faust	ok
+fennel	no tags query available for "fennel"
+fidl	no tags query available for "fidl"
+firrtl	no tags query available for "firrtl"
+fish	ok
+foam	no tags query available for "foam"
+forth	no tags query available for "forth"
+fortran	ok
+fsharp	ok
+gdscript	ok
+git_config	no tags query available for "git_config"
+git_rebase	no tags query available for "git_rebase"
+gitattributes	no tags query available for "gitattributes"
+gitcommit	no tags query available for "gitcommit"
+gitignore	no tags query available for "gitignore"
+gleam	ok
+glsl	ok
+gn	ok
+go	ok
+godot_resource	no tags query available for "godot_resource"
+gomod	no tags query available for "gomod"
+graphql	ok
+groovy	ok
+hack	ok
+hare	ok
+haskell	no tags query available for "haskell"
+haxe	ok
+hcl	ok
+heex	no tags query available for "heex"
+hlsl	ok
+html	no tags query available for "html"
+http	no tags query available for "http"
+hurl	no tags query available for "hurl"
+hyprlang	no tags query available for "hyprlang"
+ini	no tags query available for "ini"
+janet	no tags query available for "janet"
+java	ok
+javascript	ok
+jinja2	no tags query available for "jinja2"
+jq	ok
+jsdoc	no tags query available for "jsdoc"
+json	no tags query available for "json"
+json5	no tags query available for "json5"
+jsonnet	no tags query available for "jsonnet"
+julia	ok
+just	no tags query available for "just"
+kconfig	no tags query available for "kconfig"
+kdl	no tags query available for "kdl"
+kotlin	ok
+ledger	no tags query available for "ledger"
+less	ok
+linkerscript	no tags query available for "linkerscript"
+liquid	no tags query available for "liquid"
+llvm	no tags query available for "llvm"
+lua	ok
+luau	ok
+make	no tags query available for "make"
+markdown	no tags query available for "markdown"
+markdown_inline	no tags query available for "markdown_inline"
+matlab	ok
+mermaid	no tags query available for "mermaid"
+meson	no tags query available for "meson"
+mojo	ok
+move	ok
+nginx	no tags query available for "nginx"
+nickel	no tags query available for "nickel"
+nim	ok
+ninja	no tags query available for "ninja"
+nix	no tags query available for "nix"
+norg	no tags query available for "norg"
+nushell	no tags query available for "nushell"
+objc	ok
+ocaml	ok
+odin	ok
+org	no tags query available for "org"
+pascal	no tags query available for "pascal"
+pem	no tags query available for "pem"
+perl	no tags query available for "perl"
+php	ok
+pkl	no tags query available for "pkl"
+powershell	ok
+prisma	ok
+prolog	no tags query available for "prolog"
+promql	no tags query available for "promql"
+properties	no tags query available for "properties"
+proto	ok
+pug	no tags query available for "pug"
+puppet	ok
+purescript	no tags query available for "purescript"
+python	ok
+ql	no tags query available for "ql"
+r	ok
+racket	no tags query available for "racket"
+regex	no tags query available for "regex"
+rego	no tags query available for "rego"
+requirements	no tags query available for "requirements"
+rescript	ok
+robot	no tags query available for "robot"
+ron	no tags query available for "ron"
+rst	no tags query available for "rst"
+ruby	ok
+rust	ok
+scala	ok
+scheme	ok
+scss	ok
+smithy	no tags query available for "smithy"
+solidity	ok
+sparql	no tags query available for "sparql"
+sql	ok
+squirrel	ok
+ssh_config	no tags query available for "ssh_config"
+starlark	ok
+svelte	no tags query available for "svelte"
+swift	ok
+tablegen	no tags query available for "tablegen"
+tcl	no tags query available for "tcl"
+teal	ok
+templ	ok
+textproto	no tags query available for "textproto"
+thrift	ok
+tlaplus	ok
+tmux	no tags query available for "tmux"
+todotxt	no tags query available for "todotxt"
+toml	no tags query available for "toml"
+tsx	ok
+turtle	no tags query available for "turtle"
+twig	no tags query available for "twig"
+typescript	ok
+typst	no tags query available for "typst"
+uxntal	no tags query available for "uxntal"
+v	ok
+verilog	no tags query available for "verilog"
+vhdl	ok
+vimdoc	no tags query available for "vimdoc"
+vue	no tags query available for "vue"
+wat	no tags query available for "wat"
+wgsl	ok
+wolfram	no tags query available for "wolfram"
+xml	no tags query available for "xml"
+yaml	no tags query available for "yaml"
+yuck	no tags query available for "yuck"
+zig	ok

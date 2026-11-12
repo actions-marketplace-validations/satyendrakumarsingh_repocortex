@@ -1,0 +1,985 @@
+{
+ "group": "R5",
+ "languages": [
+  {
+   "language": "c",
+   "project": "https://github.com/redis/redis",
+   "commit": "b83c9c1eeaeeb8d5ebe42cb1a2ee405fc08ede88",
+   "timing": {
+    "index_wall_seconds": 39.36,
+    "index_reported_ms": 39181,
+    "index_cpu_user_seconds": 118.76,
+    "resolve_wall_seconds": 2.13,
+    "resolve_reported_ms": 2078
+   },
+   "index_stats": {
+    "files_discovered_all_languages": 1958,
+    "files_indexed_all_languages": 1008,
+    "files_skipped_all_languages": 942,
+    "c_files": {
+     "total": 848,
+     "ok": 732,
+     "partial": 99,
+     "failed": 8,
+     "skipped_over_262144_bytes": 9
+    },
+    "c_files_under_src": {
+     "ok": 188,
+     "partial": 26,
+     "failed": 5,
+     "skipped": 8,
+     "bytes_ok": 5488624,
+     "bytes_partial": 58843,
+     "bytes_failed": 837799,
+     "bytes_skipped": 2892054,
+     "share_of_src_c_bytes_not_indexed": 0.402
+    },
+    "skipped_oversize_files": [
+     {
+      "file": "src/module.c",
+      "bytes": 693439
+     },
+     {
+      "file": "src/redis-cli.c",
+      "bytes": 451168
+     },
+     {
+      "file": "src/server.c",
+      "bytes": 370850
+     },
+     {
+      "file": "src/t_stream.c",
+      "bytes": 291010
+     },
+     {
+      "file": "src/cluster_legacy.c",
+      "bytes": 281476
+     },
+     {
+      "file": "deps/xxhash/xxhash.h",
+      "bytes": 278450
+     },
+     {
+      "file": "src/t_hash.c",
+      "bytes": 273647
+     },
+     {
+      "file": "src/server.h",
+      "bytes": 267970
+     },
+     {
+      "file": "src/zset_btree.c",
+      "bytes": 262494
+     }
+    ],
+    "symbols_reported_by_index": 11609,
+    "c_symbols": {
+     "function": 8229,
+     "class": 2599
+    },
+    "references_reported_by_index": 78320,
+    "imports": 3504,
+    "run_status": "degraded (exit code 0)",
+    "partial_files": 99,
+    "partial_meaning": "parse succeeded but zero symbols and zero references were extracted (internal/parse/generic.go); parse_error is empty",
+    "partial_examples": [
+     {
+      "file": "src/version.h",
+      "why": "two #define lines only; object-like macros are never extracted"
+     },
+     {
+      "file": "src/crc64.h",
+      "why": "include guard plus five function prototypes; prototypes are never extracted"
+     },
+     {
+      "file": "src/commands.c",
+      "why": "only #include and #define MAKE_CMD/MAKE_ARG; the command table arrives through #include \"commands.def\""
+     }
+    ]
+   },
+   "parse_failures": [
+    {
+     "file": "deps/jemalloc/src/ctl.c",
+     "bytes": 132653,
+     "error": "parse exceeded 5s: context deadline exceeded",
+     "seconds_alone": 4.54,
+     "alone_outcome": "ok, 95 symbols"
+    },
+    {
+     "file": "deps/jemalloc/test/unit/SFMT.c",
+     "bytes": 87608,
+     "error": "parse exceeded 5s: context deadline exceeded",
+     "seconds_alone": 5.16,
+     "alone_outcome": "failed again"
+    },
+    {
+     "file": "deps/lua/src/lobject.c",
+     "bytes": 5498,
+     "error": "parse exceeded 5s: context deadline exceeded",
+     "seconds_alone": 5.18,
+     "alone_outcome": "failed again (214 lines)"
+    },
+    {
+     "file": "src/crc16_slottable.h",
+     "bytes": 112381,
+     "error": "parse exceeded 5s: context deadline exceeded",
+     "seconds_alone": 5.2,
+     "alone_outcome": "failed again"
+    },
+    {
+     "file": "src/fast_float_strtod.c",
+     "bytes": 62163,
+     "error": "parse exceeded 5s: context deadline exceeded",
+     "seconds_alone": 5.19,
+     "alone_outcome": "failed again"
+    },
+    {
+     "file": "src/networking.c",
+     "bytes": 252402,
+     "error": "parse exceeded 5s: context deadline exceeded",
+     "seconds_alone": 4.23,
+     "alone_outcome": "ok, 201 symbols"
+    },
+    {
+     "file": "src/t_set.c",
+     "bytes": 181167,
+     "error": "parse exceeded 5s: context deadline exceeded",
+     "seconds_alone": 6.63,
+     "alone_outcome": "ok, 164 symbols"
+    },
+    {
+     "file": "src/t_zset.c",
+     "bytes": 229686,
+     "error": "parse exceeded 5s: context deadline exceeded",
+     "seconds_alone": 3.89,
+     "alone_outcome": "ok, 169 symbols"
+    }
+   ],
+   "parse_timeout_reproduction": {
+    "finding": "Not limited to file-scope macro invocations. deps/lua/src/lobject.c (5,498 bytes) times out because of one ordinary function, luaO_int2fb, whose last statement is `return ((e+1) << 3) | (cast_int(x) - 8);`, followed later in the file by a function-local 256-element array initializer.",
+    "minimal_file": "int f(unsigned int x) { int e = 0; return ((e+1) << 3) | (cast_int(x) - 8); }\nint g(unsigned int x) {\n  static const unsigned char t[256] = {7,7,...256 values...};\n  return t[x];\n}",
+    "minimal_file_bytes": 676,
+    "seconds_by_initializer_length": {
+     "32": 0.2,
+     "64": 0.36,
+     "128": 1.04,
+     "256": ">5 (timeout)"
+    },
+    "control": "the same file with `(x - 8)` instead of `(cast_int(x) - 8)` indexes in 0.20 s",
+    "load_dependence": "4 of the 8 failures (ctl.c, networking.c, t_set.c, t_zset.c) index successfully when alone in a directory (3.9 to 6.6 s wall for the whole command); they only fail in the full run, where the indexer runs at about 327% CPU, so the 5 s wall-clock limit makes the set of failed files depend on machine load."
+   },
+   "references": {
+    "scope": "call references recorded in C files",
+    "total": 74311,
+    "resolved": 21635,
+    "ambiguous": 6507,
+    "unresolved": 46169,
+    "resolved_rate": 0.291,
+    "ambiguous_rate": 0.088,
+    "unresolved_rate": 0.621,
+    "whole_repository_as_printed_by_resolve": {
+     "total": 78320,
+     "resolved": 22257,
+     "ambiguous": 7046,
+     "unresolved": 49017,
+     "printed_rate": "76.0% of the 29303 that name something this index defines"
+    },
+    "resolved_references_with_no_edge": 2991
+   },
+   "edges_by_confidence": {
+    "calls_with_evidence_in_c_files": {
+     "high": 10488,
+     "medium": 8083,
+     "low": 13
+    },
+    "all_languages_by_kind": {
+     "CALLS": {
+      "high": 10986,
+      "medium": 8091,
+      "low": 29
+     },
+     "EXTENDS": {
+      "high": 46
+     },
+     "CONFIGURED_BY": {
+      "high": 2
+     }
+    },
+    "reason_by_tier": {
+     "high": "defined in the same file",
+     "medium": "same directory, but the language requires an import",
+     "low": "unique name in repository, no import evidence"
+    },
+    "resolve_output_counts_references_not_edges": {
+     "high": 12697,
+     "medium": 9529,
+     "low": 31,
+     "edges_printed": 19152
+    }
+   },
+   "definitions": {
+    "files": [
+     "src/childinfo.c",
+     "src/lolwut.c",
+     "src/mt19937-64.c",
+     "src/sparkline.c",
+     "src/keymeta.h"
+    ],
+    "selection": "every k-th eligible non-test src/*.c file of 50-400 lines, plus the median eligible header",
+    "standard": "expected = function definitions, struct/union/enum definitions, typedefs, #define macros (include guard excluded), file-scope variables. Prototypes and forward declarations are not expected.",
+    "expected": 67,
+    "extracted": 73,
+    "correct": 31,
+    "wrong": 42,
+    "missed": 36,
+    "precision": 0.425,
+    "recall": 0.463,
+    "per_file": [
+     {
+      "file": "src/childinfo.c",
+      "expected": 7,
+      "extracted": 7,
+      "correct": 7,
+      "wrong": 0,
+      "missed": 0
+     },
+     {
+      "file": "src/lolwut.c",
+      "expected": 8,
+      "extracted": 7,
+      "correct": 7,
+      "wrong": 0,
+      "missed": 1
+     },
+     {
+      "file": "src/mt19937-64.c",
+      "expected": 15,
+      "extracted": 8,
+      "correct": 8,
+      "wrong": 0,
+      "missed": 7
+     },
+     {
+      "file": "src/sparkline.c",
+      "expected": 9,
+      "extracted": 12,
+      "correct": 4,
+      "wrong": 8,
+      "missed": 5
+     },
+     {
+      "file": "src/keymeta.h",
+      "expected": 28,
+      "extracted": 39,
+      "correct": 5,
+      "wrong": 34,
+      "missed": 23
+     }
+    ],
+    "functions_only": {
+     "expected": 30,
+     "correct": 28,
+     "missed": 2,
+     "recall": 0.933
+    },
+    "examples": {
+     "wrong": [
+      "src/sparkline.c:51 `void sparklineSequenceAddSample(struct sequence *seq, ...)` yields a symbol `class sequence` at line 51: every `struct X` type usage in a parameter list or body is recorded as a class definition (8 of 12 symbols in this file)",
+      "src/keymeta.h:40-46 seven forward declarations (`struct redisDb;`) and 27 parameter-type usages recorded as class symbols; RedisModuleKeyOptCtx appears 14 times"
+     ],
+     "missed": [
+      "src/lolwut.c:77 `lwCanvas *lwCreateCanvas(int width, int height, int bgcolor)` and src/sparkline.c:40 `struct sequence *createSparklineSequence(void)`: functions whose declarator is a pointer are never extracted",
+      "src/mt19937-64.c:60-64 `#define NN 312` and four more macros; :68 `static unsigned long long mt[NN];` and :70 `static int mti`",
+      "src/keymeta.h:63-73 eleven function-pointer typedefs, :50-80 twelve macros"
+     ]
+    },
+    "repository_wide_checks": {
+     "pointer_returning_functions": "regex over successfully parsed C files: 0 of 587 pointer-returning function definitions under src/ have a symbol, and 0 of 209 under deps/; other function definitions: 3247 of 3262 under src/",
+     "function_names_defined_under_src_by_regex": 6322,
+     "of_those_with_a_symbol": 3308,
+     "class_symbols": "of 2599 C `class` symbols, a regex classification finds about 789 struct/union/enum definitions, 331 typedefs, 36 forward declarations and 1443 mere type usages",
+     "never_extracted": "macros (object-like and function-like), file-scope variables, function prototypes, enumerators",
+     "attribute_macro_breaks_extraction": "src/dict.c:498 `int dictAdd(dict *d, void *key __stored_key, void *val)` has no symbol; the only `dictAdd` symbol is the static one in deps/hiredis/dict.c:141"
+    },
+    "header_declaration_vs_source_definition": "One symbol. A prototype in a header produces no symbol; the definition in the .c file produces one, and calls bind to it (sdsempty: src/sds.h:266 prototype has no symbol, src/sds.c:205 has, 205 edges point at it). Header symbols exist only for functions with a body there (static inline sdslen in src/sds.h:98)."
+   },
+   "precision": {
+    "standard": "correct = the bound definition is the function this call invokes after reading the call line and the definition; C has no overloads. Binding to a header prototype would count as correct but cannot occur because prototypes are not symbols.",
+    "sampling": "CALLS edges whose evidence file is a C file, ordered by id; ids[i*k + k/2] with k = population // n; the low tier is the entire population",
+    "high": {
+     "population": 10488,
+     "sampled": 24,
+     "correct": 24,
+     "wrong": 0,
+     "unverifiable": 0,
+     "precision": 1.0,
+     "edge_ids": [
+      246,
+      835,
+      1394,
+      2234,
+      3201,
+      3758,
+      4218,
+      4808,
+      5376,
+      5814,
+      6251,
+      7496,
+      8423,
+      9849,
+      10829,
+      11836,
+      12822,
+      13372,
+      14132,
+      14609,
+      15674,
+      16694,
+      17843,
+      18746
+     ]
+    },
+    "medium": {
+     "population": 8083,
+     "sampled": 23,
+     "correct": 23,
+     "wrong": 0,
+     "unverifiable": 0,
+     "precision": 1.0,
+     "edge_ids": [
+      824,
+      1758,
+      2683,
+      3365,
+      5229,
+      7153,
+      7701,
+      8457,
+      8938,
+      9465,
+      10002,
+      10566,
+      11374,
+      11884,
+      12550,
+      13491,
+      14751,
+      15385,
+      15929,
+      16588,
+      17166,
+      17708,
+      18225
+     ]
+    },
+    "low": {
+     "population": 13,
+     "sampled": 13,
+     "correct": 3,
+     "wrong": 10,
+     "unverifiable": 0,
+     "precision": 0.231,
+     "edge_ids": [
+      18010,
+      18011,
+      18013,
+      18014,
+      18015,
+      18016,
+      18018,
+      18019,
+      18020,
+      18021,
+      19212,
+      19213,
+      19214
+     ],
+     "wrong_detail": "10 edges bind the C macro call `LCS(i,j)` in src/t_string.c to the JSON key \"LCS\" in src/commands/lcs.json:2"
+    },
+    "overall_sample": {
+     "sampled": 60,
+     "correct": 50,
+     "wrong": 10
+    },
+    "bound_to_header_declaration": 0,
+    "bound_to_header_inline_definition": 4,
+    "known_wrong_edges_found_by_targeted_search_outside_the_sample": {
+     "medium": 74,
+     "medium_population": 8083,
+     "medium_precision_upper_bound": 0.991,
+     "detail": "72 cross-file edges to a function declared `static` in another .c file that the calling file does not include (22 calls to freeClient, 6 to createClient and 2 to resetClient in replication.c, aof.c, cluster_asm.c and others bound to the static functions of src/redis-benchmark.c because the real definitions in src/networking.c failed to parse; 31 uses of the macro `check` in deps/lua/src/ldebug.c bound to the static `check` in lparser.c); 1 libc `write` in utils/corrupt_rdb.c:46 bound to a Python function in utils/generate-command-code.py:273; 1 struct-field call `c->free_privdata(...)` in deps/hiredis/hiredis.c:754 bound to a test helper in deps/hiredis/test.c:1257"
+    }
+   },
+   "recall": {
+    "files": [
+     "src/childinfo.c",
+     "src/lolwut.c",
+     "src/mt19937-64.c",
+     "src/sparkline.c",
+     "src/notify.c"
+    ],
+    "standard": "call sites to functions defined in the repository; function-like macros (serverLog, serverAssert, dictSize) and calls through function-pointer variables (getMonotonicUs) excluded; up to 8 evenly spaced sites per file. The deterministic fifth pick src/lzf_c.c (and src/lzf_d.c) contain only macro calls, so the next eligible file src/notify.c was used.",
+    "call_sites": 38,
+    "bound_correct": 33,
+    "bound_wrong": 0,
+    "ambiguous": 0,
+    "unbound": 5,
+    "recall": 0.868,
+    "all_sites_in_the_five_files": {
+     "call_sites": 148,
+     "bound_correct": 129,
+     "bound_wrong": 0,
+     "ambiguous": 0,
+     "unbound": 19,
+     "recall": 0.872,
+     "unbound_by_callee": {
+      "createObject": 9,
+      "zmalloc": 4,
+      "zrealloc": 1,
+      "zstrdup": 1,
+      "createStringObject": 1,
+      "addReplyVerbatim": 1,
+      "exitFromChild": 1,
+      "moduleNotifyKeyspaceEvent": 1
+     },
+     "why": "callee returns a pointer (never extracted), or lives in a file that was skipped for size (server.c, module.c) or timed out (networking.c)"
+    },
+    "repository_wide_regex_estimate_for_src": {
+     "caveat": "regex-based, not hand-verified; counts a reference as bound if its status is resolved",
+     "recorded_call_references_to_functions_defined_under_src": 20286,
+     "resolved": 13244,
+     "ambiguous": 236,
+     "unresolved": 6806,
+     "bound_rate_in_indexed_files": 0.653,
+     "call_sites_inside_failed_or_skipped_files_never_recorded": 17229,
+     "bound_rate_over_all_call_sites": 0.353,
+     "note": "the five audited files are small utility files; the large core files are the ones that are skipped or time out"
+    }
+   },
+   "weak_spots": [
+    {
+     "case": "static functions with the same name in different files",
+     "example": "`static long long usec(void)` in src/intset.c:373, src/listpack.c:2277, src/ziplist.c:1724",
+     "outcome": "calls inside each file bind to that file's own definition (2, 22 and 20 call sites, high, correct). But a call to a non-static function whose real definition is missing from the index binds to another file's static function: `freeClient(c)` in src/replication.c (15 sites) is bound at medium confidence to `static void freeClient(client c)` in src/redis-benchmark.c. 72 such edges in the repository."
+    },
+    {
+     "case": "calls through function pointers",
+     "example": "src/childinfo.c:66 `getMonotonicUs()` (global `monotime (*getMonotonicUs)(void)`); src/dict.c:1864 `d->type->hashFunction(key)`",
+     "outcome": "left unresolved, which is right. A function passed as a callback is not a reference at all: sentinelDisconnectCallback (src/sentinel.c:1276) is passed at lines 2602 and 2635 and has zero references, so it has no callers and would look dead."
+    },
+    {
+     "case": "struct-of-function-pointer tables",
+     "example": "src/resp_parser.c:203 `parser->callbacks.error(p_ctx)`",
+     "outcome": "the field name is treated as a plain function name: bound at medium confidence to `error` in src/intset.c:363. 3 struct-field call sites are bound in the whole repository and all 3 are wrong (also hiredis.c:754 `c->free_privdata` and ldo.c:104 `G(L)->panic`)."
+    },
+    {
+     "case": "function-like macros",
+     "example": "src/t_string.c:1523 `LCS(i,j) = 0;` with `#define LCS(A,B) lcs[(B)+((A)*(blen+1))]`",
+     "outcome": "macros are never extracted as definitions; the invocation is recorded as a call and bound (low) to the JSON key \"LCS\" in src/commands/lcs.json. serverLog and serverAssert invocations stay unresolved and are counted as calls outside the repository."
+    },
+    {
+     "case": "unresolved label",
+     "example": "resolve prints `Unresolved: 49017 (calls outside this repository)`",
+     "outcome": "at least 6806 of them under src/ are calls to functions that are defined in the repository but have no symbol (zmalloc, createObject, addReply, lookupKeyRead)."
+    }
+   ],
+   "tool_answers": [
+    {
+     "command": "repocortex tool call find_callers name=lpBytes",
+     "rows": 42,
+     "right": 42,
+     "missing": "48 of 90 call lines found by grep: 35 in files with no index (t_hash.c 13, t_stream.c 14, t_set.c 5, t_zset.c 2, server.h 1) and 13 in indexed files whose enclosing function has no symbol (rdbLoadObject at rdb.c:3994 and 4222, lpNext/lpPrev/lpFirst/lpMerge/lpDup in listpack.c, _quicklistNodeAllowMerge). The answer does say the list may be incomplete."
+    },
+    {
+     "command": "repocortex tool call analyze_impact symbol=lpBytes",
+     "rows": 50,
+     "right": "13 of 13 direct callers are real; 4 indirect rows checked against the source are real (50 of 65 rows shown)",
+     "missing": "33 of 46 real direct-caller functions (regex): rdbLoadObject, hashTypeConvertListpack, streamAppendItem, streamTrim, zsetDup, lpMerge and others. Reported `13 direct, 52 indirect, risk moderate`."
+    }
+   ],
+   "notes": [
+    "cpp files in this repository: 8 (7 ok, 1 partial); not evaluated here.",
+    "param_count is 0 for every symbol and arg_count is 0 for every reference, so arity is unavailable to the resolver.",
+    "libc calls such as close/read/write/printf are marked ambiguous because scripts in other languages define functions with those names.",
+    "The index run exits 0 with status degraded; the nine oversize files are counted inside `942 skipped` and are not named in the output.",
+    "index_runs.symbols_found is 25279 while the index command printed 11609."
+   ]
+  },
+  {
+   "language": "cpp",
+   "project": "https://github.com/google/leveldb",
+   "commit": "bb74ef739973a70ca9f0d90788a1da89b788c0ad",
+   "timing": {
+    "index_wall_seconds": 3.27,
+    "index_reported_ms": 3079,
+    "resolve_wall_seconds": 0.32,
+    "resolve_reported_ms": 252
+   },
+   "index_stats": {
+    "files_discovered_all_languages": 152,
+    "files_indexed_all_languages": 134,
+    "files_skipped_all_languages": 18,
+    "cpp_files": {
+     "total": 76,
+     "ok": 74,
+     "partial": 2,
+     "failed": 0
+    },
+    "headers_labelled_c": {
+     "total": 57,
+     "ok": 44,
+     "partial": 13,
+     "note": "every .h file (56 C++ headers plus db/c_test.c) is given language `c` and parsed with the C grammar"
+    },
+    "symbols_reported_by_index": 1016,
+    "cpp_symbols": {
+     "function": 712,
+     "class": 101,
+     "table": 1,
+     "column": 1
+    },
+    "symbols_in_c_labelled_headers": {
+     "function": 132,
+     "class": 53
+    },
+    "references_reported_by_index": 6732,
+    "imports": 767,
+    "run_status": "degraded (exit code 0)",
+    "partial_files": 15,
+    "partial_examples": [
+     {
+      "file": "table/merger.cc",
+      "why": "4,974 bytes, 190 lines: class MergingIterator with about 20 inline methods and NewMergingIterator. Zero symbols and zero references, no parse error reported; indexing it alone gives the same result."
+     },
+     {
+      "file": "util/filter_policy.cc",
+      "why": "its only content is the out-of-line destructor `FilterPolicy::~FilterPolicy() {}`, a form that is never extracted"
+     },
+     {
+      "file": "db/db_iter.h",
+      "why": "C++ header parsed as C: a namespace holding one forward declaration and one prototype (`Iterator* NewDBIterator(...)`)"
+     }
+    ]
+   },
+   "parse_failures": [],
+   "references": {
+    "scope": "call references recorded in .cc files (language cpp)",
+    "total": 6126,
+    "resolved": 1997,
+    "ambiguous": 990,
+    "unresolved": 3139,
+    "resolved_rate": 0.326,
+    "ambiguous_rate": 0.162,
+    "unresolved_rate": 0.512,
+    "in_c_labelled_headers": {
+     "total": 606,
+     "resolved": 142,
+     "ambiguous": 29,
+     "unresolved": 435
+    },
+    "whole_repository_as_printed_by_resolve": {
+     "total": 6732,
+     "resolved": 2139,
+     "ambiguous": 1019,
+     "unresolved": 3574,
+     "printed_rate": "67.7% of the 3158 that name something this index defines"
+    },
+    "resolved_references_with_no_edge": 413,
+    "call_expressions_never_recorded": "regex estimate over parsed .cc files: 4965 of 7760 indented call expressions (64%) have a reference row on that line; 0 of 730 namespace- or class-qualified calls (`Status::OK()`, `Env::Default()`, `crc32c::Value(...)`) are recorded; 70.6% of unqualified ones. The same estimate for redis C is 97.1%."
+   },
+   "edges_by_confidence": {
+    "calls_with_evidence_in_cpp_files": {
+     "high": 1242,
+     "medium": 243,
+     "low": 111
+    },
+    "calls_with_evidence_in_c_labelled_headers": {
+     "high": 87,
+     "medium": 11,
+     "low": 3
+    },
+    "all_languages_by_kind": {
+     "CALLS": {
+      "high": 1329,
+      "medium": 254,
+      "low": 114
+     },
+     "EXTENDS": {}
+    },
+    "reason_by_tier": {
+     "high": "defined in the same file (1215), receiver type matches (27)",
+     "medium": "same directory, but the language requires an import",
+     "low": "unique name in repository, no import evidence"
+    },
+    "resolve_output_counts_references_not_edges": {
+     "high": 1509,
+     "medium": 363,
+     "low": 267,
+     "edges_printed": 1697
+    }
+   },
+   "definitions": {
+    "files": [
+     "db/filename.cc",
+     "helpers/memenv/memenv.cc",
+     "table/table_builder.cc",
+     "util/hash.cc",
+     "include/leveldb/iterator.h"
+    ],
+    "selection": "every k-th eligible non-test .cc file of 50-400 lines, plus the median eligible header",
+    "standard": "expected = functions, methods (inline and out-of-line), constructors, destructors, deleted special members, classes, structs, type aliases, named namespaces, macros (include guard excluded). Pure virtual method declarations are counted because they are the only declaration of that method; other prototypes are not.",
+    "expected": 97,
+    "extracted": 55,
+    "correct": 54,
+    "wrong": 1,
+    "missed": 43,
+    "precision": 0.982,
+    "recall": 0.557,
+    "per_file": [
+     {
+      "file": "db/filename.cc",
+      "expected": 13,
+      "extracted": 11,
+      "correct": 11,
+      "wrong": 0,
+      "missed": 2
+     },
+     {
+      "file": "helpers/memenv/memenv.cc",
+      "expected": 51,
+      "extracted": 40,
+      "correct": 39,
+      "wrong": 1,
+      "missed": 12
+     },
+     {
+      "file": "table/table_builder.cc",
+      "expected": 15,
+      "extracted": 1,
+      "correct": 1,
+      "wrong": 0,
+      "missed": 14
+     },
+     {
+      "file": "util/hash.cc",
+      "expected": 3,
+      "extracted": 1,
+      "correct": 1,
+      "wrong": 0,
+      "missed": 2
+     },
+     {
+      "file": "include/leveldb/iterator.h",
+      "expected": 15,
+      "extracted": 2,
+      "correct": 2,
+      "wrong": 0,
+      "missed": 13
+     }
+    ],
+    "examples": {
+     "wrong": [
+      "helpers/memenv/memenv.cc:311 `void RemoveFileInternal(const std::string& fname) EXCLUSIVE_LOCKS_REQUIRED(mutex_) {` is stored as a function named EXCLUSIVE_LOCKS_REQUIRED (same for three LOCKS_EXCLUDED methods in db/db_test.cc:47-58)"
+     ],
+     "missed": [
+      "table/table_builder.cc: all 12 out-of-line members (`TableBuilder::TableBuilder`, `~TableBuilder`, `Add`, `Flush`, `Finish`, `FileSize`, ...) and `struct TableBuilder::Rep`; the file yields one symbol",
+      "db/filename.cc:20 `static std::string MakeFileName(...)`; helpers/memenv/memenv.cc:388 `Env* NewMemEnv(Env* base_env)` (pointer return)",
+      "helpers/memenv/memenv.cc:23 `class FileState` and :221 `class InMemoryEnv` (classes with GUARDED_BY members: only their constructors appear), all five destructors, typedef FileSystem",
+      "include/leveldb/iterator.h:24 `class LEVELDB_EXPORT Iterator` and eight of its nine pure virtual methods; `Valid` is stored as a function spanning lines 35-93",
+      "namespaces are never extracted"
+     ]
+    },
+    "repository_wide_checks": {
+     "out_of_line_methods": "regex over non-test .cc files: 245 `Class::method(...)` definitions at column 0, 3 have a same-named symbol in that file. db/db_impl.cc (1,579 lines) yields 8 symbols, none of them a DBImpl method; db/log_reader.cc, util/arena.cc, table/block_builder.cc, util/status.cc yield 0.",
+     "pointer_returning_free_functions": "0 of 25 extracted",
+     "export_macro": "`struct LEVELDB_EXPORT Options {` in include/leveldb/options.h is stored as a class named LEVELDB_EXPORT; 4 class symbols are named LEVELDB_EXPORT. Options, ReadOptions and WriteOptions exist only as forward-declaration symbols; Env, DB and Slice have no symbol; Iterator (a typedef line), Comparator (an unrelated test struct) and Status (a function at status.h:103) have only a mis-typed or unrelated one",
+     "templates": "db/skiplist.h: template class SkipList and all 17 out-of-line template members are missing; the file yields 6 symbols including a function named `const`",
+     "gtest": "every TEST / TEST_F body is a function named TEST or TEST_F"
+    },
+    "header_declaration_vs_source_definition": "A method declared in a class in a header and defined out of line in a .cc file yields no symbol at all (TableBuilder::FileSize: table_builder.h declaration and table_builder.cc:278 definition both absent), so calls to it are unbound or bound to an unrelated same-named method. A free function declared in a header and defined in a .cc file yields one symbol, the definition, and calls bind to it (BuildTable, db/builder.cc:17). Forward declarations (`struct WriteOptions;` in include/leveldb/db.h:23) are stored as class symbols and constructor calls bind to them."
+   },
+   "precision": {
+    "standard": "strict: correct = the exact member/overload the call invokes, or, for a virtual call, an override in a class the receiver can actually hold at that call site (judged by reading how the receiver is assigned). lenient: any override anywhere in the class hierarchy also counts. A constructor call bound to a forward declaration of the right type counts as correct in both.",
+    "sampling": "CALLS edges whose evidence file is a .cc file, ordered by id; ids[i*k + k/2] with k = population // 20",
+    "high": {
+     "population": 1242,
+     "sampled": 20,
+     "correct": 17,
+     "wrong": 3,
+     "unverifiable": 0,
+     "precision": 0.85,
+     "lenient_correct": 20,
+     "lenient_precision": 1.0,
+     "edge_ids": [
+      109,
+      197,
+      271,
+      333,
+      395,
+      460,
+      530,
+      597,
+      685,
+      788,
+      875,
+      937,
+      1010,
+      1087,
+      1178,
+      1243,
+      1390,
+      1463,
+      1539,
+      1678
+     ],
+     "wrong_ids": [
+      197,
+      395,
+      1390
+     ],
+     "wrong_detail": "197 and 395: `iter->Next()` / `iter->Seek(\"b\")` on the iterator returned by the real DB in DBTest are bound to ModelDB::ModelIter in the same file (real target DBIter, which has no symbol). 1390: `iter_->status()` inside KeyConvertingIterator::status is bound to itself."
+    },
+    "medium": {
+     "population": 243,
+     "sampled": 20,
+     "correct": 14,
+     "wrong": 6,
+     "unverifiable": 0,
+     "precision": 0.7,
+     "lenient_correct": 16,
+     "lenient_precision": 0.8,
+     "edge_ids": [
+      34,
+      187,
+      693,
+      783,
+      825,
+      969,
+      1078,
+      1096,
+      1125,
+      1255,
+      1267,
+      1279,
+      1291,
+      1497,
+      1583,
+      1602,
+      1617,
+      1645,
+      1664,
+      1676
+     ],
+     "wrong_ids": [
+      34,
+      783,
+      969,
+      1125,
+      1583,
+      1645
+     ],
+     "wrong_detail": "34: db/builder.cc:45 `builder->FileSize()` (TableBuilder) bound to RecoveryTest::FileSize in db/recovery_test.cc:133. 969: `env_->RemoveFile(name)` bound to VersionEdit::RemoveFile(int, uint64_t). 1125: `parsed.DecodeFrom(encoded)` on a VersionEdit bound to InternalKey::DecodeFrom. 1583: `cache_->Release(handle)` bound to ScopedHandle::Release in util/env_windows.cc. 783 and 1645 are overrides in test classes the receiver never holds (wrong only under the strict standard)."
+    },
+    "low": {
+     "population": 111,
+     "sampled": 20,
+     "correct": 15,
+     "wrong": 5,
+     "unverifiable": 0,
+     "precision": 0.75,
+     "lenient_correct": 16,
+     "lenient_precision": 0.8,
+     "edge_ids": [
+      9,
+      132,
+      139,
+      168,
+      212,
+      430,
+      469,
+      560,
+      638,
+      659,
+      684,
+      743,
+      749,
+      760,
+      806,
+      966,
+      1124,
+      1329,
+      1377,
+      1413
+     ],
+     "wrong_ids": [
+      9,
+      430,
+      469,
+      560,
+      1377
+     ],
+     "wrong_detail": "430, 469, 560: `RandomString(&rnd, n)` in db/db_test.cc calls the file's own `static std::string RandomString(Random*, int)` at line 29, which was not extracted, so the call is bound to the three-argument test::RandomString in util/testutil.cc. 1377: `builder.FileSize()` bound to RecoveryTest::FileSize. 9: `g_env->NowMicros()` bound to EnvWrapper::NowMicros (strict only)."
+    },
+    "overall_sample": {
+     "sampled": 60,
+     "correct_strict": 46,
+     "wrong_strict": 14,
+     "correct_lenient": 52,
+     "wrong_lenient": 8
+    },
+    "bound_to_header_declaration": {
+     "function_prototypes": 0,
+     "forward_declaration_of_a_struct_for_a_constructor_call": 4,
+     "ids": [
+      187,
+      132,
+      139,
+      638
+     ]
+    }
+   },
+   "recall": {
+    "files": [
+     "db/filename.cc",
+     "helpers/memenv/memenv.cc",
+     "table/table_builder.cc",
+     "util/hash.cc",
+     "table/format.cc"
+    ],
+    "standard": "call expressions to functions, methods and constructors defined in leveldb (std::, libc, assert, `new T(...)`, variable declarations and operators excluded); 10 evenly spaced sites per file (util/hash.cc has one). Status taken from symbol_references; a possible override counts as correct.",
+    "call_sites": 41,
+    "bound_correct": 9,
+    "bound_wrong": 1,
+    "ambiguous": 4,
+    "unbound": 27,
+    "recall": 0.22,
+    "per_file": [
+     {
+      "file": "db/filename.cc",
+      "call_sites": 10,
+      "bound_correct": 2,
+      "bound_wrong": 0,
+      "ambiguous": 2,
+      "unbound": 6
+     },
+     {
+      "file": "helpers/memenv/memenv.cc",
+      "call_sites": 10,
+      "bound_correct": 1,
+      "bound_wrong": 0,
+      "ambiguous": 1,
+      "unbound": 8
+     },
+     {
+      "file": "table/table_builder.cc",
+      "call_sites": 10,
+      "bound_correct": 2,
+      "bound_wrong": 1,
+      "ambiguous": 1,
+      "unbound": 6
+     },
+     {
+      "file": "util/hash.cc",
+      "call_sites": 1,
+      "bound_correct": 1,
+      "bound_wrong": 0,
+      "ambiguous": 0,
+      "unbound": 0
+     },
+     {
+      "file": "table/format.cc",
+      "call_sites": 10,
+      "bound_correct": 3,
+      "bound_wrong": 0,
+      "ambiguous": 0,
+      "unbound": 7
+     }
+    ],
+    "all_sites_in_the_five_files": {
+     "call_sites": 203,
+     "bound_correct": 45,
+     "bound_wrong": 7,
+     "ambiguous": 14,
+     "unbound": 137,
+     "recall": 0.222
+    },
+    "why_unbound": "qualified calls (`Status::OK()`, `crc32c::Value`, `port::Snappy_Compress`) are not recorded at all; Slice/Status/BlockHandle members live in headers parsed as C and have no symbol; out-of-line methods (BlockHandle::EncodeTo, TableBuilder::WriteBlock) and `static std::string MakeFileName` have no symbol",
+    "wrong_examples": [
+     "table/format.cc:57 `metaindex_handle_.DecodeFrom(input)` (BlockHandle) bound to InternalKey::DecodeFrom in db/dbformat.h:144",
+     "table/table_builder.cc:121 `Flush()` (TableBuilder::Flush, same file) bound to StringSink::Flush in table/table_test.cc:98",
+     "table/table_builder.cc:148 `block->Finish()` (BlockBuilder) bound to Constructor::Finish in table/table_test.cc:152"
+    ],
+    "no_edge": "in table/table_builder.cc and table/format.cc the enclosing functions have no symbol, so even the correctly resolved references produce no edge and are invisible to find_callers"
+   },
+   "weak_spots": [
+    {
+     "case": "C++ overloads",
+     "example": "db/db_test.cc: DBTest::Put(k, v) at :348, ModelDB::Put(options, k, v) at :2117, Handler::Put at :2152",
+     "outcome": "all 145 `Put(...)` calls in the file are left ambiguous; arity is not recorded for either side (param_count and arg_count are 0 everywhere). When only one overload has a symbol the call is bound to it regardless of arity: the 2-argument `RandomString(&rnd, n)` is bound to the 3-parameter test::RandomString."
+    },
+    {
+     "case": "virtual methods called through a base pointer",
+     "example": "db/db_test.cc:373 `iter->Next()` where iter is an Iterator* returned by DB::NewIterator",
+     "outcome": "bound at high confidence (`defined in the same file`) to ModelDB::ModelIter::Next, the only override defined in that file; the base declaration Iterator::Next and the real target DBIter::Next have no symbols. One override is picked, not the set."
+    },
+    {
+     "case": "methods defined out of line (Class::method)",
+     "example": "table/table_builder.cc:278 `uint64_t TableBuilder::FileSize() const`",
+     "outcome": "not extracted (3 of 245 in non-test files have a same-named symbol). `builder->FileSize()` in db/builder.cc:45 is bound to RecoveryTest::FileSize(const std::string&) in db/recovery_test.cc."
+    },
+    {
+     "case": "templates",
+     "example": "db/skiplist.h `template <typename Key, class Comparator> class SkipList` and `void SkipList<Key, Comparator>::Insert(const Key& key)`",
+     "outcome": "neither the class nor any out-of-line template member is extracted. `table_.Insert(buf)` in db/memtable.cc:99 is ambiguous; `table_.Insert(e)` in util/cache.cc:290 (HandleTable::Insert) is resolved to CacheTest::Insert in util/cache_test.cc:52."
+    },
+    {
+     "case": "namespaces",
+     "example": "table/format.cc:94 `crc32c::Value(data, n + 1)`; db/db_test.cc:31 `test::RandomString(rnd, len, &r)`",
+     "outcome": "namespaces are not symbols and qualified calls are not recorded as references (0 of about 730). Unqualified names are matched across namespaces and classes: three unrelated `Value` definitions are candidates for one name."
+    },
+    {
+     "case": "static functions with the same name in different files",
+     "example": "`static bool Between(...)` in db/db_test.cc:1216 and table/table_test.cc:749",
+     "outcome": "calls bind to the definition in the same file (edge 1463, correct). `static std::string` functions are not extracted at all (MakeFileName, RandomString, RandomKey)."
+    },
+    {
+     "case": "function pointers and function-pointer tables",
+     "example": "include/leveldb/iterator.h:92 `(*function)(arg1, arg2);` in CleanupNode::Run; db/c.cc comparator callbacks `(*compare_)(state_, ...)`",
+     "outcome": "not bound to anything; not observed to be mis-bound in this project."
+    },
+    {
+     "case": "function-like macros",
+     "example": "`void IncrementBy(int count) LOCKS_EXCLUDED(mu_) {` in db/db_test.cc:47; `TEST_F(DBTest, Empty) { ... }`",
+     "outcome": "the annotation macro replaces the method name (function LOCKS_EXCLUDED, function EXCLUSIVE_LOCKS_REQUIRED); classes containing GUARDED_BY members lose their class symbol; every test body is named TEST_F."
+    }
+   ],
+   "tool_answers": [
+    {
+     "command": "repocortex tool call find_callers name=EscapeString",
+     "rows": 16,
+     "right": 16,
+     "missing": "2 of 18 call lines found by grep: db/dbformat.cc:28 and :39, inside ParsedInternalKey::DebugString and InternalKey::DebugString, which have no symbols. All 16 rows are labelled low confidence although all are correct; the caller of table/filter_block_test.cc:47 is named TEST_F."
+    },
+    {
+     "command": "repocortex tool call analyze_impact symbol=EscapeString",
+     "rows": 0,
+     "right": 0,
+     "missing": "Reports `0 direct, 0 indirect` by default because low edges are excluded, with a note that 17 symbols were held back and that low edges are `measured at 0.0-2.8% precision (docs/accuracy.md)`. There are 8 real direct-caller functions. With min_confidence=low it returns 6 direct (all right; the two DebugString methods missing) and 11 indirect (the 4 checked are right)."
+    },
+    {
+     "command": "repocortex tool call find_implementations name=Iterator",
+     "rows": 0,
+     "right": 0,
+     "missing": "all 9 subclasses (DBIter, MemTableIterator, MergingIterator, TwoLevelIterator, EmptyIterator, Block::Iter, Version::LevelFileNumIterator, ModelIter, KeyConvertingIterator). The name resolved to the typedef line table/two_level_iterator.cc:16, not to the class. name=Comparator resolved to an unrelated struct in db/skiplist_test.cc:23 and returned 0 of 7; name=Env returned `No symbol named \"Env\"` (8 subclasses exist). The index holds no EXTENDS edge for any C++ file."
+    }
+   ],
+   "notes": [
+    "Headers are the main loss: .h is mapped to the C grammar, so class bodies in headers are mostly unparsed.",
+    "The tool's own analyze_impact text cites 0.0-2.8% precision for low edges; this sample measured 75% strict for low edges in leveldb and 23% (3 of 13) in redis.",
+    "No file failed or timed out in leveldb.",
+    "The regex-based repository-wide figures are estimates, not hand-verified."
+   ]
+  }
+ ]
+}

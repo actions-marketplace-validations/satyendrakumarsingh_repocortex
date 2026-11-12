@@ -1,0 +1,558 @@
+{
+  "group": "G5",
+  "languages": [
+    {
+      "language": "odin",
+      "sources": [
+        "github.com/odin-lang/examples@5d24fd4: absolute_beginners/5_structs.odin (54 lines)",
+        "github.com/odin-lang/examples@5d24fd4: wgpu/glfw-triangle/os_glfw.odin (55)",
+        "github.com/odin-lang/examples@5d24fd4: opengl/learn_opengl/1_getting_started/5_transformations/shader.odin (72)",
+        "github.com/odin-lang/examples@5d24fd4: math/rand/markov/simple_markov.odin (70)",
+        "github.com/odin-lang/examples@5d24fd4: thread/basics/thread_basics.odin (61)",
+        "Linguist Odin/sample.odin (1940 lines) was too large to hand-count; indexed only as a cross-check"
+      ],
+      "detected_language_ok": true,
+      "files_checked": 5,
+      "parse": {
+        "ok": 5,
+        "partial": 0,
+        "failed": 0,
+        "errors": []
+      },
+      "convention": "Top-level `name :: proc/struct/enum/union`, proc groups (`name :: proc {a, b}`), and top-level `name :=` variables. Not counted: enum members, struct fields, constants declared inside a proc body, `package` lines.",
+      "expected": 32,
+      "extracted": 6,
+      "correct": 6,
+      "wrong": 0,
+      "missed": 31,
+      "wrong_kind": 5,
+      "precision": 1.0,
+      "recall": 0.031,
+      "wrong_examples": [],
+      "missed_examples": [
+        "5_structs.odin:9 `Cat :: struct {`",
+        "5_structs.odin:18 `structs :: proc() -> Cat {`",
+        "shader.odin:6 `shader_set_bool :: proc(id: u32, name: cstring, value: bool) {`",
+        "shader.odin:27 `shader_set_vec2 :: proc {` (proc group)",
+        "simple_markov.odin:11 `Transition_Matrix := [State][State]f64{` and :19 `main :: proc() {`"
+      ],
+      "pattern": "Only `enum` declarations are extracted (the enum name plus every member, all tagged kind `class` and all given the enum's own start line). Procedures (24 of 24 missed), structs (3 of 3), proc groups (3 of 3) and the top-level variable are never extracted. Same result on Linguist's 1,940-line sample.odin: 41 symbols, all enums and enum members, against roughly 116 proc/struct/enum/union declarations found by grep.",
+      "verdict": "broken",
+      "correct_in_convention": 1,
+      "correct_outside_convention": 5,
+      "outside_convention_note": "5 enum members (Banana, Apple, Pear, Lime, Blueberry at simple_markov.odin:9) are real declarations, counted correct for precision but not in `expected`; all 5 carry kind `class`.",
+      "wrong_kind_in_convention": 0
+    },
+    {
+      "language": "powershell",
+      "sources": [
+        "linguist/samples/PowerShell/ZLocation.psm1 (90 lines)",
+        "linguist/samples/PowerShell/history.ps1 (64)",
+        "github.com/dahlbyk/posh-git@bbc5ac3: src/AnsiUtils.ps1 (99)",
+        "github.com/dahlbyk/posh-git@bbc5ac3: src/ConsoleMode.ps1 (115)",
+        "github.com/dahlbyk/posh-git@bbc5ac3: src/PoshGitTypes.ps1 (305)"
+      ],
+      "detected_language_ok": true,
+      "files_checked": 5,
+      "parse": {
+        "ok": 5,
+        "partial": 0,
+        "failed": 0,
+        "errors": []
+      },
+      "convention": "`function`/`filter` definitions (including ones nested in an `if`), `class`, `enum`, and class methods and constructors (each overload is its own definition). Not counted: enum members, class properties, script-level `$variables`, aliases made by `Set-Alias` (a command call).",
+      "expected": 38,
+      "extracted": 58,
+      "correct": 58,
+      "wrong": 0,
+      "missed": 0,
+      "wrong_kind": 20,
+      "precision": 1.0,
+      "recall": 1.0,
+      "wrong_examples": [],
+      "missed_examples": [],
+      "pattern": "Functions, classes, enums, methods and constructor overloads are all found at the right line. Every enum member is also emitted, but with kind `function` (20 of them, e.g. ConsoleMode.ps1:54 `ENABLE_PROCESSED_INPUT = 0x0001` -> function). One name keeps its scope prefix: ZLocation.psm1:59 `function global:TabExpansion` is stored as `global:TabExpansion`, so an exact lookup for `TabExpansion` would miss it (exact-name precision 57/58, recall 37/38). Not extracted and not in the convention: class properties, script variables, and `Set-Alias -Name z` (ZLocation.psm1:90).",
+      "verdict": "good",
+      "correct_in_convention": 38,
+      "correct_outside_convention": 20,
+      "outside_convention_note": "20 enum members are real declarations (counted correct, not in `expected`) but all have kind `function`.",
+      "wrong_kind_in_convention": 0,
+      "name_not_exact": 1
+    },
+    {
+      "language": "prisma",
+      "sources": [
+        "linguist/samples/Prisma/blog-minimal-schema.prisma (24 lines)",
+        "linguist/samples/Prisma/blog-schema-advanced.prisma (40)",
+        "linguist/samples/Prisma/mcu-schema.prisma (31)",
+        "linguist/samples/Prisma/now-example-schema.prisma (120)",
+        "linguist/samples/Prisma/schema.prisma (32)"
+      ],
+      "detected_language_ok": true,
+      "files_checked": 5,
+      "parse": {
+        "ok": 5,
+        "partial": 0,
+        "failed": 0,
+        "errors": []
+      },
+      "convention": "`model` and `enum` blocks (also `type`/`view` blocks, none present). Not counted: fields, enum values, `datasource` and `generator` config blocks. Prisma is a schema language, so a model is the unit a developer looks up.",
+      "expected": 20,
+      "extracted": 170,
+      "correct": 49,
+      "wrong": 121,
+      "missed": 9,
+      "wrong_kind": 0,
+      "precision": 0.288,
+      "recall": 0.55,
+      "wrong_examples": [
+        "blog-minimal-schema.prisma:17 column `boolean`, `string`, `unique` on model Post: type names and the `@unique` attribute recorded as columns (28 such tokens in total: string, boolean, int, unique, id, user)",
+        "now-example-schema.prisma:10 table `core_store` for `model CoreStore {` (name taken from `@@map(\"core_store\")` at line 18; the identifier CoreStore is not in the index)",
+        "now-example-schema.prisma:37 table `posts` for `model Post {`",
+        "now-example-schema.prisma:86 table `users-permissions_permission` for `model UsersPermissionsPermission {`",
+        "blog-schema-advanced.prisma:22 column `title` reported at line 22 (the model line); the field is at line 27. 84 real fields are located more than 2 lines from where they are declared because every column carries its model's line"
+      ],
+      "missed_examples": [
+        "now-example-schema.prisma:10 `model CoreStore {` (only `core_store` is indexed)",
+        "now-example-schema.prisma:21 `model Migration {` (indexed as `_migration`)",
+        "now-example-schema.prisma:48 `model StrapiAdministrator {`",
+        "now-example-schema.prisma:59 `model UploadFile {`",
+        "now-example-schema.prisma:107 `model UsersPermissionsUser {`"
+      ],
+      "pattern": "Prisma symbols do not come from the tree-sitter grammar (which contributes only `enum Role` as a class) but from a separate ORM scanner that models each `model` as a database table: names are lower-cased (`Author` -> `author`), replaced by the `@@map` name when there is one (9 of 19 models, so the model identifier is lost), and every field is a `column` stamped with the model's line rather than its own. Its field rule (identifier followed by identifier) also turns type names and attributes into columns whenever the next line starts with an identifier: 28 of 150 columns are spurious. Lenient reading (ignore column line numbers and case): 133/170 = 0.782 precision; also accepting `@@map` names as the model: 142/170 = 0.835 precision and 20/20 recall.",
+      "verdict": "poor",
+      "correct_in_convention": 11,
+      "correct_outside_convention": 38,
+      "outside_convention_note": "150 column symbols: 122 are real field names (38 within 2 lines of the reported line, 84 further away), 28 are not fields at all. No real field is missing.",
+      "wrong_kind_in_convention": 0,
+      "name_not_exact": 16,
+      "precision_lenient": 0.782,
+      "recall_lenient": 1.0
+    },
+    {
+      "language": "proto",
+      "sources": [
+        "linguist/samples/Protocol Buffer/addressbook.proto (27 lines)",
+        "github.com/grpc/grpc-proto@2768528: grpc/health/v1/health.proto (92)",
+        "github.com/grpc/grpc-proto@2768528: grpc/examples/helloworld.proto (37)",
+        "github.com/grpc/grpc-proto@2768528: grpc/reflection/v1/reflection.proto (147)",
+        "github.com/grpc/grpc-proto@2768528: grpc/testing/test.proto (116)"
+      ],
+      "detected_language_ok": true,
+      "files_checked": 5,
+      "parse": {
+        "ok": 5,
+        "partial": 0,
+        "failed": 0,
+        "errors": []
+      },
+      "convention": "`message` (including nested), `enum`, `service` and `rpc` declarations. Not counted: fields, `oneof` groups, enum values, `package` lines.",
+      "expected": 54,
+      "extracted": 61,
+      "correct": 61,
+      "wrong": 0,
+      "missed": 0,
+      "wrong_kind": 34,
+      "precision": 1.0,
+      "recall": 1.0,
+      "wrong_examples": [],
+      "missed_examples": [],
+      "pattern": "Every message, enum, service and rpc is found at the right line, including nested ones; the 7 extra symbols are enum values. The kind is wrong for most of them: all 17 messages and all 10 services are tagged `function` (only enums get `class`), and the 7 enum values are also `function`. Only the 25 rpcs and 2 enums have a sensible kind, so filtering by kind (for example 'list classes') returns almost nothing useful.",
+      "verdict": "usable",
+      "correct_in_convention": 54,
+      "correct_outside_convention": 7,
+      "outside_convention_note": "7 enum values (MOBILE, HOME, WORK, UNKNOWN, SERVING, NOT_SERVING, SERVICE_UNKNOWN) are real declarations, counted correct but not in `expected`; all tagged `function`.",
+      "wrong_kind_in_convention": 27,
+      "wrong_kind_examples": [
+        "addressbook.proto:6 `message Person {` -> function",
+        "health.proto:53 `service Health {` -> function",
+        "addressbook.proto:12 `MOBILE = 0;` -> function"
+      ]
+    },
+    {
+      "language": "puppet",
+      "sources": [
+        "linguist/samples/Puppet/apacheinit.pp (378 lines)",
+        "linguist/samples/Puppet/expiringhost.pp (26)",
+        "linguist/samples/Puppet/stages-example.pp (26)",
+        "github.com/puppetlabs/puppetlabs-ntp@af2d69f: manifests/config.pp (162)",
+        "github.com/puppetlabs/puppetlabs-ntp@af2d69f: manifests/install.pp (29)"
+      ],
+      "detected_language_ok": false,
+      "files_checked": 5,
+      "parse": {
+        "ok": 0,
+        "partial": 0,
+        "failed": 0,
+        "skipped": 5,
+        "errors": [
+          "no tags query available for \"pascal\" (all 5 .pp files, parse_status = skipped)"
+        ]
+      },
+      "convention": "`class NAME`, `define NAME` (defined types), `node NAME`, Puppet-language `function`, and `type X = ...` aliases. Not counted: resource declarations (including `class { 'x': }`), variables, parameters.",
+      "expected": 7,
+      "extracted": 0,
+      "correct": 0,
+      "wrong": 0,
+      "missed": 7,
+      "wrong_kind": 0,
+      "precision": null,
+      "recall": 0.0,
+      "wrong_examples": [],
+      "missed_examples": [
+        "apacheinit.pp:15 `class apache (`",
+        "expiringhost.pp:1 `define example::expiringhost($ip, $timestamp) {`",
+        "ntp_config.pp:6 `class ntp::config {`",
+        "stages-example.pp:1 `class foo {`",
+        "stages-example.pp:14 `node default {`"
+      ],
+      "pattern": "As shipped, Puppet is unreachable: `.pp` is claimed by both the pascal and puppet grammars, pascal wins, and pascal has no definition query, so every manifest is skipped with zero symbols. The only route to the puppet grammar is a file literally named `Modulefile`. Forcing that (same 5 files, one per directory) gives 8 symbols: 3 correct (`apache`, `foo`, `bar`), 5 wrong, 4 missed. The wrong ones are resource-style class declarations stored with the whole statement text as the name. Namespaced names (`class ntp::install`, `define example::expiringhost`) and `node default` make the parse `partial` and yield nothing; a minimal test confirmed `define`, `node`, `function` and `type` aliases are never extracted and any `a::b` class name is lost.",
+      "verdict": "broken",
+      "detected_as": "pascal",
+      "grammar_forced": {
+        "how": "each file copied as <dir>/Modulefile, the only filename the tool maps to puppet",
+        "parse": {
+          "ok": 2,
+          "partial": 3,
+          "failed": 0,
+          "errors": [
+            "no parse_error text on the partial files"
+          ]
+        },
+        "expected": 7,
+        "extracted": 8,
+        "correct": 3,
+        "wrong": 5,
+        "missed": 4,
+        "wrong_kind": 0,
+        "precision": 0.375,
+        "recall": 0.429,
+        "wrong_examples": [
+          "apacheinit.pp:130 name is the entire text `class { '::apache::service':\\n    service_name   => $service_name, ... }` (a resource declaration, 6 lines long)",
+          "apacheinit.pp:323 `class { '::apache::default_mods': all => false, mods => $default_mods, }`",
+          "apacheinit.pp:332 `class { '::apache::default_confd_files': all => $default_confd_files }`",
+          "apacheinit.pp:336 `class { \"::apache::mod::${mpm_module}\": }`",
+          "stages-example.pp:20 `class { \"foo\": stage => \"one\"; \"bar\": stage => \"two\"; }`"
+        ],
+        "missed_examples": [
+          "expiringhost.pp:1 `define example::expiringhost($ip, $timestamp) {` (file parses partial)",
+          "ntp_config.pp:6 `class ntp::config {` (file parses partial)",
+          "ntp_install.pp:6 `class ntp::install {` (file parses partial)",
+          "stages-example.pp:14 `node default {`"
+        ]
+      }
+    },
+    {
+      "language": "r",
+      "sources": [
+        "linguist/samples/R/2.R (183 lines)",
+        "linguist/samples/R/import.r (201)",
+        "linguist/samples/R/df.residual.r (29)",
+        "github.com/r-lib/withr@f8132fa: R/env.R (81)",
+        "github.com/r-lib/withr@f8132fa: R/with.R (78)"
+      ],
+      "detected_language_ok": true,
+      "files_checked": 5,
+      "parse": {
+        "ok": 5,
+        "partial": 0,
+        "failed": 0,
+        "errors": []
+      },
+      "convention": "Top-level `name <- function(...)` and `name = function(...)` (including S3 methods such as `df.residual.lme`), plus top-level bindings built by a function factory in package code (`with_envvar <- with_(...)`). Not counted: functions assigned inside another function, plain data assignments in scripts (`font_size <- 8`).",
+      "expected": 21,
+      "extracted": 0,
+      "correct": 0,
+      "wrong": 0,
+      "missed": 21,
+      "wrong_kind": 0,
+      "precision": null,
+      "recall": 0.0,
+      "wrong_examples": [],
+      "missed_examples": [
+        "df.residual.r:2 `df.residual.mira <- function(object, ...) {`",
+        "2.R:9 `gtable_select <- function (x, ...)`",
+        "import.r:55 `import = function (module, attach, attach_operators = TRUE) {`",
+        "env.R:3 `get_envvar <- function(envs, action = \"replace\") {`",
+        "with.R:63 `.onLoad <- function(...) {`"
+      ],
+      "pattern": "No function assignment is ever extracted, with `<-` or with `=`: 21 of 21 missed, files parse `ok`. A 12-line probe of every assignment form produced only 3 symbols and all 3 were wrong: the parameter name of a brace-less function (`f4 <<- function(z) z` -> function `z`; `assign(\"f5\", function(a) a)` -> `a`; `f8 <- \\(x) x` -> `x`). `setClass`/`setGeneric`/`setMethod` are not extracted either. Indexing all of Linguist's R folder again gave 0 symbols from 8 parsed files. Note `.Rd` documentation files are indexed as R source.",
+      "verdict": "broken"
+    },
+    {
+      "language": "rescript",
+      "sources": [
+        "linguist/samples/ReScript/RedBlackTree.resi (115 lines)",
+        "github.com/rescript-lang/rescript-core@2410129: src/Core__Null.res (64)",
+        "github.com/rescript-lang/rescript-core@2410129: src/Core__Console.res (67)",
+        "github.com/rescript-lang/rescript-core@2410129: test/Test.res (52)",
+        "github.com/rescript-lang/rescript-core@2410129: src/Core__Type.resi (77)"
+      ],
+      "detected_language_ok": true,
+      "files_checked": 5,
+      "parse": {
+        "ok": 2,
+        "partial": 3,
+        "failed": 0,
+        "errors": [
+          "Core__Console.res, Core__Type.resi and RedBlackTree.resi are `partial` with an empty parse_error"
+        ]
+      },
+      "convention": "Top-level and module-level `let` bindings (values and functions; signatures in .resi), `type`, `module`, `external` and `exception` declarations. Not counted: `let` inside a function body, variant constructors, record fields, code inside doc comments.",
+      "expected": 130,
+      "extracted": 0,
+      "correct": 0,
+      "wrong": 0,
+      "missed": 130,
+      "wrong_kind": 0,
+      "precision": null,
+      "recall": 0.0,
+      "wrong_examples": [],
+      "missed_examples": [
+        "Core__Null.res:20 `let equal = (a, b, eq) => Core__Option.equal(a->toOption, b->toOption, eq)`",
+        "Core__Null.res:2 `type t<'a> = Js.Null.t<'a> =`",
+        "Core__Console.res:45 `@val external log: 'a => unit = \"console.log\"`",
+        "Core__Type.resi:31 `module Classify: {`",
+        "RedBlackTree.resi:19 `let createNode: (~color: nodeColor, ~value: 'a, ~height: float) => node<'a>`"
+      ],
+      "pattern": "Nothing is extracted from ReScript at all: 0 symbols from 130 definitions, including the two files that parse `ok`. A probe file with one of each form (`let`, arrow function, `type`, variant type, `module`, `external`, `exception`) also gave 0. The definition query that exists for this grammar matches none of its declaration forms. Three of five real files are additionally only partially parsed, with no error text.",
+      "verdict": "broken"
+    },
+    {
+      "language": "scheme",
+      "sources": [
+        "linguist/samples/Scheme/asteroids.sps (435 lines)",
+        "linguist/samples/Scheme/common.scm (88)",
+        "linguist/samples/Scheme/lambdastar.sls (45)",
+        "linguist/samples/Scheme/r7rs.scm (36)",
+        "linguist/samples/Scheme/basic.sld (7)"
+      ],
+      "detected_language_ok": true,
+      "files_checked": 5,
+      "parse": {
+        "ok": 5,
+        "partial": 0,
+        "failed": 0,
+        "errors": []
+      },
+      "convention": "Top-level `(define name ...)` and `(define (name args) ...)`, including those in a library body; `define-syntax` macros; record types (`define-record-type` and this file's `define-record-type++`); `library` / `define-library` names. Not counted: `let`/`letrec` bindings, `set!`.",
+      "expected": 45,
+      "extracted": 34,
+      "correct": 34,
+      "wrong": 0,
+      "missed": 11,
+      "wrong_kind": 3,
+      "precision": 1.0,
+      "recall": 0.756,
+      "wrong_examples": [],
+      "missed_examples": [
+        "lambdastar.sls:5 `(define-syntax lambda*`",
+        "lambdastar.sls:19 `(define-syntax posary-h`",
+        "asteroids.sps:69 `(define-record-type++ spaceship`",
+        "lambdastar.sls:1 `(library (lambdastar)`",
+        "basic.sld:1 `(define-library (libs basic)`"
+      ],
+      "pattern": "Only the `define` form is recognised: all 34 plain defines are found at the right line with no false positives (`(define (f x) ...)` -> function, `(define x ...)` -> variable). Every other defining form is invisible: macros (`define-syntax`, 4 of 4 missed), record types (5 of 5; a probe with the standard `define-record-type` also gave nothing), `define-values`, and library names (2 of 2). A name bound to a lambda (`(define get-more (lambda ...))`) is tagged `variable`, not `function` (3 cases).",
+      "verdict": "usable",
+      "wrong_kind_in_convention": 3,
+      "wrong_kind_examples": [
+        "lambdastar.sls:43 `(define get-more (lambda (rec some) ...` -> variable",
+        "r7rs.scm:19 `(define get-output-string (lambda (o) ...` -> variable",
+        "r7rs.scm:5 `(define open-output-string (let ((n 0)) (lambda () ...` -> variable"
+      ]
+    },
+    {
+      "language": "scss",
+      "sources": [
+        "linguist/samples/SCSS/screen.scss (14 lines)",
+        "github.com/picocss/pico@a07563d: scss/helpers/_functions.scss (55)",
+        "github.com/picocss/pico@a07563d: scss/_settings.scss (143)",
+        "github.com/picocss/pico@a07563d: scss/colors/utilities/_utils.scss (60)",
+        "github.com/picocss/pico@a07563d: scss/forms/_input-range.scss (100)"
+      ],
+      "detected_language_ok": true,
+      "files_checked": 5,
+      "parse": {
+        "ok": 5,
+        "partial": 0,
+        "failed": 0,
+        "errors": []
+      },
+      "convention": "`@mixin`, `@function`, top-level `$variable:` declarations (first declaration only when a variable is immediately reassigned), `%placeholder` selectors. Not counted: ordinary CSS rules/selectors, variables local to a mixin or function, `@keyframes`.",
+      "expected": 28,
+      "extracted": 0,
+      "correct": 0,
+      "wrong": 0,
+      "missed": 28,
+      "wrong_kind": 0,
+      "precision": null,
+      "recall": 0.0,
+      "wrong_examples": [],
+      "missed_examples": [
+        "_input-range.scss:10 `@mixin slider-track {`",
+        "_functions.scss:13 `@function shadow-layer($elevation, $blur, $opacity, $color) {`",
+        "_utils.scss:24 `@function brightness($color) {`",
+        "_settings.scss:7 `$theme-color: \"azure\" !default;`",
+        "screen.scss:1 `$blue: #3bbfce;`"
+      ],
+      "pattern": "Nothing is extracted from SCSS: 0 of 8 functions, 0 of 2 mixins, 0 of 18 top-level variables, all files parse `ok`. A probe with `@mixin`, `@function`, `%placeholder`, a `$variable`, a class rule and `@keyframes` also gave 0. The definition query present for the grammar matches none of these forms.",
+      "verdict": "broken"
+    },
+    {
+      "language": "solidity",
+      "sources": [
+        "github.com/Uniswap/v2-core@6a9e7c9: contracts/UniswapV2Factory.sol (49 lines)",
+        "github.com/Uniswap/v2-core@6a9e7c9: contracts/interfaces/IUniswapV2Pair.sol (52)",
+        "github.com/Uniswap/v2-core@6a9e7c9: contracts/UniswapV2ERC20.sol (94)",
+        "github.com/Uniswap/v2-core@6a9e7c9: contracts/UniswapV2Pair.sol (201)",
+        "Linguist has no Solidity samples folder"
+      ],
+      "detected_language_ok": true,
+      "files_checked": 4,
+      "parse": {
+        "ok": 4,
+        "partial": 0,
+        "failed": 0,
+        "errors": []
+      },
+      "convention": "`contract`, `interface`, `library`, `function`, `constructor`, `modifier`, `event`, `struct`, `enum`, `error`. Not counted: state variables and contract-level constants (treated as fields, reported separately), parameters, locals.",
+      "expected": 70,
+      "extracted": 67,
+      "correct": 67,
+      "wrong": 0,
+      "missed": 3,
+      "wrong_kind": 13,
+      "precision": 1.0,
+      "recall": 0.957,
+      "wrong_examples": [],
+      "missed_examples": [
+        "UniswapV2ERC20.sol:24 `constructor() public {`",
+        "UniswapV2Factory.sol:15 `constructor(address _feeToSetter) public {`",
+        "UniswapV2Pair.sol:61 `constructor() public {`"
+      ],
+      "pattern": "Contracts, the interface, all 49 functions, the modifier and all 13 events are found at the right line with no false positives; only the 3 constructors are missing. Events are tagged `function` although the tool has an `event` kind (13 wrong kinds). Outside the convention: none of the 25 state variables and constants (`MINIMUM_LIQUIDITY`, `balanceOf`, `getPair`, ...) are extracted; if those are counted, recall falls to 67/95 = 0.705. A probe showed `struct`, `enum` and `library` are extracted, while custom `error`, `type X is uint`, file-level constants, `receive` and `fallback` are not.",
+      "verdict": "good",
+      "wrong_kind_in_convention": 13,
+      "wrong_kind_examples": [
+        "IUniswapV2Pair.sol:4 `event Approval(address indexed owner, ...)` -> function",
+        "UniswapV2Factory.sol:13 `event PairCreated(...)` -> function"
+      ],
+      "recall_if_state_variables_counted": 0.705
+    },
+    {
+      "language": "sql",
+      "sources": [
+        "linguist/samples/SQL/db.sql (225 lines, MySQL dump)",
+        "linguist/samples/SQL/create_stuff.sql (21, Oracle)",
+        "linguist/samples/SQL/videodb.ddl (85, CQL)",
+        "linguist/samples/TSQL/storedprocedure.sql (23, T-SQL)",
+        "linguist/samples/PLpgSQL/procedures.sql (31, PL/pgSQL; copied as pg_procedures.sql)"
+      ],
+      "detected_language_ok": true,
+      "files_checked": 5,
+      "parse": {
+        "ok": 5,
+        "partial": 0,
+        "failed": 0,
+        "errors": []
+      },
+      "convention": "Objects created by DDL: `CREATE TABLE / VIEW / FUNCTION / PROCEDURE / INDEX / TRIGGER / TYPE / SEQUENCE / SCHEMA` (a CQL `KEYSPACE` counted as a schema). Not counted: columns, `CREATE USER`, `GRANT`, `DROP`, `INSERT`/`SELECT` statements.",
+      "expected": 23,
+      "extracted": 24,
+      "correct": 17,
+      "wrong": 7,
+      "missed": 8,
+      "wrong_kind": 11,
+      "precision": 0.708,
+      "recall": 0.652,
+      "wrong_examples": [
+        "create_stuff.sql:17 class `TO` from `GRANT CREATE TYPE TO username;` (a GRANT read as a CREATE TYPE named TO)",
+        "create_stuff.sql:2 `CREATE TABLE x AS SELECT * FROM DUAL;` emitted twice, as class `x` and as table `x` (same for `y` at line 4)",
+        "db.sql:2 table `articles`: second copy of the table created at line 5, placed on the comment line 3 lines above it",
+        "db.sql:26 table `challenges`: second copy of the table created at line 32, placed 6 lines above it",
+        "create_stuff.sql:4 columns `col3`, `col4` reported at line 4; declared at lines 7 and 8"
+      ],
+      "missed_examples": [
+        "storedprocedure.sql:1 `CREATE PROCEDURE [dbo].[ins_SomeObject]` (T-SQL; file yields nothing)",
+        "db.sql:92 `CREATE TABLE IF NOT EXISTS `challenge_attempt_count` (`",
+        "db.sql:107 `CREATE TABLE IF NOT EXISTS `classes` (`",
+        "db.sql:189 `CREATE TABLE IF NOT EXISTS `users` (`",
+        "videodb.ddl:1 `CREATE KEYSPACE videodb WITH REPLICATION = ...`"
+      ],
+      "pattern": "Two extractors run over SQL and are not reconciled. The grammar tags `CREATE TABLE`, `CREATE VIEW` and `CREATE TYPE` as `class` and functions, triggers, indexes and sequences as `function`; a separate database scanner emits `table` and `column` symbols for the same statements, so a table often appears twice (in the full Linguist SQL set: 66 class + 52 table + 209 column + 174 function = the 501 from the first pass). Columns are real column names but carry the table's line. Plain SELECT/INSERT statements are not counted as definitions, but they derail extraction: in db.sql the 6 tables after line 77 (of 9) are lost in the full file, although the 4 of them I re-indexed in isolation were each found. MySQL back-quoted names keep their backticks (`\\`articles\\``). T-SQL `[dbo].[name]` procedures and a `CREATE PROCEDURE ... BEGIN ... END` probe yield nothing. Seen outside the scored files: `DROP TABLE x;` recorded as table `x` (Linguist SQL/drop_stuff.sql:6-7), and `CREATE INDEX i ON users (name)` recording `users` as a table definition.",
+      "verdict": "poor",
+      "correct_in_convention": 15,
+      "correct_outside_convention": 2,
+      "outside_convention_note": "4 column symbols (col1..col4 of table y): 2 within 2 lines of their declaration (counted correct), 2 further away (counted wrong).",
+      "wrong_kind_in_convention": 11,
+      "name_not_exact": 3,
+      "wrong_kind_examples": [
+        "videodb.ddl:7 `CREATE TABLE users (` -> class (the tool has a `table` kind and uses it elsewhere)",
+        "db.sql:5 `CREATE TABLE IF NOT EXISTS `articles` (` -> class"
+      ],
+      "first_pass_breakdown_501_symbols": {
+        "column": 209,
+        "function": 174,
+        "class": 66,
+        "table": 52
+      },
+      "detection_notes": "Recognised as sql: .sql .ddl .prc .tab .udf .viw .mysql. Not recognised (skipped, no grammar): .pkb .pks .pck .plsql .pgsql .db2. SQL/hostcache_set_state.inc is detected as pascal and skipped."
+    },
+    {
+      "language": "squirrel",
+      "sources": [
+        "linguist/samples/Squirrel/Squirrel.nut (56 lines)",
+        "github.com/albertodemichelis/squirrel@f9267f2: samples/class.nut (49)",
+        "github.com/albertodemichelis/squirrel@f9267f2: samples/list.nut (40)",
+        "github.com/albertodemichelis/squirrel@f9267f2: samples/metamethods.nut (115)",
+        "github.com/albertodemichelis/squirrel@f9267f2: samples/methcall.nut (68)"
+      ],
+      "detected_language_ok": true,
+      "files_checked": 5,
+      "parse": {
+        "ok": 5,
+        "partial": 0,
+        "failed": 0,
+        "errors": []
+      },
+      "convention": "`class` declarations, named `function`s (free, `Class::method`, in a class body, and as members of a table literal), in-class `constructor`s, global slots created with `<-`, `enum` and `const`. Not counted: `local` variables, class member fields.",
+      "expected": 33,
+      "extracted": 39,
+      "correct": 28,
+      "wrong": 11,
+      "missed": 5,
+      "wrong_kind": 0,
+      "precision": 0.718,
+      "recall": 0.848,
+      "wrong_examples": [
+        "methcall.nut:8 function `Toggle` from `function Toggle::constructor(startstate) {` (the class qualifier recorded as a second function; 6 such cases)",
+        "Squirrel.nut:35 function `Entity` from `function Entity::MoveTo(newx,newy,newz)`",
+        "Squirrel.nut:42 class `Entity` from `class Player extends Entity {` (the base class recorded as a class defined here; 3 such cases)",
+        "class.nut:19 class `BaseVector` from `class Vector3 extends BaseVector {`",
+        "class.nut:42 classes `FakeNamespace` and `Utils` from `class FakeNamespace.Utils.SuperClass {` (path components recorded as classes)"
+      ],
+      "missed_examples": [
+        "Squirrel.nut:22 `constructor(etype,entityname)` inside class Entity",
+        "Squirrel.nut:43 `constructor(entityname)` inside class Player",
+        "class.nut:4 `constructor(...)` inside class BaseVector",
+        "class.nut:43 `constructor()` inside class FakeNamespace.Utils.SuperClass",
+        "class.nut:38 `FakeNamespace <- {` (global slot)"
+      ],
+      "pattern": "Classes and named functions are all found, but every identifier inside a declaration header is also emitted as a definition: the class qualifier in `function Class::method` (6), the base class after `extends` (3) and the leading components of a dotted class name (2). That is 11 false definitions out of 39, each a duplicate name pointing at the wrong place. In-class `constructor` blocks are never extracted (4 of 4), nor are `<-` global slots; a probe showed `const` is also missed and enum members are tagged `class`.",
+      "verdict": "usable",
+      "wrong_kind_in_convention": 0
+    }
+  ],
+  "notes": [
+    "Binary under test: scratchpad/langs/repocortex; each language indexed in its own directory under scratchpad/langs/work/G5/t/<language> with `repocortex init && repocortex index`; symbols read from the `symbols` table joined to `files`. Probe files for individual syntax forms are under work/G5/x/. Nothing in the repository was modified.",
+    "Scoring rules used for every language. `expected` is the hand-listed set under the stated convention. A symbol is `correct` if it names a real declaration within 2 lines of the reported line; it is `wrong` if it is a reference, a duplicate of a definition already counted, a different identifier, or more than 2 lines from the declaration. correct + wrong = extracted. recall = (expected - missed) / expected.",
+    "Real declarations the convention does not list (enum members, columns) are counted `correct` for precision when located correctly but are NOT added to `expected`; `correct_in_convention` and `correct_outside_convention` separate the two. So `correct` can exceed `expected - missed`.",
+    "A name that differs from the source identifier only by case or by quoting/scope decoration kept from the source (`author` for `Author`, back-quoted `articles`, `global:TabExpansion`) is counted correct and tallied in `name_not_exact`. A different identifier (a Prisma `@@map` table name in place of the model name) is counted wrong and the definition missed.",
+    "`wrong_kind` counts correct symbols whose kind is not sensible given the tool's own kind vocabulary (class, interface, function, method, field, constant, variable, type_alias, table, column, event, ...). There is no enum or struct kind, so enum/struct/contract -> `class` is accepted; enum member -> `function` or `class`, message/service -> `function`, event -> `function` and table -> `class` are not. `wrong_kind_in_convention` restricts the count to in-convention symbols.",
+    "Verdict thresholds, fixed before scoring: good = precision >= 0.9 and recall >= 0.9 and at most 20% wrong kinds among in-convention symbols; usable = precision >= 0.7 and recall >= 0.7; poor = below that with recall >= 0.1; broken = recall < 0.1 or the language yields nothing as shipped.",
+    "Five of twelve languages are broken as shipped: odin (enums only), r, rescript and scss (zero symbols although a definition query exists and files parse), puppet (never reached: .pp is routed to pascal, which has no query).",
+    "Language detection: .pp -> pascal instead of puppet; .inc -> pascal for a SQL include; .Rd documentation is treated as R source; .pgsql/.pkb/.pks/.pck/.plsql/.db2 have no grammar mapping.",
+    "Nothing crashed, hung or was slow: every index run in this group finished in under 1.1 s wall time, including the 40-file Linguist SQL set (largest file 2,933 lines) and the 1,940-line Odin sample.",
+    "Sample sizes are small by design (4 to 5 files per language); the precision and recall figures describe these files, and the probes show which syntax forms are and are not covered."
+  ]
+}

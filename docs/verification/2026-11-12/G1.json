@@ -1,0 +1,669 @@
+{
+  "group": "G1",
+  "languages": [
+    {
+      "language": "angular",
+      "sources": [
+        "github.com/gothinkster/angular-realworld-example-app (depth-1 clone): src/app/core/auth/auth.component.html, src/app/core/layout/header.component.html, src/app/features/article/pages/article/article.component.html, src/app/features/article/pages/home/home.component.html",
+        "Linguist samples: no Angular folder"
+      ],
+      "detected_language_ok": false,
+      "detected_as": "html (skipped); other extensions: no grammar",
+      "files_checked": 4,
+      "parse": {
+        "ok": 0,
+        "partial": 0,
+        "failed": 0,
+        "skipped": 4,
+        "errors": [
+          "no tags query available for \"html\" (all 4 .component.html files)",
+          "no grammar for this file type (same content renamed to .angular and .ng)"
+        ]
+      },
+      "convention": "Angular templates: template reference variables (#ref) and @let declarations would be the only definitions; the 4 real templates contain none (only @for loop variables and one structural-directive local).",
+      "expected": 0,
+      "extracted": 0,
+      "correct": 0,
+      "wrong": 0,
+      "missed": 0,
+      "wrong_kind": 0,
+      "precision": null,
+      "recall": null,
+      "wrong_examples": [],
+      "missed_examples": [],
+      "pattern": "The angular grammar is registered with no file extension, filename or shebang, so no file can ever be routed to it: .component.html is detected as html (which has no tags query and is skipped), and .angular/.ng/.ng.html are not routed to it either. The grammar could not be exercised through the tool at all; precision and recall are undefined (0/0).",
+      "verdict": "broken",
+      "untestable": true
+    },
+    {
+      "language": "apex",
+      "sources": [
+        "linguist/samples/Apex/BooleanUtils.cls",
+        "linguist/samples/Apex/EmailUtils.cls",
+        "linguist/samples/Apex/GeoUtils.cls",
+        "linguist/samples/Apex/TwilioAPI.cls",
+        "linguist/samples/Apex/AccountTrigger.trigger"
+      ],
+      "detected_language_ok": true,
+      "files_checked": 5,
+      "parse": {
+        "ok": 5,
+        "partial": 0,
+        "failed": 0,
+        "errors": []
+      },
+      "convention": "Classes (including inner classes), methods, constructors, triggers, and class-level fields; locals and parameters not counted.",
+      "expected": 39,
+      "extracted": 36,
+      "correct": 36,
+      "wrong": 0,
+      "missed": 3,
+      "wrong_kind": 0,
+      "precision": 1.0,
+      "recall": 0.923,
+      "wrong_examples": [],
+      "missed_examples": [
+        {
+          "file": "AccountTrigger.trigger",
+          "line": 1,
+          "text": "trigger AccountTrigger on Account("
+        },
+        {
+          "file": "GeoUtils.cls",
+          "line": 21,
+          "text": "public static Map<String, String> geo_response = new Map<String, String>{...}"
+        },
+        {
+          "file": "TwilioAPI.cls",
+          "line": 49,
+          "text": "private static TwilioRestClient client;"
+        }
+      ],
+      "pattern": "Every class, inner class, method and constructor is extracted at the right line with no noise; triggers and class-level fields are never extracted. Constructor is labelled 'method' (acceptable). No interface/enum occurred in the Linguist samples, so those are untested.",
+      "verdict": "good"
+    },
+    {
+      "language": "arduino",
+      "sources": [
+        "linguist/samples/C++/hello.ino",
+        "linguist/samples/C++/octave_changer.ino",
+        "github.com/arduino/arduino-examples (depth-1 clone): examples/02.Digital/Debounce/Debounce.ino, examples/06.Sensors/Ping/Ping.ino, examples/07.Display/RowColumnScanning/RowColumnScanning.ino, examples/10.StarterKit_BasicKit/p12_KnockLock/p12_KnockLock.ino"
+      ],
+      "detected_language_ok": true,
+      "files_checked": 6,
+      "parse": {
+        "ok": 6,
+        "partial": 0,
+        "failed": 0,
+        "errors": []
+      },
+      "convention": "C/C++ rules: functions, classes/structs, #define macros, and file-scope (global) variable and constant declarations; locals not counted.",
+      "expected": 44,
+      "extracted": 17,
+      "correct": 17,
+      "wrong": 0,
+      "missed": 27,
+      "wrong_kind": 0,
+      "precision": 1.0,
+      "recall": 0.386,
+      "wrong_examples": [],
+      "missed_examples": [
+        {
+          "file": "Debounce.ino",
+          "line": 31,
+          "text": "const int buttonPin = 2;"
+        },
+        {
+          "file": "Debounce.ino",
+          "line": 35,
+          "text": "int ledState = HIGH;"
+        },
+        {
+          "file": "Ping.ino",
+          "line": 25,
+          "text": "const int pingPin = 7;"
+        },
+        {
+          "file": "RowColumnScanning.ino",
+          "line": 35,
+          "text": "const int row[8] = {"
+        },
+        {
+          "file": "p12_KnockLock.ino",
+          "line": 31,
+          "text": "Servo myServo;"
+        }
+      ],
+      "pattern": "All 17 functions are extracted correctly (functions-only recall 17/17 = 1.0); none of the 27 file-scope globals/constants (pin numbers, state variables), which make up most of a sketch's named declarations, is extracted. The samples contain no class, struct or #define, so those are untested.",
+      "verdict": "poor",
+      "functions_only": {
+        "expected": 17,
+        "extracted": 17,
+        "recall": 1.0
+      }
+    },
+    {
+      "language": "authzed",
+      "sources": [
+        "linguist/samples/SpiceDB Schema/oviva.zed",
+        "github.com/authzed/examples (depth-1 clone): tracing/schema.zed, federated-authorization/spicedb/schema.zed, agentic-rag-authorization/data/schema.zed, schemas/multiple-validation-files/schema.zed (copied under distinct names)"
+      ],
+      "detected_language_ok": true,
+      "files_checked": 5,
+      "parse": {
+        "ok": 0,
+        "partial": 5,
+        "failed": 0,
+        "errors": [
+          "parse_status=partial with empty parse_error on every file, including a one-line file containing only `definition user {}`"
+        ]
+      },
+      "convention": "`definition` and `caveat` blocks (object types), plus each `relation` and `permission` inside them. Counted by anchored grep: 36 definitions + 96 relations + 282 permissions, 0 caveats.",
+      "expected": 414,
+      "extracted": 0,
+      "correct": 0,
+      "wrong": 0,
+      "missed": 414,
+      "wrong_kind": 0,
+      "precision": null,
+      "recall": 0.0,
+      "wrong_examples": [],
+      "missed_examples": [
+        {
+          "file": "tracing_schema.zed",
+          "line": 1,
+          "text": "definition user {}"
+        },
+        {
+          "file": "tracing_schema.zed",
+          "line": 3,
+          "text": "definition document {"
+        },
+        {
+          "file": "tracing_schema.zed",
+          "line": 4,
+          "text": "relation writer: user"
+        },
+        {
+          "file": "tracing_schema.zed",
+          "line": 7,
+          "text": "permission edit = writer"
+        },
+        {
+          "file": "federated_schema.zed",
+          "line": 3,
+          "text": "definition keycloak_account {"
+        }
+      ],
+      "pattern": "Nothing is extracted from any schema. Every file, even the minimal `definition user {}`, comes back parse_status=partial with no error text, so the grammar itself does not parse valid input in this build, and the generic inferred query has no pattern for definition/relation/permission anyway.",
+      "verdict": "broken"
+    },
+    {
+      "language": "bash",
+      "sources": [
+        "linguist/samples/Shell/sbt (extensionless, #!/usr/bin/env bash; copied as sbt.sh after the original was skipped)",
+        "linguist/samples/Shell/filenames/mvnw",
+        "linguist/samples/Shell/filenames/.bashrc",
+        "linguist/samples/Shell/rvm.bash",
+        "linguist/samples/Shell/alacritty.pacscript (skipped by the tool, dropped)",
+        "github.com/rupa/z (depth-1 clone): z.sh"
+      ],
+      "detected_language_ok": false,
+      "detected_as": "extension/known-filename files -> bash (correct); extensionless shebang script and .pacscript -> no grammar, skipped",
+      "files_checked": 5,
+      "parse": {
+        "ok": 5,
+        "partial": 0,
+        "failed": 0,
+        "skipped": 2,
+        "errors": [
+          "sbt (no extension, bash shebang): skipped, 'no grammar for this file type'",
+          "alacritty.pacscript: skipped, 'no grammar for this file type'"
+        ]
+      },
+      "convention": "Function definitions in both forms (`name() {` and `function name {`), plus explicit `declare -r`/`readonly` constants. Aliases, plain assignments, exports and awk functions embedded in strings are not counted.",
+      "expected": 50,
+      "extracted": 41,
+      "correct": 41,
+      "wrong": 0,
+      "missed": 9,
+      "wrong_kind": 0,
+      "precision": 1.0,
+      "recall": 0.82,
+      "wrong_examples": [],
+      "missed_examples": [
+        {
+          "file": "z.sh",
+          "line": 250,
+          "text": "_z_zsh_tab_completion() {"
+        },
+        {
+          "file": "sbt.sh",
+          "line": 7,
+          "text": "declare -r sbt_release_version=0.11.3"
+        },
+        {
+          "file": "sbt.sh",
+          "line": 8,
+          "text": "declare -r sbt_snapshot_version=0.13.0-SNAPSHOT"
+        },
+        {
+          "file": "sbt.sh",
+          "line": 101,
+          "text": "declare -r default_jvm_opts=\"-Dfile.encoding=UTF8\""
+        },
+        {
+          "file": "sbt.sh",
+          "line": 105,
+          "text": "declare -r sbt_opts_file=\".sbtopts\""
+        }
+      ],
+      "pattern": "Functions are extracted almost perfectly (41 of 42, including nested functions and both definition styles; the one miss is a function nested in an if-block next to zsh-only syntax), with zero noise. Declared constants (8 `declare -r`) are never extracted, and neither are the 19 aliases in .bashrc (not counted). Bigger issue is detection: there is no shebang detection, so an extensionless `#!/usr/bin/env bash` script is skipped entirely unless its name is in the Linguist filename list (mvnw, .bashrc are).",
+      "verdict": "usable",
+      "functions_only": {
+        "expected": 42,
+        "extracted": 41,
+        "recall": 0.976
+      },
+      "not_counted": {
+        "aliases_in_.bashrc": 19,
+        "extracted": 0
+      }
+    },
+    {
+      "language": "bicep",
+      "sources": [
+        "linguist/samples/Bicep/101-container-registry.bicep",
+        "linguist/samples/Bicep/201-1vm-2nics-2subnets-1vnet.bicep",
+        "linguist/samples/Bicep/params.bicepparam",
+        "github.com/Azure-Samples/todo-nodejs-mongo (depth-1 clone): infra/main.bicep, infra/app/api-appservice-avm.bicep"
+      ],
+      "detected_language_ok": true,
+      "files_checked": 5,
+      "parse": {
+        "ok": 4,
+        "partial": 1,
+        "failed": 0,
+        "errors": [
+          "params.bicepparam: partial, empty parse_error"
+        ]
+      },
+      "convention": "Named declarations: param, var, resource, module, output (and type/func, none present). In the .bicepparam file only `var` counts, since its `param x = ...` lines assign values to parameters declared elsewhere.",
+      "expected": 87,
+      "extracted": 0,
+      "correct": 0,
+      "wrong": 0,
+      "missed": 87,
+      "wrong_kind": 0,
+      "precision": null,
+      "recall": 0.0,
+      "wrong_examples": [],
+      "missed_examples": [
+        {
+          "file": "101-container-registry.bicep",
+          "line": 5,
+          "text": "param acrName string = 'acr001${uniqueString(resourceGroup().id)}'"
+        },
+        {
+          "file": "101-container-registry.bicep",
+          "line": 22,
+          "text": "resource acr 'Microsoft.ContainerRegistry/registries@2019-12-01-preview' = {"
+        },
+        {
+          "file": "101-container-registry.bicep",
+          "line": 33,
+          "text": "output acrLoginServer string = acr.properties.loginServer"
+        },
+        {
+          "file": "201-1vm-2nics-2subnets-1vnet.bicep",
+          "line": 10,
+          "text": "var nic1Name = 'nic-1'"
+        },
+        {
+          "file": "main.bicep",
+          "line": 48,
+          "text": "module web './app/web-appservice-avm.bicep' = {"
+        }
+      ],
+      "pattern": "Files parse 'ok' but zero symbols come out: the inferred query only knows generic node names (function_definition, class_declaration ...) and Bicep's parameter/variable/resource/module/output declaration nodes match none of them. parse_status=ok therefore says nothing about extraction.",
+      "verdict": "broken"
+    },
+    {
+      "language": "bitbake",
+      "sources": [
+        "linguist/samples/BitBake/cmake.bbclass",
+        "linguist/samples/BitBake/gstreamer-libav.bb",
+        "linguist/samples/BitBake/qtbase_%.bbappend",
+        "linguist/samples/BitBake/tclibc-newlib.inc and xorg-driver-common.inc (detected as pascal and skipped; re-tested renamed to .bb)"
+      ],
+      "detected_language_ok": false,
+      "detected_as": ".bb/.bbappend/.bbclass -> bitbake (correct); .inc -> pascal (skipped)",
+      "files_checked": 5,
+      "parse": {
+        "ok": 3,
+        "partial": 2,
+        "failed": 0,
+        "errors": [
+          "gstreamer-libav.bb: partial, empty parse_error",
+          "tclibc-newlib (as .bb): partial, empty parse_error",
+          "original .inc names: language=pascal, skipped, 'no tags query available for \"pascal\"'"
+        ]
+      },
+      "convention": "Named functions and tasks: shell functions (`name() {`, including override-suffixed ones such as do_install:append), `python name() {` and Python `def name(...)`. Anonymous `python() {` and variable assignments (89 assignment lines across the 5 files) are not counted.",
+      "expected": 11,
+      "extracted": 3,
+      "correct": 3,
+      "wrong": 0,
+      "missed": 8,
+      "wrong_kind": 0,
+      "precision": 1.0,
+      "recall": 0.273,
+      "wrong_examples": [],
+      "missed_examples": [
+        {
+          "file": "cmake.bbclass",
+          "line": 41,
+          "text": "def oecmake_map_compiler(compiler, d):"
+        },
+        {
+          "file": "cmake.bbclass",
+          "line": 94,
+          "text": "cmake_do_generate_toolchain_file() {"
+        },
+        {
+          "file": "cmake.bbclass",
+          "line": 220,
+          "text": "cmake_runcmake_build() {"
+        },
+        {
+          "file": "cmake.bbclass",
+          "line": 225,
+          "text": "cmake_do_compile()  {"
+        },
+        {
+          "file": "xorg-driver-common.bb",
+          "line": 30,
+          "text": "def _add_xorg_abi_depends(d, name):"
+        }
+      ],
+      "pattern": "Only some shell-style functions are found (3 of 7; in cmake.bbclass 1 of 5 near-identical `name() {` definitions) and no Python `def` (0 of 4). Extracted names drop the override suffix (do_configure:prepend:rpi -> do_configure, do_install:append -> do_install), which was accepted as correct. No variable is extracted. .inc include files are misdetected as Pascal and skipped.",
+      "verdict": "poor",
+      "not_counted": {
+        "variable_assignment_lines": 89,
+        "extracted": 0
+      }
+    },
+    {
+      "language": "cairo",
+      "sources": [
+        "linguist/samples/Cairo/boolean.cairo",
+        "linguist/samples/Cairo/cust_struct_vect.cairo",
+        "linguist/samples/Cairo/merkle_tree_test.cairo",
+        "linguist/samples/Cairo/pizza_factory.cairo",
+        "linguist/samples/Cairo/rlp.cairo"
+      ],
+      "detected_language_ok": true,
+      "files_checked": 5,
+      "parse": {
+        "ok": 5,
+        "partial": 0,
+        "failed": 0,
+        "errors": []
+      },
+      "convention": "Rust-style: fn (free functions, impl methods and trait method signatures), struct, enum, trait, named impl, mod, const, type alias. Struct fields and enum variants not counted.",
+      "expected": 51,
+      "extracted": 29,
+      "correct": 29,
+      "wrong": 0,
+      "missed": 22,
+      "wrong_kind": 2,
+      "precision": 1.0,
+      "recall": 0.569,
+      "wrong_examples": [],
+      "missed_examples": [
+        {
+          "file": "boolean.cairo",
+          "line": 2,
+          "text": "pub impl BoolImpl<T, +Drop<T>> of BoolTrait<T> {"
+        },
+        {
+          "file": "cust_struct_vect.cairo",
+          "line": 6,
+          "text": "fn new() -> V;   (trait method signature)"
+        },
+        {
+          "file": "merkle_tree_test.cairo",
+          "line": 8,
+          "text": "mod regular_call_merkle_tree_pedersen {"
+        },
+        {
+          "file": "pizza_factory.cairo",
+          "line": 14,
+          "text": "pub mod PizzaFactory {"
+        },
+        {
+          "file": "pizza_factory.cairo",
+          "line": 20,
+          "text": "pub struct Storage {"
+        }
+      ],
+      "pattern": "Every function with a body is found (23 of 23) plus top-level traits, enums and one struct, with no noise. Never extracted: named impls (0 of 6), modules (0 of 2), trait method signatures (0 of 12), and the two `pub struct`s nested in a contract module. Traits are labelled 'class' although the tool has an interface kind (2 wrong kinds); enums and structs as 'class' follows the tool's own kind model. Side check, not scored: Cairo Zero files share the .cairo extension and get 1 of 4 `func`s with parse_status=ok.",
+      "verdict": "usable"
+    },
+    {
+      "language": "capnp",
+      "sources": [
+        "Linguist samples: no Cap'n Proto folder",
+        "github.com/capnproto/capnproto (depth-1 clone): c++/samples/addressbook.capnp, c++/samples/calculator.capnp, c++/src/capnp/persistent.capnp, c++/src/capnp/compat/json.capnp, c++/src/benchmark/carsales.capnp"
+      ],
+      "detected_language_ok": true,
+      "files_checked": 5,
+      "parse": {
+        "ok": 0,
+        "partial": 5,
+        "failed": 0,
+        "errors": [
+          "parse_status=partial with empty parse_error on every file, including a 4-line file with one struct"
+        ]
+      },
+      "convention": "struct, enum, interface, const and annotation declarations, plus interface methods. Fields, enumerants, unions/groups and `using` import aliases not counted.",
+      "expected": 36,
+      "extracted": 0,
+      "correct": 0,
+      "wrong": 0,
+      "missed": 36,
+      "wrong_kind": 0,
+      "precision": null,
+      "recall": 0.0,
+      "wrong_examples": [],
+      "missed_examples": [
+        {
+          "file": "addressbook.capnp",
+          "line": 27,
+          "text": "struct Person {"
+        },
+        {
+          "file": "addressbook.capnp",
+          "line": 37,
+          "text": "enum Type {"
+        },
+        {
+          "file": "calculator.capnp",
+          "line": 24,
+          "text": "interface Calculator {"
+        },
+        {
+          "file": "calculator.capnp",
+          "line": 47,
+          "text": "evaluate @0 (expression :Expression) -> (value :Value);"
+        },
+        {
+          "file": "json.capnp",
+          "line": 81,
+          "text": "annotation name @0xfa5b1fd61c2e7c3d (field, enumerant, method, group, union) :Text;"
+        }
+      ],
+      "pattern": "Nothing is extracted. Every file, including a minimal valid schema, is parse_status=partial with no error text, so the grammar does not parse real Cap'n Proto in this build; no struct, enum, interface, method or annotation is ever recorded.",
+      "verdict": "broken"
+    },
+    {
+      "language": "circom",
+      "sources": [
+        "linguist/samples/Circom/binsum.circom",
+        "linguist/samples/Circom/switcher.circom",
+        "linguist/samples/Circom/xor3.circom",
+        "github.com/iden3/circomlib (depth-1 clone): circuits/comparators.circom, circuits/mux1.circom"
+      ],
+      "detected_language_ok": true,
+      "files_checked": 5,
+      "parse": {
+        "ok": 3,
+        "partial": 2,
+        "failed": 0,
+        "errors": [
+          "switcher.circom: partial, empty parse_error",
+          "xor3.circom: partial, empty parse_error"
+        ]
+      },
+      "convention": "`template` and `function` definitions (and `component main`, none present). Signals and components inside a template are not counted; a template inside a block comment is not counted.",
+      "expected": 13,
+      "extracted": 1,
+      "correct": 1,
+      "wrong": 0,
+      "missed": 12,
+      "wrong_kind": 0,
+      "precision": 1.0,
+      "recall": 0.077,
+      "wrong_examples": [],
+      "missed_examples": [
+        {
+          "file": "binsum.circom",
+          "line": 65,
+          "text": "template BinSum(n, ops) {"
+        },
+        {
+          "file": "comparators.circom",
+          "line": 24,
+          "text": "template IsZero() {"
+        },
+        {
+          "file": "comparators.circom",
+          "line": 89,
+          "text": "template LessThan(n) {"
+        },
+        {
+          "file": "mux1.circom",
+          "line": 33,
+          "text": "template Mux1() {"
+        },
+        {
+          "file": "switcher.circom",
+          "line": 31,
+          "text": "template Switcher() {"
+        }
+      ],
+      "pattern": "The single `function` is extracted; `template`, the construct nearly all Circom code is written in, is never extracted (0 of 12), including in files that parse 'ok'.",
+      "verdict": "broken"
+    },
+    {
+      "language": "clojure",
+      "sources": [
+        "github.com/ring-clojure/ring (depth-1 clone): ring-core/src/ring/util/request.clj, ring-core/src/ring/middleware/session/cookie.clj, ring-core-protocols/src/ring/core/protocols.clj, ring-core/src/ring/middleware/params.clj, ring-core/src/ring/util/mime_type.clj",
+        "Linguist Clojure samples used only for a detection check (too small to score)"
+      ],
+      "detected_language_ok": true,
+      "files_checked": 5,
+      "parse": {
+        "ok": 5,
+        "partial": 0,
+        "failed": 0,
+        "errors": []
+      },
+      "convention": "Top-level defining forms: ns (namespace), def, defn, defn-, defmacro, defmulti, defprotocol and its method signatures, deftype, defrecord. defmethod bodies and protocol implementations inside deftype/extend-protocol are not counted.",
+      "expected": 45,
+      "extracted": 36,
+      "correct": 36,
+      "wrong": 0,
+      "missed": 9,
+      "wrong_kind": 0,
+      "precision": 1.0,
+      "recall": 0.8,
+      "wrong_examples": [],
+      "missed_examples": [
+        {
+          "file": "cookie.clj",
+          "line": 1,
+          "text": "(ns ring.middleware.session.cookie"
+        },
+        {
+          "file": "cookie.clj",
+          "line": 96,
+          "text": "(deftype CookieStore [secret-key options]"
+        },
+        {
+          "file": "protocols.clj",
+          "line": 7,
+          "text": "(defprotocol ^{:added \"1.6\"} StreamableResponseBody"
+        },
+        {
+          "file": "protocols.clj",
+          "line": 9,
+          "text": "(write-body-to-stream [body response output-stream]"
+        },
+        {
+          "file": "request.clj",
+          "line": 45,
+          "text": "(defmulti ^String body-string"
+        }
+      ],
+      "pattern": "def, defn and defn- are all extracted (36 of 36, correct lines, sensible kinds variable/function, metadata handled), with no noise. Everything else is missed: ns (0 of 5), deftype, defprotocol and its method, defmulti (0 of 4). Detection check on Linguist samples: Babashka validate-and-format.bb is read as bitbake (0 symbols), index.cljs.hl is skipped, and protocol.cljs (defprotocol + 2 deftype) yields nothing.",
+      "verdict": "usable",
+      "excluding_ns": {
+        "expected": 40,
+        "extracted": 36,
+        "recall": 0.9
+      }
+    },
+    {
+      "language": "cmake",
+      "sources": [
+        "linguist/samples/CMake/sample5.cmake",
+        "github.com/rpavlik/cmake-modules (depth-1 clone): GetMSVCVersion.cmake, EnableExtraCompilerWarnings.cmake, StashMapConfig.cmake, ProgramFilesGlob.cmake",
+        "side check, not scored: github.com/capnproto/capnproto c++/CMakeLists.txt"
+      ],
+      "detected_language_ok": true,
+      "files_checked": 5,
+      "parse": {
+        "ok": 5,
+        "partial": 0,
+        "failed": 0,
+        "errors": [
+          "side check CMakeLists.txt (261 lines): partial, empty parse_error, 0 symbols"
+        ]
+      },
+      "convention": "function() and macro() definitions. set()/option() calls are commands, not declarations, and are not counted (2 file-scope include-guard set() calls and 1 option() exist in the scored files); targets and project() would count but none occur in the scored module files.",
+      "expected": 17,
+      "extracted": 17,
+      "correct": 17,
+      "wrong": 0,
+      "missed": 0,
+      "wrong_kind": 0,
+      "precision": 1.0,
+      "recall": 1.0,
+      "wrong_examples": [],
+      "missed_examples": [],
+      "pattern": "Every function() and macro() is extracted at the right line, upper- or lower-case, with no noise; macros are labelled 'function' (8 of them; the tool has no macro kind). Nothing else is ever extracted: in the side-check CMakeLists.txt, project() and option() produce no symbols and the file only parses partially, so build-level names (targets, options, cache variables) are invisible.",
+      "verdict": "good"
+    }
+  ],
+  "notes": [
+    "Binary: scratchpad/langs/repocortex; each language indexed in its own empty directory under scratchpad/langs/work/G1/<language>; raw query output in work/G1/out/<language>.{files,syms}.json.",
+    "Precision is null where nothing was extracted. Where the tool extracted anything, precision was 1.0 in every language: 180 extracted symbols across the group, 0 wrong (no calls, references, keywords or duplicates recorded as definitions).",
+    "Totals over the 12 languages: expected 807, extracted 180, correct 180, missed 627 (authzed alone contributes 414 expected; without it 393 expected, 213 missed).",
+    "Root cause of the zero/low-recall languages: gotreesitter ships no per-language tags queries; the query is inferred from a fixed list of generic node names (function_definition, function_declaration, class_declaration, method_declaration, function_item, struct_item, enum_item, trait_item ...). RepoCortex adds supplements only for go, java, typescript, tsx, javascript, python, rust, cpp, c_sharp, ruby (internal/parse/queries.go), none for this group. A grammar is reported as having a tags query ('ok' in tags_probe.tsv) as soon as one generic pattern compiles, even if the language's real declaration nodes (bicep param/resource, circom template, capnp struct, authzed definition, cairo impl/mod, clojure deftype/ns) match nothing.",
+    "parse_status is not a signal of extraction quality: bicep files and circom/comparators.circom are 'ok' with 0 symbols; authzed and capnp are 'partial' on every file including minimal valid input; parse_error is always empty for 'partial'.",
+    "Detection findings: angular grammar unreachable (no extension); no shebang detection (extensionless bash script skipped); BitBake .inc -> pascal; Babashka .bb -> bitbake; .cljs.hl and .pacscript -> no grammar; Cairo Zero and Cairo 1 share .cairo.",
+    "Nothing crashed or hung. Slowest runs: authzed 1038 ms for 5 files / 645 lines and capnp 533 ms for 5 files / 503 lines (both the all-'partial' languages; multival_schema.zed and oviva.zed dominate), against 30-240 ms for every other language.",
+    "Kind notes: struct and enum become 'class' by the tool's own kind model (kindFromTag), counted as sensible; Cairo traits as 'class' counted as wrong kind (2); Apex constructors as 'method', CMake macros and Cairo impl methods as 'function' counted as sensible."
+  ]
+}

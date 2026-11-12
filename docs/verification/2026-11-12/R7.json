@@ -1,0 +1,327 @@
+{
+  "group": "R7",
+  "binary": "repocortex version dev (scratchpad/langs/repocortex), no compiler index imported, accuracy mode auto",
+  "languages": [
+    {
+      "language": "rust",
+      "project": "https://github.com/BurntSushi/ripgrep",
+      "commit": "178cc027e283fd965cb72d0a7395b219eada170c",
+      "timing": {
+        "index_wall_seconds": 1.24,
+        "index_reported_ms": 1181,
+        "resolve_wall_seconds": 0.40,
+        "resolve_reported_ms": 371
+      },
+      "index_stats": {
+        "files_discovered": 224,
+        "files_indexed": 108,
+        "files_skipped": 116,
+        "rust_files": 102,
+        "rust_files_ok": 92,
+        "rust_files_partial": 10,
+        "rust_files_failed": 0,
+        "symbols_total": 3389,
+        "symbols_rust": 3369,
+        "symbols_rust_by_kind": {"function": 2920, "class": 376, "constant": 66, "interface": 7},
+        "references_total": 18737,
+        "references_rust": 18723,
+        "imports": 133,
+        "run_status": "degraded (11 files partial: 10 Rust, 1 Lua)"
+      },
+      "parse_failures": [
+        {"file": "crates/grep/src/lib.rs", "bytes": 656, "error": "status partial, empty parse_error: parsed cleanly but zero symbols and zero references; file holds only `pub extern crate` lines", "seconds_alone": 0.17},
+        {"file": "crates/pcre2/src/lib.rs", "bytes": 308, "error": "status partial, empty parse_error: only `pub use` re-exports and `mod x;` declarations, none of which are extracted", "seconds_alone": 0.16},
+        {"file": "crates/printer/src/macros.rs", "bytes": 670, "error": "status partial, empty parse_error: only a `macro_rules!` definition, which is not extracted", "seconds_alone": 0.16},
+        {"file": "crates/searcher/src/macros.rs", "bytes": 739, "error": "status partial: only a `macro_rules!` definition", "seconds_alone": 0.18},
+        {"file": "crates/regex/src/lib.rs", "bytes": 323, "error": "status partial: only `pub use` and `mod x;`", "seconds_alone": 0.19},
+        {"file": "crates/searcher/src/lib.rs", "bytes": 3718, "error": "status partial: `pub use`, `mod x;` and a test-only `const SHERLOCK` with a multi-line byte string that is also not extracted", "seconds_alone": 0.19},
+        {"file": "tests/tests.rs", "bytes": 585, "error": "status partial: only `mod x;` declarations", "seconds_alone": 0.19},
+        {"file": "tests/macros.rs", "bytes": 1583, "error": "status partial: three `macro_rules!` definitions (rgtest, eqnice, eqnice_repr), none extracted", "seconds_alone": 0.19},
+        {"file": "crates/matcher/tests/tests.rs", "bytes": 29, "error": "status partial: two `mod x;` lines", "seconds_alone": 0.19},
+        {"file": "fuzz/fuzz_targets/fuzz_glob.rs", "bytes": 509, "error": "status partial: whole body is inside the `libfuzzer_sys::fuzz_target!` macro invocation; macro bodies are opaque token trees so no calls are seen", "seconds_alone": 0.18}
+      ],
+      "parse_failures_note": "There were no failed parses, crashes, hangs or timeouts. All 10 entries are `partial`, which this build assigns when a file parses cleanly but yields zero symbols AND zero references (internal/parse/generic.go). For Rust that means files made only of mod/use/extern crate/macro_rules!. seconds_alone includes process start-up.",
+      "references": {
+        "scope": "references in Rust files",
+        "total": 18723,
+        "resolved": 4906,
+        "ambiguous": 5825,
+        "unresolved": 7992,
+        "resolved_pct_of_all": 26.2,
+        "resolved_pct_of_those_naming_an_indexed_definition": 45.7,
+        "tool_reported_line": "Resolved: 4910 (45.7% of the 10736 that name something this index defines); Ambiguous 5826 (2775 reached the candidate cap; the receiver rescued 0); Unresolved 8001",
+        "by_candidate_count": {
+          "exactly_1_same_named_definition": {"resolved": 3025, "ambiguous": 746},
+          "2_to_5": {"resolved": 1540, "ambiguous": 1945},
+          "6_to_20": {"resolved": 341, "ambiguous": 1462},
+          "over_20": {"resolved": 0, "ambiguous": 1672}
+        },
+        "note": "746 references whose name has exactly ONE definition in the whole repository are still left `ambiguous` (e.g. args.matches_possible() in crates/core/main.rs:86, only definition at crates/core/flags/hiargs.rs:521). Functions in another directory are declined even when unique; only type names get the `low` unique-name tier."
+      },
+      "edges_by_confidence": {
+        "scope": "edges with a Rust evidence file; every edge is kind CALLS (no IMPLEMENTS/EXTENDS/IMPORTS edges are produced for Rust)",
+        "CALLS": {"high": 3034, "medium": 1419, "low": 286, "exact": 0},
+        "total": 4739,
+        "by_detail": {
+          "high / defined in the same file": 3000,
+          "high / receiver type matches": 34,
+          "medium / same directory, but the language requires an import": 1410,
+          "medium / receiver matches, overloaded": 9,
+          "low / unique name in repository, no import evidence": 286
+        },
+        "destination_kind": {
+          "high": {"function": 2405, "type (struct/enum)": 629},
+          "medium": {"function": 1198, "type (struct/enum)": 221},
+          "low": {"function": 0, "type (struct/enum)": 283, "Cargo dependency": 3}
+        },
+        "self_loops_high": 193
+      },
+      "definitions": {
+        "files": ["crates/core/messages.rs", "crates/regex/src/error.rs", "crates/cli/src/lib.rs", "crates/core/flags/mod.rs", "crates/core/haystack.rs"],
+        "expected": 71,
+        "extracted": 50,
+        "correct": 50,
+        "wrong": 0,
+        "missed": 21,
+        "precision": 1.0,
+        "recall": 0.704,
+        "per_file": [
+          {"file": "crates/core/messages.rs", "expected": 13, "extracted": 6, "missed": "3 statics (MESSAGES, IGNORE_MESSAGES, ERRORED), 4 macro_rules! (eprintln_locked, message, err_message, ignore_message)"},
+          {"file": "crates/regex/src/error.rs", "expected": 7, "extracted": 7, "missed": "none"},
+          {"file": "crates/cli/src/lib.rs", "expected": 14, "extracted": 7, "missed": "7 `mod x;` declarations"},
+          {"file": "crates/core/flags/mod.rs", "expected": 26, "extracted": 19, "missed": "7 `mod x;` declarations"},
+          {"file": "crates/core/haystack.rs", "expected": 11, "extracted": 11, "missed": "none"}
+        ],
+        "examples": {
+          "wrong": [],
+          "missed": ["static MESSAGES (crates/core/messages.rs:21)", "macro_rules! err_message (crates/core/messages.rs:82)", "mod decompress; (crates/cli/src/lib.rs:126)", "mod hiargs; (crates/core/flags/mod.rs:46)"]
+        },
+        "whole_repo_regex_cross_check": {
+          "method": "regex over every Rust file for item keywords, matched to a symbols row with the same name within 3 lines; an automatic proxy, not hand-verified",
+          "fn": "2919/2921", "struct": "303/303", "enum": "73/73", "trait": "7/7", "const": "66/76", "static": "0/17", "type_alias_and_assoc_type": "0/52", "mod": "0/121", "macro_rules": "0/38",
+          "total": "3368/3608 = 93.3%"
+        },
+        "quality_notes": "Every fn is kind `function` (no method vs associated-function distinction); structs and enums are both `class`. fqn is `<file>:<name>` with no owning type, so Error::new is `crates/regex/src/error.rs:new`; enum variants and struct fields are not symbols. Raw identifier kept verbatim (`r#async`)."
+      },
+      "precision": {
+        "standard": "Strict: the edge's dst must be the function/method the call invokes; for trait methods on a generic or dyn receiver the trait method is required; for `Enum::Variant(..)` the enum counts as correct (variants are not symbols). `type_qualifier` = the edge points at the struct/enum (or crate dependency) named in the path of `Type::assoc_fn(..)`: the name is bound to the right type, but that is not the function invoked (the `assoc_fn` reference itself was left ambiguous). Strict precision counts type_qualifier as wrong; lenient counts it as correct.",
+        "sampling": "all CALLS edges with a .rs evidence file, ordered by id, per tier: k = floor(N/20), rows at index k/2, k/2+k, ... (first 20)",
+        "high": {"population": 3034, "sampled": 20, "correct": 13, "type_qualifier": 4, "wrong": 3, "unverifiable": 0, "precision_strict": 0.65, "precision_lenient": 0.85,
+          "edge_ids": [106, 967, 1154, 1366, 1606, 1806, 1984, 2140, 2389, 2561, 2736, 2934, 3178, 3373, 3563, 3765, 3965, 4148, 4350, 4662],
+          "type_qualifier_ids": [1366, 1806, 2561, 4350],
+          "wrong_ids": {
+            "3373": "crates/printer/src/standard.rs:2054 `SearcherBuilder::new().line_number(false)` bound to the test fn `line_number` at standard.rs:2321; real target is SearcherBuilder::line_number in crates/searcher",
+            "4148": "crates/regex/src/literal.rs:534 `self.seq.min_literal_len()` (regex-syntax Seq, external) bound to the enclosing TSeq::min_literal_len itself (self-loop)",
+            "4662": "crates/searcher/src/testutil.rs:33 `RegexBuilder::new(pattern).multi_line(true)` (regex crate, external) bound to SearcherTester::multi_line at testutil.rs:384"
+          }},
+        "medium": {"population": 1419, "sampled": 20, "correct": 15, "type_qualifier": 1, "wrong": 4, "unverifiable": 0, "precision_strict": 0.75, "precision_lenient": 0.80,
+          "edge_ids": [142, 215, 286, 360, 433, 506, 579, 651, 726, 802, 1018, 1400, 1691, 2164, 2330, 2882, 3047, 3781, 4238, 4508],
+          "type_qualifier_ids": [2164],
+          "wrong_ids": {
+            "1400": "crates/ignore/src/dir.rs:218 `self.clone()` on Ignore (derived Clone) bound to `impl Clone for Error` in crates/ignore/src/lib.rs:123",
+            "1691": "crates/ignore/src/gitignore.rs:107 `path.parent()` (std::path::Path) bound to Ignore::parent in dir.rs:184",
+            "2882": "crates/printer/src/json.rs:667 `m.end()` (grep_matcher::Match) bound to PreludeWriter::end in standard.rs:1647",
+            "3047": "crates/printer/src/standard.rs:803 `ctx.bytes()` (SinkContext, crates/searcher) bound to Sunk::bytes in crates/printer/src/util.rs:233"
+          },
+          "caveat": "9 of the 20 sampled medium edges are the same callee (parse_low_raw called from tests in crates/core/flags/defs.rs, which holds 660+ such edges). Outside that cluster: 6 correct, 1 type_qualifier, 4 wrong of 11."},
+        "low": {"population": 286, "sampled": 20, "correct": 0, "type_qualifier": 19, "wrong": 1, "unverifiable": 0, "precision_strict": 0.0, "precision_lenient": 0.95,
+          "edge_ids": [848, 1065, 1368, 1758, 2733, 3115, 3359, 3422, 3484, 3559, 3641, 3701, 3828, 3918, 4411, 4536, 4564, 4578, 4592, 4637],
+          "wrong_ids": {"1758": "crates/ignore/src/gitignore.rs:614 `File::open(path)` (std::fs::File) bound to the flag struct `File` in crates/core/flags/defs.rs:1987"},
+          "note": "No low edge in the whole population points at a function: 283 point at a struct/enum, 3 at a Cargo.toml dependency (edge 848: `textwrap::indent(..)` -> dependency `textwrap`)."},
+        "all_tiers_weighted_estimate": {"strict": 0.641, "lenient": 0.841, "caveat": "n=20 per tier; 95% Wilson interval for 17/20 is roughly 64-95%"},
+        "targeted_census_beyond_the_sample": {
+          "self_loop_edges": "193 high edges have src == dst. Every 10th was read (18 Rust edges): 5 are real recursion, 13 are delegation to a different type's same-named method (e.g. crates/printer/src/counter.rs:56 `self.wtr.write(buf)` -> CounterWriter::write itself; crates/ignore/src/walk.rs:834 `self.ig_builder.overrides(..)` -> WalkBuilder::overrides itself). 72% wrong in that subset.",
+          "receiver_edges": "All 43 receiver-based edges were listed. `high / receiver type matches` (34): 10 wrong, all trait methods on a generic receiver bound to one impl in an unrelated crate (crates/printer/src/hyperlink/mod.rs:652 `wtr.supports_hyperlinks()` with W: termcolor::WriteColor -> crates/cli/src/wtr.rs:101; crates/searcher/src/searcher/mod.rs:905 `matcher.non_matching_bytes()` with M: Matcher -> crates/regex/src/matcher.rs:481). `medium / receiver matches, overloaded` (9): 9 wrong, every one bound to the pcre2 crate's impl (crates/pcre2/src/matcher.rs:331/339). The remaining 24 high receiver edges look right by receiver name and target but were not all opened."
+        }
+      },
+      "recall": {
+        "files": ["crates/core/haystack.rs (whole file)", "crates/core/flags/config.rs (lines 1-108)", "crates/regex/src/strip.rs (lines 1-119)", "crates/core/logger.rs (whole file)", "crates/core/main.rs (lines 43-151)"],
+        "call_sites": 70,
+        "bound_correct": 32,
+        "bound_wrong": 4,
+        "ambiguous": 30,
+        "unbound": 4,
+        "recall": 0.457,
+        "precision_on_these_sites": 0.889,
+        "per_file": [
+          {"file": "crates/core/haystack.rs", "call_sites": 19, "bound_correct": 5, "bound_wrong": 1, "ambiguous": 10, "unbound": 3},
+          {"file": "crates/core/flags/config.rs", "call_sites": 2, "bound_correct": 2, "bound_wrong": 0, "ambiguous": 0, "unbound": 0},
+          {"file": "crates/regex/src/strip.rs", "call_sites": 11, "bound_correct": 7, "bound_wrong": 0, "ambiguous": 4, "unbound": 0},
+          {"file": "crates/core/logger.rs", "call_sites": 1, "bound_correct": 1, "bound_wrong": 0, "ambiguous": 0, "unbound": 0},
+          {"file": "crates/core/main.rs", "call_sites": 37, "bound_correct": 17, "bound_wrong": 3, "ambiguous": 16, "unbound": 1}
+        ],
+        "examples": {
+          "bound_wrong": [
+            "crates/core/haystack.rs:118 `self.dent.is_stdin()` (ignore::DirEntry::is_stdin, crates/ignore/src/walk.rs:56) bound to Haystack::is_stdin itself, high",
+            "crates/core/main.rs:118 `args.stats()` (HiArgs::stats, hiargs.rs:822) bound to SearchResult::stats in search.rs:186, medium",
+            "crates/core/main.rs:122 `args.printer(mode, ..)` (HiArgs::printer, hiargs.rs:561) bound to SearchWorker::printer in search.rs:270, medium",
+            "crates/core/main.rs:126 `searcher.search(&haystack)` (SearchWorker::search, search.rs:245) bound to the enclosing free fn `search` in main.rs:107, high"
+          ],
+          "ambiguous": ["crates/core/haystack.rs:36 `self.build(dent)` (only one `build` in the file, 26 in the repo, over the candidate cap)", "crates/core/main.rs:85 `args.mode()`", "crates/core/main.rs:86 `args.matches_possible()` (unique name repo-wide)", "crates/regex/src/strip.rs:57 `Error::new(..)`", "crates/core/main.rs:44 `flags::parse()` (re-exported with pub(crate) use)"],
+          "unbound": ["crates/core/haystack.rs:73-75 `hay.dent.path()`, `.file_type()`, `.metadata()` inside log::debug!(..): no reference rows exist for calls in macro arguments", "crates/core/main.rs:131 `haystack.path()` inside err_message!(..)"]
+        },
+        "note": "Macro invocations (err_message!, message!, eprintln_locked!) were left out of the denominator; all 9 seen in these files are unresolved because macro_rules! definitions are not indexed. Std-library calls were ignored for recall, but 3 of them in haystack.rs are bound to in-repo methods (`ft.is_dir()`, `self.dent.path().is_dir()`, `ft.is_file()` -> Haystack::is_dir / is_file), which are precision errors. 70 sites is above the suggested 40 because main.rs was taken as one contiguous block."
+      },
+      "weak_spots": [
+        {"case": "same-named methods on different types (new, len, build)", "example": "crates/globset/src/glob.rs:131 `Self::new(glob)`; crates/core/haystack.rs:36 `self.build(dent)`", "outcome": "Never bound, never wrong: all 1154 references named `new`, all 383 named `build`, all 171 named `len` and all 153 named `is_empty` are `ambiguous`. `Type::new(..)` produces two references at the same position, `Type` (bound to the struct, emitted as a CALLS edge) and `new` (ambiguous); the path qualifier is not used as the receiver."},
+        {"case": "trait method on a generic value", "example": "crates/searcher/src/searcher/core.rs:148 `self.matcher.shortest_match(slice)` with M: Matcher; crates/printer/src/util.rs:149 `matcher.new_captures()` with M: Matcher", "outcome": "Bound WRONG. The first is bound, high, to the enclosing Core::shortest_match (core.rs:141) instead of Matcher::shortest_match (crates/matcher/src/lib.rs:1010). The second is bound, medium ('receiver matches, overloaded'), to the pcre2 crate's impl (crates/pcre2/src/matcher.rs:331), a crate grep-printer does not depend on."},
+        {"case": "trait method on a dyn value", "example": "crates/core/flags/parse.rs:188 `flag.name_long()` and :278 `mat.flag.is_switch()` with flag: &'static dyn Flag (105 impls)", "outcome": "Left ambiguous (not bound, not wrong)."},
+        {"case": "Self::method", "example": "crates/globset/src/lib.rs:629 `Self::from_cow(..)`; crates/globset/src/glob.rs:708 `Self::tokens_to_regex(..)`; crates/searcher/src/sink.rs:28 `Self::error_message(err)`", "outcome": "First two bound correctly (high, same file). Third left ambiguous (trait declaration plus two impls in the same file). `Self` itself is recorded as an unresolved call reference."},
+        {"case": "self.method()", "example": "crates/core/haystack.rs:138 `self.is_stdin()`; crates/core/haystack.rs:118 `self.dent.is_stdin()`", "outcome": "`self.is_stdin()` bound correctly. `self.dent.is_stdin()` bound WRONG to the same method (self-loop): no receiver is recorded for `self.x()` or `self.field.x()`, so resolution is by bare name within the file."},
+        {"case": "use paths with crate::", "example": "crates/core/flags/parse.rs:95 `crate::flags::config::args()`; crates/core/flags/parse.rs:117 `crate::messages::set_messages(..)`", "outcome": "First bound correctly (medium, target happens to be in the same directory). Second left ambiguous although the full path is written out and the name is unique: the path is not used, only directory proximity. `use crate::flags::parse::parse_low_raw` + call binds correctly for the same reason (same directory), not because of the import."},
+        {"case": "use paths with super::", "example": "crates/core/flags/doc/man.rs:66 `super::render_custom_markup(..)`; crates/core/flags/doc/man.rs:67 `crate::flags::parse::lookup(name)`", "outcome": "First bound correctly (medium, same directory). Second left ambiguous (target is one directory up)."},
+        {"case": "re-exports (pub use)", "example": "crates/core/main.rs:44 `flags::parse()` where flags/mod.rs has `pub(crate) use crate::flags::{.. parse::parse ..}`", "outcome": "Left ambiguous. Files consisting of `pub use` lines are flagged partial. Module path segments are themselves recorded as call references and can bind to functions: crates/core/main.rs:94 `messages::errored()` produces a CALLS edge to the FUNCTION `messages` (messages.rs:101) as well as the correct one to `errored`."},
+        {"case": "macros", "example": "crates/core/haystack.rs:38 `err_message!(\"{err}\")`; crates/core/haystack.rs:70-76 `log::debug!(.., hay.dent.path().display(), ..)`", "outcome": "macro_rules! definitions are not indexed (0 of 38), so every invocation of an in-repo macro is unresolved. Calls written inside macro arguments are not recorded at all (this includes everything inside assert!/assert_eq!/format!/vec!). `vec![]`, `Ok(..)`, `Some(..)` are recorded as call references named vec/Ok/Some."},
+        {"case": "method chains a.b().c()", "example": "crates/core/main.rs:147 `searcher.printer().get_mut()`; crates/printer/src/standard.rs:2054 `SearcherBuilder::new().line_number(false)...`; crates/globset/src/lib.rs:629 `path.as_ref()`", "outcome": "First: both links bound correctly (medium). Second: `.line_number(..)` bound WRONG to a same-file test fn named line_number (high). Third: std AsRef::as_ref bound WRONG to `impl AsRef<Glob> for Glob` (glob.rs:88, medium). The evidence line/column of every link in a chain is the first line of the chain, not the line the method name is on."}
+      ],
+      "tool_answers": [
+        {"command": "repocortex tool call find_callers name=find_iter_at_in_context", "rows": 3, "right": 3, "missing": "none; grep finds exactly these three call sites (json.rs:661, standard.rs:716, summary.rs:649). Output is prefixed with 'COVERAGE TOO LOW ... Do not present what follows as an answer' and 'verdict: weak'."},
+        {"command": "repocortex tool call analyze_impact symbol=find_iter_at_in_context", "rows": 7, "right": 7, "missing": "3 direct + 4 indirect (matched/context in json.rs and standard.rs) are all real. Missing: everything past the Sink trait boundary. The Sink methods are invoked through `self.sink.matched(..)` in crates/searcher/src/searcher/core.rs:536 (generic S: Sink), so the searcher, the application and every printer test are absent, and the output states 'No test symbol reaches this target' (+20 risk) although the printer test modules exercise it. It does say it is a lower bound."},
+        {"command": "repocortex tool call find_implementations name=Matcher", "rows": 0, "right": 0, "missing": "all 6: crates/regex/src/matcher.rs:409, crates/pcre2/src/matcher.rs:315, crates/searcher/src/testutil.rs:63, crates/matcher/tests/util.rs:28 and :69, crates/matcher/src/lib.rs:1133 (blanket impl for &M). Same for Sink (0 of 9) and Flag (0 of 104). `impl Trait for Type` is not turned into any relationship: the repository has 247 such impl blocks and zero IMPLEMENTS edges."},
+        {"command": "repocortex tool call find_callers name=is_stdin (extra, harder case)", "rows": 3, "right": 2, "missing": "Picked Haystack::is_stdin of two definitions. haystack.rs:138 and search.rs:258 are right; haystack.rs:118 is wrong (it calls ignore::DirEntry::is_stdin). The answer is labelled 'verdict: strong (high=3) ... Act on these'."}
+      ],
+      "notes": [
+        "Documentation claim checked: README says syntax-tree `high` edges are 94.2-100% precise with 33-66% recall, measured on Go, TypeScript, Python and Java. Rust is not in that list. Measured here for Rust high edges: 17/20 = 85% lenient, 13/20 = 65% strict. Recall 32/70 = 45.7% is inside the claimed range.",
+        "Roughly 24% of all Rust CALLS edges (1136 of 4739) point at a struct/enum or a Cargo dependency rather than a function; the whole low tier is of this kind.",
+        "The resolver has effectively three rules for Rust: same file by bare name (3000 edges), same directory by bare name (1410), repository-unique type name (286). Receiver typing produced 43 edges, 19 of them wrong. Imports and written paths (crate::a::b::f) do not influence the result.",
+        "No crash, hang or timeout in any command."
+      ]
+    },
+    {
+      "language": "scala",
+      "project": "https://github.com/com-lihaoyi/os-lib",
+      "commit": "8871ab0bda9bbcc4edbef9b1a402eb4c47ef9398",
+      "additional_projects": [
+        {"project": "https://github.com/scalameta/munit", "commit": "d4c9f83138413dd2b9064fbda824c0ed9b46af87", "why": "second suggested project, used for the whole-repo definition cross-check and to confirm the zero-reference result"},
+        {"project": "https://github.com/lampepfl/gears", "commit": "253c242b4f4bc15c1efe111b699fe8e31622f525", "why": "neither suggested project contains Scala 3 significant-indentation sources; gears (57 .scala files) is written entirely in that style"}
+      ],
+      "timing": {
+        "os-lib": {"index_wall_seconds": 0.75, "index_reported_ms": 681, "resolve_wall_seconds": 0.05, "resolve_reported_ms": 19},
+        "munit": {"index_wall_seconds": 1.66, "index_reported_ms": 1591, "resolve_wall_seconds": 0.16, "resolve_reported_ms": 67},
+        "gears": {"index_wall_seconds": 0.63, "index_reported_ms": 573, "resolve_wall_seconds": 0.05, "resolve_reported_ms": 16}
+      },
+      "index_stats": {
+        "os-lib": {"files_discovered": 103, "files_indexed": 67, "files_skipped": 36, "scala_files": 61, "scala_ok": 60, "scala_partial": 1, "scala_failed": 0, "symbols_total": 853, "symbols_scala": 836, "symbols_scala_by_kind": {"function": 749, "class": 57, "interface": 30}, "references_total": 83, "references_in_scala_files": 0, "imports": 219},
+        "munit": {"files_discovered": 274, "files_indexed": 227, "files_skipped": 47, "scala_files": 191, "scala_ok": 190, "scala_partial": 1, "scala_failed": 0, "symbols_total": 1394, "symbols_scala": 1062, "symbols_scala_by_kind": {"function": 848, "class": 176, "interface": 38}, "references_total": 863, "references_in_scala_files": 0, "imports": 449},
+        "gears": {"files_discovered": 85, "files_indexed": 59, "files_skipped": 26, "scala_files": 59, "scala_ok": 51, "scala_partial": 8, "scala_failed": 0, "symbols_total": 539, "symbols_scala": 539, "references_total": 0, "references_in_scala_files": 0, "imports": 316}
+      },
+      "parse_failures": [
+        {"file": "os-lib: os/src/ZipOps.scala", "bytes": 89, "error": "status partial, empty parse_error: file is `package object zipplaceholders {}`; package objects are not extracted", "seconds_alone": 0.24},
+        {"file": "munit: project/plugins.sbt", "bytes": 888, "error": "status partial: only addSbtPlugin(..) calls; no call references are extracted from Scala at all", "seconds_alone": 0.25},
+        {"file": "gears: js/src/main/scala/async/default.scala", "bytes": 158, "error": "status partial: two anonymous `given X = Y` definitions, not extracted", "seconds_alone": 0.24},
+        {"file": "gears: jvm/src/main/scala/async/DefaultSupport.scala", "bytes": 187, "error": "status partial: three anonymous `given` definitions, not extracted", "seconds_alone": 0.23},
+        {"file": "gears: shared/src/main/scala/async/package.scala", "bytes": 469, "error": "status partial: `package object async:` holding one `type` alias; neither is extracted", "seconds_alone": 0.24},
+        {"file": "gears: native/src/test/scala/SingleThreadedSupport.scala", "bytes": 305, "error": "status partial: a single top-level `val`, not extracted", "seconds_alone": 0.24},
+        {"file": "gears: jvm/src/test/scala/SingleThreadedSupport.scala", "bytes": 124, "error": "status partial: a single top-level `val`", "seconds_alone": 0.24},
+        {"file": "gears: js/src/test/scala/SingleThreadedSupport.scala", "bytes": 75, "error": "status partial: a single top-level `val`", "seconds_alone": 0.23},
+        {"file": "gears: build.sbt", "bytes": 1911, "error": "status partial: sbt settings (vals and calls only)", "seconds_alone": 0.24},
+        {"file": "gears: project/plugins.sbt", "bytes": 392, "error": "status partial: addSbtPlugin(..) calls only", "seconds_alone": 0.25}
+      ],
+      "parse_failures_note": "No failed parse, crash, hang or timeout on any of the three projects. `partial` means zero symbols and zero references. Because Scala never yields references, any file whose definitions are all of an unsupported kind (val/var, given, type alias, package object) or that is a script of top-level calls gets this status. That also explains the first-pass Linguist result: the Linguist `Scala` folder is 7 script-like files (build.sbt, node11.sc, three .kojo scripts, two extension-less shebang scripts). Copied out and indexed here: 5 indexed, 2 skipped (no extension), 18 symbols, build.sbt partial. The samples are not representative of Scala projects.",
+      "references": {
+        "scope": "references in Scala files",
+        "os-lib": {"total": 0, "resolved": 0, "ambiguous": 0, "unresolved": 0},
+        "munit": {"total": 0, "resolved": 0, "ambiguous": 0, "unresolved": 0},
+        "gears": {"total": 0, "resolved": 0, "ambiguous": 0, "unresolved": 0},
+        "note": "ZERO references of any kind (call, extends, implementation) are extracted from Scala source: 0 in 311 Scala files / 1.0 MB across three projects, and 0 in a hand-written probe containing `Geometry.area(1.0, 2.0)` and `getHandle()`. Every reference the tool reports for os-lib (83: 3 resolved, 16 ambiguous, 64 unresolved) and munit (863: 307 resolved, 194 ambiguous, 362 unresolved) comes from the Java and JavaScript files in those repositories."
+      },
+      "edges_by_confidence": {
+        "scope": "edges with a Scala evidence file",
+        "CALLS": {"high": 0, "medium": 0, "low": 0, "exact": 0},
+        "EXTENDS": 0,
+        "IMPLEMENTS": 0,
+        "total": 0,
+        "repository_totals_all_from_non_scala_files": {"os-lib": {"CALLS high": 3}, "munit": {"CALLS high": 274, "CALLS medium": 14, "CALLS low": 3, "EXTENDS high": 7, "EXTENDS low": 1, "IMPLEMENTS high": 2, "IMPLEMENTS low": 2}, "gears": {}},
+        "note": "In munit 14 edges go from Java sources to Scala definitions (8 CALLS high, 3 EXTENDS, 3 IMPLEMENTS); they bind JVM code that uses the real JUnit 4 jar to munit's Scala.js/Native re-implementation of org.junit under munit/js-native/, e.g. edge 42 EventDispatcher.java:125 `getMethodName` -> munit/js-native/src/main/scala/org/junit/runner/Description.scala:15, labelled high."
+      },
+      "definitions": {
+        "files": ["os-lib os/src/Source.scala (Scala 2 syntax, 125 lines)", "os-lib os/src/Model.scala (Scala 2 syntax, 312 lines)", "os-lib os/src-3/Macros.scala (Scala 3, braces, 87 lines)", "gears shared/src/main/scala/async/Listener.scala (Scala 3, significant indentation, 107 lines)", "gears shared/src/main/scala/async/retry.scala (Scala 3, significant indentation, 154 lines)"],
+        "standard": "Expected = every def (including overloads, local defs and defs in anonymous classes), val/var members (not locals, not constructor parameters), class, case class, object, case object, trait, enum, given, type member. Strict `correct` = right name, right line, sensible kind; an `object` or `case object` stored with kind `function` is counted wrong. Lenient ignores kind.",
+        "expected": 152,
+        "extracted": 129,
+        "correct": 109,
+        "wrong": 20,
+        "missed": 23,
+        "precision": 0.845,
+        "recall": 0.717,
+        "lenient_kind_ignored": {"correct": 129, "precision": 1.0, "recall": 0.849},
+        "per_file": [
+          {"file": "os/src/Source.scala", "expected": 28, "extracted": 25, "correct": 23, "wrong": 2, "missed": 3},
+          {"file": "os/src/Model.scala", "expected": 59, "extracted": 53, "correct": 42, "wrong": 11, "missed": 6},
+          {"file": "os/src-3/Macros.scala", "expected": 13, "extracted": 13, "correct": 12, "wrong": 1, "missed": 0},
+          {"file": "async/Listener.scala", "expected": 25, "extracted": 18, "correct": 15, "wrong": 3, "missed": 7},
+          {"file": "async/retry.scala", "expected": 27, "extracted": 20, "correct": 17, "wrong": 3, "missed": 7}
+        ],
+        "missed_breakdown": {"val_var_members": 16, "symbolic_operator_defs": 4, "ordinary_defs": 2, "trait": 1},
+        "examples": {
+          "wrong": ["`object Source` (os/src/Source.scala:62) stored as kind function", "`case object File extends FileType` (os/src/Model.scala:16) stored as kind function", "`object Retry:` (retry.scala:56) stored as kind function with end_line 56 although it runs to line 154"],
+          "missed": ["`trait Source extends geny.Writable` (os/src/Source.scala:25), the central trait of the file", "second overload `def writeBytesTo(out: WritableByteChannel)` (os/src/Source.scala:39)", "`def +`, `def ++`, `def -`, `def --` (os/src/Model.scala:111-115)", "`val (out, err) = ..` (os/src/Model.scala:181)", "`val lock: Listener.ListenerLock | Null` (Listener.scala:32)", "`def completeNow(..): Boolean =` with an indented `if .. then .. else` body (Listener.scala:37)", "`val forever = Retry(retryOnSuccess = true)` (retry.scala:60)"]
+        },
+        "whole_repo_regex_cross_check": {
+          "method": "regex over every .scala file for declaration keywords, matched to a symbols row with the same name within 2 lines; automatic proxy, not hand-verified; val/var not included because members and locals cannot be told apart by regex",
+          "os-lib (Scala 2 style)": {"def": "608/620", "class": "55/57", "object": "138/139", "trait": "30/31", "type": "0/9"},
+          "munit (Scala 2 style, some scala-3 dirs with braces)": {"def": "686/702", "class": "176/178", "object": "143/143", "trait": "37/38", "type": "5/18 (the 5 are coincidental name matches)"},
+          "gears (Scala 3 significant indentation)": {"def": "394/424 (390 by the script plus 4 backtick names stored with their backticks, e.g. `yield`)", "class": "66/71", "object": "39/43", "trait": "33/35", "enum": "2/6", "given": "0/32", "type": "2/29"},
+          "objects_stored_as_kind_function": "os-lib 133 of 138, munit 139 of 143, gears 37 of 39"
+        },
+        "construct_probes": [
+          {"construct": "val / var / lazy val members", "result": "never extracted (0 of 16 in the five files; 0 of 4 in a hand-written probe)"},
+          {"construct": "type aliases, abstract type members, opaque types", "result": "never extracted (gears AsyncSupport.scala:14,17,27; Async.scala:120,401)"},
+          {"construct": "given instances (named and anonymous)", "result": "never extracted (gears 0 of 32, including named `given blockingImpl(..)` at jvm/.../AsyncImpl.scala:5)"},
+          {"construct": "enum", "result": "top-level `enum TaskSchedule:` extracted as class; simple cases (`case Red, Green`) extracted as kind function; parameterised cases (`case Every(val millis: Long, ..)`) not extracted; nested enums inside a class or behind `private` are missed (4 of 6 in gears)"},
+          {"construct": "extension methods", "result": "the defs inside `extension (..)` are extracted (ScalaConverters.scala asGears, asScala)"},
+          {"construct": "symbolic method names", "result": "`def +`, `def ++`, `def -`, `def --`, `object /`, `def ~~>` missed; `def unary_!` extracted"},
+          {"construct": "package object", "result": "not extracted"},
+          {"construct": "Scala 3 indentation, larger files", "result": "silent truncation: in gears shared/src/main/scala/async/Async.scala (450 lines) `object Async` (line 48) is missing and nothing after line 373 is extracted (raceImpl, select, either, handle, ~~> all absent); in Timer.scala (a class with braces containing indentation-style members) 4 of 15 definitions are extracted: the nested enum, the private object and its 5 members, a var and an inline def are missing. Both files are reported parse_status ok."},
+          {"construct": "content-dependent drop in Scala 2 syntax", "result": "os/src/Source.scala lines 25-60 indexed alone yield `trait Source` and both writeBytesTo overloads; lines 25-73 (the same text followed by `object Source {..}`) lose `trait Source` and the second overload. Small hand-written reductions did not reproduce it. Seen for other trait+companion pairs too (munit Compare.scala:23, gears Resource.scala:6)."}
+        ],
+        "verdict": "Definition extraction is usable for def/class/trait/object in Scala 2 syntax (about 98% of those keywords located in os-lib and munit) but not complete: vals, vars, givens, type members and symbolic methods are never recorded, objects carry the wrong kind, and Scala 3 indentation files lose definitions silently (about 92% of defs, 33% of enums located in gears, with whole tails of files missing)."
+      },
+      "precision": {
+        "standard": "same as Rust; not applicable because there is nothing to sample",
+        "high": {"population": 0, "sampled": 0, "correct": 0, "wrong": 0, "unverifiable": 0, "precision": null, "edge_ids": []},
+        "medium": {"population": 0, "sampled": 0, "correct": 0, "wrong": 0, "unverifiable": 0, "precision": null, "edge_ids": []},
+        "low": {"population": 0, "sampled": 0, "correct": 0, "wrong": 0, "unverifiable": 0, "precision": null, "edge_ids": []},
+        "note": "No edge of any kind has a Scala evidence file in os-lib, munit or gears. Precision is undefined (0/0), not 100%."
+      },
+      "recall": {
+        "files": ["os-lib os/src-3/Macros.scala", "os-lib os/src/Source.scala", "os-lib os/src/PermsOps.scala", "os-lib os/src/Model.scala (lines 21-115, without the repeated local add(..) calls)", "gears shared/src/main/scala/async/Listener.scala"],
+        "call_sites": 40,
+        "bound_correct": 0,
+        "bound_wrong": 0,
+        "ambiguous": 0,
+        "unbound": 40,
+        "recall": 0.0,
+        "per_file": [
+          {"file": "os/src-3/Macros.scala", "call_sites": 12, "unbound": 12, "examples": "Macros.stringPathChunkValidatedImpl('s) :13; segmentsFromStringLiteralValidation(literal) :41; fromStringSegments(..) :43"},
+          {"file": "os/src/Source.scala", "call_sites": 5, "unbound": 5, "examples": "getHandle() :28, :39, :113; Internals.transfer(inChannel, out) :37, :55"},
+          {"file": "os/src/PermsOps.scala", "call_sites": 10, "unbound": 10, "examples": "apply(p, followLinks = true) :10; PermSet.fromSet(..) :13; checker.value.onWrite(p) :27; arg2.toSet() :28"},
+          {"file": "os/src/Model.scala", "call_sites": 8, "unbound": 8, "examples": "permToMask(perm) :26; permToOffset(perm) :52; PermSet.permToMask(elem) :110"},
+          {"file": "async/Listener.scala", "call_sites": 5, "unbound": 5, "examples": "acquireLock() :38; this.complete(data, source) :39; lock.release() :44; acceptingListener(consumer) :59"}
+        ],
+        "note": "Not a sampling artefact: the symbol_references table has no row for any Scala file."
+      },
+      "weak_spots": [
+        {"case": "apply on a companion object / case class", "example": "os/src/Model.scala:219 `Shellable(Seq(s))`; gears retry.scala:60 `Retry(retryOnSuccess = true)`; gears ScalaConverters.scala:26 `Listener((res, _) => ..)` (Listener.apply)", "outcome": "Not bound: no reference is extracted from Scala. The `def apply` definitions themselves are indexed."},
+        {"case": "implicit / given conversions", "example": "os/src/Model.scala:22-77 `implicit def fromSet/fromString/fromInt` used implicitly wherever a PermSet is expected; gears jvm/.../DefaultSupport.scala:5 `given AsyncOperations = JvmAsyncOperations`", "outcome": "Invisible. Implicit applications have no syntax to match, explicit calls are not extracted either, and `given` definitions are not even recorded as symbols."},
+        {"case": "overloaded methods", "example": "os/src/PermsOps.scala:10 `def apply(p: Path): PermSet = apply(p, followLinks = true)` calling the overload on line 11", "outcome": "Not bound. Both overloads are indexed as separate symbols with identical fqn `os/src/PermsOps.scala:apply`; in os/src/Source.scala the second overload of writeBytesTo is missing altogether."},
+        {"case": "methods inherited from a trait", "example": "os/src/Source.scala:113 `def getChannel() = getHandle().right.get` in `trait SeekableSource extends Source`", "outcome": "Not bound. The `extends Source` clause is not recorded either: Scala has no EXTENDS/IMPLEMENTS references, so no hierarchy exists to walk."},
+        {"case": "method chains", "example": "gears retry.scala:68 `Retry(retryOnSuccess = true).withMaximumFailures(0)`", "outcome": "Not bound."},
+        {"case": "same-named methods on different types", "example": "`getHandle` is defined 8 times in os/src/Source.scala and called 3 times", "outcome": "Not bound. All 8 definitions share the fqn `os/src/Source.scala:getHandle`, so they could not be told apart even if calls were extracted."}
+      ],
+      "tool_answers": [
+        {"command": "repocortex tool call find_callers name=segmentsFromStringLiteralValidation (os-lib)", "rows": 0, "right": 0, "missing": "all 8 call sites: os/src-2/Macros.scala:34,50,65,76 and os/src-3/Macros.scala:41,58,72,82. The output says the result is a lower bound and not proof of absence, but its coverage line ('16% of the 19 references ... Run repocortex resolve to raise it') describes the Java files, not Scala, and resolve had already been run."},
+        {"command": "repocortex tool call analyze_impact symbol=segmentsFromStringLiteralValidation (os-lib)", "rows": 0, "right": 0, "missing": "0 direct, 0 indirect, 'Risk low (score 20)'. Reality: 8 macro implementations call it and every compile-time-validated path literal goes through them. It adds 'an empty result is as likely to mean not indexed as not used'."},
+        {"command": "repocortex tool call find_implementations name=Checker (os-lib)", "rows": 0, "right": 0, "missing": "`object Nop extends Checker` (os/src/Model.scala:308) and `case class AccessChecker(..) extends os.Checker` (os/test/src/TestUtil.scala:121). Same for name=SeekableSource: 0 rows, misses ChannelSource (Source.scala:117) and ChannelLengthSource (Source.scala:120)."}
+      ],
+      "notes": [
+        "Headline: for Scala the tool builds a definition list and nothing else. There is no call graph, no type hierarchy and no usable find_callers / analyze_impact / find_implementations answer. The documented precision 94-100% / recall 33-66% does not apply: measured recall is 0/40 and precision is undefined.",
+        "The Scala tags query in this build appears to be inferred rather than hand-written and contains definition patterns only; Rust, by contrast, yields 18,723 references from 102 files.",
+        "`repocortex resolve` on a Scala-only repository prints 'References: 0 ... Edges: 0' and exits 0; `index` reports the run as degraded only because of the partial files, not because the language has no references.",
+        "Kinds: every def is `function`; object and case object are `function`; trait is `interface`; class, case class and enum are `class`.",
+        "No crash, hang or timeout in any command on any of the three Scala projects."
+      ]
+    }
+  ],
+  "cleanup": "Clones of ripgrep, os-lib, munit and gears and the probe directory under work/R7 were deleted. Small helper scripts (q.sh, sample.py, annot.py, rust_defs.py, scala_defs.py) and sample_ripgrep.json remain in work/R7."
+}

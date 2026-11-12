@@ -1,0 +1,524 @@
+{
+  "group": "G2",
+  "languages": [
+    {
+      "language": "commonlisp",
+      "sources": [
+        "github/linguist samples/Common Lisp/macros-advanced.cl",
+        "github/linguist samples/Common Lisp/array.l",
+        "github/linguist samples/Common Lisp/sample.lisp",
+        "github.com/sharplispers/split-sequence: list.lisp",
+        "github.com/sharplispers/split-sequence: api.lisp",
+        "github.com/sionescu/bordeaux-threads: apiv2/impl-abcl.lisp"
+      ],
+      "detected_language_ok": true,
+      "files_checked": 6,
+      "parse": {
+        "ok": 6,
+        "partial": 0,
+        "failed": 0,
+        "errors": []
+      },
+      "convention": "Every top-level definition form counts once per textual form: defun, defmacro, defgeneric, defmethod, defvar/defparameter/defconstant, defclass, defstruct, deftype, define-condition (a macro redefined three times = 3). Not counted: flet/labels locals, declaim, in-package, defpackage.",
+      "expected": 76,
+      "extracted": 57,
+      "correct": 57,
+      "wrong": 0,
+      "missed": 19,
+      "wrong_kind": 7,
+      "precision": 1.0,
+      "recall": 0.75,
+      "wrong_examples": [],
+      "missed_examples": [
+        "api.lisp:27 (define-condition simple-program-error (program-error simple-condition) ())",
+        "impl-abcl.lisp:51 (defstruct mutex name lock)",
+        "impl-abcl.lisp:9 (deftype native-thread () ...)",
+        "impl-abcl.lisp:62 (defconstant +lock+ ...)",
+        "impl-abcl.lisp:138 (defstruct (semaphore (:constructor %%make-semaphore (name cell))) ...)"
+      ],
+      "pattern": "defun, defmacro, defmethod, defgeneric, defvar and defparameter are extracted reliably; defconstant (11 missed), defstruct (4), deftype (3) and define-condition (1) are never extracted, and a synthetic probe showed defclass, defpackage and (defun (setf x) ...) are also skipped. All 7 defmacro forms are labelled kind 'function' (counted as wrong_kind).",
+      "verdict": "usable",
+      "missed_breakdown": {
+        "defconstant": 11,
+        "defstruct": 4,
+        "deftype": 3,
+        "define-condition": 1
+      }
+    },
+    {
+      "language": "crystal",
+      "sources": [
+        "github.com/kemalcr/kemal: src/kemal/handler.cr",
+        "github.com/kemalcr/kemal: src/kemal/helpers/macros.cr",
+        "github.com/kemalcr/kemal: src/kemal/websocket_handler.cr",
+        "github.com/kemalcr/kemal: src/kemal/helpers/exceptions.cr"
+      ],
+      "detected_language_ok": true,
+      "files_checked": 4,
+      "parse": {
+        "ok": 3,
+        "partial": 1,
+        "failed": 0,
+        "errors": [
+          "macros.cr: parse_status=partial, parse_error is NULL (no text)"
+        ]
+      },
+      "convention": "module, class, struct, enum, alias, def (instance and self.), macro, and named constants (UPPER = ...). Not counted: getter/property/setter macro calls, instance variables, include/extend.",
+      "expected": 55,
+      "extracted": 50,
+      "correct": 43,
+      "wrong": 7,
+      "missed": 12,
+      "wrong_kind": 0,
+      "precision": 0.86,
+      "recall": 0.7818,
+      "wrong_examples": [
+        "exceptions.cr:3 'Exception' (class) - superclass in `class InvalidPathStartException < Exception`",
+        "exceptions.cr:15 'Exception' (class) - superclass in `class RouteNotFound < Exception`",
+        "exceptions.cr:30 'Exception' (class) - superclass in `class MethodNotAllowed < Exception`",
+        "exceptions.cr:43 'Exception' (class) - superclass in `class CustomException < Exception`",
+        "exceptions.cr:52 'Exception' (class) - superclass in `class PayloadTooLarge < Exception`"
+      ],
+      "missed_examples": [
+        "macros.cr:46 macro content_for(key)",
+        "macros.cr:65 macro render(filename, layout)",
+        "macros.cr:118 macro halt(env, status_code = 200, response = \"\")",
+        "handler.cr:59 macro only(paths, method = \"GET\")",
+        "handler.cr:189 class Handler (lost because the macro definitions earlier in the file derail the grammar; found once the macros are deleted)"
+      ],
+      "pattern": "Every `class X < Y` also records the superclass Y as a second class definition on the same line (7 of 7 subclasses). `macro` definitions are never extracted (11 of 11 missed) and a file consisting only of macros parses 'partial' with 0 symbols; macro bodies also swallowed one ordinary class that followed them. Plain def/class/module/constant extraction is accurate. Modules are labelled kind 'package' (4), structs and enums 'class'; alias, lib/fun, annotation and abstract def were not extracted in a synthetic probe.",
+      "verdict": "usable"
+    },
+    {
+      "language": "css",
+      "sources": [
+        "github.com/necolas/normalize.css: normalize.css",
+        "github.com/animate-css/animate.css: source/_base.css",
+        "github.com/animate-css/animate.css: source/_vars.css",
+        "github.com/animate-css/animate.css: source/attention_seekers/bounce.css",
+        "github.com/animate-css/animate.css: source/flippers/flip.css"
+      ],
+      "detected_language_ok": true,
+      "files_checked": 5,
+      "parse": {
+        "ok": 5,
+        "partial": 0,
+        "failed": 0,
+        "errors": []
+      },
+      "convention": "CSS has no functions or types. Decision: selectors/rule sets are NOT definitions (they are rules applied to elements, the 53 selector rule sets in these files were not counted); `@keyframes <name>` and custom-property declarations (`--name: value`) ARE counted because they introduce a name that is referenced elsewhere (animation-name, var()).",
+      "expected": 5,
+      "extracted": 0,
+      "correct": 0,
+      "wrong": 0,
+      "missed": 5,
+      "wrong_kind": 0,
+      "precision": null,
+      "recall": 0.0,
+      "wrong_examples": [],
+      "missed_examples": [
+        "bounce.css:1 @keyframes bounce {",
+        "flip.css:1 @keyframes flip {",
+        "_vars.css:2 --animate-duration: 1s;",
+        "_vars.css:3 --animate-delay: 1s;",
+        "_vars.css:4 --animate-repeat: 1;"
+      ],
+      "pattern": "The tool parses CSS cleanly but emits zero symbols for any CSS file (also 0 symbols for Linguist's 6307-line bootstrap.css in the first pass): no selectors, no @keyframes, no custom properties. For a selector-only stylesheet such as normalize.css there is nothing a developer would call a definition; the 5 named declarations that do exist in the sample are all missed.",
+      "verdict": "broken",
+      "verdict_note": "Zero symbols in every case. If keyframes and custom properties are not considered definitions the fair label is 'nothing to extract'; by the convention stated here recall is 0/5."
+    },
+    {
+      "language": "cuda",
+      "sources": [
+        "github/linguist samples/Cuda/vectorAdd.cu",
+        "github/linguist samples/Cuda/scalarProd_kernel.cuh",
+        "github.com/harrism/mini-nbody: cuda/nbody-orig.cu",
+        "github.com/harrism/mini-nbody: cuda/nbody-block.cu",
+        "github.com/harrism/mini-nbody: cuda/nbody-soa.cu"
+      ],
+      "detected_language_ok": true,
+      "files_checked": 5,
+      "parse": {
+        "ok": 5,
+        "partial": 0,
+        "failed": 0,
+        "errors": []
+      },
+      "convention": "As for C/C++: function definitions (including __global__/__device__ kernels), struct/class/typedef types, and object-like #define constants. Not counted: #include, locals.",
+      "expected": 21,
+      "extracted": 15,
+      "correct": 15,
+      "wrong": 0,
+      "missed": 6,
+      "wrong_kind": 0,
+      "precision": 1.0,
+      "recall": 0.7143,
+      "wrong_examples": [],
+      "missed_examples": [
+        "nbody-orig.cu:6 #define BLOCK_SIZE 256",
+        "nbody-orig.cu:7 #define SOFTENING 1e-9f",
+        "nbody-block.cu:6 #define BLOCK_SIZE 256",
+        "nbody-soa.cu:6 #define BLOCK_SIZE 256",
+        "nbody-soa.cu:7 #define SOFTENING 1e-9f"
+      ],
+      "pattern": "All 12 functions (kernels included, also when the return type and __global__ sit on the preceding line) and all 3 typedef'd structs are found; every #define constant is missed (6 of 6). The real samples are plain C-style CUDA; a synthetic probe showed that namespaces, enums, out-of-class method definitions (`void Solver::step`), constructor declarations, `using` aliases and const globals are not extracted either. Structs/typedefs are labelled 'class'.",
+      "verdict": "usable",
+      "recall_excluding_defines": 1.0
+    },
+    {
+      "language": "cue",
+      "sources": [
+        "github/linguist samples/CUE/kube.cue",
+        "github.com/cue-labs/cue-by-example: 004_mythic_beasts_dns/schema.cue",
+        "github.com/cue-labs/cue-by-example: 004_mythic_beasts_dns/shared.cue",
+        "github.com/cue-labs/cue-by-example: 003_kubernetes_tutorial/manual/services/kitchen/kube.cue (copied as kitchen_kube.cue)"
+      ],
+      "detected_language_ok": true,
+      "files_checked": 4,
+      "parse": {
+        "ok": 0,
+        "partial": 4,
+        "failed": 0,
+        "errors": [
+          "all 4 files: parse_status=partial, parse_error is NULL (no text)"
+        ]
+      },
+      "convention": "The package clause, plus each distinct top-level label per file: definitions (`#Name:`), hidden fields (`_name:`) and regular top-level fields. Nested fields, comprehensions and `let` bindings not counted.",
+      "expected": 30,
+      "extracted": 0,
+      "correct": 0,
+      "wrong": 0,
+      "missed": 30,
+      "wrong_kind": 0,
+      "precision": null,
+      "recall": 0.0,
+      "wrong_examples": [],
+      "missed_examples": [
+        "schema.cue:10 #Zone: {",
+        "schema.cue:36 #Record: {",
+        "schema.cue:40 #TTL: int & >=0 & <=2147483647",
+        "kube.cue:44 #Component: string",
+        "kube.cue:70 _spec: {"
+      ],
+      "pattern": "Nothing is extracted from any CUE file: all four valid files are reported as 'partial' parses with no error text and yield zero symbols, so not even `#Definition` names or the package clause are indexed.",
+      "verdict": "broken",
+      "expected_breakdown": {
+        "package clauses": 4,
+        "#definitions": 15,
+        "other top-level fields": 11
+      }
+    },
+    {
+      "language": "d",
+      "sources": [
+        "github/linguist samples/D/arrayops.d",
+        "github/linguist samples/D/mpq.d",
+        "github/linguist samples/D/aa.d",
+        "github/linguist samples/D/template.d",
+        "github/linguist samples/D/template_function.d"
+      ],
+      "detected_language_ok": true,
+      "files_checked": 5,
+      "parse": {
+        "ok": 4,
+        "partial": 1,
+        "failed": 0,
+        "errors": [
+          "template.d: parse_status=partial, parse_error is NULL (no text)"
+        ]
+      },
+      "convention": "module declaration, struct/class/interface/union/enum types, functions and methods (extern prototypes, constructors `this` and destructors `~this` included), templates, aliases that introduce a name, and module- or aggregate-level constants (`enum X = ...`, `const X = ...`). Not counted: member fields, `alias x this`, unittest blocks, locals, names produced only by string mixins. Nested functions were not expected but accepted as correct when extracted (4 cases).",
+      "expected": 124,
+      "extracted": 84,
+      "correct": 84,
+      "wrong": 0,
+      "missed": 44,
+      "wrong_kind": 31,
+      "precision": 1.0,
+      "recall": 0.6452,
+      "wrong_examples": [],
+      "missed_examples": [
+        "mpq.d:37 const LIBMPQ_ERROR_OPEN = -1; (12 such module constants, none extracted)",
+        "aa.d:15 enum GROW_NUM = 4; (11 manifest constants, none extracted)",
+        "mpq.d:146 template MPQ_FUNC(char[] func_name) {",
+        "mpq.d:105 this(char[] fnname = \"unknown_function\", int errno = 0) { (constructor)",
+        "mpq.d:24 module mpq;"
+      ],
+      "pattern": "Named functions, methods, extern(C) prototypes and struct/class types are extracted accurately (no false positives). Never extracted: constants (`const X =` / `enum X =`, 25 missed), constructors and destructors (10), templates (4, and a template-only file parses 'partial'), aliases (3) and the module declaration (2). Every method inside a class/struct is labelled 'function' rather than 'method' (31 wrong_kind); a probe also showed enum members emitted as 'function'.",
+      "verdict": "usable",
+      "note": "correct=84 includes 4 nested functions outside the expected list; recall uses the 80 expected definitions that were found.",
+      "missed_breakdown": {
+        "constants": 25,
+        "constructors/destructors": 10,
+        "templates": 4,
+        "aliases": 3,
+        "module declarations": 2
+      }
+    },
+    {
+      "language": "dart",
+      "sources": [
+        "github/linguist samples/Dart/point.dart",
+        "github/linguist samples/Dart/addressbook.pb.dart",
+        "github.com/google/quiver-dart: lib/src/iterables/min_max.dart",
+        "github.com/google/quiver-dart: lib/src/async/countdown_timer.dart",
+        "github.com/google/quiver-dart: lib/src/cache/map_cache.dart",
+        "github.com/google/quiver-dart: lib/check.dart"
+      ],
+      "detected_language_ok": true,
+      "files_checked": 6,
+      "parse": {
+        "ok": 6,
+        "partial": 0,
+        "failed": 0,
+        "errors": []
+      },
+      "convention": "classes (also mixins, enums, extensions, typedefs), top-level functions, methods, getters and setters (each counted), constructors including named and factory constructors, and top-level const/final variables. Not counted: `library` directive, instance/static fields, imports, locals.",
+      "expected": 89,
+      "extracted": 72,
+      "correct": 72,
+      "wrong": 0,
+      "missed": 17,
+      "wrong_kind": 35,
+      "precision": 1.0,
+      "recall": 0.809,
+      "wrong_examples": [],
+      "missed_examples": [
+        "addressbook.pb.dart:24 factory Person_PhoneNumber({ ... }) (unnamed factory constructor)",
+        "addressbook.pb.dart:36 factory Person_PhoneNumber.fromBuffer(...)",
+        "addressbook.pb.dart:64 set number($core.String value) => ... (setter)",
+        "map_cache.dart:31 factory MapCache.lru({int? maximumSize}) {",
+        "addressbook.pb.dart:195 const $core.bool _omitFieldNames = ..."
+      ],
+      "pattern": "Classes, generative constructors, getters, methods and top-level functions are all found with no false positives. Never extracted: factory constructors (10 missed), setters (5) and top-level constants (2); a probe also showed typedefs, extension names, operators and top-level var/final are skipped. Kinds are inconsistent: getters and constructors are 'method' but ordinary instance and static methods are 'function' (35 wrong_kind); the named constructor `Person._()` is recorded under the bare class name.",
+      "verdict": "usable",
+      "missed_breakdown": {
+        "factory constructors": 10,
+        "setters": 5,
+        "top-level constants": 2
+      }
+    },
+    {
+      "language": "devicetree",
+      "sources": [
+        "github.com/dgibson/dtc: tests/test_tree1.dts",
+        "github.com/dgibson/dtc: tests/label01.dts",
+        "github.com/dgibson/dtc: tests/multilabel_merge.dts",
+        "github.com/dgibson/dtc: tests/overlay_overlay.dts",
+        "github.com/dgibson/dtc: tests/aliases.dts"
+      ],
+      "detected_language_ok": true,
+      "files_checked": 5,
+      "parse": {
+        "ok": 0,
+        "partial": 5,
+        "failed": 0,
+        "errors": [
+          "all 5 files: parse_status=partial, parse_error is NULL (no text)"
+        ]
+      },
+      "convention": "Every named node block (`[label:] name[@addr] { ... }`), counted once per block, with its label considered part of the node. Not counted: the root node `/`, `&label { }` overlay references, properties, property labels, /memreserve/ lines.",
+      "expected": 30,
+      "extracted": 0,
+      "correct": 0,
+      "wrong": 0,
+      "missed": 30,
+      "wrong_kind": 0,
+      "precision": null,
+      "recall": 0.0,
+      "wrong_examples": [],
+      "missed_examples": [
+        "test_tree1.dts:14 subnode@1 {",
+        "test_tree1.dts:36 ssn0: subsubnode@0 {",
+        "label01.dts:40 node: randomnode {",
+        "aliases.dts:17 sub1: subnode@1 {",
+        "overlay_overlay.dts:35 local: new-local-node {"
+      ],
+      "pattern": "Nothing is extracted: no Linguist sample folder exists, and all five valid .dts files from the dtc test suite are reported as 'partial' parses with no error text and yield zero symbols - neither node names nor labels are indexed.",
+      "verdict": "broken",
+      "linguist_samples": "none (no 'Device Tree' folder in Linguist samples)"
+    },
+    {
+      "language": "elixir",
+      "sources": [
+        "github/linguist samples/Elixir/function.ex",
+        "github/linguist samples/Elixir/atom.ex",
+        "github/linguist samples/Elixir/integer.ex",
+        "github/linguist samples/Elixir/float.ex"
+      ],
+      "detected_language_ok": true,
+      "files_checked": 4,
+      "parse": {
+        "ok": 4,
+        "partial": 0,
+        "failed": 0,
+        "errors": []
+      },
+      "convention": "defmodule/defprotocol/defimpl, every def/defp/defmacro/defmacrop/defguard/defdelegate clause (each clause head is one definition site, bodiless headers included), and @type/@typep/@opaque/@callback. Not counted: module attributes used as constants, @spec, imports.",
+      "expected": 103,
+      "extracted": 62,
+      "correct": 62,
+      "wrong": 0,
+      "missed": 41,
+      "wrong_kind": 0,
+      "precision": 1.0,
+      "recall": 0.6019,
+      "wrong_examples": [],
+      "missed_examples": [
+        "float.ex:19 def pow(base, exponent) when is_float(base) and is_number(exponent),",
+        "integer.ex:183 def gcd(integer1, integer2) when is_integer(integer1) and is_integer(integer2) do",
+        "integer.ex:11 defguard is_odd(integer) when is_integer(integer) and (integer &&& 1) == 1",
+        "float.ex:3 defmodule Float do",
+        "float.ex:209 defp decimal_to_float(sign, num, den, exp) do (no guard; found when the file is truncated after line 212)"
+      ],
+      "pattern": "Any clause with a `when` guard is silently dropped (33 of the 41 misses), so functions whose every clause is guarded (Float.pow, Integer.pow, Integer.gcd, Integer.digits ...) vanish from the index: only 39 of 52 distinct names are present. defguard (2) and @type (2) are never extracted, and a probe showed defdelegate, defprotocol, defimpl, defstruct and paren-less zero-arity defs are skipped too. In float.ex the module itself and 3 unguarded defs are also lost although parse_status is 'ok'. What is extracted is correct; modules are labelled 'package'. Borderline between usable and poor.",
+      "verdict": "usable",
+      "distinct_names_expected": 52,
+      "distinct_names_found": 39,
+      "missed_breakdown": {
+        "guarded clauses (when)": 33,
+        "defguard": 2,
+        "@type": 2,
+        "defmodule": 1,
+        "unguarded def lost in float.ex": 3
+      }
+    },
+    {
+      "language": "erlang",
+      "sources": [
+        "github/linguist samples/Erlang/record_utils.erl",
+        "github/linguist samples/Erlang/record_helper.erl",
+        "github/linguist samples/Erlang/single-context.es (detected as javascript, 0 symbols; re-tested as single_context_renamed.escript)",
+        "github.com/ninenines/ranch: src/ranch_acceptor.erl",
+        "github.com/ninenines/ranch: src/ranch_crc32c.erl",
+        "github.com/ninenines/ranch: src/ranch_transport.erl",
+        "github.com/ninenines/ranch: examples/tcp_reverse/src/reverse_protocol.erl"
+      ],
+      "detected_language_ok": false,
+      "detected_as": {
+        "single-context.es": "javascript (parse ok, 0 symbols); all .erl and .escript files detected as erlang"
+      },
+      "files_checked": 7,
+      "parse": {
+        "ok": 7,
+        "partial": 0,
+        "failed": 0,
+        "errors": []
+      },
+      "convention": "-module, every function clause head (each clause is one definition site), -record, -type/-opaque and -define macros (the ctags kinds). Not counted: -spec, -export, -behaviour, and -callback declarations (31 in ranch_transport.erl; none extracted).",
+      "expected": 126,
+      "extracted": 114,
+      "correct": 114,
+      "wrong": 0,
+      "missed": 12,
+      "wrong_kind": 1,
+      "precision": 1.0,
+      "recall": 0.9048,
+      "wrong_examples": [],
+      "missed_examples": [
+        "ranch_transport.erl:20 -type socket() :: any().",
+        "ranch_transport.erl:25 -type sendfile_opts() :: [{chunk_size, non_neg_integer()}].",
+        "ranch_crc32c.erl:20 -define(CRC32C_TABLE, {",
+        "reverse_protocol.erl:17 -define(TIMEOUT, 60000).",
+        "record_utils.erl:3 -module(record_utils)."
+      ],
+      "pattern": "Every function clause head is extracted (113 of 113, guards and multi-line heads included), one row per clause, so a function with 11 clauses appears 11 times (114 rows cover 51 distinct names). Outside functions almost nothing is indexed: -module (6), -type (4) and -define (2) are all missed, and the single -record is extracted but labelled 'function'. Linguist's `.es` escript is detected as JavaScript and yields 0 symbols; the same file renamed `.escript` is detected as Erlang and fully extracted.",
+      "verdict": "good",
+      "missed_breakdown": {
+        "-module": 6,
+        "-type": 4,
+        "-define": 2
+      }
+    },
+    {
+      "language": "faust",
+      "sources": [
+        "github/linguist samples/Faust/FFT.dsp",
+        "github/linguist samples/Faust/lowCut.dsp",
+        "github.com/grame-cncm/faustlibraries: tests/delays_tests.dsp",
+        "github.com/grame-cncm/faustlibraries: tests/spats_tests.dsp",
+        "github.com/grame-cncm/faustlibraries: dx7/lfo.lib (skipped as .lib; re-tested as lfo_lib_renamed.dsp)",
+        "github.com/grame-cncm/faustlibraries: platform.lib (re-tested as platform_lib_renamed.dsp)"
+      ],
+      "detected_language_ok": false,
+      "detected_as": {
+        "*.lib": "not recognised (skipped: no grammar for this file type); *.dsp detected as faust"
+      },
+      "files_checked": 6,
+      "parse": {
+        "ok": 4,
+        "partial": 2,
+        "failed": 0,
+        "skipped": 1,
+        "errors": [
+          "lfo.lib: parse_status=skipped, parse_error='no grammar for this file type'",
+          "delays_tests.dsp and platform_lib_renamed.dsp: parse_status=partial, parse_error is NULL (no text)"
+        ]
+      },
+      "convention": "Every top-level definition statement: `name = expr;` (including `process` and `x = library(...)` bindings) and `name(args) = expr;`, one per statement (pattern-matching clauses each count). Local definitions inside `with { }` were not expected but accepted as correct when extracted (7 cases). Not counted: declare, import.",
+      "expected": 92,
+      "extracted": 24,
+      "correct": 24,
+      "wrong": 0,
+      "missed": 75,
+      "wrong_kind": 0,
+      "precision": 1.0,
+      "recall": 0.1848,
+      "wrong_examples": [],
+      "missed_examples": [
+        "FFT.dsp:26 process = signal : dm.fft_spectral_level_demo(N) <: _,_;",
+        "FFT.dsp:9 N=32;",
+        "lowCut.dsp:34 freq = hslider(\"freq [unit:Hz][style:knob]\", 100, 20, 5000, 1);",
+        "delays_tests.dsp:12 delay_test = os.tosc(440) : de.delay(44100, 22050);",
+        "platform_lib_renamed.dsp:70 SR = min(192000.0, max(50.0, fconstant(int fSamplingFreq, <math.h>)));"
+      ],
+      "pattern": "Only definitions written with a parameter list, `name(args) = ...`, are extracted (17 of 17 top-level ones, plus 7 local ones in `with` blocks); a definition without parameters, `name = expr;`, is never extracted (0 of 75), which includes every `process` entry point, every constant and every `library()` binding. Faust library files (`.lib`, where most real Faust definitions live) are not recognised at all ('no grammar for this file type').",
+      "verdict": "poor",
+      "note": "correct=24 includes 7 local `with` definitions outside the expected list; recall uses the 17 expected definitions that were found."
+    },
+    {
+      "language": "fish",
+      "sources": [
+        "github/linguist samples/fish/eval.fish",
+        "github/linguist samples/fish/config.fish",
+        "github/linguist samples/fish/funced.fish",
+        "github.com/jorgebucaran/fisher: functions/fisher.fish",
+        "github.com/jorgebucaran/hydro: conf.d/hydro.fish",
+        "github.com/jorgebucaran/nvm.fish: conf.d/nvm.fish (copied as nvm_confd.fish)",
+        "github.com/jorgebucaran/nvm.fish: functions/nvm.fish (copied as nvm_functions.fish)"
+      ],
+      "detected_language_ok": true,
+      "files_checked": 7,
+      "parse": {
+        "ok": 7,
+        "partial": 0,
+        "failed": 0,
+        "errors": []
+      },
+      "convention": "`function NAME ...` with a literal name, wherever it appears. Not counted: functions with a computed name (`function $color`, 2 in hydro.fish; none extracted), `set` variable assignments, completions.",
+      "expected": 20,
+      "extracted": 20,
+      "correct": 20,
+      "wrong": 0,
+      "missed": 0,
+      "wrong_kind": 0,
+      "precision": 1.0,
+      "recall": 1.0,
+      "wrong_examples": [],
+      "missed_examples": [],
+      "pattern": "Every literally named function is extracted at the right line with kind 'function', including event-handler functions with --on-event/--on-variable flags; nothing else is emitted. Functions whose name is a variable are (reasonably) not indexed. The sample contains no alias/abbr definitions, so those are untested.",
+      "verdict": "good"
+    }
+  ],
+  "notes": [
+    "Binary: scratchpad/langs/repocortex (version 'dev'). Each language was indexed in its own directory under scratchpad/langs/work/G2/idx/<language>; raw query output is in work/G2/out/<language>.{files,syms}.json.",
+    "Scoring unit: one definition site. For languages with multi-clause functions (Elixir, Erlang, Faust, redefinitions in Common Lisp) each clause head / definition form is one site, so several rows with the same name on different lines are each 'correct', not duplicates. Distinct-name figures are given where this matters (Elixir 39/52 names; Erlang 114 rows = 51 names).",
+    "'correct' can exceed (expected - missed) where the tool extracted real nested/local definitions that the convention did not require (D: 4 nested functions; Faust: 7 `with`-local definitions). Recall always uses expected definitions only.",
+    "wrong_kind counts labels that put a definition in a different category of the language (macro or method labelled 'function', record labelled 'function'). The tool's documented vocabulary merges (struct/enum/typedef -> 'class', module/namespace -> 'package') were NOT counted as wrong_kind but are mentioned per language.",
+    "parse_status 'partial' never came with an error message: parse_error was NULL for all 13 partial files (cue 4, devicetree 5, faust 2, crystal 1, d 1). 'ok' is not a guarantee either: crystal handler.cr and elixir float.ex are 'ok' yet lose definitions that are found when the surrounding code is removed.",
+    "Language detection findings: Erlang escript with extension .es is indexed as javascript (0 symbols); Faust .lib files are skipped with 'no grammar for this file type'; Common Lisp .l and .cl were detected correctly.",
+    "Synthetic probe files (not scored) were used only to confirm patterns seen in real files; they live in work/G2/probe/.",
+    "Nothing crashed or hung. Every index run finished in under 0.4 s wall time (reported Duration 29-194 ms).",
+    "All 12 languages could be tested. Device Tree has no Linguist sample folder, so its files come from the dtc test suite only."
+  ]
+}

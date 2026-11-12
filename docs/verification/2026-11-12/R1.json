@@ -1,0 +1,688 @@
+{
+ "group": "R1",
+ "languages": [
+  {
+   "language": "go",
+   "project": "https://github.com/gin-gonic/gin",
+   "commit": "0f09c3a9b4626d9fe9979cf4d0521d6ae32ab646",
+   "timing": {
+    "index_wall_s": 1.553,
+    "index_reported_ms": 1494,
+    "resolve_wall_s": 0.253,
+    "resolve_reported_ms": 225
+   },
+   "index_stats": {
+    "files_discovered": 123,
+    "files_indexed": 98,
+    "files_skipped": 25,
+    "files_partial": 0,
+    "files_failed": 0,
+    "go_files_on_disk": 99,
+    "go_files_indexed_ok": 98,
+    "go_file_absent_from_files_table": "testdata/protoexample/test.pb.go (git-tracked, generated protobuf; not listed even as skipped)",
+    "symbols": 1963,
+    "go_symbol_rows_by_kind": {
+     "function": 909,
+     "method": 408,
+     "variable": 330,
+     "class": 188,
+     "constant": 108,
+     "interface": 20,
+     "endpoint": 1
+    },
+    "references": 9338,
+    "imports": 517,
+    "run_status": "ready"
+   },
+   "references": {
+    "total": 9338,
+    "resolved": 3590,
+    "ambiguous": 1410,
+    "unresolved": 4338,
+    "resolved_pct_of_all": 38.4,
+    "resolved_pct_of_refs_naming_an_indexed_definition": 71.8,
+    "by_kind": {
+     "call": {
+      "resolved": 3572,
+      "ambiguous": 1410,
+      "unresolved": 4329
+     },
+     "extends": {
+      "resolved": 18,
+      "unresolved": 9
+     }
+    }
+   },
+   "edges_by_confidence": {
+    "total": 3577,
+    "CALLS": {
+     "exact": 0,
+     "high": 3448,
+     "medium": 103,
+     "low": 8
+    },
+    "EXTENDS": {
+     "high": 18
+    }
+   },
+   "definitions": {
+    "files": [
+     "auth.go",
+     "errors.go",
+     "response_writer.go",
+     "mode.go",
+     "render/json.go"
+    ],
+    "standard": "expected = type declarations, functions, methods, package-level constants and variables. Struct fields and interface method specs are not counted here (see with_members).",
+    "expected": 89,
+    "extracted": 92,
+    "correct": 89,
+    "wrong": 3,
+    "missed": 0,
+    "precision": 0.967,
+    "recall": 1.0,
+    "with_members": {
+     "note": "if the 16 struct fields and 6 interface method specs in these files are also expected (none are extracted)",
+     "expected": 111,
+     "correct": 89,
+     "recall": 0.802
+    },
+    "examples": {
+     "wrong": [
+      "errors.go:105 `var result errorMsgs` (function-local) indexed as variable errors.go:result, indistinguishable from a package-level variable",
+      "errors.go:165 `var buffer strings.Builder` (function-local)",
+      "render/json.go:162 `var buffer bytes.Buffer` (function-local)"
+     ],
+     "missed": [],
+     "quality_notes": [
+      "every named type (struct, map type, slice type, func type) has kind=class",
+      "method fqn omits the receiver type: Error.JSON and errorMsgs.JSON are both `errors.go:JSON`; six Render methods in render/json.go share one fqn",
+      "interface method specs (ResponseWriter.Status/Size/WriteString/Written/WriteHeaderNow/Pusher) and struct fields are not symbols"
+     ]
+    }
+   },
+   "precision": {
+    "standard": "correct = the edge target is the function/method the call statically invokes; for a call through an interface, any in-repo implementation that can legitimately be the dynamic target counts as correct (this includes an implementation compiled only under a non-default build tag, flagged below).",
+    "sampling": "per tier, CALLS edges with a .go evidence file ordered by id; every k-th id (k = population // 20, offset k // 2); tiers with fewer than 20 edges taken whole",
+    "high": {
+     "population": 3448,
+     "sampled": 20,
+     "correct": 18,
+     "wrong": 2,
+     "unverifiable": 0,
+     "precision": 0.9,
+     "edge_ids": [
+      88,
+      267,
+      439,
+      613,
+      789,
+      964,
+      1155,
+      1378,
+      1550,
+      1739,
+      1920,
+      2095,
+      2267,
+      2439,
+      2613,
+      2785,
+      2967,
+      3143,
+      3315,
+      3490
+     ],
+     "wrong_ids": {
+      "1378": "context_test.go:2185 c.Request.Header.Set(...) is net/http Header.Set; bound to (*Context).Set context.go:285",
+      "2967": "response_writer.go:130 cn.CloseNotify() on an http.CloseNotifier; bound to the enclosing (*responseWriter).CloseNotify (false self-recursion)"
+     },
+     "population_level_floor_on_errors": "about 170 resolved call references (roughly 160 of them high tier) have a receiver that is an imported non-gin package yet are bound to a gin symbol: require.Error(t, err) -> SliceValidationError.Error (binding/default_validator.go:24) x87, errors.New -> gin.New x28, template.New -> gin.New x10, http.Dir -> gin.Dir x9, etc. That alone caps high-tier precision near 95%."
+    },
+    "medium": {
+     "population": 103,
+     "sampled": 20,
+     "correct": 3,
+     "wrong": 17,
+     "unverifiable": 0,
+     "precision": 0.15,
+     "edge_ids": [
+      719,
+      1106,
+      1130,
+      1137,
+      1147,
+      1172,
+      1199,
+      1211,
+      1221,
+      1240,
+      1252,
+      1257,
+      1273,
+      1292,
+      1343,
+      1592,
+      1671,
+      1695,
+      1802,
+      2839
+     ],
+     "correct_ids": [
+      719,
+      1802,
+      2839
+     ],
+     "note": "1802 and 2839 (json.API.Marshal / MarshalIndent) are bound to codec/json/go_json.go, an implementation compiled only with build tag go_json; counted correct as a possible implementation. Under a default-build standard only 719 is correct (1/20).",
+     "full_census_of_tier": {
+      "edges": 103,
+      "correct": 14,
+      "wrong": 89,
+      "precision": 0.136,
+      "breakdown": "80 x `w.Header()` / `c.Header(...)` bound to the package variable binding.Header (binding/binding.go:87); 4 x c.JSON(...) bound to variable binding.JSON; 3 x proto.Marshal/bson.Marshal bound to gojsonApi.Marshal; file.Open() (multipart.FileHeader) bound to internal/fs FileSystem.Open; c.Writer.Write bound to a test type failWriter.Write in render/render_msgpack_test.go; 14 correct = 11 json.API.* to the go_json implementation, bb.BindBody, HTMLRender.Instance, fs.Open"
+     }
+    },
+    "low": {
+     "population": 8,
+     "sampled": 8,
+     "correct": 1,
+     "wrong": 7,
+     "unverifiable": 0,
+     "precision": 0.125,
+     "edge_ids": [
+      2009,
+      2048,
+      2536,
+      2919,
+      2935,
+      3328,
+      3335,
+      3340
+     ],
+     "correct_ids": [
+      2009
+     ],
+     "note": "the 7 wrong ones are stdlib conversions/calls (http.Dir, http.FileSystem, http.HandlerFunc, io/fs fs.File) bound to same-named gin symbols"
+    },
+    "edge_weighted_overall_estimate": 0.876
+   },
+   "recall": {
+    "files": [
+     "auth.go",
+     "render/json.go",
+     "response_writer.go",
+     "mode.go",
+     "ginS/gins.go"
+    ],
+    "method": "in each file, the first 10 call sites in source order whose target is a function or method declared in this repository (fewer where the file has fewer); calls of function-valued variables/parameters excluded",
+    "call_sites": 37,
+    "bound_correct": 25,
+    "bound_wrong": 9,
+    "ambiguous": 3,
+    "unbound": 0,
+    "recall": 0.676,
+    "per_file": {
+     "auth.go": {
+      "sites": 10,
+      "correct": 9,
+      "ambiguous": 1
+     },
+     "render/json.go": {
+      "sites": 10,
+      "correct": 8,
+      "ambiguous": 2
+     },
+     "response_writer.go": {
+      "sites": 6,
+      "correct": 6
+     },
+     "mode.go": {
+      "sites": 1,
+      "correct": 1
+     },
+     "ginS/gins.go": {
+      "sites": 10,
+      "correct": 1,
+      "wrong": 9
+     }
+    },
+    "notes": [
+     "3 of the 25 correct are json.API.Marshal/MarshalIndent bound to the go_json build-tag implementation; strict recall is 22/37 = 0.595",
+     "without the wrapper file ginS/gins.go recall is 24/27 = 0.889; in that file every `engine().X(...)` is bound to the enclosing ginS function of the same name instead of (*gin.Engine).X",
+     "ambiguous: c.Header(...) (auth.go:59), r.WriteContentType(w) (render/json.go:79, 95) although the receiver type is declared in the same file"
+    ]
+   },
+   "weak_spots": [
+    {
+     "case": "overloaded methods",
+     "example": "Go has no overloading; nearest analogue is the same method name on several receiver types: render/json.go:79 `r.WriteContentType(w)` with r declared as IndentedJSON in the method receiver",
+     "outcome": "left ambiguous (not bound); no wrong edge"
+    },
+    {
+     "case": "call through an interface",
+     "example": "context.go:1226 `c.engine.HTMLRender.Instance(name, obj)`; context.go:964 `bb.BindBody(body, obj)`; gin.go:801 `c.Writer.Write(defaultMessage)`",
+     "outcome": "bound at medium to ONE implementation chosen arbitrarily (HTMLProduction.Instance, not HTMLDebug; bsonBinding.BindBody only); c.Writer.Write is bound to failWriter.Write, a test type in another package that does not implement gin.ResponseWriter (wrong)"
+    },
+    {
+     "case": "embedded struct (Go's superclass analogue)",
+     "example": "benchmarks_test.go:68 `router.GET(...)` on *Engine, promoted from RouterGroup",
+     "outcome": "bound correctly at high to (*RouterGroup).GET routergroup.go:142 (name is unique in the package)"
+    },
+    {
+     "case": "same name in different packages",
+     "example": "recovery.go:56 `log.New(...)`, response_writer.go:20 `errors.New(...)` -> gin.New (gin.go:215); ginS/gins_test.go:251 `http.Dir(...)` -> gin.Dir",
+     "outcome": "WRONG at high confidence: the package qualifier of the call is ignored. find_callers name=New returns 50 rows (capped) of which 27 are errors.New/template.New, all labelled high, verdict 'strong'"
+    },
+    {
+     "case": "call through a field or returned value (a.b().c())",
+     "example": "ginS/gins.go:21 `engine().LoadHTMLGlob(pattern)`; context_test.go:2185 `c.Request.Header.Set(...)`; context_test.go:1209 `w.Header().Get(...)`; gin.go:400 `root.addRoute(path, handlers)`; response_writer.go:86 `w.ResponseWriter.Write(data)`",
+     "outcome": "WRONG: bound to the enclosing ginS.LoadHTMLGlob (false self-recursion, high); to (*Context).Set (high); to the variable binding.Header (medium); to the enclosing (*Engine).addRoute instead of (*node).addRoute (high); to the enclosing (*responseWriter).Write (high)"
+    },
+    {
+     "case": "call of a function-typed parameter",
+     "example": "recovery.go:86 `handle(c, err)` where handle is a RecoveryFunc parameter",
+     "outcome": "WRONG at high: bound to (*RouterGroup).handle routergroup.go:110"
+    }
+   ],
+   "tool_answers": [
+    {
+     "command": "repocortex tool call find_callers name=assert1",
+     "rows": 7,
+     "right": 7,
+     "missing": "none (grep finds the same 7 call sites)"
+    },
+    {
+     "command": "repocortex tool call find_callers name=New  (extra probe)",
+     "rows": 50,
+     "right": 23,
+     "missing": "list is capped at 50; 27 of the 50 rows are errors.New (21) and template.New (6) call sites, all labelled high"
+    },
+    {
+     "command": "repocortex tool call analyze_impact symbol=assert1",
+     "rows": 50,
+     "right": "4 of 4 direct; the 17 depth-2 rows checked are right; depth 3 contains at least one false row (CustomRecoveryWithWriter, reached through the mis-bound `handle(c, err)` parameter call)",
+     "missing": "TestAddRoute and TestAddRouteFails (gin_test.go:439-463 call router.addRoute, left ambiguous between (*Engine).addRoute and (*node).addRoute); 3 rows omitted by the cap"
+    },
+    {
+     "command": "repocortex tool call find_implementations name=Render",
+     "rows": 0,
+     "right": 0,
+     "missing": "answers for the METHOD (*Context).Render context.go:1201, not the interface render.Render; passing path=render/render.go (key=value and --args JSON) did not change the selected symbol. 16 types are asserted to implement render.Render in render/render.go:18-34. The tool does state that structural (implicit) Go implementations are invisible without a compiler index."
+    },
+    {
+     "command": "repocortex tool call find_implementations name=ResponseWriter",
+     "rows": 6,
+     "right": 2,
+     "missing": "nothing missing; 4 rows wrong: ResponseWriter listed as subtype and supertype of itself (embedded http.ResponseWriter bound to gin.ResponseWriter), mockPusherResponseWriter and nonPusherResponseWriter (embed http.ResponseWriter only). responseWriter is right only by accident (same mis-binding). All labelled high."
+    }
+   ],
+   "notes": [
+    "arg_count in symbol_references is argument count + 1 for ordinary calls.",
+    "6 of the 18 EXTENDS edges are wrong: every embedded `http.X` (http.ResponseWriter, http.FileSystem, http.File) is bound to a same-named gin symbol, once to a method ((*Context).File).",
+    "No crash, hang or timeout. gin has 99 .go files, just under the 100-file guideline; used as suggested."
+   ]
+  },
+  {
+   "language": "java",
+   "project": "https://github.com/google/gson",
+   "commit": "a961b0fe088f8558d00cc1b56e506a3656907a91",
+   "timing": {
+    "index_wall_s": 2.386,
+    "index_reported_ms": 2329,
+    "resolve_wall_s": 0.83,
+    "resolve_reported_ms": 794
+   },
+   "index_stats": {
+    "files_discovered": 315,
+    "files_indexed": 270,
+    "files_skipped": 45,
+    "files_partial": 9,
+    "files_failed": 0,
+    "java_files_on_disk": 266,
+    "java_files_ok": 258,
+    "java_files_partial": 8,
+    "partial_files": "5 package-info.java, 3 module-info.java, 1 .proto (parse_error column empty for all)",
+    "symbols": 5435,
+    "java_symbol_rows_by_kind": {
+     "method": 3516,
+     "field": 1096,
+     "class": 738,
+     "interface": 35
+    },
+    "references": 29361,
+    "imports": 2710,
+    "run_status": "degraded (parse_failures=9)"
+   },
+   "references": {
+    "total": 29361,
+    "resolved": 9367,
+    "ambiguous": 7895,
+    "unresolved": 12099,
+    "resolved_pct_of_all": 31.9,
+    "resolved_pct_of_refs_naming_an_indexed_definition": 54.3,
+    "by_kind": {
+     "call": {
+      "resolved": 9201,
+      "ambiguous": 7850,
+      "unresolved": 12042
+     },
+     "extends": {
+      "resolved": 63,
+      "ambiguous": 44,
+      "unresolved": 33
+     },
+     "implementation": {
+      "resolved": 103,
+      "ambiguous": 1,
+      "unresolved": 24
+     }
+    },
+    "call_refs_that_are_real_calls_arg_count_gt_0": {
+     "total": 19085,
+     "resolved": 7041,
+     "ambiguous": 3781,
+     "unresolved": 8263
+    },
+    "call_refs_that_are_receiver_identifiers_arg_count_0": {
+     "total": 10008,
+     "resolved": 2160,
+     "ambiguous": 4069,
+     "unresolved": 3779
+    },
+    "note": "34% of Java `reference.call` rows are not calls: they are the identifier in receiver position (`reader` in `reader.peek()`), recorded as a call with arg_count 0 and resolved by name."
+   },
+   "edges_by_confidence": {
+    "total": 9255,
+    "CALLS": {
+     "exact": 0,
+     "high": 7199,
+     "medium": 1851,
+     "low": 39
+    },
+    "EXTENDS": {
+     "high": 24,
+     "medium": 38,
+     "low": 1
+    },
+    "IMPLEMENTS": {
+     "high": 87,
+     "low": 16
+    },
+    "CALLS_by_target_kind": {
+     "high": {
+      "method": 6398,
+      "field": 795,
+      "class": 6
+     },
+     "medium": {
+      "method": 1733,
+      "field": 114,
+      "class": 4
+     },
+     "low": {
+      "proto message (kind=function)": 31,
+      "class": 7,
+      "field": 1
+     }
+    }
+   },
+   "definitions": {
+    "files": [
+     "gson/src/main/java/com/google/gson/LongSerializationPolicy.java",
+     "gson/src/main/java/com/google/gson/internal/LazilyParsedNumber.java",
+     "gson/src/main/java/com/google/gson/internal/Streams.java",
+     "gson/src/main/java/com/google/gson/JsonStreamParser.java",
+     "gson/src/main/java/com/google/gson/internal/bind/EnumTypeAdapter.java"
+    ],
+    "standard": "expected = classes, interfaces, enums, enum constants, methods, constructors, fields",
+    "expected": 65,
+    "extracted": 63,
+    "correct": 63,
+    "wrong": 0,
+    "missed": 2,
+    "precision": 1.0,
+    "recall": 0.969,
+    "examples": {
+     "wrong": [],
+     "missed": [
+      "LongSerializationPolicy.DEFAULT (enum constant, line 37)",
+      "LongSerializationPolicy.STRING (enum constant, line 58)"
+     ],
+     "quality_notes": [
+      "enum constants are never symbols (stream/JsonToken.java: 10 constants, only the enum itself extracted)",
+      "constructors have kind=method; enums and annotation types have kind=class/interface",
+      "fqn is `<file>:<name>` with no class qualifier, so overloads and nested-class methods collide (three `Streams.java:write`, three `LongSerializationPolicy.java:serialize`)",
+      "signature column is NULL for every sampled symbol"
+     ]
+    }
+   },
+   "precision": {
+    "standard": "correct = the edge target is the declaration the call statically invokes, RIGHT OVERLOAD REQUIRED; for virtual calls the declared method on the receiver's static type (or an override of it) counts. A CALLS edge whose target is a class/proto message named in receiver position (`Foo.bar()` -> class Foo) is counted wrong under the task's letter (the call does not invoke the class) and reported separately.",
+    "sampling": "per tier, CALLS edges with a .java evidence file ordered by id; every k-th id (k = population // 20, offset k // 2)",
+    "high": {
+     "population": 7199,
+     "sampled": 20,
+     "correct": 16,
+     "wrong": 4,
+     "unverifiable": 0,
+     "precision": 0.8,
+     "edge_ids": [
+      239,
+      630,
+      1046,
+      1476,
+      1899,
+      2419,
+      2920,
+      3517,
+      4170,
+      4878,
+      5377,
+      5879,
+      6303,
+      6685,
+      7048,
+      7407,
+      7766,
+      8127,
+      8592,
+      9072
+     ],
+     "wrong_ids": {
+      "3517": "EscapingTest.java:60 strings.add(...) on java.util.List -> CollectionTest.CollectionWithoutNoArgsConstructor.add ('same package directory')",
+      "4170": "MapTest.java:396 src.put(...) on LinkedHashMap -> MapTest.MapWithoutNoArgsConstructor.put",
+      "6303": "JsonReaderPathTest.java:376 local variable `reader` in `reader.getPreviousPath()` -> method JsonReaderTest.reader(String) in another class",
+      "6685": "JsonReaderTest.java:403 local variable `reader` in `reader.skipValue()` -> method reader(String)"
+     },
+     "population_level_floor_on_errors": "1234 high edges point at JsonReaderTest.reader(String); on 1025 of them the evidence line contains no reader(...) call at all (the local variable `reader` used as a receiver). That is 14.2% of the whole high tier from one name, so high-tier precision cannot exceed 85.8%."
+    },
+    "medium": {
+     "population": 1851,
+     "sampled": 20,
+     "correct": 12,
+     "wrong": 8,
+     "unverifiable": 0,
+     "precision": 0.6,
+     "edge_ids": [
+      213,
+      1345,
+      2175,
+      2393,
+      2530,
+      3074,
+      3357,
+      3538,
+      3776,
+      4011,
+      4294,
+      4540,
+      4703,
+      4836,
+      5209,
+      5667,
+      6070,
+      8397,
+      8750,
+      9153
+     ],
+     "wrong_ids": {
+      "2175": "jsonWriter.value(true) -> value(String) JsonWriter.java:527; real value(boolean) :543",
+      "2393": "jsonArray.add('i') -> add(Boolean) JsonArray.java:86; real add(Character) :96",
+      "2530": "o.addProperty(\"a\", 1) -> addProperty(String,String) :93; real (String,Number) :104",
+      "4703": "gson.toJson(target, boolean[].class) -> toJson(Object) Gson.java:565; real toJson(Object,Type) :590 (argument count differs and was not used)",
+      "5667": "writer.value(Number) -> JsonTreeWriter.value(String) :162; real value(Number) :216",
+      "8397": "jsonWriter.value(double) -> value(String) :527; real value(double) :598",
+      "8750": "gson.getAdapter(Class) -> getAdapter(TypeToken) Gson.java:340; real getAdapter(Class) :407",
+      "9153": "local variable `json` -> field JsonParserParameterizedTest.json in another module"
+     },
+     "precision_if_any_overload_of_the_right_method_counts": 0.95,
+     "note": "for 'receiver matches, overloaded' (1335 edges) the first-declared overload is chosen regardless of argument types"
+    },
+    "low": {
+     "population": 39,
+     "sampled": 20,
+     "correct": 0,
+     "wrong": 20,
+     "unverifiable": 0,
+     "precision": 0.0,
+     "edge_ids": [
+      2078,
+      2080,
+      3360,
+      5711,
+      5714,
+      5719,
+      5722,
+      5724,
+      8865,
+      8867,
+      8869,
+      8872,
+      8873,
+      8875,
+      8877,
+      8879,
+      8881,
+      8882,
+      8884,
+      8887
+     ],
+     "right_symbol_but_not_a_call_target": 19,
+     "precision_if_receiver_type_references_count_as_correct": 0.95,
+     "note": "none of the 20 is an edge to a callable. 19 are the type name in receiver position bound to the right type: 7 to a Java class (FieldNamingPolicy.separateCamelCase(...) -> class FieldNamingPolicy), 12 to the .proto message that generates the Java class (TestOneof.newBuilder() -> message TestOneof in json_test.proto, stored with kind=function). 1 is plainly wrong: 3360 UUID.fromString(...) (java.util.UUID) -> field TypeAdapters.UUID."
+    },
+    "edge_weighted_overall_estimate": {
+     "strict": 0.756,
+     "lenient_overloads_and_receiver_types": 0.831
+    }
+   },
+   "recall": {
+    "files": [
+     "gson/src/main/java/com/google/gson/internal/Streams.java",
+     "gson/src/main/java/com/google/gson/JsonStreamParser.java",
+     "gson/src/main/java/com/google/gson/JsonParser.java",
+     "gson/src/main/java/com/google/gson/internal/bind/ArrayTypeAdapter.java",
+     "gson/src/main/java/com/google/gson/internal/LazilyParsedNumber.java"
+    ],
+    "method": "in each file, the first 10 call sites in source order whose target is a method or explicitly declared constructor in this repository (fewer where the file has fewer)",
+    "call_sites": 42,
+    "bound_correct": 22,
+    "bound_wrong": 0,
+    "ambiguous": 4,
+    "unbound": 16,
+    "recall": 0.524,
+    "per_file": {
+     "Streams.java": {
+      "sites": 9,
+      "correct": 2,
+      "ambiguous": 2,
+      "unbound": 5
+     },
+     "JsonStreamParser.java": {
+      "sites": 9,
+      "correct": 4,
+      "unbound": 5
+     },
+     "JsonParser.java": {
+      "sites": 10,
+      "correct": 4,
+      "ambiguous": 2,
+      "unbound": 4
+     },
+     "ArrayTypeAdapter.java": {
+      "sites": 10,
+      "correct": 8,
+      "unbound": 2
+     },
+     "LazilyParsedNumber.java": {
+      "sites": 4,
+      "correct": 4
+     }
+    },
+    "notes": [
+     "all 16 unbound sites are constructor invocations (`new JsonSyntaxException(e)`, `new JsonReader(reader)`, `this(new StringReader(json))`): no symbol_references row exists for them at all, so they are also missing from the tool's own resolved/ambiguous/unresolved denominators",
+     "excluding constructor calls recall is 22/26 = 0.846",
+     "ambiguous: same-arity overloads parseReader(Reader)/parseReader(JsonReader) (JsonParser.java:92, 110) and JsonElementTypeAdapter.ADAPTER.read/write (Streams.java:48, 70)",
+     "the same files also contain wrong high edges to non-repository targets (not recall sites): `asBigDecimal().intValue()` -> LazilyParsedNumber.intValue, `value.compareTo(other.value)` (String) -> LazilyParsedNumber.compareTo, `Array.set(...)` (java.lang.reflect) -> JsonArray.set, `list.add(...)` (ArrayList) -> JsonArray.add"
+    ]
+   },
+   "weak_spots": [
+    {
+     "case": "overloaded methods",
+     "example": "GsonTest.java:427 `jsonWriter.value(true)` (7 overloads); PrimitiveTest.java:272 `gson.toJson(target, boolean[].class)`; JsonParser.java:110 `parseReader(jsonReader)`",
+     "outcome": "receiver-qualified overloads are bound at medium to the first-declared overload (value(String), toJson(Object)) - wrong overload in 7 of the 16 sampled 'receiver matches, overloaded' edges; unqualified same-arity overloads are left ambiguous"
+    },
+    {
+     "case": "call through an interface or superclass",
+     "example": "Gson.java:1103 `typeAdapter.read(reader)`; ArrayTypeAdapter.java:75 `componentTypeAdapter.read(in)`; JsonTreeWriterTest.java:91 `writer.setStrictness(...)` (JsonTreeWriter inherits it from JsonWriter); Excluder.java:63 `super.clone()`; JsonReaderPathTest.java:48 `factory.create(\"...\")`",
+     "outcome": "typeAdapter.read -> abstract TypeAdapter.read (medium, correct); componentTypeAdapter.read ambiguous; inherited setStrictness ambiguous in 6 of 6 sites; super.clone() bound to the enclosing Excluder.clone (wrong, high); factory.create on the nested enum Factory bound to TypeAdapterFactory.create(Gson,TypeToken) 'defined 1 level up its inheritance chain' - wrong class named Factory, 18 such edges, all wrong"
+    },
+    {
+     "case": "same-named methods in different classes",
+     "example": "EscapingTest.java:60 `strings.add(\"<\")` (java.util.List); ArrayTypeAdapter.java:76 `list.add(instance)` (ArrayList); JsonTreeTest.java:52 `json.getAsJsonObject()` (json is a JsonElement)",
+     "outcome": "WRONG: bound to CollectionWithoutNoArgsConstructor.add in another test class (high), to JsonArray.add (medium), and to JsonObject.getAsJsonObject(String) with 'receiver type matches' (high) - the receiver type was taken from the assignment's left-hand side"
+    },
+    {
+     "case": "call through a field or returned value (a.b().c())",
+     "example": "MoreSpecificTypeSerializationTest.java:94 `json.get(\"sub\").getAsJsonObject()`; LazilyParsedNumber.java:51 `asBigDecimal().intValue()`; Streams.java:48 `JsonElementTypeAdapter.ADAPTER.read(reader)`",
+     "outcome": "first is bound correctly (medium) only because the name plus argument count is unique; second is WRONG at high (BigDecimal.intValue bound to the enclosing class's intValue); third is left ambiguous"
+    },
+    {
+     "case": "constructor calls",
+     "example": "JsonStreamParser.java:68 `new JsonReader(reader)`",
+     "outcome": "not recorded as a reference at all; constructors have zero callers in the index"
+    },
+    {
+     "case": "local variable shadowing a member name",
+     "example": "JsonReaderTest.java:403 `reader.skipValue()`",
+     "outcome": "the local `reader` is bound as a CALL of method reader(String): 1025 false high-confidence edges"
+    }
+   ],
+   "tool_answers": [
+    {
+     "command": "repocortex tool call find_callers name=getDelegateAdapter",
+     "rows": 19,
+     "right": 19,
+     "missing": "none (grep finds the same 19 call sites)"
+    },
+    {
+     "command": "repocortex tool call analyze_impact symbol=getDelegateAdapter",
+     "rows": 14,
+     "right": 14,
+     "missing": "reports '14 direct, 0 indirect, Risk low (score 15)'. Every indirect caller is missing: TreeTypeAdapter.read/write/getSerializationDelegate and Excluder's adapter read/write call delegate() (ambiguous), and Gson.getAdapter / Gson.getDelegateAdapter call factory.create(this, type) (ambiguous), which reaches the listed create(...) methods. The output does say it is a lower bound."
+    },
+    {
+     "command": "repocortex tool call find_implementations name=TypeAdapterFactory",
+     "rows": 25,
+     "right": 25,
+     "missing": "capped at 25 (stated as truncated); the index holds 27 IMPLEMENTS edges, the 2 not shown are GsonTest.DummyFactory and test-shrinker ClassWithJsonAdapterAnnotation.Factory. 17 anonymous `new TypeAdapterFactory() {...}` implementations are not represented."
+    }
+   ],
+   "notes": [
+    "arg_count is argument count + 1 for real calls and 0 for receiver-identifier pseudo-calls.",
+    "The run is marked degraded because package-info.java / module-info.java parse as partial; tool answers carry a 'COVERAGE TOO LOW' note.",
+    "No crash, hang or timeout."
+   ]
+  }
+ ]
+}

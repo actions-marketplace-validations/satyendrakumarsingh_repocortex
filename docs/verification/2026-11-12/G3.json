@@ -1,0 +1,473 @@
+{
+ "group": "G3",
+ "languages": [
+  {
+   "language": "fortran",
+   "sources": [
+    "github.com/certik/fortran-utils (depth-1 clone): src/optimize.f90, src/ppm.f90, src/mesh.f90, src/sorting.f90",
+    "linguist/samples/Fortran/sample1.f",
+    "linguist/samples/Fortran/m_finite_differences.fpp"
+   ],
+   "detected_language_ok": true,
+   "files_checked": 6,
+   "parse": {
+    "ok": 5,
+    "partial": 1,
+    "failed": 0,
+    "errors": "none reported; sample1.f is 'partial' (tool's meaning: zero symbols AND zero references)"
+   },
+   "convention": "modules, programs, subroutines, functions, named/generic interfaces and interface-declared procedures; not module variables or parameters",
+   "expected": 35,
+   "extracted": 0,
+   "correct": 0,
+   "wrong": 0,
+   "missed": 35,
+   "wrong_kind": 0,
+   "precision": null,
+   "recall": 0.0,
+   "wrong_examples": [],
+   "missed_examples": [
+    "mesh.f90:1 module mesh",
+    "mesh.f90:14 function meshexp(rmin, rmax, a, N) result(mesh)",
+    "sorting.f90:31 subroutine sortNums(nums)",
+    "sorting.f90:13 interface argsort",
+    "sample1.f:4 program main"
+   ],
+   "pattern": "The zero is real. The tags query the tool gets for fortran (inferred by gotreesitter v0.50.1, no RepoCortex supplement) contains only two @reference.call patterns ((call_expression (identifier)) and (call (identifier))) and no @definition pattern at all, so no module/subroutine/function can ever become a symbol; the grammar does produce (module_statement (name)), (subroutine_statement (name)), (function_statement (name)) nodes. Files show parse_status 'ok' only because call references were recorded.",
+   "verdict": "broken"
+  },
+  {
+   "language": "fsharp",
+   "sources": [
+    "linguist/samples/F#/Combinators.fs",
+    "linguist/samples/F#/JsonFormat.fs",
+    "linguist/samples/F#/JsonSerializer.fs",
+    "linguist/samples/F#/PerformanceTesters.fs",
+    "linguist/samples/F#/sample.fs",
+    "each also copied with a .fsx extension (identical content) to reach the fsharp grammar"
+   ],
+   "detected_language_ok": false,
+   "detected_as": "forth (for .fs); fsharp only for .fsx and .fsi",
+   "files_checked": 5,
+   "parse": {
+    "ok": 0,
+    "partial": 5,
+    "failed": 0,
+    "errors": "as .fs: all 5 parse_status 'skipped', parse_error 'no tags query available for \"forth\"'; as .fsx: all 5 'partial' (zero symbols, zero references), no error text"
+   },
+   "convention": "named modules (top-level and nested), types (class, record, abbreviation, interface), module-level let bindings, members (member/override/static member/member val); not namespaces, constructors, class-private let bindings, val fields, record fields",
+   "expected": 43,
+   "extracted": 0,
+   "correct": 0,
+   "wrong": 0,
+   "missed": 43,
+   "wrong_kind": 0,
+   "precision": null,
+   "recall": 0.0,
+   "wrong_examples": [],
+   "missed_examples": [
+    "sample.fs:5 type Foo = { Bar : string }",
+    "sample.fs:12 let Sample1(xs : int list) : string =",
+    "Combinators.fs:8 module Json =",
+    "Combinators.fs:17 let pickle (pickler : Pickler<'T>) (value : 'T) : string =",
+    "JsonSerializer.fs:77 static member CreateJson(...)"
+   ],
+   "pattern": "Two independent failures. (1) Every .fs file is detected as Forth, which has no tags query, so real F# source is skipped outright (phase A saw 0 fsharp files for this reason); only .fsx/.fsi reach the fsharp grammar. (2) Even then the only pattern is (type_definition (identifier) @name), which never matches because the grammar nests the name as type_definition > record_type_defn/interface_type_defn/... > type_name > identifier; there is no pattern for let bindings, modules or members.",
+   "verdict": "broken"
+  },
+  {
+   "language": "gdscript",
+   "sources": [
+    "linguist/samples/GDScript/example.gd",
+    "linguist/samples/GDScript/grid.gd",
+    "linguist/samples/GDScript/player.gd",
+    "linguist/samples/GDScript/pong.gd"
+   ],
+   "detected_language_ok": true,
+   "files_checked": 4,
+   "parse": {
+    "ok": 4,
+    "partial": 0,
+    "failed": 0,
+    "errors": "none"
+   },
+   "convention": "func, class / class_name, signal, enum and const declarations; not script-level var/export var/onready var (36 of those exist and are also not extracted)",
+   "expected": 31,
+   "extracted": 0,
+   "correct": 0,
+   "wrong": 0,
+   "missed": 31,
+   "wrong_kind": 0,
+   "precision": null,
+   "recall": 0.0,
+   "wrong_examples": [],
+   "missed_examples": [
+    "example.gd:27 func some_function(param1, param2):",
+    "example.gd:49 class Something:",
+    "example.gd:17 const answer = 42",
+    "grid.gd:55 func piece_cell_xform(p,er=0):",
+    "player.gd:67 func _integrate_forces( state ):"
+   ],
+   "pattern": "The zero is real. The inferred query has (function_definition (identifier) @name) and (class_definition (identifier) @name), but this grammar names definitions with a (name) node, not (identifier) (e.g. (function_definition (name) (parameters) (body ...))), so the definition patterns can never match. Only call references are recorded (170 across the 4 files), which is why the files read 'ok'. 20 of the 31 expected are functions/classes; all 20 missed.",
+   "verdict": "broken"
+  },
+  {
+   "language": "gleam",
+   "sources": [
+    "linguist/samples/Gleam/contributor.gleam",
+    "linguist/samples/Gleam/websocket.gleam",
+    "github.com/gleam-lang/stdlib (depth-1 clone): src/gleam/pair.gleam, src/gleam/order.gleam, src/gleam/io.gleam"
+   ],
+   "detected_language_ok": true,
+   "files_checked": 5,
+   "parse": {
+    "ok": 0,
+    "partial": 5,
+    "failed": 0,
+    "errors": "none reported; all 5 'partial' (zero symbols and zero references)"
+   },
+   "convention": "functions (pub fn, fn, external fn, @external fn), custom types and type aliases, constants; not type constructors/variants",
+   "expected": 29,
+   "extracted": 0,
+   "correct": 0,
+   "wrong": 0,
+   "missed": 29,
+   "wrong_kind": 0,
+   "precision": null,
+   "recall": 0.0,
+   "wrong_examples": [],
+   "missed_examples": [
+    "pair.gleam:9 pub fn first(pair: #(a, b)) -> a {",
+    "order.gleam:4 pub type Order {",
+    "contributor.gleam:6 pub type Contributor {",
+    "io.gleam:14 pub fn print(string: String) -> Nil",
+    "websocket.gleam:44 pub external fn receive(from: Connection, within: Int) -> ..."
+   ],
+   "pattern": "The zero is real. The inferred query has three type patterns and no function pattern: functions are (function (visibility_modifier) (identifier) ...) nodes that no pattern mentions, and the type patterns expect type_definition > type_identifier directly while the grammar produces type_definition > type_name > type_identifier, so they never match either. No reference patterns exist, hence 'partial'. The older Linguist samples (contributor.gleam, websocket.gleam, pre-1.0 syntax) also produce ERROR nodes, but the modern stdlib files fail identically.",
+   "verdict": "broken"
+  },
+  {
+   "language": "glsl",
+   "sources": [
+    "linguist/samples/GLSL/SyLens.glsl",
+    "linguist/samples/GLSL/recurse1.frag",
+    "linguist/samples/GLSL/SimpleLighting.gl2.frag",
+    "linguist/samples/GLSL/pntriangles.tesc (copied as pntriangles_tesc.glsl)",
+    "linguist/samples/GLSL/closesthit.rchit (copied as closesthit_rchit.glsl)"
+   ],
+   "detected_language_ok": true,
+   "files_checked": 5,
+   "parse": {
+    "ok": 5,
+    "partial": 0,
+    "failed": 0,
+    "errors": "none"
+   },
+   "convention": "function definitions (with a body), structs, named uniform/buffer interface blocks, and global uniform/in/out/varying variables; not prototypes, struct members or locals",
+   "expected": 62,
+   "extracted": 34,
+   "correct": 34,
+   "wrong": 0,
+   "missed": 28,
+   "wrong_kind": 0,
+   "precision": 1.0,
+   "recall": 0.548,
+   "wrong_examples": [],
+   "missed_examples": [
+    "SyLens.glsl:17 uniform float kCoeff, kCube, uShift, vShift;",
+    "closesthit_rchit.glsl:17 layout(binding = 2, set = 0) uniform UBO { ... } ubo;",
+    "closesthit_rchit.glsl:12 layout(location = 0) rayPayloadInEXT RayPayload rayPayload;",
+    "pntriangles_tesc.glsl:41 layout(location = 0) in vec3 inNormal[];",
+    "SimpleLighting.gl2.frag:3 varying vec4 FrontColor;"
+   ],
+   "pattern": "Every function definition (31 of 31) and every struct (3 of 3, reported as kind 'class') is extracted at the right line with no false positives; prototypes are correctly not reported. All 28 misses are the shader interface: global uniforms/varyings/in/out variables and uniform/buffer blocks have no pattern. Counting functions and structs only, recall is 34/34.",
+   "verdict": "usable",
+   "detection_notes": "Unrenamed Linguist files: .vs .fp .tesc .rchit .fsh .glslf are detected as glsl; extrude_normals.gs is detected as javascript and recurse1.fs as forth (skipped, no tags query)."
+  },
+  {
+   "language": "gn",
+   "sources": [
+    "linguist/samples/GN/BUILD.2.gn",
+    "linguist/samples/GN/clang.gni",
+    "linguist/samples/GN/isolate.gni",
+    "linguist/samples/GN/icu.gn"
+   ],
+   "detected_language_ok": true,
+   "files_checked": 4,
+   "parse": {
+    "ok": 4,
+    "partial": 0,
+    "failed": 0,
+    "errors": "none"
+   },
+   "convention": "build-configuration language: counted named targets (group/config/source_set/pkg_config/shim_headers(\"name\")), template(\"name\") definitions and declare_args() build arguments; not plain assignments inside targets",
+   "expected": 13,
+   "extracted": 0,
+   "correct": 0,
+   "wrong": 0,
+   "missed": 13,
+   "wrong_kind": 0,
+   "precision": null,
+   "recall": 0.0,
+   "wrong_examples": [],
+   "missed_examples": [
+    "icu.gn:8 group(\"icu\") {",
+    "icu.gn:30 source_set(\"icui18n\") {",
+    "isolate.gni:14 template(\"v8_isolate_run\") {",
+    "clang.gni:10 clang_use_chrome_plugins = ... (inside declare_args())",
+    "BUILD.2.gn:7 group(\"gn_all\") {"
+   ],
+   "pattern": "The zero is real. The inferred query is a single reference pattern, (call_expression (identifier) @name) @reference.call, so a target such as group(\"icu\") is stored as a call reference to 'group' (27 references over the 4 files) and nothing is ever a definition. Target names are string literals, which the query never captures.",
+   "verdict": "broken"
+  },
+  {
+   "language": "graphql",
+   "sources": [
+    "linguist/samples/GraphQL/kitchen-sink.graphql",
+    "linguist/samples/GraphQL/schema-kitchen-sink.graphql",
+    "linguist/samples/GraphQL/schema.graphqls (copied as schema_graphqls.graphql)"
+   ],
+   "detected_language_ok": true,
+   "files_checked": 3,
+   "parse": {
+    "ok": 2,
+    "partial": 1,
+    "failed": 0,
+    "errors": "none reported; kitchen-sink.graphql (operations only) is 'partial'"
+   },
+   "convention": "type-system definitions (type, interface, union, enum, scalar, input, directive) plus named operations (query/mutation/subscription) and fragments; not fields, arguments, enum values (accepted as correct when extracted) or 'extend type'",
+   "expected": 60,
+   "extracted": 64,
+   "correct": 63,
+   "wrong": 1,
+   "missed": 4,
+   "wrong_kind": 10,
+   "precision": 0.984,
+   "recall": 0.933,
+   "wrong_examples": [
+    "schema_graphqls.graphql:30 symbol with an EMPTY name, kind 'function' (from the empty-bodied 'enum PriceAdjustmentCodesEnum @doc(...) { }')"
+   ],
+   "missed_examples": [
+    "kitchen-sink.graphql:8 query queryName($foo: ComplexType, $site: Site = MOBILE) {",
+    "kitchen-sink.graphql:29 mutation likeStory {",
+    "kitchen-sink.graphql:37 subscription StoryLikeSubscription($input: StoryLikeSubscribeInput) {",
+    "kitchen-sink.graphql:50 fragment frag on Friend {"
+   ],
+   "pattern": "Schema (SDL) files are extracted completely: all 56 type/interface/union/enum/scalar/input/directive definitions found, plus 7 enum values. Client documents are invisible: named queries, mutations, subscriptions and fragments have no pattern, so an operations-only file yields nothing. Kinds are coarse: scalars, directives and enum values are labelled 'function' (10 symbols); unions, enums and inputs are labelled 'class'. An enum with an empty body yields one empty-named symbol.",
+   "verdict": "good",
+   "detection_notes": ".graphqls is detected as graphql without renaming (same symbols)."
+  },
+  {
+   "language": "groovy",
+   "sources": [
+    "github.com/jenkinsci/JenkinsPipelineUnit (depth-1 clone): src/main/groovy/com/lesfurets/jenkins/unit/MethodCall.groovy, .../DockerMock.groovy, .../declarative/PostDeclaration.groovy",
+    "github.com/spockframework/spock-example (depth-1 clone): src/test/groovy/DataDrivenSpec.groovy",
+    "github.com/jenkinsci/pipeline-examples (depth-1 clone): pipeline-examples/parallel-from-grep/parallelFromGrep.groovy",
+    "Linguist Groovy samples are 2-17 lines with no definitions; only used for detection"
+   ],
+   "detected_language_ok": true,
+   "files_checked": 5,
+   "parse": {
+    "ok": 5,
+    "partial": 0,
+    "failed": 0,
+    "errors": "none reported (the grammar does emit ERROR nodes, e.g. on every 'implements' clause, but the tool does not surface them)"
+   },
+   "convention": "classes (incl. nested), methods, constructors, script-level def functions; not fields/properties or script variables",
+   "expected": 50,
+   "extracted": 44,
+   "correct": 40,
+   "wrong": 4,
+   "missed": 10,
+   "wrong_kind": 0,
+   "precision": 0.909,
+   "recall": 0.8,
+   "wrong_examples": [
+    "DockerMock.groovy:4 class 'erializable' (real: class DockerMock implements Serializable)",
+    "DockerMock.groovy:30 class 'erializable' (real: class Container implements Serializable)",
+    "DockerMock.groovy:44 class 'erializable' (real: class Image implements Serializable)",
+    "DataDrivenSpec.groovy:19 class 'Specification' (the superclass in 'class DataDrivenSpec extends Specification')"
+   ],
+   "missed_examples": [
+    "DockerMock.groovy:5 class DockerMock implements Serializable {",
+    "DockerMock.groovy:13 DockerMock(PipelineTestHelper helper, Binding binding) {  (constructor)",
+    "DockerMock.groovy:23 private <T> T intercept(T instance) {  (generic method)",
+    "DataDrivenSpec.groovy:20 def \"maximum of two numbers\"() {  (Spock string-named method)",
+    "DockerMock.groovy:48 Image(String id) {  (constructor)"
+   ],
+   "pattern": "Plain classes and ordinary methods are extracted well (all 36 ordinary methods/functions found; methods are labelled 'function'). The class pattern captures every identifier child of class_definition: 'extends X' adds the superclass as a second class symbol, and 'implements X' (which the grammar parses as an ERROR) replaces the class name with a mangled 'erializable'. Constructors, generic methods (<T> T name(...)) and Spock string-named methods are never extracted. A synthetic probe also showed enum, trait and interface-method declarations produce no symbols.",
+   "verdict": "usable",
+   "detection_notes": "Jenkinsfile (by filename) and .gvy are detected as groovy; template.gtpl is also parsed as groovy."
+  },
+  {
+   "language": "hack",
+   "sources": [
+    "linguist/samples/Hack/Assert.hh, FakeDB.hh, Nav.hh, Recipe.hh, UserID.hh (each copied with a .hack extension to reach the hack grammar)",
+    "linguist/samples/Hack/first.hack",
+    "detection also checked on unrenamed linguist/samples/Hack/funs.hh, Map.hhi, funs.php"
+   ],
+   "detected_language_ok": false,
+   "detected_as": "cpp (for .hh); hack only for .hack and .hhi; php for .php",
+   "files_checked": 6,
+   "parse": {
+    "ok": 6,
+    "partial": 0,
+    "failed": 0,
+    "errors": "none (as .hack). Unrenamed .hh set, parsed as cpp: 3 ok, 3 partial, no error text"
+   },
+   "convention": "functions, methods (incl. abstract), classes/interfaces/traits/enums, type aliases (type/newtype); not namespace statements, properties or constants",
+   "expected": 34,
+   "extracted": 26,
+   "correct": 26,
+   "wrong": 0,
+   "missed": 8,
+   "wrong_kind": 0,
+   "precision": 1.0,
+   "recall": 0.765,
+   "wrong_examples": [
+    "(unrenamed) Assert.hh:18 function 'if' -- the .hh file was parsed as C++ and '} else if (is_int($x)) {' became a function"
+   ],
+   "missed_examples": [
+    "UserID.hh:15 newtype ID = int;",
+    "UserID.hh:16 newtype USER_ID as ID = ID;",
+    "FakeDB.hh:4 type DBResult = shape(",
+    "Nav.hh:14 type NavItem = shape(",
+    "Nav.hh:25 final class :hack:nav extends :x:element {  (XHP class name)"
+   ],
+   "pattern": "With the hack grammar, every function, method and ordinary class is extracted at the right line with the right kind (26/26, no false positives). All 8 misses are type aliases (type/newtype: 7) and one XHP class (:hack:nav). The bigger problem is detection: .hh is routed to C++, so the legacy-but-common Hack extension yields garbage (on the 6 unrenamed .hh files: 37 expected, 2 extracted, 1 correct, 1 wrong 'if'); only .hack and .hhi reach the hack grammar, and Hack-in-.php goes to php.",
+   "verdict": "usable",
+   "as_detected_unrenamed": {
+    "files": 7,
+    "expected": 38,
+    "extracted": 3,
+    "correct": 2,
+    "wrong": 1,
+    "missed": 36,
+    "precision": 0.667,
+    "recall": 0.053
+   }
+  },
+  {
+   "language": "hare",
+   "sources": [
+    "linguist/samples/Hare/contains.ha",
+    "linguist/samples/Hare/iter.ha",
+    "linguist/samples/Hare/types.ha"
+   ],
+   "detected_language_ok": true,
+   "files_checked": 3,
+   "parse": {
+    "ok": 3,
+    "partial": 0,
+    "failed": 0,
+    "errors": "none"
+   },
+   "convention": "functions (fn, incl. @test fn) and type declarations (type X = struct/enum/union/alias/fn-type); not struct fields or enum values",
+   "expected": 53,
+   "extracted": 15,
+   "correct": 13,
+   "wrong": 2,
+   "missed": 40,
+   "wrong_kind": 0,
+   "precision": 0.867,
+   "recall": 0.245,
+   "wrong_examples": [
+    "iter.ha:51 function 'iterator' -- the return type in 'fn iter(fmt: str, args: []field) iterator = iterator {'",
+    "types.ha:165 function 'dirent' -- the return type in 'export fn dirent_dup(e: *dirent) dirent = {'"
+   ],
+   "missed_examples": [
+    "iter.ha:33 export type mods = struct {",
+    "iter.ha:19 export type neg = enum {",
+    "types.ha:139 export type filestat = struct {",
+    "types.ha:254 export type fs = struct {",
+    "types.ha:200 export type closefunc = fn(fs: *fs) void;"
+   ],
+   "pattern": "The only definition pattern is (function_declaration (identifier) @name). All 13 functions are found, but no type declaration is ever extracted (40 of 40 missed, and types.ha is almost entirely types). The pattern also captures a second identifier child, so a function whose return type is a plain named type gets an extra bogus function symbol named after that type.",
+   "verdict": "poor"
+  },
+  {
+   "language": "haxe",
+   "sources": [
+    "github.com/HaxeFoundation/hscript (depth-1 clone): hscript/Colorizer.hx, hscript/Tools.hx, hscript/Expr.hx, hscript/Live.hx, script/RunScript.hx",
+    "Linguist has no Haxe sample folder in this checkout"
+   ],
+   "detected_language_ok": true,
+   "files_checked": 5,
+   "parse": {
+    "ok": 5,
+    "partial": 0,
+    "failed": 0,
+    "errors": "none reported, but the grammar emits many ERROR nodes (RunScript 16, Colorizer 29, Tools 48, Expr 153) that the tool does not surface"
+   },
+   "convention": "classes, interfaces, enums, typedefs, methods and constructors (function new); not member vars, enum constructors or locals; both branches of #if/#else counted",
+   "expected": 45,
+   "extracted": 14,
+   "correct": 14,
+   "wrong": 0,
+   "missed": 31,
+   "wrong_kind": 0,
+   "precision": 1.0,
+   "recall": 0.311,
+   "wrong_examples": [],
+   "missed_examples": [
+    "Expr.hx:24 enum Const {",
+    "Expr.hx:74 typedef Argument = { name : String, ?t : CType, ?opt : Bool, ?value : Expr };",
+    "RunScript.hx:16 class RunScript {",
+    "Colorizer.hx:20 class Colorizer extends Parser {",
+    "Tools.hx:27 public static function iter( e : Expr, f : Expr -> Void ) {"
+   ],
+   "pattern": "What is extracted is right (14/14), but two thirds of the definitions are lost. There is no pattern for enum, typedef or abstract (Expr.hx: 22 definitions of which 19 are enums/typedefs, 0 extracted), 'function new' has no identifier to capture, and the grammar fails on ordinary Haxe (switch/case patterns, #if blocks, try/catch), wrapping whole classes in ERROR nodes so the class itself and any method inside the broken region vanish (4 of 5 classes and 6 of 18 named methods missed).",
+   "verdict": "poor"
+  },
+  {
+   "language": "hcl",
+   "sources": [
+    "linguist/samples/HCL/main.tf",
+    "linguist/samples/HCL/example.tf",
+    "linguist/samples/HCL/terraform.tfvars",
+    "linguist/samples/HCL/example.hcl",
+    "linguist/samples/HCL/example.tofu"
+   ],
+   "detected_language_ok": true,
+   "files_checked": 5,
+   "parse": {
+    "ok": 5,
+    "partial": 0,
+    "failed": 0,
+    "errors": "none"
+   },
+   "convention": "configuration language: labelled top-level blocks are the definitions (resource, data, variable, output, module, provider, template; named by their last label) plus each name assigned inside a locals block; unlabelled blocks (terraform, locals), nested blocks (ingress, tags, provisioner ...) and attribute assignments are not definitions",
+   "expected": 22,
+   "extracted": 52,
+   "correct": 21,
+   "wrong": 31,
+   "missed": 1,
+   "wrong_kind": 13,
+   "precision": 0.404,
+   "recall": 0.955,
+   "wrong_examples": [
+    "main.tf:5 function 'ingress' (nested block inside a resource)",
+    "main.tf:1 function 'elb_sec_group' duplicating deployment_unit 'elb_sec_group' on the same line",
+    "example.tf:3 and :9 function 'file' twice (provisioner \"file\" blocks)",
+    "example.tofu:7 function 'terraform' / :67 function 'locals' (block keywords)",
+    "terraform.tfvars:7 function 'config' (nested block inside an attribute map)"
+   ],
+   "missed_examples": [
+    "example.tofu:68 full_tag_map = merge(...)  (the local value defined inside locals { })"
+   ],
+   "pattern": "Every block at every nesting depth becomes a symbol of kind 'function', named by its last label or, when unlabelled, by its block keyword. So all 21 labelled top-level blocks are found (recall 21/22), but 23 of 52 symbols are nested or unlabelled blocks (ingress, egress, tags, terraform, locals ...). In .tf files each resource is additionally stored a second time as a 'deployment_unit' (8 duplicates); .tofu files do not get that. Resource type is not part of the name (aws_instance.example and a variable named example would collide). If every block is accepted as a definition, precision is 44/52 = 0.846.",
+   "verdict": "usable",
+   "detection_notes": ".tf .tfvars .hcl .tofu .nomad .workflow are all detected as hcl."
+  }
+ ],
+ "notes": [
+  "Binary under test: scratchpad/langs/repocortex. All indexing was done on copies under scratchpad/langs/work/G3/<language>/; the repository was not modified.",
+  "None of the 12 languages has a RepoCortex supplement; every tags query here is the one gotreesitter v0.50.1 infers (grammars.ResolveTagsQuery). The queries were dumped with a throwaway Go program (work/G3/scripts/dumpq) and trees with work/G3/scripts/sexp to explain each failure.",
+  "'has a tags query' does not mean 'has definition patterns': fortran and gn have reference patterns only; gdscript, gleam and fsharp have definition patterns that cannot match the grammar's actual node shapes. All five extract 0 symbols on real code.",
+  "parse_status is not a syntax-health signal for these languages: 'partial' means the file yielded zero symbols and zero references, and 'ok' means it yielded at least one of either. Files with dozens of tree-sitter ERROR nodes (Haxe, Groovy, old Gleam) are reported 'ok' or 'partial' with parse_error NULL; fortran/gdscript/gn files read 'ok' with 0 symbols because call references were recorded.",
+  "Extension routing losses: .fs -> forth (F# and GLSL fragment shaders skipped, 'no tags query available for \"forth\"'), .hh -> cpp (Hack parsed as C++), .gs -> javascript (GLSL geometry shaders).",
+  "Kind vocabulary is coarse: methods are 'function' in groovy/haxe (but 'method' in hack), structs/enums/unions/inputs are 'class', and any definition kind the tool does not know (graphql scalar/directive/enum value, every hcl block) falls back to 'function'. wrong_kind counts only the clearly misleading cases (function for a non-callable).",
+  "Precision is null where nothing was extracted (0/0). Enum values, struct/record fields and member variables were excluded from 'expected' in every language; where the tool extracted enum values (graphql) they were scored correct.",
+  "Nothing crashed, hung or was slow: every index run finished in under 0.4 s."
+ ]
+}
