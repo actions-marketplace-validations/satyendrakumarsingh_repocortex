@@ -1,0 +1,232 @@
+{
+  "name": "repocortex-vscode",
+  "displayName": "RepoCortex",
+  "description": "Callers, impact, tests and implementations for the symbol under the cursor, read from the local RepoCortex index. Every row carries its confidence tier.",
+  "version": "0.1.0",
+  "publisher": "repocortex",
+  "license": "Apache-2.0",
+  "private": true,
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/satyendrakumarsingh/repocortex.git",
+    "directory": "editors/vscode"
+  },
+  "bugs": {
+    "url": "https://github.com/satyendrakumarsingh/repocortex/issues"
+  },
+  "homepage": "https://github.com/satyendrakumarsingh/repocortex/blob/main/docs/guides/editor-extension.md",
+  "engines": {
+    "vscode": "^1.125.0"
+  },
+  "categories": [
+    "Programming Languages",
+    "Other"
+  ],
+  "keywords": [
+    "repocortex",
+    "code graph",
+    "call graph",
+    "impact analysis",
+    "callers"
+  ],
+  "main": "./out/src/extension.js",
+  "extensionKind": [
+    "workspace"
+  ],
+  "capabilities": {
+    "untrustedWorkspaces": {
+      "supported": false,
+      "description": "RepoCortex runs the repocortex binary against the workspace folder, so it stays off until the folder is trusted."
+    },
+    "virtualWorkspaces": {
+      "supported": false,
+      "description": "RepoCortex reads a local index through a local binary and needs files on disk."
+    }
+  },
+  "activationEvents": [
+    "onCommand:repocortex.showCallers",
+    "onCommand:repocortex.showImpact",
+    "onCommand:repocortex.showTests",
+    "onCommand:repocortex.showImplementations",
+    "onCommand:repocortex.indexWorkspace",
+    "onCommand:repocortex.refreshStatus",
+    "onCommand:repocortex.showStatus",
+    "onCommand:repocortex.showFullReport",
+    "workspaceContains:.repocortex",
+    "workspaceContains:.repocortex/index.db"
+  ],
+  "contributes": {
+    "commands": [
+      {
+        "command": "repocortex.showCallers",
+        "title": "Show callers",
+        "category": "RepoCortex"
+      },
+      {
+        "command": "repocortex.showImpact",
+        "title": "Show what this could break",
+        "category": "RepoCortex"
+      },
+      {
+        "command": "repocortex.showTests",
+        "title": "Show tests that reach this",
+        "category": "RepoCortex"
+      },
+      {
+        "command": "repocortex.showImplementations",
+        "title": "Show implementations",
+        "category": "RepoCortex"
+      },
+      {
+        "command": "repocortex.indexWorkspace",
+        "title": "Index this workspace in a terminal",
+        "category": "RepoCortex"
+      },
+      {
+        "command": "repocortex.refreshStatus",
+        "title": "Refresh index status",
+        "category": "RepoCortex",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "repocortex.showStatus",
+        "title": "Show index status",
+        "category": "RepoCortex"
+      },
+      {
+        "command": "repocortex.showFullReport",
+        "title": "Show the full tool report",
+        "category": "RepoCortex",
+        "icon": "$(output)"
+      }
+    ],
+    "menus": {
+      "editor/context": [
+        {
+          "command": "repocortex.showCallers",
+          "when": "editorTextFocus && resourceScheme == file",
+          "group": "4_repocortex@1"
+        },
+        {
+          "command": "repocortex.showImpact",
+          "when": "editorTextFocus && resourceScheme == file",
+          "group": "4_repocortex@2"
+        },
+        {
+          "command": "repocortex.showTests",
+          "when": "editorTextFocus && resourceScheme == file",
+          "group": "4_repocortex@3"
+        },
+        {
+          "command": "repocortex.showImplementations",
+          "when": "editorTextFocus && resourceScheme == file",
+          "group": "4_repocortex@4"
+        }
+      ],
+      "view/title": [
+        {
+          "command": "repocortex.showFullReport",
+          "when": "view == repocortex.results",
+          "group": "navigation@1"
+        },
+        {
+          "command": "repocortex.refreshStatus",
+          "when": "view == repocortex.results",
+          "group": "navigation@2"
+        }
+      ]
+    },
+    "viewsContainers": {
+      "panel": [
+        {
+          "id": "repocortex",
+          "title": "RepoCortex",
+          "icon": "media/repocortex.svg"
+        }
+      ]
+    },
+    "views": {
+      "repocortex": [
+        {
+          "id": "repocortex.results",
+          "name": "Results",
+          "icon": "media/repocortex.svg",
+          "contextualTitle": "RepoCortex"
+        }
+      ]
+    },
+    "viewsWelcome": [
+      {
+        "view": "repocortex.results",
+        "contents": "Put the cursor on a function, method or type and run a RepoCortex command.\n[Show callers](command:repocortex.showCallers)\n[Show what this could break](command:repocortex.showImpact)\n[Show tests that reach this](command:repocortex.showTests)\n[Show implementations](command:repocortex.showImplementations)\nAnswers come from the local index in .repocortex/. Nothing leaves this machine."
+      }
+    ],
+    "taskDefinitions": [
+      {
+        "type": "repocortex",
+        "required": [
+          "step"
+        ],
+        "properties": {
+          "step": {
+            "type": "string",
+            "enum": [
+              "init",
+              "index",
+              "resolve"
+            ],
+            "description": "The repocortex subcommand this task runs."
+          }
+        }
+      }
+    ],
+    "configuration": {
+      "title": "RepoCortex",
+      "properties": {
+        "repocortex.path": {
+          "type": "string",
+          "default": "repocortex",
+          "scope": "machine",
+          "markdownDescription": "Path to the `repocortex` binary, or a bare command name found on `PATH`. A leading `~/` is expanded. This is a machine setting on purpose: a workspace cannot change which program the extension runs."
+        },
+        "repocortex.codeLens.enabled": {
+          "type": "boolean",
+          "default": false,
+          "scope": "resource",
+          "markdownDescription": "Show the number of callers RepoCortex found above function and type definitions. Off by default. Counts are looked up only for definitions scrolled into view, are cached until the index changes, and wait for typing to pause."
+        },
+        "repocortex.minConfidence": {
+          "type": "string",
+          "enum": [
+            "low",
+            "medium",
+            "high",
+            "exact"
+          ],
+          "enumDescriptions": [
+            "Show everything RepoCortex found, including weak inferences.",
+            "Hide low-confidence inferences.",
+            "Show only what RepoCortex can defend: high and exact.",
+            "Show only bindings a compiler proved. Empty unless a SCIP index was imported."
+          ],
+          "default": "low",
+          "scope": "resource",
+          "markdownDescription": "Lowest confidence tier shown. It is sent to the tool as `min_confidence`, so the tool itself reports how many results it left out."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "pretest": "npm run compile",
+    "test": "node --test \"out/test/**/*.test.js\"",
+    "vscode:prepublish": "npm run compile",
+    "package": "npx @vscode/vsce package --no-dependencies"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "@types/vscode": "~1.125.0",
+    "typescript": "^5.9.0"
+  }
+}

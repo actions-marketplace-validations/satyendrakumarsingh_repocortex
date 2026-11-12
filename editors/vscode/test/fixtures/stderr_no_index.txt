@@ -1,0 +1,1 @@
+error: no index at /work/project/.repocortex/index.db — run 'repocortex init' and 'repocortex index' first
