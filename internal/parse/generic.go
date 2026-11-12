@@ -623,6 +623,14 @@ func (p *genericParser) Parse(ctx context.Context, path string, src []byte) (*Re
 			if fixed && fix.owner != "" {
 				sym.FQN = model.DefaultFQN(path, fix.owner+"."+sym.Name)
 			}
+			if tag.Kind == macroDefinitionTag {
+				// A macro_rules! is a function by kind and a macro by name:
+				// `src/error.rs:print_error!`. See macroFQNMarker.
+				if sym.FQN == "" {
+					sym.FQN = model.DefaultFQN(path, sym.Name)
+				}
+				sym.FQN += macroFQNMarker
+			}
 			res.Symbols = append(res.Symbols, sym)
 		case strings.HasPrefix(tag.Kind, "reference"):
 			r := Reference{
@@ -1649,7 +1657,7 @@ func kindFromTag(tagKind string) model.EntityKind {
 		return model.KindInterface
 	case "method", "constructor":
 		return model.KindMethod
-	case "function":
+	case "function", "function.macro":
 		return model.KindFunction
 	case "field", "property", "member":
 		return model.KindField

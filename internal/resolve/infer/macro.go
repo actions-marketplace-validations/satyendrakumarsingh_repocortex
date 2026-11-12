@@ -14,33 +14,48 @@ import (
 // invocation reaches. fd bound std's `format!` to a test function named
 // `format` at `high`, twice in thirty.
 //
-// The parser now emits `reference.call.macro` (name without the bang, a path in
-// front as a scope receiver) but indexes `macro_rules! name` as a plain
-// `function` symbol, which nothing in the index tells from an `fn`. So a macro
-// invocation binds only to a symbol of kind `macro`, which no parser emits yet,
-// and otherwise to nothing: it is never bound to a function. A distinct kind
-// (or a flag on the symbol) for macro_rules definitions would make the rule
-// exact. What the rule needs:
+// The parser emits `reference.call.macro` for an invocation (name without the
+// bang, a path in front as a scope receiver) and indexes `macro_rules! name` as a
+// `function` whose qualified name ends in `!` (`src/error.rs:print_error!`), the
+// one thing in the index that tells it from an `fn`; its kind stays `function`
+// so that every tool that looks a function up by name still finds it. So:
 //
-//   - a reference of kind `reference.call.macro` for each invocation, written
-//     `name!(...)`, `name![...]` or `name!{...}`, with the name WITHOUT the
-//     bang and a path qualifier recorded as the receiver as for any call. Today
-//     it emits `reference.call` with receiver kind `bare`, which cannot be told
-//     from a call of a function.
-//   - a symbol of kind `macro` for each `macro_rules! name { ... }` definition
-//     (and `macro name` declarative macros 2.0), qualified like a function at
-//     the module level it is written in, so that isModuleLevel holds.
+//   - a macro invocation binds only to a macro definition (in the same file
+//     first, then the one of that name in the repository), and otherwise to
+//     nothing: never to a function;
+//   - any other call never binds to a macro definition.
 //
-// Until then coreSyntax (corefunctions.go) keeps the standard macros from
-// binding to anything, and this rule is inert: no symbol has the kind and no
-// reference has the suffix.
+// A symbol of kind `macro` counts as a definition too, for a parser that gives
+// macros a kind of their own.
 
 const (
 	// macroRefSuffix ends the kind of a reference to a macro invocation.
 	macroRefSuffix = ".macro"
-	// macroSymbolKind is the kind of a symbol that defines a macro.
+	// macroSymbolKind is the kind of a symbol that defines a macro, where a
+	// parser gives macros a kind of their own.
 	macroSymbolKind = "macro"
+	// macroFQNMarker ends the qualified name of a Rust macro_rules! definition,
+	// which is indexed as a function: `src/error.rs:print_error!`. The parser
+	// writes it (internal/parse/lang_rust.go); no Rust identifier ends in it,
+	// and the language test keeps Ruby's `save!` out.
+	macroFQNMarker = "!"
 )
+
+// isMacroDefinition reports whether a symbol defines a macro.
+func isMacroDefinition(s registry.SymbolIndexEntry) bool {
+	if s.Kind == macroSymbolKind {
+		return true
+	}
+	return s.Kind == string(model.KindFunction) && strings.HasSuffix(s.FQN, macroFQNMarker) &&
+		languageOfCandidate(s) == "rust"
+}
+
+// macroVisibleFrom reports whether a macro definition can be seen from a scope
+// of its file: one written inside a function body is visible only in it.
+func macroVisibleFrom(scope string, s registry.SymbolIndexEntry) bool {
+	s.FQN = strings.TrimSuffix(s.FQN, macroFQNMarker)
+	return visibleFrom(scope, s)
+}
 
 // isMacroInvocation reports whether a reference is a macro invocation.
 func isMacroInvocation(refKind string) bool { return strings.HasSuffix(refKind, macroRefSuffix) }
@@ -50,7 +65,7 @@ func isMacroInvocation(refKind string) bool { return strings.HasSuffix(refKind, 
 func withoutMacros(cands []registry.SymbolIndexEntry) []registry.SymbolIndexEntry {
 	has := false
 	for _, s := range cands {
-		if s.Kind == macroSymbolKind {
+		if isMacroDefinition(s) {
 			has = true
 			break
 		}
@@ -60,7 +75,7 @@ func withoutMacros(cands []registry.SymbolIndexEntry) []registry.SymbolIndexEntr
 	}
 	kept := make([]registry.SymbolIndexEntry, 0, len(cands))
 	for _, s := range cands {
-		if s.Kind != macroSymbolKind {
+		if !isMacroDefinition(s) {
 			kept = append(kept, s)
 		}
 	}
@@ -75,7 +90,7 @@ func withoutMacros(cands []registry.SymbolIndexEntry) []registry.SymbolIndexEntr
 func (r *Resolver) callMacro(c call) decision {
 	var macros, here []registry.SymbolIndexEntry
 	for _, s := range c.cands {
-		if s.Kind != macroSymbolKind || !isModuleLevel(s) {
+		if !isMacroDefinition(s) || !macroVisibleFrom(c.scope, s) {
 			continue
 		}
 		macros = append(macros, s)

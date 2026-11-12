@@ -20,13 +20,30 @@ import (
 //	type Item = T  (in an impl)            type_alias, owned by the impl's type
 //	type Item;     (in a trait)            type_alias, owned by the trait
 //	mod inline { ... }                     package
-//	macro_rules! name { ... }              function
+//	macro_rules! name { ... }              function, qualified name ends in !
 //
 // `mod external;` declares a file, not a module body, and defines nothing here;
 // the file it names is indexed as itself. A static is a constant unless it is
 // mut, as in the language; a macro_rules! is a function because it is invoked
 // by name and defines a name nothing else does, like a function-like macro in C.
 //
+// # A macro definition is a function whose qualified name ends in `!`
+//
+// The symbol's kind stays `function`: every tool that asks for "the function or
+// method of this name" (callers, callees, impact, dead code) keeps finding a
+// macro by its bare name, and nothing that prints a kind learns a new word. What
+// marks it is its qualified name, `src/error.rs:print_error!`, which is how the
+// language writes it. The resolver (internal/resolve/infer/macro.go) reads the
+// suffix: a `.macro` reference binds only to such a symbol, and a call that is
+// not a macro invocation never does.
+const (
+	// macroDefinitionTag is the query capture of a macro_rules! definition.
+	macroDefinitionTag = "definition.function.macro"
+	// macroFQNMarker ends the qualified name of a macro definition. No Rust
+	// identifier ends in it.
+	macroFQNMarker = "!"
+)
+
 // # Macro invocations are not calls
 //
 // `format!(..)`, `vec![..]`, `print_error!(..)` and `std::println!(..)` are
@@ -46,7 +63,7 @@ func init() {
 (type_item name: (type_identifier) @name) @definition.type_alias
 (associated_type name: (type_identifier) @name) @definition.type_alias
 (mod_item name: (identifier) @name body: (declaration_list)) @definition.module
-(macro_definition name: (identifier) @name) @definition.function
+(macro_definition name: (identifier) @name) @definition.function.macro
 
 (call_expression (identifier) @name) @reference.call
 (call_expression (field_expression (field_identifier) @name)) @reference.call

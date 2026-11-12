@@ -493,6 +493,14 @@ func (r *Resolver) ResolveFile(
 			cands = kept
 		}
 
+		// A call that is not a macro invocation never reaches a macro: a
+		// `name(...)` and a `name!(...)` are different names (macro.go). Done
+		// here and not only in the shaped path, so that no strategy below can
+		// bind a function call to a macro_rules! of the same name.
+		if edgeKind == model.EdgeCalls && !isMacroInvocation(ref.Kind) {
+			cands = withoutMacros(cands)
+		}
+
 		// A type is not its own supertype. `class Flask(flask.Flask)` declares
 		// a Flask that extends ANOTHER Flask, and the name alone bound it to
 		// itself: the clause's qualifier is not captured, and the nearest
