@@ -204,6 +204,8 @@ var supplements = map[string]string{
 (record_declaration name: (identifier) @name) @definition.class
 (invocation_expression (member_access_expression (identifier) (identifier) @name)) @reference.call
 (invocation_expression (identifier) @name) @reference.call
+(invocation_expression (member_access_expression "this" (identifier) @name)) @reference.call
+(invocation_expression (member_access_expression "base" (identifier) @name)) @reference.call
 `,
 
 	"ruby": `
@@ -374,6 +376,152 @@ var inheritanceQueries = map[string]string{
 	"python": `
 (class_definition superclasses: (argument_list (identifier) @name @reference.inherit))
 (class_definition superclasses: (argument_list (attribute attribute: (identifier) @name) @reference.inherit))
+`,
+
+	// C# writes one base_list after the colon and the grammar does not say which
+	// entry is the base class and which are interfaces:
+	//
+	//	class A : B, IFoo, IBar<T>   -> (base_list (identifier) (identifier) (generic_name ...))
+	//	struct S : IFoo              -> (struct_declaration (base_list (identifier)))
+	//	interface I : IBase          -> (interface_declaration (base_list (identifier)))
+	//	record R(int X) : Base(X), IFoo
+	//	                             -> (base_list (primary_constructor_base_type ...) (identifier))
+	//
+	// Where the declaration decides, the pattern follows it: a struct can only
+	// implement interfaces, an interface can only extend them, and a record's
+	// `Base(...)` call is a base class. In a class (or record) list nothing in
+	// the syntax decides, so the .NET naming convention does: a name shaped
+	// `I` + capital + lower-case (IDisposable, IFoo) is an interface and is
+	// IMPLEMENTS, anything else is EXTENDS. The limitation is that a class
+	// implementing an interface not named that way is recorded as EXTENDS to it,
+	// and a base class named like `IFoo` as IMPLEMENTS. Both channels are
+	// consulted together when a call is bound through the ancestry, so the
+	// label changes the edge kind and not the answer.
+	//
+	// An enum's base_list is its underlying integral type and is not captured.
+	// Each shape is spelled four ways: plain (B), generic (B<T>), and either
+	// qualified (Ns.B, Ns.B<T>). The last segment is captured, because the
+	// resolver matches a reference by simple name.
+	"c_sharp": `
+(class_declaration (base_list (identifier) @name @reference.implementation (#match? @name "^I[A-Z][a-z]")))
+(class_declaration (base_list (generic_name . (identifier) @name @reference.implementation) (#match? @name "^I[A-Z][a-z]")))
+(class_declaration (base_list (qualified_name (identifier) @name @reference.implementation .) (#match? @name "^I[A-Z][a-z]")))
+(class_declaration (base_list (qualified_name (generic_name . (identifier) @name @reference.implementation) .) (#match? @name "^I[A-Z][a-z]")))
+(class_declaration (base_list (identifier) @name @reference.extends (#not-match? @name "^I[A-Z][a-z]")))
+(class_declaration (base_list (generic_name . (identifier) @name @reference.extends) (#not-match? @name "^I[A-Z][a-z]")))
+(class_declaration (base_list (qualified_name (identifier) @name @reference.extends .) (#not-match? @name "^I[A-Z][a-z]")))
+(class_declaration (base_list (qualified_name (generic_name . (identifier) @name @reference.extends) .) (#not-match? @name "^I[A-Z][a-z]")))
+(record_declaration (base_list (identifier) @name @reference.implementation (#match? @name "^I[A-Z][a-z]")))
+(record_declaration (base_list (generic_name . (identifier) @name @reference.implementation) (#match? @name "^I[A-Z][a-z]")))
+(record_declaration (base_list (qualified_name (identifier) @name @reference.implementation .) (#match? @name "^I[A-Z][a-z]")))
+(record_declaration (base_list (qualified_name (generic_name . (identifier) @name @reference.implementation) .) (#match? @name "^I[A-Z][a-z]")))
+(record_declaration (base_list (identifier) @name @reference.extends (#not-match? @name "^I[A-Z][a-z]")))
+(record_declaration (base_list (generic_name . (identifier) @name @reference.extends) (#not-match? @name "^I[A-Z][a-z]")))
+(record_declaration (base_list (qualified_name (identifier) @name @reference.extends .) (#not-match? @name "^I[A-Z][a-z]")))
+(record_declaration (base_list (qualified_name (generic_name . (identifier) @name @reference.extends) .) (#not-match? @name "^I[A-Z][a-z]")))
+(struct_declaration (base_list (identifier) @name @reference.implementation))
+(struct_declaration (base_list (generic_name . (identifier) @name @reference.implementation)))
+(struct_declaration (base_list (qualified_name (identifier) @name @reference.implementation .)))
+(struct_declaration (base_list (qualified_name (generic_name . (identifier) @name @reference.implementation) .)))
+(interface_declaration (base_list (identifier) @name @reference.extends))
+(interface_declaration (base_list (generic_name . (identifier) @name @reference.extends)))
+(interface_declaration (base_list (qualified_name (identifier) @name @reference.extends .)))
+(interface_declaration (base_list (qualified_name (generic_name . (identifier) @name @reference.extends) .)))
+(primary_constructor_base_type (identifier) @name @reference.extends)
+(primary_constructor_base_type (generic_name . (identifier) @name @reference.extends))
+(primary_constructor_base_type (qualified_name (identifier) @name @reference.extends .))
+(primary_constructor_base_type (qualified_name (generic_name . (identifier) @name @reference.extends) .))
+`,
+
+	// C++ lists its bases after the colon, each optionally preceded by an access
+	// specifier and `virtual`:
+	//
+	//	class A : public B, private C   -> (base_class_clause (access_specifier) (type_identifier) ...)
+	//	struct S : B                    -> the same node under struct_specifier
+	//	class A : public Base<T>        -> (template_type (type_identifier) (template_argument_list))
+	//	class A : public ns::B          -> (qualified_identifier (namespace_identifier) (type_identifier))
+	//
+	// All of them are EXTENDS: C++ has no interface construct, and an abstract
+	// class used as one is a base class to the grammar. One clause serves class
+	// and struct, so no pattern names the parent.
+	//
+	// A qualified base is captured by its last segment, at up to three levels
+	// (`a::b::C`, which nests as qualified_identifier inside qualified_identifier),
+	// and only when the qualifier is a namespace: `Base<T>::type`, a member of a
+	// dependent type, names nothing a symbol could be bound to, and capturing its
+	// `type` would be a false edge. Out-of-line method definitions `A::m()` are a
+	// separate gap and not read here.
+	"cpp": `
+(base_class_clause (type_identifier) @name @reference.extends)
+(base_class_clause (template_type . (type_identifier) @name @reference.extends))
+(base_class_clause (qualified_identifier . (type_identifier) @name @reference.extends .))
+(base_class_clause (qualified_identifier . (namespace_identifier) (type_identifier) @name @reference.extends .))
+(base_class_clause (qualified_identifier . (namespace_identifier) (template_type . (type_identifier) @name @reference.extends) .))
+(base_class_clause (qualified_identifier . (namespace_identifier) (qualified_identifier . (namespace_identifier) (type_identifier) @name @reference.extends .) .))
+(base_class_clause (qualified_identifier . (namespace_identifier) (qualified_identifier . (namespace_identifier) (template_type . (type_identifier) @name @reference.extends) .) .))
+(base_class_clause (qualified_identifier . (namespace_identifier) (qualified_identifier . (namespace_identifier) (qualified_identifier . (namespace_identifier) (type_identifier) @name @reference.extends .) .) .))
+`,
+
+	// Rust has no classes; the hierarchy is traits.
+	//
+	//	trait A: B + C       -> (trait_item (trait_bounds (type_identifier) (type_identifier)))
+	//	trait A: ns::B<T>    -> (trait_bounds (generic_type (scoped_type_identifier ...)))
+	//
+	// A supertrait is EXTENDS, as an interface that extends another is in Java.
+	// Lifetimes (`'static`) are a different node and are not captured, and a
+	// `where Self: B` clause is not a supertrait list.
+	//
+	// The standard library's traits are not captured. A bound like `Debug +
+	// Send + Sync` is nearly always the prelude's, and the resolver binds by
+	// name: ripgrep's `trait Flag: Debug` was bound, at medium, to an unrelated
+	// struct called `Debug` in the next file of the same directory, because a
+	// sibling module is a same-directory candidate. The list is the prelude,
+	// the marker and operator traits, and the std::io, std::fmt and std::error
+	// ones that are written without a `std::` prefix. A repository that defines
+	// its own trait under one of these names loses that supertrait edge, which is
+	// the cheaper error.
+	//
+	// `impl Trait for Type` declares IMPLEMENTS from Type to Trait, but the
+	// reference would sit on the impl block, which is no symbol: the resolver
+	// attributes a reference to the innermost symbol on its line, so the edge
+	// would have no source. That is why no pattern for it is here; see the note
+	// in docs/accuracy.md.
+	"rust": `
+(trait_item (trait_bounds (type_identifier) @name @reference.extends (#not-match? @name "^(Debug|Display|Clone|Copy|Send|Sync|Sized|Unpin|Default|Eq|PartialEq|Ord|PartialOrd|Hash|Iterator|IntoIterator|DoubleEndedIterator|ExactSizeIterator|From|Into|TryFrom|TryInto|AsRef|AsMut|Borrow|ToString|ToOwned|Drop|Fn|FnMut|FnOnce|Deref|DerefMut|Any|Error|Read|Write|BufRead|Seek|UnwindSafe|RefUnwindSafe|Future|Extend|FromStr)$")))
+(trait_item (trait_bounds (generic_type type: (type_identifier) @name @reference.extends (#not-match? @name "^(Debug|Display|Clone|Copy|Send|Sync|Sized|Unpin|Default|Eq|PartialEq|Ord|PartialOrd|Hash|Iterator|IntoIterator|DoubleEndedIterator|ExactSizeIterator|From|Into|TryFrom|TryInto|AsRef|AsMut|Borrow|ToString|ToOwned|Drop|Fn|FnMut|FnOnce|Deref|DerefMut|Any|Error|Read|Write|BufRead|Seek|UnwindSafe|RefUnwindSafe|Future|Extend|FromStr)$"))))
+(trait_item (trait_bounds (scoped_type_identifier name: (type_identifier) @name @reference.extends (#not-match? @name "^(Debug|Display|Clone|Copy|Send|Sync|Sized|Unpin|Default|Eq|PartialEq|Ord|PartialOrd|Hash|Iterator|IntoIterator|DoubleEndedIterator|ExactSizeIterator|From|Into|TryFrom|TryInto|AsRef|AsMut|Borrow|ToString|ToOwned|Drop|Fn|FnMut|FnOnce|Deref|DerefMut|Any|Error|Read|Write|BufRead|Seek|UnwindSafe|RefUnwindSafe|Future|Extend|FromStr)$"))))
+(trait_item (trait_bounds (generic_type type: (scoped_type_identifier name: (type_identifier) @name @reference.extends (#not-match? @name "^(Debug|Display|Clone|Copy|Send|Sync|Sized|Unpin|Default|Eq|PartialEq|Ord|PartialOrd|Hash|Iterator|IntoIterator|DoubleEndedIterator|ExactSizeIterator|From|Into|TryFrom|TryInto|AsRef|AsMut|Borrow|ToString|ToOwned|Drop|Fn|FnMut|FnOnce|Deref|DerefMut|Any|Error|Read|Write|BufRead|Seek|UnwindSafe|RefUnwindSafe|Future|Extend|FromStr)$")))))
+`,
+
+	// Ruby: a single superclass and any number of mixins.
+	//
+	//	class A < B           -> (class (constant) (superclass (constant)))
+	//	class A < Mod::B      -> (superclass (scope_resolution (constant) (constant)))
+	//	include M, extend M,
+	//	prepend M             -> (call (identifier) (argument_list (constant)))
+	//
+	// The superclass is EXTENDS. A mixin is IMPLEMENTS, the relation Java gives
+	// an interface and Rust a trait: the module contributes methods without
+	// being the class's parent. `include` and `prepend` put the module in the
+	// instance ancestry. `extend` puts it in the CLASS's singleton ancestry
+	// (its methods become class methods), which this graph cannot tell apart,
+	// so a call to a method that only an extended module defines may bind to it
+	// from an instance method too; the resolver only ever consults ancestry for
+	// a call it could not bind by name, which bounds the damage.
+	//
+	// `!receiver` keeps the mixin patterns to the bare statement. `foo.include
+	// M` and `Class.new { include M }` on a receiver are not a class body
+	// declaring its ancestry. Only a constant is captured: `include
+	// Comparable` names a module, `include some_helper` does not.
+	//
+	// `class A < Struct.new(:x)` and `class A < Class.new(B)` put a CALL where
+	// the superclass is, and capture nothing, deliberately: the base is built at
+	// run time, not named.
+	"ruby": `
+(superclass (constant) @name @reference.extends)
+(superclass (scope_resolution name: (constant) @name @reference.extends))
+(call !receiver method: (identifier) @_m arguments: (argument_list (constant) @name @reference.implementation) (#match? @_m "^(include|extend|prepend)$"))
+(call !receiver method: (identifier) @_m arguments: (argument_list (scope_resolution name: (constant) @name @reference.implementation)) (#match? @_m "^(include|extend|prepend)$"))
 `,
 }
 
