@@ -25,6 +25,11 @@ import "strings"
 //   - const NAME = ... (also `const global`) is a constant; const NAME{T} = ... and const NAME =
 //     Union{...} (a right-hand side that is a parametrised type) are
 //     type_alias;
+//   - an operator method on a qualified name is named by the operator, in all
+//     the spellings: `Base.:+(a, b)`, `Base.:(==)(a, b)`;
+//   - when the grammar gives up on a file, the short forms and the headers
+//     that are direct children of the ERROR at its root are taken (see the
+//     recovery patterns at the end of juliaDefinitions);
 //   - plain assignments, global declarations and `(x::T)(args) = ...`
 //     functors are not definitions.
 func init() {
@@ -38,6 +43,7 @@ const juliaCallName = `(call_expression . [
     (operator) @name
     (field_expression (_) . (identifier) @name .)
     (field_expression (quote_expression (operator) @name))
+    (field_expression (quote_expression (parenthesized_expression (operator) @name)))
     (parametrized_type_expression . (identifier) @name)
   ])`
 
@@ -117,6 +123,30 @@ func juliaDefinitions() string {
 				b.WriteString(strings.Replace(out, "%s", mid, 1) + "\n")
 			}
 		}
+	}
+
+	// RECOVERY. When the grammar cannot read one construct (a transpose after a
+	// closing bracket, `)'`, is the usual one) it gives up on the whole file:
+	// the root is an ERROR whose children are the file's items, the ones it could
+	// read as nodes of their own. The short-form methods among them are not under
+	// a source_file, so the patterns above never reach them. They are taken here,
+	// but only from an ERROR that is the root of the tree or a direct child of the
+	// source_file: an ERROR deeper down is as likely the remains of a function
+	// body, where a short form is a local closure.
+	for _, s := range shapes {
+		lhs := "(assignment . " + s + " . (operator)) @definition.function"
+		b.WriteString("(ERROR " + lhs + ") @_top\n  (#not-has-ancestor? @_top ERROR source_file)\n")
+		b.WriteString("(source_file (ERROR " + lhs + ") @_top)\n  (#not-has-ancestor? @_top ERROR)\n")
+		// A header `function name(...)` whose body the grammar could not read stays
+		// a keyword and a signature, with no function_definition around them.
+		b.WriteString("(ERROR \"function\" . (signature " + s + ") @definition.function) @_top\n  (#not-has-ancestor? @_top ERROR source_file)\n")
+		b.WriteString("(source_file (ERROR \"function\" . (signature " + s + ") @definition.function) @_top)\n  (#not-has-ancestor? @_top ERROR)\n")
+		// ... or the keyword is an ERROR of its own and the signature follows it.
+		b.WriteString("(ERROR (ERROR \"function\") . (signature " + s + ") @definition.function) @_top\n  (#not-has-ancestor? @_top ERROR source_file)\n")
+		b.WriteString("(source_file (ERROR (ERROR \"function\") . (signature " + s + ") @definition.function) @_top)\n  (#not-has-ancestor? @_top ERROR)\n")
+		// ... which can itself be an ERROR inside the top one.
+		b.WriteString("(ERROR (ERROR \"function\" . (signature " + s + ") @definition.function)) @_top\n  (#not-has-ancestor? @_top ERROR source_file)\n")
+		b.WriteString("(source_file (ERROR (ERROR \"function\" . (signature " + s + ") @definition.function)) @_top)\n  (#not-has-ancestor? @_top ERROR)\n")
 	}
 	return b.String()
 }
