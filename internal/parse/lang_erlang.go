@@ -8,6 +8,7 @@ import ts "github.com/odvcencio/gotreesitter"
 // arrived as three symbols. Consecutive clauses of one name and arity are now
 // one symbol; `f/1` and `f/2` stay apart. See clausemerge.go.
 func init() {
+	registerDefinitions("erlang", erlangDefinitions, true)
 	registerClauseMerge("erlang", erlangClauseArity)
 }
 
@@ -20,3 +21,24 @@ func erlangClauseArity(name *ts.Node, lang *ts.Language) string {
 	}
 	return namedChildCount(clause, "expr_args", lang)
 }
+
+// What the index holds, see fixtures/langs/erlang/expected.tsv:
+//
+//   - a function is a function, its clauses folded per name and arity (above);
+//   - -module(name). is a package;
+//   - -type and -opaque are a type alias, -record(name, {...}) is a class;
+//   - -define(NAME, value). is a constant, and -define(NAME(Args), body). is a
+//     function: a macro that takes arguments is called, one that does not is a
+//     value.
+//
+// Not definitions: -spec (it describes a function defined elsewhere),
+// -callback, -export, -import, -behaviour, record fields, the -ifdef family.
+const erlangDefinitions = `
+(fun_decl (function_clause (atom) @name)) @definition.function
+(module_attribute . (atom) @name) @definition.package
+(type_alias (type_name . (atom) @name)) @definition.type_alias
+(opaque (type_name . (atom) @name)) @definition.type_alias
+(record_decl . (atom) @name) @definition.class
+(pp_define (macro_lhs . [(var) (atom)] @name .)) @definition.constant
+(pp_define (macro_lhs . [(var) (atom)] @name . (var_args))) @definition.function
+`
