@@ -12,6 +12,7 @@ import (
 	"github.com/satyendrakumarsingh/repocortex/internal/config"
 	"github.com/satyendrakumarsingh/repocortex/internal/pipeline"
 	"github.com/satyendrakumarsingh/repocortex/internal/registry"
+	"github.com/satyendrakumarsingh/repocortex/pkg/model"
 
 	"github.com/spf13/cobra"
 )
@@ -22,6 +23,7 @@ func newIndexCmd(g *Global) *cobra.Command {
 		showDig  bool
 		accuracy string
 		full     bool
+		rehash   bool
 	)
 
 	cmd := &cobra.Command{
@@ -30,9 +32,21 @@ func newIndexCmd(g *Global) *cobra.Command {
 		Long: `Walks the repository, parses every supported file, and makes the result
 queryable.
 
-By default this is incremental: files are compared by content hash against
-the current revision and only what changed is reparsed, so cost scales with
-your edits rather than repository size. Use --full to rebuild from scratch.
+By default this is incremental: only files whose content changed are reparsed,
+so an update costs a small fraction of a rebuild. It is not independent of
+repository size. Every file is stat'ed on every run, and after a change
+references are re-resolved across the whole index. docs/performance.md has
+measured figures. Use --full to rebuild from scratch.
+
+A file is read only when it might have changed. If its size and modification
+time match the index, and both are more than two seconds older than the
+previous run, it is taken as unchanged without being opened; on Linux and macOS
+the inode change time must be that old too, which catches an edit whose
+modification time was put back. Every other file is hashed and the hash
+decides, so a touched file with the same content is not reparsed and a same-size
+edit made in the same second is not missed. Windows has no change time to
+check: there, a same-size edit whose modification time was restored to the
+second is not seen. --rehash reads and hashes every file regardless.
 
 A full rebuild publishes atomically — the new revision becomes visible only
 once the entire run is written, so an interrupted rebuild leaves the previous
@@ -51,8 +65,11 @@ revision in place.`,
 				return fmt.Errorf("--workers %d: must be zero (use the default) or positive", workers)
 			}
 
+			if full && rehash {
+				return fmt.Errorf("--rehash applies to an incremental update; --full already reads every file")
+			}
 			if !full {
-				done, err := tryIncremental(cmd, g, showDig)
+				done, err := tryIncremental(cmd, g, showDig, rehash)
 				if err != nil {
 					return err
 				}
@@ -71,6 +88,8 @@ revision in place.`,
 	cmd.Flags().StringVar(&accuracy, "accuracy", "", "override accuracy mode: fast|auto|exact")
 	cmd.Flags().BoolVar(&full, "full", false,
 		"rebuild from scratch instead of updating incrementally (discards resolved edges; re-run 'repocortex resolve')")
+	cmd.Flags().BoolVar(&rehash, "rehash", false,
+		"read and hash every file instead of trusting an unchanged size and modification time")
 	return cmd
 }
 
@@ -91,7 +110,7 @@ type incrementalReport struct {
 //
 // Returns false when there is nothing to update — no index, or an index that
 // has never been populated — so the caller can fall back to a full build.
-func tryIncremental(cmd *cobra.Command, g *Global, showDigest bool) (bool, error) {
+func tryIncremental(cmd *cobra.Command, g *Global, showDigest, rehash bool) (bool, error) {
 	ctx := cmd.Context()
 	cfg := g.Config()
 	start := time.Now()
@@ -119,40 +138,9 @@ func tryIncremental(cmd *cobra.Command, g *Global, showDigest bool) (bool, error
 		return false, fmt.Errorf("prepare discovery: %w", err)
 	}
 
-	changes, err := pipeline.Diff(ctx, reg, current.ID, walker, Version)
-	if err != nil {
-		return false, fmt.Errorf("diff working tree: %w", err)
-	}
-
-	stats, err := pipeline.Incremental(ctx, reg, current.ID, walker, changes, pipeline.IncrementalOptions{
-		Resolve: true,
-	})
+	stats, err := refreshIndex(ctx, reg, current, walker, cfg.RepoRoot, rehash)
 	if err != nil {
 		return false, fmt.Errorf("incremental update failed: %w", err)
-	}
-
-	// The pass succeeded, so this run's contents are now this build's work —
-	// record that. Only the full path stamps at BeginRun, because only it
-	// creates a run; an incremental pass updates the committed run in place.
-	//
-	// Skipping this would turn the staleness fix into a permanent penalty: the
-	// differ treats a version mismatch as "everything is dirty", so a run that
-	// re-parsed under the new build and never said so would re-parse in full on
-	// every subsequent index, forever.
-	if err := reg.StampProducer(ctx, current.ID, Version); err != nil {
-		return false, err
-	}
-
-	// And record which commit these contents now describe. Only the full path
-	// stamps at BeginRun because only it creates a run; without this an
-	// incrementally-updated index keeps naming the commit it was FIRST built at,
-	// so `head_matches_build` reports a mismatch for an index that is in fact
-	// current. The portal's index bar and the MCP provenance block both read
-	// this field, and a provenance claim that is wrong is worse than absent.
-	if rev := headRevision(ctx, cfg.RepoRoot); rev != "" && rev != current.GitRevision {
-		if err := reg.StampGitRevision(ctx, current.ID, rev); err != nil {
-			return false, err
-		}
 	}
 
 	report := incrementalReport{
@@ -393,7 +381,52 @@ func renderIndexReport(cmd *cobra.Command, g *Global, r indexReport) error {
 // scope; kept explicit so the abort path is obviously immune to the cancelled
 // parent context.
 
+// refreshIndex brings the committed run up to date with the working tree, in
+// place, and records which commit its contents now describe.
+//
+// `index` and `watch` share it. pipeline.Refresh stamps the build and the time
+// of the pass; the commit is stamped here because reading it needs git, which
+// the pipeline does not depend on. Only the full path stamps a commit at
+// BeginRun, because only it creates a run; without this an incrementally
+// updated index keeps naming the commit it was FIRST built at, so
+// `head_matches_build` reports a mismatch for an index that is in fact current.
+// The portal's index bar and the MCP provenance block both read that field,
+// and a provenance claim that is wrong is worse than absent.
+//
+// current.GitRevision is updated to match, so a long-lived caller (watch)
+// compares the next pass against what is stored and not against what it read
+// at start-up.
+func refreshIndex(
+	ctx context.Context,
+	reg *registry.Registry,
+	current *model.IndexRun,
+	walker *fs.Walker,
+	repoRoot string,
+	rehash bool,
+) (pipeline.IncrementalStats, error) {
+	stats, err := pipeline.Refresh(ctx, reg, current.ID, walker, pipeline.RefreshOptions{
+		RunningAs: Version,
+		Rehash:    rehash,
+	})
+	if err != nil {
+		return stats, err
+	}
+	if rev := headRevision(ctx, repoRoot); rev != "" && rev != current.GitRevision {
+		if err := reg.StampGitRevision(ctx, current.ID, rev); err != nil {
+			return stats, err
+		}
+		current.GitRevision = rev
+	}
+	return stats, nil
+}
+
 // headRevision reads the commit HEAD names, or "" when this is not a repository.
+//
+// It reads the ref and nothing else. It used to call Repo.Info, which also
+// computes whether the working tree is dirty by comparing every tracked file
+// with the git index. Nothing here uses that answer, and on django it was half
+// of an update that changed nothing: about 1 s of 2.5 s, spent after the index
+// was already up to date.
 //
 // Extracted so the incremental path can stamp the same value the full path
 // records at BeginRun. Warnings are the caller's business: this is used on the
@@ -403,9 +436,9 @@ func headRevision(ctx context.Context, root string) string {
 	if err != nil {
 		return ""
 	}
-	info, err := repo.Info(ctx)
-	if err != nil || !info.IsRepo {
+	sha, err := repo.HeadSHA(ctx)
+	if err != nil {
 		return ""
 	}
-	return info.HeadSHA
+	return sha
 }

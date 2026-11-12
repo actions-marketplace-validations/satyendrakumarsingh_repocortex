@@ -82,6 +82,12 @@ type Discovered struct {
 
 	Skipped    bool   `json:"skipped"`
 	SkipReason string `json:"skip_reason,omitempty"`
+
+	// Unread is true when this walk did not open the file: its size and times
+	// matched what an earlier pass recorded, so ContentHash (or the binary
+	// skip) is that pass's and not a fresh reading. Only WalkTrusting sets
+	// it; see trust.go for the rule and what it does not cover.
+	Unread bool `json:"-"`
 }
 
 // Option adjusts a Walker. The knobs here are operational rather than
@@ -207,11 +213,24 @@ func (w *Walker) Root() string { return w.root }
 // can distinguish "not present" from "present but not indexed" — the difference
 // between a deleted file and an oversized one.
 func (w *Walker) Walk(ctx context.Context) ([]Discovered, error) {
+	return w.WalkTrusting(ctx, nil)
+}
+
+// WalkTrusting is Walk for a tree an earlier pass has already read. A file
+// whose size and times match what that pass recorded, and whose times are old
+// enough to be believed, is returned with the recorded hash and Unread set,
+// without being opened. Everything else is read and hashed exactly as Walk
+// does. A nil trust is Walk.
+//
+// The rule, its reasoning and its limits are in trust.go. The saving is the
+// difference between one stat and one open, read and close per file, which is
+// most of what a pass over an unchanged tree costs.
+func (w *Walker) WalkTrusting(ctx context.Context, trust *Trust) ([]Discovered, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
 
-	st := &walkState{w: w, ctx: ctx, done: ctx.Done()}
+	st := &walkState{w: w, ctx: ctx, done: ctx.Done(), trust: trust}
 	// One slot per worker beyond the caller's own goroutine, which does real
 	// work rather than blocking on a queue.
 	if n := w.workers - 1; n > 0 {
@@ -233,6 +252,9 @@ type walkState struct {
 	w    *Walker
 	ctx  context.Context
 	done <-chan struct{} // ctx.Done(), hoisted so the hot path never calls it
+
+	// trust is read-only for the whole walk, so workers share it unlocked.
+	trust *Trust
 
 	sem chan struct{}
 	wg  sync.WaitGroup
@@ -299,7 +321,7 @@ func (st *walkState) walkDir(dir, rel string, rules ruleSet) {
 		return
 	}
 
-	rules = loadDirRules(rules, dir, rel)
+	rules = loadDirRules(rules, dir, rel, entries)
 
 	for _, entry := range entries {
 		if st.cancelled() {
@@ -347,7 +369,7 @@ func (st *walkState) walkDir(dir, rel string, rules ruleSet) {
 		case entry.Type()&iofs.ModeSymlink != 0:
 			st.emit(st.symlink(childPath, childRel))
 		case entry.Type().IsRegular():
-			st.emit(st.w.inspect(childPath, childRel, entry))
+			st.emit(st.w.inspect(childPath, childRel, entry, st.trust))
 		default:
 			// Sockets, devices and FIFOs. Opening a FIFO blocks until a writer
 			// appears, which would hang the indexer indefinitely on a
@@ -416,8 +438,9 @@ func withinRoot(root, target string) bool {
 	return strings.HasPrefix(target, root+string(filepath.Separator))
 }
 
-// inspect stats, sizes, sniffs and hashes a regular file.
-func (w *Walker) inspect(full, rel string, entry iofs.DirEntry) Discovered {
+// inspect stats, sizes, sniffs and hashes a regular file. With a trust it
+// stops after the stat when the file provably has not changed.
+func (w *Walker) inspect(full, rel string, entry iofs.DirEntry, trust *Trust) Discovered {
 	d := Discovered{Path: rel, Language: languageOf(rel)}
 
 	info, err := entry.Info()
@@ -431,6 +454,18 @@ func (w *Walker) inspect(full, rel string, entry iofs.DirEntry) Discovered {
 	if d.SizeBytes > w.maxFileSize {
 		d.Skipped, d.SkipReason = true, SkipTooLarge
 		return d
+	}
+
+	if trust != nil {
+		changed, hasChange := changeTimeUnix(info)
+		if known, ok := trust.unchanged(rel, d.SizeBytes, d.ModTimeUnix, changed, hasChange); ok {
+			d.Unread = true
+			d.ContentHash = known.ContentHash
+			if known.ContentHash == "" {
+				d.Skipped, d.SkipReason = true, known.SkipReason
+			}
+			return d
+		}
 	}
 
 	sum, binary, err := hashFile(full, w.maxFileSize)

@@ -207,6 +207,22 @@ Two more that appear as `parse_error` rather than a skip reason:
 - `no tags query available for "markdown"` — the grammar exists but ships no tags
   query, so no symbols can be extracted. Common for markup and data formats.
 
+### `repocortex index` says "up to date" after an edit
+
+**Cause.** An incremental run reads a file only when it might have changed: a
+file whose size and modification time match the index, and are more than two
+seconds older than the previous run, is taken as unchanged without being opened
+(on Linux and macOS its inode change time must be that old too). An ordinary
+save always fails that test and is hashed. What can slip through is a same-size
+edit whose modification time was deliberately restored on Windows, or one made
+across a clock that stepped backwards or a network filesystem whose clock is
+more than two seconds behind.
+
+**Fix.** `repocortex index --rehash` reads and hashes every file. If that finds
+the edit, the timestamps on that filesystem are not trustworthy; use `--rehash`
+there. `repocortex index --full` rebuilds from scratch and is not needed for
+this.
+
 ### `source is 300000 bytes, over the 262144 limit`
 
 **Cause.** The file exceeded `parse.MaxSourceBytes` (256 KiB). It was discovered,

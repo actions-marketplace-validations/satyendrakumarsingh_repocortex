@@ -14,7 +14,7 @@ import (
 
 // harness holds a fully wired index over a temp repo.
 type harness struct {
-	t      *testing.T
+	t      testing.TB
 	root   string
 	db     *store.DB
 	reg    *registry.Registry
@@ -27,7 +27,7 @@ type harness struct {
 // the content-hash rule they were written for.
 const harnessBuild = "test-build"
 
-func newHarness(t *testing.T, files map[string]string) *harness {
+func newHarness(t testing.TB, files map[string]string) *harness {
 	t.Helper()
 	ctx := context.Background()
 
@@ -442,7 +442,7 @@ func TestADifferentBuildMakesEveryFileDirty(t *testing.T) {
 			})
 			// Nothing in the tree changes. The ONLY difference is the build.
 
-			changes, err := diffAgainst(ctx, h.reg, h.runID, h.walker, tc.indexedBy, tc.using)
+			changes, err := diffAgainst(ctx, h.reg, h.runID, h.walker, tc.indexedBy, tc.using, 0)
 			if err != nil {
 				t.Fatalf("diffAgainst: %v", err)
 			}

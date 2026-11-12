@@ -172,6 +172,15 @@ turning the cheapest common case into the most expensive one. Hashing costs a
 read per file: that is what the ~0.9 s no-op run over 5,000 files is paying for,
 and it is roughly 180 µs per file including the walk.
 
+**Since 2026-11-12 an unchanged file is no longer read at all.** The hash is
+still the verdict, but a file whose size and times match the index, and are
+more than two seconds older than the previous run, is not opened; the rule and
+its limits are in [the CLI reference](CLI.md#index) and
+`internal/acquire/fs/trust.go`. The no-op and one-file figures in the table
+above predate that and were not re-measured on this corpus. On django the
+same change took a no-op from 2.5 s to 0.13 s; see
+[the re-measurement](#re-measured-after-the-update-path-was-fixed).
+
 ## Three real repositories
 
 Every other figure in this document comes from a synthetic corpus or from
@@ -290,6 +299,44 @@ two-file edit, after a cold index of 13.58 s. So the floor under an update
 follows the size of the repository, which is not what `repocortex index --help`
 says of it ("cost scales with your edits rather than repository size"). What
 that pass costs per file on an idle machine was not measured here.
+
+#### Re-measured after the update path was fixed
+
+The same day, the same machine and the same clone (`a0f2e29`, 7,100 tracked
+files, 7,090 discovered), with a binary built the same way from the tree before
+the fix and from the tree after it. The load average was 6 to 8 during the
+"before" run and 8 to 10 during the "after" run, so these are again ceilings
+and not idle figures. Each cell is every run, wall time from `/usr/bin/time`.
+
+| `repocortex index` on django | Before | After |
+|---|---|---|
+| Nothing changed | 2.54 / 2.68 / 2.67 s | 0.21 / 0.13 / 0.14 s |
+| Two files changed (one function appended to each) | 3.25 / 3.39 / 3.31 s | 1.06 / 1.03 / 0.83 s |
+| 200 files changed (one comment line appended to each) | 4.26 / 4.35 s | 1.98 / 2.26 s |
+| Peak RSS, nothing changed / two files / 200 files | 58 / 190 / 236 MB | 57 / 188 / 222 MB |
+| Cold `index` into an empty database, for scale | 18.82 s | 17.09 s |
+
+Two things were the floor, found with `pprof` on the unchanged-tree path:
+
+| Where an update that changed nothing spent its time | Share |
+|---|---|
+| Opening, reading and hashing every discovered file (`fs.hashFile`) | about half |
+| `git status` over every tracked file, to stamp the commit (`Repo.Info` computing a dirty flag nothing read) | about half |
+| Reading the previous run's file list, the SQLite open and the schema check | under 50 ms |
+
+Neither is paid now. The commit is read from the ref. A file is hashed only
+when it might have changed, by the rule in [the CLI reference](CLI.md#index):
+same size, same modification time, and both that and the inode change time more
+than two seconds older than the previous run. The hash is still the verdict for
+every file that fails that test, and `repocortex index --rehash` hashes
+everything as before (0.55 s on this tree, now that the status scan is gone).
+
+What still follows the size of the repository and not the edit, for a two-file
+change, from the same profile: one `lstat` per file (0.1 s of wall, on 14
+cores), and the reference resolution that runs after any change and passes over
+every file's references (about 0.35 s for django's 285,396). So the published
+2.5 s for two files is met, at 0.8 s to 1.1 s, and the help text no longer says
+the cost is independent of repository size, because it is not.
 
 `repocortex watch` has no one-shot mode, so the script starts it, waits for its
 "Watching" line, makes the same two-file edit and times how long watch takes to

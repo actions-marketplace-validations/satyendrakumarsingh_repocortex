@@ -172,6 +172,15 @@ turning the cheapest common case into the most expensive one. Hashing costs a
 read per file: that is what the ~0.9 s no-op run over 5,000 files is paying for,
 and it is roughly 180 µs per file including the walk.
 
+**Since 2026-11-12 an unchanged file is no longer read at all.** The hash is
+still the verdict, but a file whose size and times match the index, and are
+more than two seconds older than the previous run, is not opened; the rule and
+its limits are in [the CLI reference](../CLI.md#index) and
+`internal/acquire/fs/trust.go`. The no-op and one-file figures in the table
+above predate that and were not re-measured on this corpus. On django the
+same change took a no-op from 2.5 s to 0.13 s; see
+[the re-measurement](../performance.md#re-measured-after-the-update-path-was-fixed).
+
 ## Three real repositories
 
 Every other figure in this document comes from a synthetic corpus or from

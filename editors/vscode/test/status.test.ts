@@ -44,7 +44,8 @@ test('the index token changes when the index is rebuilt', () => {
 });
 
 test('the index token also changes when the index is updated in place', () => {
-  // An incremental `repocortex index` keeps the run id and its timestamp.
+  // An incremental `repocortex index` keeps the run id, and up to 1.0.1 its
+  // timestamp too. `resolve` keeps both in every version.
   const ready = parseStatus(fixture('status_ready.json'));
   const before = indexToken(ready, { modifiedMs: 1_000_000, size: 4096 });
   assert.notEqual(before, indexToken(ready, { modifiedMs: 1_060_000, size: 4096 }));
@@ -60,13 +61,13 @@ test('status bar: an index updated in place shows the age of the update, and say
   // Built three days ago, updated by an incremental index four minutes ago.
   const view = presentStatus({ kind: 'status', status, provenance, indexFile: { modifiedMs: now - 4 * 60_000, size: 1 } }, now);
   assert.equal(view.text, 'RepoCortex: 4m old');
-  assert.ok(view.detail.includes('RepoCortex reports its last full index run finished 2026-11-12T14:27:34+05:30.'));
-  assert.ok(view.detail.some((line) => /^The index file was last written .*\(4m old\)\. An incremental update does not move the run timestamp/u.test(line)));
+  assert.ok(view.detail.includes('RepoCortex reports its index run last finished 2026-11-12T14:27:34+05:30.'));
+  assert.ok(view.detail.some((line) => /^The index file was last written .*\(4m old\)\. That is later than the run timestamp, which `resolve` never moves/u.test(line)));
 
   // Written within a minute of the run: that is the run itself, so its timestamp stands.
   const same = presentStatus({ kind: 'status', status, provenance, indexFile: { modifiedMs: READY_BUILT + 5_000, size: 1 } }, now);
   assert.equal(same.text, 'RepoCortex: 3d old');
-  assert.ok(same.detail.includes('RepoCortex reports its last full index run finished 2026-11-12T14:27:34+05:30 (3d old).'));
+  assert.ok(same.detail.includes('RepoCortex reports its index run last finished 2026-11-12T14:27:34+05:30 (3d old).'));
   assert.ok(!same.detail.some((line) => line.startsWith('The index file was last written')));
 });
 

@@ -1,14 +1,12 @@
 package cli
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"os"
 	"time"
 
 	"github.com/satyendrakumarsingh/repocortex/internal/acquire/fs"
-	"github.com/satyendrakumarsingh/repocortex/internal/pipeline"
 	"github.com/satyendrakumarsingh/repocortex/internal/registry"
 	"github.com/satyendrakumarsingh/repocortex/internal/watch"
 
@@ -74,7 +72,7 @@ func runWatch(cmd *cobra.Command, g *Global, debounce time.Duration) error {
 	// running — a branch switch, a pull, an editor save between sessions — and
 	// starting from a stale index would leave those edits invisible until the
 	// affected file happened to be touched again.
-	if stats, err := reconcile(ctx, reg, current.ID, walker); err != nil {
+	if stats, err := refreshIndex(ctx, reg, current, walker, cfg.RepoRoot, false); err != nil {
 		return fmt.Errorf("initial reconcile: %w", err)
 	} else if changed := stats.Added + stats.Modified + stats.Deleted; changed > 0 {
 		log.Info("reconciled changes made while not watching",
@@ -129,7 +127,7 @@ func runWatch(cmd *cobra.Command, g *Global, debounce time.Duration) error {
 			// was touched, not that its content differs — editors rewrite
 			// files unchanged, and formatters run on save. Hashing keeps the
 			// no-op case cheap and, more importantly, correct.
-			stats, err := reconcile(ctx, reg, current.ID, walker)
+			stats, err := refreshIndex(ctx, reg, current, walker, cfg.RepoRoot, false)
 			if err != nil {
 				if ctx.Err() != nil {
 					return nil
@@ -153,20 +151,4 @@ func runWatch(cmd *cobra.Command, g *Global, debounce time.Duration) error {
 				"took", time.Since(start).Round(time.Millisecond))
 		}
 	}
-}
-
-// reconcile diffs the working tree against the index and applies what changed.
-func reconcile(
-	ctx context.Context,
-	reg *registry.Registry,
-	runID int64,
-	walker *fs.Walker,
-) (pipeline.IncrementalStats, error) {
-	changes, err := pipeline.Diff(ctx, reg, runID, walker, Version)
-	if err != nil {
-		return pipeline.IncrementalStats{}, err
-	}
-	return pipeline.Incremental(ctx, reg, runID, walker, changes, pipeline.IncrementalOptions{
-		Resolve: true,
-	})
 }

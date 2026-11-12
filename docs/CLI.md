@@ -102,13 +102,48 @@ Next: repocortex index
 ### `index`
 
 **Answers:** what is in this repository? Walks it, parses every supported file,
-and makes the result queryable. Incremental by default — files are compared by
-**content hash**, not mtime, so a `git checkout` does not trigger a full
-reparse.
+and makes the result queryable. Incremental by default: only files whose
+**content hash** changed are reparsed, so a `git checkout` that rewrites
+timestamps does not trigger a full reparse.
+
+An update costs a small fraction of a rebuild, but it is not independent of
+repository size: every file is stat'ed on every run, and after a change
+references are re-resolved across the whole index. On django (7,090 files) that
+is 0.13 s when nothing changed and about 1 s after a two-file edit; see
+[performance](performance.md#figures-other-tools-publish-measured-here).
+
+**Which files are read.** A file is read and hashed only when it might have
+changed. It is taken as unchanged, without being opened, when all of these hold:
+
+1. the previous run recorded it, under the same build;
+2. its size is the recorded size;
+3. its modification time is the recorded one, to the second;
+4. that time is at least two seconds older than the moment the previous run
+   began;
+5. on Linux and macOS, its inode change time is that old too.
+
+Every other file is hashed and the hash decides. A file that was touched but
+not changed is hashed once, found identical, not reparsed, and its new time
+recorded. A same-size edit made in the same second as the save the index
+recorded is not missed, because rule 4 does not believe a time that close to
+the run that read it. Rule 5 catches a same-size edit whose modification time
+was put back (`cp -p`, `rsync -t`, `touch -r`): a program cannot set the change
+time.
+
+Not covered, and what `--rehash` is for: Windows offers no change time without
+opening the file, so a same-size edit whose modification time was restored to
+the second is not seen there; and a clock stepped backwards by more than two
+seconds between runs, or a network filesystem whose clock is that far behind,
+can hide a same-size edit that lands on the recorded second.
+
+`status` "Last indexed", and the `provenance.age_seconds` every tool answer
+carries, are the time of the latest run, full or incremental, including a run
+that found nothing to change.
 
 | Flag | Effect |
 |---|---|
 | `--full` | rebuild from scratch. Discards resolved edges; re-run `resolve` |
+| `--rehash` | incremental, but read and hash every file instead of trusting an unchanged size and modification time |
 | `--accuracy fast\|auto\|exact` | override the accuracy mode (full path only) |
 | `--workers N` | parse concurrency (default 4). Peak memory scales with this, not with repository size |
 | `--digest` | print the registry digest — the determinism gate |
