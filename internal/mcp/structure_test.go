@@ -283,6 +283,91 @@ func TestFindDeadCodeIncludesExportedWhenAsked(t *testing.T) {
 	}
 }
 
+// seedTestOnly adds to seedChain a test file whose one test calls a production
+// function nothing else calls, and a function already called from production.
+func seedTestOnly(ctx context.Context, reg *registry.Registry, runID int64) {
+	w, err := reg.NewWriter(ctx, runID)
+	if err != nil {
+		panic(err)
+	}
+	prod := model.File{Path: "svc/parse.go", Language: "go", ContentHash: "t1", ParseStatus: "ok", SizeBytes: 900}
+	pid, _ := w.AddFile(ctx, &prod)
+	test := model.File{Path: "svc/parse_test.go", Language: "go", ContentHash: "t2", ParseStatus: "ok", SizeBytes: 400}
+	tid, _ := w.AddFile(ctx, &test)
+
+	sym := func(fileID int64, name string, line, end int) int64 {
+		s := model.Symbol{
+			FileID: fileID, Kind: model.KindFunction, Name: name, FQN: "svc." + name,
+			Range:      model.Range{Start: model.Position{Line: line}, End: model.Position{Line: end}},
+			Confidence: model.ConfidenceHigh, Source: model.SourceSourceCode,
+		}
+		id, _ := w.AddSymbol(ctx, &s)
+		return id
+	}
+	legacy := sym(pid, "legacyParse", 1, 30)
+	shared := sym(pid, "sharedParse", 40, 50)
+	prodCaller := sym(pid, "parseAll", 60, 70)
+	testFn := sym(tid, "TestLegacyParse", 1, 20)
+	_ = w.Flush(ctx)
+	_ = w.Close()
+
+	edge := func(src, dst int64, file string, line int) model.Edge {
+		return model.Edge{SrcID: src, DstID: dst, Kind: model.EdgeCalls, Confidence: model.ConfidenceHigh,
+			Evidence: model.Evidence{FilePath: file, Range: model.Range{Start: model.Position{Line: line}},
+				Source: model.SourceSourceCode, Detail: "same package"}}
+	}
+	_, _ = reg.AddResolvedEdges(ctx, runID, []model.Edge{
+		edge(testFn, legacy, test.Path, 5),
+		edge(testFn, shared, test.Path, 6),
+		edge(prodCaller, shared, prod.Path, 65),
+	})
+}
+
+// The second finding is opt-in, is never called likely or unused, and leaves
+// the first finding's answer as it was.
+func TestFindDeadCodeListsTestOnlyCodeOnlyWhenAsked(t *testing.T) {
+	seed := func(ctx context.Context, reg *registry.Registry, runID int64) {
+		seedChain(ctx, reg, runID)
+		seedTestOnly(ctx, reg, runID)
+	}
+	fs := newFullServer(t, seed)
+
+	plain := resultText(callTool(t, fs.sess, "list_dead_code", map[string]any{}))
+	if strings.Contains(plain, "legacyParse") || strings.Contains(plain, "only in test files") {
+		t.Errorf("the default answer must not mention code only tests reach:\n%s", plain)
+	}
+
+	res := callTool(t, fs.sess, "list_dead_code", map[string]any{"include_test_only": true})
+	text := resultText(res)
+	if res.IsError {
+		t.Fatalf("list_dead_code include_test_only failed:\n%s", text)
+	}
+	if !strings.Contains(text, "legacyParse") || !strings.Contains(text, "reached only from tests (possible, never likely)") {
+		t.Errorf("legacyParse should be listed as reached only from tests, and labelled possible:\n%s", text)
+	}
+	if !strings.Contains(text, "1 definition(s) have callers only in test files") {
+		t.Errorf("the summary should count the test-only definitions separately:\n%s", text)
+	}
+	if strings.Contains(text, "sharedParse") {
+		t.Errorf("sharedParse has a production caller and must not be listed:\n%s", text)
+	}
+	if strings.Contains(text, "- function TestLegacyParse") {
+		t.Errorf("a test must not be listed as code only tests reach:\n%s", text)
+	}
+	// The first finding is still there, still graded as it was.
+	if !strings.Contains(text, "orphanHelper") || !strings.Contains(text, "likely unused") {
+		t.Errorf("the unreferenced answer changed when the second section was added:\n%s", text)
+	}
+	for _, line := range strings.Split(text, "\n") {
+		if strings.Contains(line, "legacyParse") && strings.Contains(line, "likely unused") {
+			t.Errorf("a test-only row is described as likely unused: %q", line)
+		}
+	}
+	if !strings.Contains(text, "judgement") {
+		t.Errorf("the answer must say that deleting test-only code is a judgement it does not make:\n%s", text)
+	}
+}
+
 func TestFindDeadCodeSkipsUnjudgedLanguages(t *testing.T) {
 	fs := newFullServer(t, seedChain, withJudgeable(func(string) bool { return false }))
 	text := resultText(callTool(t, fs.sess, "list_dead_code", map[string]any{}))

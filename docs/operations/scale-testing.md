@@ -101,6 +101,33 @@ of 2,000 commits. Reproduce before treating any figure as a target.
 | Impact from a hub with 1,000 callers | 1.0 s | 170 MB (the symbol index, cached once per server) |
 | Test discovery for one symbol | 2 ms | none |
 
+The two unused-code rows were measured before the page-order fix listed under
+[what the suite found](#what-the-suite-found). The same scan on the same fixture
+took 1.7 s afterwards, measured with other test suites running, so the idle
+figure is lower still and has not been re-taken.
+
+### The test-only pass of the unused-code scan
+
+`repocortex dead-code --include-test-only` (`include_test_only` on
+`list_dead_code`) adds a second pass that asks, of every referenced definition,
+whether all its callers are in test files. It has its own tests,
+`TestTestOnlyScanIsBoundedAtScale` and `TestTestOnlyAnswerStaysBoundedAtScale`,
+and its own budget: 2 s plus 90 µs per symbol for the two passes together.
+
+Measured on the same machine on 2026-11-12, but **with other test suites
+running at the same time**, so these are upper figures and not idle ones:
+
+| Symbols | Relationships | Test files | Reached only from tests | The pass itself | Both passes | Heap left behind |
+|---|---|---|---|---|---|---|
+| 5,000 | 20,428 | 5 of 50 | 120 | 34 ms | 48 ms | 0.1 MB |
+| 100,000 | 503,491 | 100 of 1,000 | 2,439 | 0.49 s | 0.87 s | 0.6 MB |
+| 250,000 | 1,258,823 | 250 of 2,500 | 6,037 | 1.86 s | 3.48 s | 0.8 MB |
+
+That is 5 to 7 µs per symbol at every size. The pass stops at the first caller
+outside a test file, so a definition with a thousand ordinary callers costs a
+few lookups; only a definition every one of whose callers is a test has all its
+relationships read.
+
 ### Every tool, warm, 95th percentile of five calls
 
 Measured with nothing else running on the machine. The same test run alongside
@@ -144,6 +171,7 @@ nothing changed took 1.0 s.
 | The hotspot query read every relationship once per file | Over 2 minutes on a 19,000-relationship index | Join order forced. Pinned by `TestFileStructureForUsesTheDestinationIndex` |
 | `list_blindspots` ran one count query per exported function and loaded every symbol | 2.4 s at 5,000 symbols | One aggregate query |
 | A hotspot score of zero for every file with no recorded size | All scores 0 | Size floors at one byte |
+| The unused-code query sorted its page: the planner reached symbols through an index and ordered them by id afterwards, so every page probed every remaining symbol before `LIMIT` applied | 1.69 s at 100,000 symbols with three pages; one more full pass for every 2,000 unreferenced definitions | Symbols are read in key order, so a page is a seek and `LIMIT` stops it: 0.40 to 0.66 s on the same fixture under the same load. Pinned by `TestUnreferencedSymbolsPagesInKeyOrderWithoutSorting` |
 
 Still open, and in the [implementation plan](../IMPLEMENTATION_PLAN.md#phase-2-depth):
 `list_dead_code` and `list_hotspots` take 3 to 5 seconds at this size, because

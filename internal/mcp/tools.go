@@ -586,7 +586,9 @@ func toolDescriptions() map[string]string {
 			"or to check whether code you are about to maintain is reachable at all. NEVER delete on " +
 			"this evidence alone: reflection, dependency injection, framework registration and other " +
 			"repositories all reach code without a reference this index can bind, so search for the " +
-			"name first. Tests, entry points and, by default, exported definitions are left out.",
+			"name first. Tests, entry points and, by default, exported definitions are left out; a " +
+			"route handler or event consumer is never 'likely'. Pass include_test_only to also get, " +
+			"as a separate section that is never 'likely', definitions whose only callers are tests.",
 
 		"list_hotspots": "Rank files by how often they change against how much code they hold, from " +
 			"recent git history, and list for each the files that are usually committed with it. Use " +

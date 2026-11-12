@@ -23,6 +23,14 @@ type fakeSource struct {
 	selfAt map[string][]int
 	// unknown lists names the text index cannot answer for.
 	unknown map[string]bool
+	// handlers are the route handler names no definition was bound to.
+	handlers []string
+	// testUse maps a name to lines, in pkg/x_test.go, where a test uses it.
+	testUse map[string][]int
+}
+
+func (f *fakeSource) UnboundRouteHandlers(context.Context, int64) ([]string, error) {
+	return f.handlers, nil
 }
 
 func (f *fakeSource) IdentifierMentions(_ context.Context, _ int64, name string) ([]registry.Mention, bool, error) {
@@ -35,6 +43,9 @@ func (f *fakeSource) IdentifierMentions(_ context.Context, _ int64, name string)
 	}
 	if lines := f.usedAt[name]; len(lines) > 0 {
 		out = append(out, registry.Mention{Path: "pkg/elsewhere.go", Lines: lines})
+	}
+	if lines := f.testUse[name]; len(lines) > 0 {
+		out = append(out, registry.Mention{Path: "pkg/x_test.go", Lines: lines})
 	}
 	return out, true, nil
 }

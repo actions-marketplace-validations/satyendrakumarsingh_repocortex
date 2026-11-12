@@ -39,6 +39,7 @@ type deadCodeArgs struct {
 	Path            string `json:"path,omitempty" jsonschema:"Only report definitions in files under this path prefix, e.g. 'internal/billing/'."`
 	MinCertainty    string `json:"min_certainty,omitempty" jsonschema:"'likely' (the default) returns only candidates where every ordinary reason for a missing caller was ruled out. 'possible' adds the rest, which are mostly uses the index could not bind: search before trusting any of them."`
 	IncludeExported bool   `json:"include_exported,omitempty" jsonschema:"Also report exported definitions, which are never better than 'possible'. Default false: in a library the whole public API has no caller in the index."`
+	IncludeTestOnly bool   `json:"include_test_only,omitempty" jsonschema:"Also list definitions that DO have callers, every one of them in a test file. They come in their own section, always 'possible' and never 'likely': production code only its tests keep alive is a judgement call, not unused code. Default false: it is a second pass over the index."`
 	Limit           int    `json:"limit,omitempty" jsonschema:"Most candidates to return. Default 25."`
 }
 
@@ -430,13 +431,20 @@ func (s *Server) findDeadCode(ctx context.Context, req *sdk.CallToolRequest, arg
 	}
 	limit = min(limit, s.limits.MaxItems)
 
-	rep, err := deadcode.Find(ctx, s.capDeps, s.deps.Registry, runID, deadcode.Options{
+	opts := deadcode.Options{
 		Limit:           limit,
 		MinCertainty:    minCert,
 		PathPrefix:      strings.TrimSpace(args.Path),
 		IncludeExported: args.IncludeExported,
 		Judgeable:       s.deps.Judgeable,
-	})
+	}
+	if args.IncludeTestOnly {
+		// Two sections share one item cap. Each gets half, so a full page of
+		// unreferenced rows cannot push every test-only row out of the answer.
+		opts.Limit = min(limit, max(s.limits.MaxItems/2, 1))
+		opts.TestOnly = s.deps.Registry
+	}
+	rep, err := deadcode.Find(ctx, s.capDeps, s.deps.Registry, runID, opts)
 	if err != nil {
 		return failFrom(err, "dead-code scan: %v", err)
 	}
@@ -452,6 +460,16 @@ func (s *Server) findDeadCode(ctx context.Context, req *sdk.CallToolRequest, arg
 			Kind: c.Kind, Name: c.Name, FQN: c.FQN, Path: c.Path, Line: c.Line,
 			Why: deadCodeWhy(c),
 		})
+	}
+	if to := rep.TestOnly; to != nil {
+		resp.Summary += fmt.Sprintf(" Separately, %d definition(s) have callers only in test files; showing %d.",
+			to.Found, len(to.Candidates))
+		for _, c := range to.Candidates {
+			resp.Items = append(resp.Items, Item{
+				Kind: c.Kind, Name: c.Name, FQN: c.FQN, Path: c.Path, Line: c.Line,
+				Why: testOnlyWhy(c),
+			})
+		}
 	}
 
 	// The warning leads. A list of deletable-looking functions is the most
@@ -490,10 +508,70 @@ func (s *Server) findDeadCode(ctx context.Context, req *sdk.CallToolRequest, arg
 			"%d more candidate(s) are graded possible and not shown. Most are uses the index could not "+
 				"bind. Pass min_certainty='possible' to list them.", rep.Possible))
 	}
+	if rep.EntryPoints > 0 {
+		resp.Notes = append(resp.Notes, fmt.Sprintf(
+			"%d candidate(s) are spelled like a route's handler or consume an event topic. A framework "+
+				"calls such a function without a call expression, so they are graded possible, never likely.",
+			rep.EntryPoints))
+	}
 	if rep.Completeness.Truncated {
 		resp.markTruncated(rep.Completeness.TruncatedReason)
 	}
+	if to := rep.TestOnly; to != nil {
+		resp.Notes = append(resp.Notes, testOnlyNotes(to)...)
+		if to.Truncated {
+			resp.markTruncated(to.TruncatedReason)
+		}
+	}
 	return s.reply(ctx, req, resp)
+}
+
+// testOnlyNotes is what an agent must read beside the test-only rows: what
+// the section claims, how far it was checked, and what it left out.
+func testOnlyNotes(to *deadcode.TestOnlyReport) []string {
+	if to.TestFiles == 0 {
+		return []string{"REACHED ONLY FROM TESTS: the index holds no file it recognises as a test, " +
+			"so no definition can have all its callers in one. This is not a finding of none."}
+	}
+	notes := []string{"REACHED ONLY FROM TESTS is a separate finding from unused. " + deadcode.TestOnlyLimits}
+	if to.NameElsewhere > 0 {
+		notes = append(notes, fmt.Sprintf(
+			"%d of the %d test-only definition(s) checked against the source text have their name in code "+
+				"that is not a test: either a production use the graph has no edge for (a function passed "+
+				"as a value, a type used without a call) or an unrelated identifier spelled the same. "+
+				"They are listed last and say so; search for the name to tell which.",
+			to.NameElsewhere, to.TextChecked))
+	}
+	if unchecked := to.Found - to.TextChecked; unchecked > 0 {
+		notes = append(notes, fmt.Sprintf(
+			"%d more test-only definition(s) were found from the graph alone and not checked against the "+
+				"text, so the test-only total is an upper bound; pass a path to check them.", unchecked))
+	}
+	if left := to.Skipped + to.EntryPoints; left > 0 {
+		notes = append(notes, fmt.Sprintf(
+			"%d definition(s) with callers only in test files were left out as expected: %d exported, "+
+				"named like an entry point or in a language the index does not bind, and %d that a "+
+				"framework calls (route handlers, event consumers).", left, to.Skipped, to.EntryPoints))
+	}
+	return notes
+}
+
+// testOnlyWhy is the one-line justification shown beside a test-only row. It
+// opens with the section's name, because the row sits in the same list as the
+// unreferenced ones and must not be read as one of them.
+func testOnlyWhy(c deadcode.Candidate) string {
+	why := fmt.Sprintf("reached only from tests (possible, never likely), %d line(s): all %d reference(s) "+
+		"the index bound are in test files", c.Lines(), c.TestReferences)
+	var also []string
+	for _, r := range c.Reasons {
+		if r != deadcode.ReasonTestOnly {
+			also = append(also, r.Text())
+		}
+	}
+	if len(also) == 0 {
+		return why + ", and its name appears in no other code that is not a test"
+	}
+	return why + ", but " + strings.Join(also, "; ")
 }
 
 // deadCodeWhy is the one-line justification shown beside a candidate.

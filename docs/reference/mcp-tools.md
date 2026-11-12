@@ -213,7 +213,7 @@ Exposed only with `mcp: { profile: full }`, and always available through
 | `find_callees` | `name`, `path`, `min_confidence` | What a symbol calls, inside this repository |
 | `find_implementations` | `name`, `path`, `min_confidence` | What implements or extends a type, and what it implements or extends |
 | `trace_call_path` | `from`, `to`, `from_path`, `to_path`, `max_depth` | Up to three shortest routes, one row per hop |
-| `list_dead_code` | `path`, `min_certainty`, `include_exported`, `limit` | Definitions nothing calls, graded `likely` or `possible` |
+| `list_dead_code` | `path`, `min_certainty`, `include_exported`, `include_test_only`, `limit` | Definitions nothing calls, graded `likely` or `possible`. A route handler or event consumer is never `likely`. With `include_test_only`, also a separate section of definitions whose every caller is in a test file, always `possible` |
 | `list_hotspots` | `path`, `commits`, `limit`, `include_tests` | Files ranked by commits times size, each followed by the files that change with it |
 
 ## Names
