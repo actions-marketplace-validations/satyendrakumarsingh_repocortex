@@ -420,9 +420,10 @@ func oneDeclaration(spec LanguageSpec, ref registry.Reference, group []registry.
 		if c.Name != group[0].Name || path.Dir(c.FilePath) != path.Dir(group[0].FilePath) {
 			return overloadChoice{}, false
 		}
-		a, _ := memberOwner(c)
-		b, _ := memberOwner(group[0])
-		if a != b {
+		// The whole qualified owner, not its last segment: Rack::Request::Helpers
+		// and Rack::Response::Helpers are two types, and a name they both
+		// declare is not an overload.
+		if ownerQual(c) != ownerQual(group[0]) {
 			return overloadChoice{}, false
 		}
 	}
@@ -761,12 +762,12 @@ func (r *Resolver) bareByName(c call, reach []registry.SymbolIndexEntry, stats *
 		return bound(best)
 	}
 	if !c.spec.PackageIsDirectory {
-		if best, ok := r.pickSameDir(c.spec, c.fr, reach); ok {
+		if best, ok := r.pickSameDir(c.spec, c.fr, reach); ok && !r.callsTestHelper(c, best.entry) {
 			best.confidence = weaker(best.confidence, c.spec.Calls.Measured.neighbour())
 			return bound(best)
 		}
 	}
-	if len(reach) == 1 && reach[0].Exported && !r.specs.IsGenericName(c.ref.Name) {
+	if len(reach) == 1 && reach[0].Exported && !r.specs.IsGenericName(c.ref.Name) && !r.callsTestHelper(c, reach[0]) {
 		return bound(candidate{reach[0], model.ConfidenceLow, "unique name in repository, no import evidence"})
 	}
 	return ambiguousCall
@@ -1353,7 +1354,7 @@ func (r *Resolver) moduleByStem(c call, stem string, stats *Stats) decision {
 		// No file and no directory of that name: a module of another crate.
 		return unresolvedCall
 	}
-	if first, ok := firstDeclaration(free); ok && !r.specs.IsGenericName(c.ref.Name) {
+	if first, ok := firstDeclaration(free); ok && !r.specs.IsGenericName(c.ref.Name) && !r.callsTestHelper(c, first) {
 		return bound(candidate{first, model.ConfidenceLow, ruleOnlyFree})
 	}
 	if len(free) > 1 {
@@ -1371,7 +1372,7 @@ func (r *Resolver) freeByName(c call) decision {
 			free = append(free, s)
 		}
 	}
-	if first, ok := firstDeclaration(free); ok {
+	if first, ok := firstDeclaration(free); ok && !r.callsTestHelper(c, first) {
 		return bound(candidate{first, model.ConfidenceMedium, ruleQualifiedFile + " (the crate's only one)"})
 	}
 	if len(free) > 1 {
@@ -1469,7 +1470,7 @@ func (r *Resolver) memberByName(c call, limit model.Confidence, stats *Stats) de
 				named = append(named, s)
 			}
 		}
-		if o, ok := oneDeclaration(c.spec, c.ref, named); ok {
+		if o, ok := oneDeclaration(c.spec, c.ref, named); ok && !r.callsTestHelper(c, o.first) {
 			tier := weaker(c.spec.Calls.Measured.namedAfterType(), limit)
 			reason := ruleNamedAfterType
 			if o.overloaded() {
@@ -1491,6 +1492,11 @@ func (r *Resolver) memberByName(c call, limit model.Confidence, stats *Stats) de
 			// same holds for a name the language's own library declares on
 			// every string or collection. See corenames.go.
 			return ambiguousCall
+		}
+		if r.callsTestHelper(c, first) {
+			// The name is all there is to go on, and the one type that
+			// declares it is in the test tree.
+			return unresolvedCall
 		}
 		if o.overloaded() {
 			// The type is the only one to declare the name, and it declares it
@@ -1541,7 +1547,7 @@ func (r *Resolver) extensionFunction(c call) decision {
 		}
 		free = append(free, s)
 	}
-	if len(free) != 1 || r.specs.IsGenericName(c.ref.Name) || c.spec.isCoreMember(c.ref.Name) {
+	if len(free) != 1 || r.specs.IsGenericName(c.ref.Name) || c.spec.isCoreMember(c.ref.Name) || r.callsTestHelper(c, free[0]) {
 		return unresolvedCall
 	}
 	return bound(candidate{free[0], c.spec.Calls.Measured.extension(), ruleExtension})
