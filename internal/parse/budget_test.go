@@ -499,8 +499,8 @@ func TestStatusDescribesTheParse(t *testing.T) {
 		for path, src := range map[string]string{
 			"script.pl":  "sub compute_total {\n    my ($x) = @_;\n    return $x + 1;\n}\n",
 			"Main.hs":    "module Main where\n\ncomputeTotal :: Int -> Int\ncomputeTotal x = x + 1\n",
-			"Makefile":   "build:\n\tgo build ./...\n",
-			"config.yml": "name: sample\n",
+			"Dockerfile": "FROM alpine\nRUN true\n",
+			"table.csv":  "a,b\n1,2\n",
 		} {
 			res := parse(t, path, src)
 			if res.Status != StatusSkipped || res.Reason != model.ParseReasonTextOnly {

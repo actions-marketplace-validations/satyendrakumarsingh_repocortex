@@ -347,12 +347,12 @@ func TestFilesOverTheSizeLimitAreNamed(t *testing.T) {
 		return b.String()
 	}
 	files := map[string]string{
-		"pkg/small.go":    "package pkg\n\nfunc Small() {}\n",
-		"gen/medium.go":   big(200),  // about 8 KB
-		"gen/large.go":    big(600),  // about 25 KB
-		"gen/largest.go":  big(1200), // about 50 KB
-		"docs/long.md":    strings.Repeat("a line of prose in a text-only language\n", 600),
-		"data/table.json": "{\"k\": [" + strings.Repeat("1, ", 4000) + "1]}\n",
+		"pkg/small.go":   "package pkg\n\nfunc Small() {}\n",
+		"gen/medium.go":  big(200),  // about 8 KB
+		"gen/large.go":   big(600),  // about 25 KB
+		"gen/largest.go": big(1200), // about 50 KB
+		"docs/long.rst":  strings.Repeat("a line of prose in a text-only language\n", 600),
+		"data/table.csv": strings.Repeat("1,", 4000) + "1\n",
 	}
 
 	indexWith := func(limit int64) (map[string]model.File, map[string]FileFacts) {
@@ -381,7 +381,7 @@ func TestFilesOverTheSizeLimitAreNamed(t *testing.T) {
 
 	// A 16 KiB limit: three files are over it.
 	rows, facts := indexWith(16 << 10)
-	for _, p := range []string{"gen/large.go", "gen/largest.go", "docs/long.md"} {
+	for _, p := range []string{"gen/large.go", "gen/largest.go", "docs/long.rst"} {
 		f := rows[p]
 		if f.ParseStatus != model.ParseStatusSkipped || f.ParseReason() != model.ParseReasonTooLarge {
 			t.Errorf("%s: status=%q reason=%q, want skipped / too_large", p, f.ParseStatus, f.ParseReason())
@@ -404,8 +404,8 @@ func TestFilesOverTheSizeLimitAreNamed(t *testing.T) {
 		}
 	}
 	// The limit applies to a text-only file exactly as to a parsed one.
-	if rows["data/table.json"].ParseReason() != model.ParseReasonTextOnly {
-		t.Errorf("data/table.json (under the limit): reason=%q, want text_only", rows["data/table.json"].ParseReason())
+	if rows["data/table.csv"].ParseReason() != model.ParseReasonTextOnly {
+		t.Errorf("data/table.csv (under the limit): reason=%q, want text_only", rows["data/table.csv"].ParseReason())
 	}
 
 	// Raise the limit and the same files are indexed.
@@ -416,8 +416,8 @@ func TestFilesOverTheSizeLimitAreNamed(t *testing.T) {
 				p, rows[p].ParseStatus, len(facts[p].Symbols))
 		}
 	}
-	if rows["docs/long.md"].ParseReason() != model.ParseReasonTextOnly {
-		t.Errorf("docs/long.md under a 64 KiB limit: reason=%q, want text_only", rows["docs/long.md"].ParseReason())
+	if rows["docs/long.rst"].ParseReason() != model.ParseReasonTextOnly {
+		t.Errorf("docs/long.rst under a 64 KiB limit: reason=%q, want text_only", rows["docs/long.rst"].ParseReason())
 	}
 }
 

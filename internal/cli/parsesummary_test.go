@@ -44,7 +44,7 @@ func seedMixedRepo(t *testing.T) string {
 	write("pkg/doc.go", "// Package pkg declares nothing in this file.\npackage pkg\n")
 	write("pkg/broken.go", "package pkg\n\nfunc Broken() {\n\tx := \n}\n\nfunc After() {}\n")
 	write("scripts/report.pl", "sub compute_quarterly_total { return 1; }\n")
-	write("docs/guide.md", "# Guide\n\nSome prose.\n")
+	write("docs/guide.rst", "Guide\n=====\n\nSome prose.\n")
 	write("gen/medium.go", filler(6000))
 	write("gen/largest.go", filler(20000))
 	write("gen/large.go", filler(12000))
@@ -74,16 +74,15 @@ func TestIndexAndStatusNameWhatWasLeftOut(t *testing.T) {
 	for name, out := range map[string]string{"index": indexOut, "status": statusOut} {
 		flat := oneLine(out)
 		for _, want := range []string{
-			"2 clean, 1 with syntax errors",
+			"3 clean, 1 with syntax errors", // the fourth parsed file is .repocortex.yml
 			"Too large: 3 files over the size limit",
 			"index.max_file_bytes",
 			"gen/largest.go",
 			"gen/large.go",
 			"gen/medium.go",
-			"Text only: 3 files searchable by text, no definitions",
-			"markdown 1",
+			"Text only: 2 files searchable by text, no definitions",
 			"perl 1",
-			"yaml 1", // .repocortex.yml itself
+			"rst 1",
 			"no_grammar",
 		} {
 			if !strings.Contains(flat, want) {
@@ -134,7 +133,7 @@ func TestIndexAndStatusNameWhatWasLeftOut(t *testing.T) {
 	if st.IndexStatus != "ready" || st.ParseFailures != 0 || st.PartialParses != 1 {
 		t.Errorf("index_status=%q parse_failures=%d partial_parses=%d, want ready, 0, 1", st.IndexStatus, st.ParseFailures, st.PartialParses)
 	}
-	if st.Parse.Clean != 2 || st.Parse.SyntaxErrors != 1 || st.Parse.TextOnly != 3 || st.Parse.TooLarge != 3 ||
+	if st.Parse.Clean != 3 || st.Parse.SyntaxErrors != 1 || st.Parse.TextOnly != 2 || st.Parse.TooLarge != 3 ||
 		st.Parse.Incomplete != 0 || st.Parse.Failed != 0 {
 		t.Errorf("parse summary = %+v", st.Parse)
 	}
@@ -249,7 +248,7 @@ func TestLanguagesSaysWhichAreTextOnly(t *testing.T) {
 		}
 		return false
 	}
-	for _, lang := range []string{"perl", "haskell", "yaml", "markdown"} {
+	for _, lang := range []string{"perl", "haskell", "dockerfile", "xml"} {
 		if !in(rep.TextOnly, lang) {
 			t.Errorf("%s is not listed as text only", lang)
 		}

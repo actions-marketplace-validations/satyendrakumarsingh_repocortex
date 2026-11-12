@@ -88,6 +88,21 @@ var containerKinds = map[model.EntityKind]bool{
 	model.KindInterface: true,
 }
 
+// proseLanguages are the languages whose symbols are headings of prose, not
+// declarations of code. They are left out of the catalogue.
+//
+// A Markdown heading is indexed so a document has an outline and its sections
+// can be found by name. It is not something a change is made TO, and its words
+// are chosen to describe the very things a task describes: once headings were
+// symbols, a task about "payment callback idempotency" anchored on the README
+// sections titled with those words, ranked them above the service the callback
+// calls, and spent the pack's source budget on them. The document's text is
+// still searched; a file that only talks about the code is admitted or refused
+// by the lexical rule, as it was before headings existed.
+var proseLanguages = map[string]bool{
+	"markdown": true,
+}
+
 func loadCatalogue(ctx context.Context, reg Registry, runID int64) (*catalogue, error) {
 	files, err := reg.Files(ctx, runID)
 	if err != nil {
@@ -124,6 +139,9 @@ func loadCatalogue(ctx context.Context, reg Registry, runID int64) (*catalogue, 
 	// a scan of every symbol per symbol.
 	byFile := make(map[int64][]model.Symbol, len(files))
 	for _, s := range symbols {
+		if proseLanguages[c.files[s.FileID].Language] {
+			continue
+		}
 		c.symbols[s.ID] = s
 		c.order = append(c.order, s.ID)
 		byFile[s.FileID] = append(byFile[s.FileID], s)
