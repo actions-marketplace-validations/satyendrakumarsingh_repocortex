@@ -1565,6 +1565,15 @@ func (r *Resolver) pickImported(
 	ref registry.Reference,
 	cands []registry.SymbolIndexEntry,
 ) (candidate, bool) {
+	if r.retrying {
+		// The second look (guided.go) trusts what the source STATES: an import
+		// that names the definition (pickNamedImport). "Some module this file
+		// imports defines one" is evidence about a module and not about the name,
+		// and on the guided set it bound `implements vscode.Disposable` to a
+		// vendored Disposable because the file imported DisposableStore from the
+		// same module.
+		return candidate{}, false
+	}
 	best := 0
 	for _, c := range cands {
 		if d, ok := imports.covers(c.FilePath); ok && d > best {
@@ -1604,6 +1613,13 @@ func (r *Resolver) pickSameDir(
 ) (candidate, bool) {
 	if !spec.PackageIsDirectory && !spec.ProximityIsEvidence {
 		// Measured to be noise for this language; see the field.
+		return candidate{}, false
+	}
+	if r.retrying && !spec.PackageIsDirectory {
+		// Where a neighbour is not in scope without an import, sharing a
+		// directory says nothing about a name that is over the cap. It bound
+		// `new Promise(resolve => ...)` to a `resolve` function in the next file,
+		// five times in a sample of thirty.
 		return candidate{}, false
 	}
 	dir := path.Dir(fr.Path)
