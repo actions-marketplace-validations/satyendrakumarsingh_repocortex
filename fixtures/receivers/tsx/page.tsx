@@ -1,6 +1,7 @@
 import { TsxButton } from "./ui/button";
 import { TsxCard, TsxPanel, TsxBox, TsxLegacy } from "./ui/wrapped";
 import * as Parts from "./ui/parts";
+import { TsxList } from "./ui/parts";
 import { Spinner } from "some-library";
 
 export function TsxPage() { // def tsx.page.TsxPage
@@ -13,5 +14,6 @@ export function TsxPage() { // def tsx.page.TsxPage
   const g = <Spinner />; // call Spinner -> external
   const h = <main>text</main>; // nocall main
   const i = <div><TsxButton label="y" /></div>; // call TsxButton -> tsx.button.TsxButton; nocall div
-  return [a, b, c, d, e, f, g, h, i];
+  const j = <TsxList.Item />; // call Item -> tsx.parts.TsxListItem
+  return [a, b, c, d, e, f, g, h, i, j];
 }

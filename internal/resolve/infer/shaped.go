@@ -97,6 +97,7 @@ const (
 	ruleQualifiedPackage  = "qualified by an imported package that re-exports it"
 	ruleQualifiedFile     = "qualified by the module whose file defines it"
 	ruleOwnExports        = "qualified by exports: defined at the top level of the same file"
+	ruleImportedObject    = "declared on the object the receiver imports"
 	ruleStatedType        = "declared on the receiver's stated type"
 	ruleNamedType         = "declared on the type the receiver names"
 	ruleConstructs        = "constructs the type the receiver names"
@@ -951,6 +952,9 @@ func (r *Resolver) callNamed(c call, stats *Stats) decision {
 			// re-exports. A class is found below, as a type. A namespace is
 			// the file of that name beneath the module.
 			if _, isType, _ := r.typeNamed(c, name); !isType {
+				if d, ok := ownedByImported(c, m, name); ok {
+					return d
+				}
 				return namespaceBeneath(c, m, name)
 			}
 		}
@@ -973,6 +977,26 @@ func ownExports(c call) decision {
 		return bound(candidate{first, model.ConfidenceHigh, ruleOwnExports})
 	}
 	return unresolvedCall
+}
+
+// ownedByImported binds `Card.Header()` and `<Card.Header />` where Card was
+// imported by name and the module assigns Header onto it (`Card.Header =
+// function`): a function or object that carries its own members, which is not
+// a type and is not a namespace file either.
+func ownedByImported(c call, m module, owner string) (decision, bool) {
+	var owned []registry.SymbolIndexEntry
+	for _, s := range c.cands {
+		if o, ok := memberOwner(s); !ok || o != owner || !isCallableKind(s.Kind) {
+			continue
+		}
+		if (m.contains != nil && m.contains(s)) || (m.beneath != nil && m.beneath(s)) {
+			owned = append(owned, s)
+		}
+	}
+	if first, chosen, ok := oneDeclaration(c.ref, owned); ok && chosen {
+		return bound(candidate{first, model.ConfidenceHigh, ruleImportedObject + " (" + owner + ")"}), true
+	}
+	return decision{}, false
 }
 
 // qualifiedBy binds a call qualified by a module to what that module defines.
