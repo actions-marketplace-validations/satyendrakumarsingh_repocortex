@@ -47,16 +47,28 @@ func (h *harness) restamp(rel, body string) {
 // changed is never reported unchanged, including the hardest ordinary case, a
 // same-size edit landing in the same second as the save the index recorded.
 //
-// Nothing here waits. The file is written, indexed and rewritten inside one
-// second, and its modification time is forced back onto the recorded second so
-// that size and time are identical on every filesystem. The diff must still
-// call it modified, because a time that close to the pass that recorded it is
-// not believed (rule 4 in internal/acquire/fs/trust.go).
+// Nothing here waits, and nothing depends on how fast the machine is. The run
+// is recorded as having begun in the very second the file was last written,
+// which is the save-then-index a watcher performs all day. The file is then
+// rewritten at the same size and its modification time forced back onto the
+// recorded second, so that size and time are identical on every filesystem.
+// The diff must still call it modified, because a time that close to the pass
+// that recorded it is not believed (rule 4 in internal/acquire/fs/trust.go).
+// On Windows that rule is the only one there is, so this is also the test
+// that it is enough.
 func TestASameSizeEditInTheSameSecondIsNeverMissed(t *testing.T) {
+	ctx := context.Background()
 	h := newHarness(t, map[string]string{"a.go": "package p\n\nfunc One() int { return 1 }\n"})
+	files, err := h.reg.Files(ctx, h.runID)
+	if err != nil || len(files) != 1 {
+		t.Fatalf("files = %v, %v", files, err)
+	}
+	if err := h.reg.MarkUpdated(ctx, h.runID, files[0].ModTimeUnix); err != nil {
+		t.Fatal(err)
+	}
 	h.restamp("a.go", "package p\n\nfunc Two() int { return 2 }\n")
 
-	changes, err := Diff(context.Background(), h.reg, h.runID, h.walker, harnessBuild)
+	changes, err := Diff(ctx, h.reg, h.runID, h.walker, harnessBuild)
 	if err != nil {
 		t.Fatal(err)
 	}
