@@ -7,7 +7,7 @@ An AI agent asks RepoCortex a question instead of searching: what a task touches
 ## Facts
 - Command: `repocortex`. Requires Go 1.26+ to build from source; no CGO.
 - Protocol: MCP over stdio, or Streamable HTTP with `repocortex serve --http 127.0.0.1:7788` (bearer token required, loopback by default) for ChatGPT, Android Studio and other remote-only clients. `repocortex install --rules` configures 30 agents, including Claude Code, Codex CLI, Copilot CLI, Gemini CLI, Cursor, VS Code, Visual Studio, Windsurf, Devin Desktop, Antigravity, Claude Desktop, Zed, Goose, Kiro, Junie, Amp, Qwen Code, Continue and Warp, and writes AGENTS.md guidance. Any stdio MCP client works; Aider uses the CLI through CONVENTIONS.md. Full list: docs/guides/coding-agents.md.
-- Confidence tiers: `exact` (proven by a compiler index, SCIP), `high` (syntax tree with imports; 94.2–100% precise against a compiler index on four repositories, 54–100% in a hand check of eleven languages), `medium` (inferred; under 50%), `low` (loose name match; hidden by default). Details: docs/accuracy.md.
+- Confidence tiers: `exact` (proven by a compiler index, SCIP), `high` (syntax tree: what the call was made on names the definition; 95.1–100% precise in a hand check of nine projects, 98.7–100% against a compiler index on three repositories), `medium` (a weaker rule; at least 60% by design), `low` (mostly a name match where the receiver's type is unknown; no promise, hidden by default). Details: docs/accuracy.md.
 - Languages: definitions are extracted for 86 languages; 120 more grammars are bundled and nothing is extracted from them. Typed (4): Go, Java, Python, TypeScript. Resolved (10): C, C#, C++, JavaScript, Kotlin, PHP, Ruby, Rust, Scala, TSX (Kotlin, PHP and Scala extract no calls yet). Parsed (72): definitions and search only.
 - Privacy: no network requests while indexing or serving, no telemetry. The opt-in `repocortex indexers install` is the only command that downloads anything.
 - MCP profiles: `minimal` (default) exposes 7 tools (about 2,000 tokens of schema per request), `standard` 18 (about 5,000), `full` 28 (about 8,400).
@@ -15,10 +15,10 @@ An AI agent asks RepoCortex a question instead of searching: what a task touches
 - Tool names are `<verb>_<noun>` with the verbs get, list, find, search, trace, analyze, plan, minimize. One name per tool; no aliases.
 - Licence: Apache-2.0. No paid tier, no account, no hosted service.
 
-## MCP tools (25)
+## MCP tools (28)
 - minimal (default): get_task_context, get_project_overview, search_code, find_symbol, get_symbol, find_references, find_callers
 - standard / full add: find_tests, analyze_impact, get_resolution_coverage, plan_rename, list_api_endpoints, list_db_tables, get_config_key, get_file_outline, minimize_diff, plan_change, list_blindspots
-- full adds: analyze_change, find_owners, find_callees, find_implementations, trace_call_path, list_dead_code, list_hotspots
+- full adds: analyze_change, find_owners, find_callees, find_implementations, trace_call_path, list_dead_code, list_hotspots, list_knowledge_risks, list_communities, get_session_stats
 
 ## Quickstart
 ```
@@ -33,6 +33,9 @@ repocortex install --rules
 - `repocortex callers <symbol>` / `repocortex callees <symbol>`: call edges with confidence
 - `repocortex impact --base <rev> --head <rev>`: blast radius of a commit range (tool: analyze_change)
 - `repocortex dead-code`: definitions nothing calls, graded likely or possible, checked against the source text
+- `repocortex bus-factor` / `repocortex communities` / `repocortex stats`: who holds the history, which files form a group, what a session cost
+- `repocortex sbom` / `repocortex vulns --advisories <file>`: CycloneDX SBOM; dependency reachability against advisories you supply
+- `repocortex move`: move a Go declaration to another file of its package (dry run by default)
 - `repocortex hotspots`: files ranked by change frequency times size, with the files that change together
 - `repocortex path <from> <to>`: the shortest routes between two symbols, hop by hop
 - `repocortex tool list|describe|call`: every agent tool from the shell

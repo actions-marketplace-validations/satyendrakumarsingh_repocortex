@@ -125,7 +125,7 @@ and measured 96% is `high`.
 ### What is recorded
 
 Every call reference now carries the shape of its receiver
-(`symbol_references.receiver_kind`, migration 0014), in one vocabulary for
+(`symbol_references.receiver_kind`, migration 0015), in one vocabulary for
 every language:
 
 | Kind | Source | `receiver` holds |

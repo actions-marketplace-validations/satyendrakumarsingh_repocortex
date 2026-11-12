@@ -413,8 +413,8 @@ Symbols:        11220
 Relationships:  24950
 Parsed:         708 (702 clean, 6 with syntax errors)
 Syntax errors:  6 files read to the end with errors the parser recovered from; definitions inside the unreadable regions may be missing
-Text only:      9 files searchable by text, no definitions (no definition query for the language): yaml 3, html 2, vimdoc 2, dockerfile 1, gomod 1
-Skipped:        6 files not indexed: no_grammar 6
+Text only:      7 files searchable by text, no definitions (no definition query for the language): yaml 3, html 2, dockerfile 1, gomod 1
+Skipped:        8 files not indexed: no_grammar 8
 ```
 
 The six files with syntax errors are SQL migrations the SQL grammar does not

@@ -142,14 +142,14 @@ Design, audit and remaining work: [portal UX plan](design/PORTAL_UX_PLAN.md).
 
 The gaps that keep a capable tool from being chosen. None needs new analysis.
 
-| Item | Answers | Done when |
-|---|---|---|
-| First tagged release with binaries | Every competitor | `install.sh` and the Homebrew formula resolve a real version |
-| Signed releases, SBOM, provenance | codebase-memory-mcp (SLSA 3, cosign) | A user can verify a download without trusting the release page |
-| Container image, winget and Scoop, MCPB bundle, MCP registry entry | codebase-memory-mcp (8 channels), CodeScene (`.mcpb`) | One install command per platform |
-| Reproducible agent benchmark | codegraph, codebase-memory-mcp, jCodeMunch, Graphify, Repowise | A script runs fixed tasks on public repositories with and without the server and prints tool calls, tokens and correctness; results and raw transcripts published |
-| Published impact-analysis accuracy | code-review-graph (the only one) | Precision and recall of `analyze_impact` against the files real commits changed, on public repositories |
-| Linux-kernel index figure | narsil, codebase-memory-mcp, codegraph | Time and peak memory recorded in [performance](performance.md) |
+| Item | Answers | Done when | Status |
+|---|---|---|---|
+| First tagged release with binaries | Every competitor | `install.sh` and the Homebrew formula resolve a real version | v1.0.1 is the first release with binaries; the Homebrew formula follows the tag |
+| Signed releases, SBOM, provenance | codebase-memory-mcp (SLSA 3, cosign) | A user can verify a download without trusting the release page | Built into the release workflow, with the commands in [verifying a release](operations/verifying-a-release.md). First used by the release after v1.0.1 |
+| Container image, winget and Scoop, MCPB bundle, MCP registry entry | codebase-memory-mcp (8 channels), CodeScene (`.mcpb`) | One install command per platform | Built: `Dockerfile`, `packaging/scoop`, `packaging/winget`, `packaging/mcpb`, `server.json`. Published with the release after v1.0.1, except winget, which waits on a review this project does not control; see [installation](getting-started/installation.md) |
+| Reproducible agent benchmark | codegraph, codebase-memory-mcp, jCodeMunch, Graphify, Repowise | A script runs fixed tasks on public repositories with and without the server and prints tool calls, tokens and correctness; results and raw transcripts published | Round 1 run and published; it shows no advantage on direct-caller lookups. Round 2 is not run; see [benchmarking](BENCHMARKING.md#5-agent-benchmark) |
+| Published impact-analysis accuracy | code-review-graph (the only one) | Precision and recall of `analyze_impact` against the files real commits changed, on public repositories | Measured, with the harness in `scripts/bench`; [benchmarking](BENCHMARKING.md#impact-analysis-accuracy) has the figures and what understates them |
+| Linux-kernel index figure | narsil, codebase-memory-mcp, codegraph | Time and peak memory recorded in [performance](performance.md) | Recorded: one run, on a loaded machine, with the build before the parse budget; see [performance](performance.md#linux-kernel-cold-index) |
 
 The benchmark is first. Six competitors publish one, and a claim without one is
 the weakest part of this project's case.
@@ -158,26 +158,36 @@ the weakest part of this project's case.
 
 Better answers from the graph that already exists.
 
-| Item | Answers | Approach | Constraint to watch |
-|---|---|---|---|
-| Community detection as a tool | Graphify, GitNexus, code-review-graph, axon | Expose `internal/analyze/cluster` (already used by the portal) as `list_communities` | Deterministic labels; cluster ids stable across runs |
-| API contract checks across repositories | GitNexus `shape_check`, Repowise, jCodeMunch | Join a client call in one index to a route in another in `repocortex system`; report a call with no matching route | Never claim a match across repositories above `high` |
-| Knowledge distribution | CodeScene, Repowise | Bus factor per directory from the history `repocortex owners` already reads | Report people only as the history spells them |
-| Unused code, deeper | Repowise, jCodeMunch | "Only reached from tests"; framework entry points from route and event edges. Not built: it needs a scan of every referenced symbol's callers, and wants its own budget and scale test | A new reason, never a promotion to `likely` |
-| The rest of the new portal | CodeScene, Repowise, GitNexus all ship a dashboard | Pages for a file, a route and a table; a change page that takes a branch; recent agent calls. Then make it the default | Served from the binary: no build step, no network, system fonts |
+| Item | Answers | Approach | Constraint to watch | Status |
+|---|---|---|---|---|
+| Community detection as a tool | Graphify, GitNexus, code-review-graph, axon | Expose `internal/analyze/cluster` (already used by the portal) as `list_communities` | Deterministic labels; cluster ids stable across runs | Shipped: `list_communities`, `repocortex communities` |
+| API contract checks across repositories | GitNexus `shape_check`, Repowise, jCodeMunch | Join a client call in one index to a route in another in `repocortex system`; report a call with no matching route | Never claim a match across repositories above `high` | Shipped: `repocortex system contracts` |
+| Knowledge distribution | CodeScene, Repowise | Bus factor per directory from the history `repocortex owners` already reads | Report people only as the history spells them | Shipped: `list_knowledge_risks`, `repocortex bus-factor` |
+| Unused code, deeper | Repowise, jCodeMunch | "Only reached from tests"; framework entry points from route and event edges | A new reason, never a promotion to `likely` | Shipped: `--include-test-only`, and route handlers and event consumers graded `possible` with their own reasons |
+| The rest of the new portal | CodeScene, Repowise, GitNexus all ship a dashboard | Pages for a file, a route and a table; a change page that takes a branch; recent agent calls. Then make it the default | Served from the binary: no build step, no network, system fonts | Pages for a file, a route and a table are built. The change page still takes one symbol, recent agent calls are not shown, and `ui --next` is not the default |
 
 ## Phase 3: breadth
 
 Larger pieces, each a project of its own.
 
-| Item | Answers | Notes |
-|---|---|---|
-| Deeper resolution for more languages | codebase-memory-mcp (11 languages with built-in type resolution), Serena | Raise C#, Kotlin, Rust and Python to the typed tier; measure each against a compiler index before claiming it |
-| Read-only query surface | Cypher in four competitors, Joern, CodeQL | A small, documented, read-only query over symbols and edges. A graph query language is a large commitment; start with saved queries |
-| Dependency reachability | Endor Labs, Semgrep, Repowise | Join the call graph to lockfiles and a local advisory database; no network at query time |
-| More edits applied by the tool | Serena, GitNexus | `repocortex rename --apply` exists; add move and extract under the same dry-run, verify and rollback protocol |
-| Editor extension | claude-context, Repowise, jCodeMunch, CodeScene | Callers and blast radius inline, from the same local index |
-| Team mode | Sourcegraph, Cursor, GitLab Orbit | A shared read-only index served over the existing HTTP transport, with per-token scopes. Breaks "single user"; does not break "no model" |
+| Item | Answers | Notes | Status |
+|---|---|---|---|
+| Deeper resolution for more languages | codebase-memory-mcp (11 languages with built-in type resolution), Serena | Raise C#, Kotlin, Rust and Python to the typed tier; measure each against a compiler index before claiming it | Python is typed, on the numbers in [accuracy](accuracy.md). C#, Kotlin and Rust are not; Kotlin, PHP and Scala extract no calls. Every language now binds a call by what it was made on |
+| Read-only query surface | Cypher in four competitors, Joern, CodeQL | A small, documented, read-only query over symbols and edges. A graph query language is a large commitment; start with saved queries | Shipped as `repocortex query` (read-only SQL). Saved queries are not built |
+| Dependency reachability | Endor Labs, Semgrep, Repowise | Join the call graph to lockfiles and a local advisory database; no network at query time | Shipped as `repocortex sbom` and `repocortex vulns --advisories`: lockfiles are read, advisories are files you supply, nothing is downloaded and no advisory database is built in |
+| More edits applied by the tool | Serena, GitNexus | `repocortex rename --apply` exists; add move and extract under the same dry-run, verify and rollback protocol | `repocortex move` shipped for a Go declaration within a package. Extract is not built |
+| Editor extension | claude-context, Repowise, jCodeMunch, CodeScene | Callers and blast radius inline, from the same local index | Built: `editors/vscode`, VS Code only; see [editor extension](guides/editor-extension.md) |
+| Team mode | Sourcegraph, Cursor, GitLab Orbit | A shared read-only index served over the existing HTTP transport, with per-token scopes. Breaks "single user"; does not break "no model" | Shipped: `serve --http --tokens-file` and `serve create-token`; see [protocols](guides/protocols.md) |
+
+### Shipped that the plan did not list
+
+| Item | Result |
+|---|---|
+| Language detection | A file's language is decided by content, shebang and `index.language_overrides`, not by extension alone, and the index records how. Objective-C, F# and the other languages that share an extension stop being read as the one the library listed first |
+| Parse budget | A parse is bounded by the library's work limits, not by a 5-second clock that left the parse running; `parse_status` describes the parse, and a file the budget stops keeps what it read. See [performance](performance.md#the-size-limit) |
+| Answers graded against their coverage | A relationship answer opens with `UNKNOWN`, `UNRELIABLE`, `UNVERIFIED` or `INCOMPLETE` when the index cannot stand behind it, and risk can be `unknown` |
+| Binding a call by what it was made on | The largest source of wrong `high` edges in the verification record; see [accuracy](accuracy.md#receivers-binding-a-call-by-what-it-was-made-on) |
+| Session usage statistics | `get_session_stats` and `repocortex stats` report calls, answer sizes and estimated tokens as usage, never as a saving |
 
 ## Declined
 

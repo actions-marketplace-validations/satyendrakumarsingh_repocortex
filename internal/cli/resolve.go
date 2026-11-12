@@ -72,9 +72,11 @@ SCIP indexes.`,
 			// "no manifests declare a build context" are different facts, and a
 			// user who cannot tell them apart will read the first as a bug.
 			var infra pipeline.InfraBindSummary
+			var eventsMerged int
 			stats, err := pipeline.Resolve(ctx, reg, run.ID, pipeline.ResolveOptions{
-				MinConfidence: min,
-				OnInfraUnits:  func(s pipeline.InfraBindSummary) { infra = s },
+				MinConfidence:  min,
+				OnInfraUnits:   func(s pipeline.InfraBindSummary) { infra = s },
+				OnEventsMerged: func(n int) { eventsMerged = n },
 			})
 			if err != nil {
 				return err
@@ -131,6 +133,7 @@ SCIP indexes.`,
 					// resolved recorded as INSTANTIATES rather than CALLS.
 					"external":       external,
 					"instantiations": stats.Instantiations,
+					"events_merged":  eventsMerged,
 					// A8 — how much of `ambiguous` is "too common to weigh"
 					// rather than "two candidates and no evidence". See
 					// infer.Stats.
@@ -207,8 +210,13 @@ SCIP indexes.`,
 			// this a name with 200 definitions and a name with two are the
 			// same number, and only the second is a disambiguation problem.
 			if stats.CapDropped > 0 {
-				fmt.Fprintf(out, "    %d had more candidates than the cap allows (%d reached the cap; the receiver rescued %d)\n",
-					stats.CapDropped, stats.CapExceeded, stats.CapExceeded-stats.CapDropped)
+				fmt.Fprintf(out, "    %d had more candidates than the cap allows and were left unbound", stats.CapDropped)
+				// Only some paths can rescue an over-cap name by its
+				// receiver; where none did, saying "rescued 0" was noise.
+				if rescued := stats.CapExceeded - stats.CapDropped; rescued > 0 {
+					fmt.Fprintf(out, " (%d more exceeded it and the receiver narrowed them to a binding)", rescued)
+				}
+				fmt.Fprintln(out)
 			}
 			// What "unresolved" is, and only that. The resolver records it when
 			// no definition with that name is in the index. That covers calls
@@ -225,17 +233,28 @@ SCIP indexes.`,
 			if external > 0 {
 				fmt.Fprintf(out, "    %d shown to leave this repository (a standard-library or dependency call)\n", external)
 			}
+			if eventsMerged > 0 {
+				// `index` counts an event topic once per file that declares
+				// it; resolution folds them into one node, so the symbol
+				// count here is lower than the one `index` printed.
+				fmt.Fprintf(out, "  Events:      %d duplicate event-topic symbol(s) merged into one node per topic (symbol count is now %d lower than `index` printed)\n",
+					eventsMerged, eventsMerged)
+			}
 			if stats.Instantiations > 0 {
 				fmt.Fprintf(out, "  Constructs:  %d of the resolved calls create a type (INSTANTIATES, not CALLS)\n", stats.Instantiations)
 			}
-			// Edge rows, from the table. Fewer than the resolved references
-			// because references between the same two definitions share one.
+			// Edge rows, from the table: CALLS, INSTANTIATES, REFERENCES,
+			// EXTENDS and IMPLEMENTS, the kinds this pass writes. Fewer than
+			// the resolved references because references between the same two
+			// definitions share one.
 			fmt.Fprintf(out, "  Edges:       %d", edgeTotal)
 			switch {
 			case edgeTotal > 0 && stats.Edges == edgeTotal:
 				fmt.Fprintf(out, "  (one per caller and definition; references between the same pair share one)\n")
+			case edgeTotal > 0 && stats.Edges > 0:
+				fmt.Fprintf(out, "  (this pass wrote %d; the rest were already there)\n", stats.Edges)
 			case edgeTotal > 0:
-				fmt.Fprintf(out, "  (%d written by this pass)\n", stats.Edges)
+				fmt.Fprintf(out, "  (this pass found nothing new to bind)\n")
 			default:
 				fmt.Fprintln(out)
 			}

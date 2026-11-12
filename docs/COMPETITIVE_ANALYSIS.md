@@ -44,7 +44,7 @@ What it lacked falls into four groups:
    access. One competitor (Repowise) ships REST with OpenAPI.
 4. **Proof and distribution.** Six competitors publish reproducible agent
    benchmarks and tool-schema costs; the leaders ship through five to eight
-   package channels with signed releases. RepoCortex has no tagged release.
+   package channels with signed releases. RepoCortex's first tagged release is v1.0.1; signed releases, SBOMs and more install channels are built and arrive with the release after it.
 
 Some gaps are closed by decision, not by oversight: embeddings, model-written
 wikis and AI review comments are [non-goals](NON-GOALS.md), and a hosted,
@@ -177,23 +177,26 @@ in the [implementation plan](IMPLEMENTATION_PLAN.md).
 | 8 | Published tool-schema cost | narsil, CKB | **Shipped**: `repocortex tool list` |
 | 9 | Audit log of agent calls | Sourcegraph, Cursor, Graphite, Kodus | **Shipped**: `repocortex serve --audit-log` |
 | 10 | Server instructions and prompts | GitNexus, code-review-graph | **Shipped** |
-| 11 | Community detection | Graphify, GitNexus, code-review-graph, axon | Partly present (`internal/analyze/cluster`, portal only); tool **planned** |
+| 11 | Community detection | Graphify, GitNexus, code-review-graph, axon | **Shipped**: `list_communities`, `repocortex communities` |
 | 12 | Ad-hoc query language | codebase-memory-mcp, GitNexus, axon, Joern, CodeQL | **Shipped**: `repocortex query`, guarded read-only SQL |
-| 13 | Symbol-level edits applied by the tool | Serena, GitNexus, code-review-graph | Partly present (`repocortex rename --apply`); more **planned** |
-| 14 | Built-in type resolution with no indexer step | Serena, codebase-memory-mcp, code-graph-rag | **Planned** (phase 3): deeper tiers for more languages |
-| 15 | API contract checks across repositories | GitNexus, Repowise, jCodeMunch | **Planned** (phase 2), on `repocortex system` |
-| 16 | Dependency reachability and SBOM | Endor Labs, Semgrep, narsil, Repowise | **Planned** (phase 3) |
-| 17 | Distribution breadth, signed releases | codebase-memory-mcp (8 channels, SLSA 3) | **Planned** (phase 1): the first tagged release |
-| 18 | Editor extension | claude-context, Repowise, jCodeMunch, CodeScene | **Planned** (phase 3) |
+| 13 | Symbol-level edits applied by the tool | Serena, GitNexus, code-review-graph | Partly **shipped**: `repocortex rename --apply`, and `repocortex move` for a Go declaration within a package; extract is not built |
+| 14 | Built-in type resolution with no indexer step | Serena, codebase-memory-mcp, code-graph-rag | Partly **shipped**: Go, Java, Python and TypeScript are typed (Python since this change set); C#, Kotlin and Rust are **planned** (phase 3) |
+| 15 | API contract checks across repositories | GitNexus, Repowise, jCodeMunch | **Shipped**: `repocortex system contracts` |
+| 16 | Dependency reachability and SBOM | Endor Labs, Semgrep, narsil, Repowise | **Shipped**: `repocortex sbom` (CycloneDX) and `repocortex vulns --advisories`, against advisories you supply; no advisory database is built in |
+| 17 | Distribution breadth, signed releases | codebase-memory-mcp (8 channels, SLSA 3) | Partly **shipped**: v1.0.1 is the first tagged release. Signing, provenance, SBOMs, a container image, Scoop, winget, an MCP bundle and a registry entry are built and publish with the release after it; winget waits on a review |
+| 18 | Editor extension | claude-context, Repowise, jCodeMunch, CodeScene | **Shipped** for VS Code: `editors/vscode` |
 | 19 | Cross-file taint and data flow | Semgrep, Snyk, SonarQube, CodeQL, GitNexus | **Declined for now.** Needs a per-language IR; SAST tools do this well |
 | 20 | Model-written wiki, AI review comments, learned rules | DeepWiki, CodeRabbit, Greptile, Bugbot | **Declined.** Needs a model; `repocortex docs` generates deterministic documentation |
 | 21 | Hosted index, SSO, SCIM, repository-permission sync, SOC 2 | Sourcegraph, Augment, Cursor, GitLab Orbit | **Out of scope.** These attach to a hosted service; the local answer is that nothing leaves the machine |
+| 22 | Knowledge distribution (bus factor) | Repowise, CodeScene | **Shipped**: `list_knowledge_risks`, `repocortex bus-factor` |
+| 23 | Session usage statistics | jCodeMunch (`get_session_stats`), Repowise (savings accounting) | **Shipped as usage only**: `get_session_stats`, `repocortex stats`. No saving is claimed; round 1 found none on simple lookups |
+| 24 | A shared index with per-user scopes | Sourcegraph, Cursor, GitLab Orbit | **Shipped**: named, scoped tokens on `serve --http --tokens-file` |
 
 ## Where RepoCortex already leads
 
 | Strength | Field |
 |---|---|
-| 206 grammars | 163 (codebase-memory-mcp), 79+ (jCodeMunch), about 40 (Graphify), 15–18 (GitNexus) |
+| 206 grammars bundled, 86 with definitions extracted | 163 (codebase-memory-mcp), 79+ (jCodeMunch), about 40 (Graphify), 15–18 (GitNexus) |
 | Compiler-proven `exact` edges from SCIP, across repositories | Only jCodeMunch imports SCIP, capped and single-repository |
 | A measured precision figure per confidence tier | Others label edges without publishing how often a label is right |
 | CI gate with pull-request comment and SARIF, free | Paid in Graphify (`gate`) and GitNexus (review) |
@@ -209,12 +212,12 @@ explain. None is independently reproduced.
 
 | Measure | Published figure | RepoCortex today |
 |---|---|---|
-| Cold index of the Linux kernel | 45 s (narsil), 3 min (codebase-memory-mcp), under 12 min on 2 cores (codegraph) | Not measured. spring-boot (9,236 files) takes 46 s |
+| Cold index of the Linux kernel | 45 s (narsil), 3 min (codebase-memory-mcp), under 12 min on 2 cores (codegraph) | 2 h 7 min to index and 3 min 53 s to resolve, in one run on a loaded machine and with the build before the parse budget ([performance](performance.md#linux-kernel-cold-index)). spring-boot (9,236 files) takes 46 s |
 | Graph query latency | under 1 ms traversal (codebase-memory-mcp), 0.3 ms lookup (Codanna) | Sub-millisecond multi-hop BFS on the in-memory graph at 1M edges; no published per-tool figure |
-| Incremental update | about 2.5 s for 2 files in 3k (code-review-graph) | Not published |
+| Incremental update | about 2.5 s for 2 files in 3k (code-review-graph) | django, two changed files: 3.25 to 3.39 s before the update path was fixed and 0.83 to 1.06 s after, on a loaded machine ([performance](performance.md)) |
 | Agent efficiency | 88% fewer tool calls, 62% fewer tokens (codegraph); 10× fewer tokens at 83% vs 92% answer quality (codebase-memory-mcp) | One round run: on direct-caller lookups of uniquely named functions, agents with search alone matched it (51 of 51 correct in both arms, tokens within 1%). The harder cases are not measured. See [benchmarking](BENCHMARKING.md#5-agent-benchmark) |
-| Impact-analysis accuracy | F1 0.693, precision 0.546 (code-review-graph, the only one) | Not published. An opening: nobody else measures this |
-| Call resolution per language | TypeScript 95.8%, Go 96.6% (codegraph) | Precision 94.2–100%, recall 33–66% from the syntax tree; `exact` with SCIP |
+| Impact-analysis accuracy | F1 0.693, precision 0.546 (code-review-graph, the only one) | F1 0.000 to 0.156 over five repositories and four languages, against a truth that understates both precision and recall ([benchmarking](BENCHMARKING.md#impact-analysis-accuracy)) |
+| Call resolution per language | TypeScript 95.8%, Go 96.6% (codegraph) | `high` precision 95.1–100% in a hand check of nine projects and recall 7–89% of call sites, from the syntax tree ([accuracy](accuracy.md)); `exact` with SCIP |
 | Tool-schema overhead | 90 tools about 12,000 tokens (narsil); 25 tools about 4,000 (CKB) | Now printed by `repocortex tool list`; see [protocols](guides/protocols.md) |
 | Repository scale | 400k–500k files (Augment); 500k-file cap (GitLab Orbit) | Synthetic scale suite runs to 1M symbols and 5M edges; see [scale testing](operations/scale-testing.md) |
 

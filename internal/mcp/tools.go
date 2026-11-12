@@ -1006,10 +1006,25 @@ func (s *Server) relationshipQuery(ctx context.Context, req *sdk.CallToolRequest
 			if minConf != model.ConfidenceLow {
 				filtered = fmt.Sprintf(" at confidence %q and above", minConf)
 			}
+			// A constructor call is recorded against the TYPE, as INSTANTIATES,
+			// and this tool reads CALLS only. A class that is only ever
+			// constructed therefore has no callers, which is easily read as
+			// "nothing uses it". Counted apart so the answer can say it is used.
+			constructs, cerr := s.deps.Registry.IncomingEdgeCount(ctx, runID, target.ID,
+				registry.EdgeFilter{MinConfidence: minConf, Kinds: []string{"INSTANTIATES"}}, nil)
+			others := "imports, implementations or plain references"
+			if cerr == nil && constructs > 0 {
+				others = fmt.Sprintf("%d of them construct it (INSTANTIATES), the rest are imports, "+
+					"implementations or plain references", constructs)
+				if constructs == notCalls {
+					others = fmt.Sprintf("all %d construct it (INSTANTIATES)", constructs)
+				}
+				resp.Summary += fmt.Sprintf(" %d construct it, which is not a call: find_references lists them.", constructs)
+			}
 			resp.Notes = append(resp.Notes, fmt.Sprintf(
-				"%d further relationship(s)%s point at this symbol without being calls — imports, "+
-					"implementations or plain references. Use find_references to see them.",
-				notCalls, filtered))
+				"%d further relationship(s)%s point at this symbol without being calls — %s. "+
+					"Use find_references to see them.",
+				notCalls, filtered, others))
 		}
 	}
 

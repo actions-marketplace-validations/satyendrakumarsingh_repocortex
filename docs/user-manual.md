@@ -117,7 +117,7 @@ Indexed payment-platform
   Revision:      1
   Files:         9 indexed, 1 skipped (10 discovered)
   Symbols:       41
-  References:    55 (unresolved until M2)
+  References:    55 (bound by `repocortex resolve`)
   Imports:       3
   Duration:      270ms
 ```

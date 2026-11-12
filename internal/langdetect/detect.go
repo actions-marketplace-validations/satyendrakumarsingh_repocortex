@@ -296,7 +296,7 @@ func (d *Detector) Detect(rel string, head []byte, neighbours func() Neighbours)
 		return rule.unsettled(byName)
 	}
 	head = bytes.TrimPrefix(head, utf8BOM)
-	if len(bytes.TrimSpace(head)) == 0 {
+	if len(bytes.TrimSpace(head)) == 0 && !rule.noGrammar {
 		// Nothing to read and nothing to parse: the default cannot be wrong
 		// about an empty file, so it is not reported as a guess.
 		return Result{Language: byName, Method: methodFor(byName, ByExtension)}

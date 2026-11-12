@@ -480,23 +480,28 @@ type BoundSite struct {
 	Path      string
 	Line      int
 	Qualifier string
+
+	// ReceiverKind is what the call was made on, one of the model.Receiver*
+	// constants: a bare call, a name, a path, the enclosing instance, a
+	// stated type, a value whose type nothing states, or an expression. Empty
+	// for a reference that did not record it.
+	ReceiverKind string
 }
 
 // BoundSites returns the references bound to symbolID, up to limit, ordered by
 // file and line.
 //
-// The qualifier is the reason this exists. The resolver binds a call by the
-// name it calls, and the text in front of that name is recorded beside it
-// without always being checked against the definition chosen. Reading it back
-// lets an answer show `errors.New` on a row that claims to call this
-// repository's New, which is evidence a reader can judge and the tier alone is
-// not.
+// The qualifier and the receiver kind are the reason this exists. The
+// resolver binds a qualified call through what the qualifier names (an
+// import, a module, a type), and a call on a value whose type nothing states
+// through the member name alone. Reading both back lets an answer show which
+// of the two a row is, which the tier alone does not.
 func (r *Registry) BoundSites(ctx context.Context, runID, symbolID int64, limit int) ([]BoundSite, error) {
 	if limit <= 0 {
 		limit = 1000
 	}
 	rows, err := r.db.QueryContext(ctx, `
-		SELECT f.path, sr.start_line, sr.receiver
+		SELECT f.path, sr.start_line, sr.receiver, sr.receiver_kind
 		  FROM symbol_references sr
 		  JOIN files f ON f.id = sr.file_id
 		 WHERE sr.resolved_symbol_id = ? AND sr.index_run_id = ? AND sr.resolution = 'resolved'
@@ -510,7 +515,7 @@ func (r *Registry) BoundSites(ctx context.Context, runID, symbolID int64, limit 
 	var out []BoundSite
 	for rows.Next() {
 		var b BoundSite
-		if err := rows.Scan(&b.Path, &b.Line, &b.Qualifier); err != nil {
+		if err := rows.Scan(&b.Path, &b.Line, &b.Qualifier, &b.ReceiverKind); err != nil {
 			return nil, fmt.Errorf("registry: references bound to symbol %d: scan: %w", symbolID, err)
 		}
 		out = append(out, b)

@@ -205,16 +205,25 @@ mcp:
 
 ```
 $ repocortex serve --list-tools
-MCP profile "standard" exposes 9 tool(s):
+MCP profile "standard" exposes 18 tool(s):
   get_project_overview
   search_code
   find_symbol
   get_symbol
   find_references
   find_callers
+  plan_rename
+  list_api_endpoints
+  list_db_tables
+  get_config_key
+  get_resolution_coverage
+  get_file_outline
+  minimize_diff
   get_task_context
   analyze_impact
   find_tests
+  plan_change
+  list_blindspots
 ```
 
 The guidance block adds **no tools**. It is text in project memory, paid for
@@ -222,8 +231,11 @@ once, that teaches the agent an ordering over the tools already there.
 
 ### There must be an index
 
-The server refuses to start without one, and an empty index answers every
-question with nothing:
+A server a person starts at a terminal, or with `--http`, refuses to start
+without one. A server an agent launches over a pipe stays up and answers every
+call with the commands to run, so the client does not report a crash; it never
+indexes for you. Either way an empty index answers every question with
+nothing:
 
 ```
 repocortex init

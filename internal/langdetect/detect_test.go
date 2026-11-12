@@ -107,6 +107,15 @@ func TestAmbiguousExtensionsAreSettledByContent(t *testing.T) {
 		{"c x-macro include", "opcodes.inc", "#ifndef OPCODE\n#define OPCODE(name, value)\n#endif\nOPCODE(NOP, 0)\nOPCODE(HALT, 1)\n", "c", "", ByContent},
 		{"an .inc nobody can place", "notes.inc", "some text\nmore text\n", "pascal", "", ByAmbiguousExtension},
 
+		// .txt
+		{"vim help file", "doc/plugin.txt", "*plugin.txt*  For Vim version 9.0.  Last change: 2024 Jan 01\n\n\t\t\tMY PLUGIN\n\n1. Intro\t\t\t\t*plugin-intro*\n", "vimdoc", "", ByContent},
+		{"vim help file known by a right-aligned tag", "doc/tags.txt", "Introduction                                    *intro*\n\nThis plugin does things.\n", "vimdoc", "", ByContent},
+		{"vim help file known by its modeline", "notes.txt", "Some notes\n\n vim:tw=78:ts=8:ft=help:norl:\n", "vimdoc", "", ByContent},
+		{"llms.txt is plain text", "llms.txt", "# RepoCortex\n\n> A code graph for agents.\n\n- [Guide](docs/guide.md): how to start\n", "", "", ""},
+		{"licence text is plain text", "LICENSE.txt", "Permission is hereby granted, free of charge, to any person\n", "", "", ""},
+		{"emphasis in prose is not a help tag", "NOTES.txt", "Remember to *always* run the tests.\n*bold* at the start of a line is still prose when it carries words after it\n", "", "", ""},
+		{"an empty text file", "empty.txt", "\n", "", "", ""},
+
 		// .bb
 		{"babashka script", "validate.bb", "#!/usr/bin/env bb\n\n(def filter-regex \"\\\\.(clj|cljs|cljc)$\")\n\n(defn clojure-source? [path]\n  (re-find #\"x\" path))\n", "clojure", "", ByShebang},
 		{"clojure without a shebang", "tasks.bb", "(ns tasks\n  (:require [babashka.fs :as fs]))\n\n(defn build [] (println \"building\"))\n", "clojure", "", ByContent},

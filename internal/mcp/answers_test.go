@@ -793,33 +793,72 @@ func TestALanguageWithNoInheritanceSaysSo(t *testing.T) {
 
 // ---------------------------------------------------------------- qualifiers
 
-// qualifiedCalls is gin's New: the bare call from inside the package, and
-// errors.New and template.New bound to it by name.
-func qualifiedCalls(b *indexBuilder) {
-	b.file("gin.go", "go", 80, fn("New", 10, 20), fn("Default", 30, 40), fn("fail", 50, 60), fn("page", 65, 75))
+// aliasedCalls is a Go function called bare from inside its package and as
+// devmcp.New and mcp.New from two files that import the package under
+// different names. Both qualifiers name the package, so nothing is wrong.
+func aliasedCalls(b *indexBuilder) {
+	b.file("gin.go", "go", 80, fn("New", 10, 20), fn("Default", 30, 40), fn("cmd", 50, 60), fn("page", 65, 75))
 	target := symKey("gin.go", "New", 10)
-	b.call(symKey("gin.go", "Default", 30), target, "New", "", "gin.go", 32, model.ConfidenceHigh)
-	b.call(symKey("gin.go", "fail", 50), target, "New", "errors", "gin.go", 52, model.ConfidenceHigh)
-	b.call(symKey("gin.go", "page", 65), target, "New", "template", "gin.go", 67, model.ConfidenceHigh)
+	b.callOn(symKey("gin.go", "Default", 30), target, "New", model.ReceiverBare, "", "gin.go", 32, model.ConfidenceHigh)
+	b.callOn(symKey("gin.go", "cmd", 50), target, "New", model.ReceiverName, "devmcp", "gin.go", 52, model.ConfidenceHigh)
+	b.callOn(symKey("gin.go", "page", 65), target, "New", model.ReceiverName, "mcp", "gin.go", 67, model.ConfidenceHigh)
 	b.wellBound("go", ".go")
 }
 
-func TestCallerRowsSayHowTheCallIsWritten(t *testing.T) {
-	fs := serverFor(t, qualifiedCalls)
+// TestAnImportAliasIsNotAConflict: two package qualifiers on calls to one Go
+// function used to mark the answer UNVERIFIED, on the reading that at most one
+// of them could be this package. A call is bound through its qualifier now,
+// and one package is imported under different names in different files.
+func TestAnImportAliasIsNotAConflict(t *testing.T) {
+	fs := serverFor(t, aliasedCalls)
 	text, _ := answer(t, fs.sess, "find_callers", map[string]any{"name": "New"})
 
-	for _, want := range []string{"written as errors.New", "written as template.New",
-		"How the calls bound to this definition are written: New ×1, errors.New ×1, template.New ×1"} {
+	if strings.HasPrefix(firstLine(text), leadUnverified) || !strings.Contains(text, "verdict: strong") {
+		t.Errorf("two import aliases of one package were read as a conflict:\n%s", text)
+	}
+	for _, want := range []string{"written as devmcp.New", "written as mcp.New",
+		"How the calls bound to this definition were made: New ×1, devmcp.New ×1, mcp.New ×1",
+		"different import aliases"} {
 		if !strings.Contains(text, want) {
 			t.Errorf("answer does not say %q:\n%s", want, text)
 		}
 	}
-	// Two package qualifiers on calls to one Go function cannot both be right.
+	if strings.Contains(text, "matched the NAME") {
+		t.Errorf("the note says a qualified call was bound by its name:\n%s", text)
+	}
+}
+
+// valueCalls is a Go function that three call sites reach through a value, an
+// instance and an expression. A function cannot be called that way, so each of
+// those bindings is wrong.
+func valueCalls(b *indexBuilder) {
+	b.file("gin.go", "go", 80, fn("New", 10, 20), fn("Default", 30, 40), fn("fail", 50, 60), fn("page", 65, 75))
+	target := symKey("gin.go", "New", 10)
+	b.callOn(symKey("gin.go", "Default", 30), target, "New", model.ReceiverBare, "", "gin.go", 32, model.ConfidenceHigh)
+	b.callOn(symKey("gin.go", "fail", 50), target, "New", model.ReceiverValue, "engine", "gin.go", 52, model.ConfidenceHigh)
+	b.callOn(symKey("gin.go", "page", 65), target, "New", model.ReceiverExpr, model.OpaqueReceiver, "gin.go", 67, model.ConfidenceHigh)
+	b.wellBound("go", ".go")
+}
+
+func TestAGoFunctionCalledOnAValueIsUnverified(t *testing.T) {
+	fs := serverFor(t, valueCalls)
+	text, _ := answer(t, fs.sess, "find_callers", map[string]any{"name": "New"})
+
+	for _, want := range []string{"written as engine.New", "written as a call on an expression",
+		"2 call(s) bound to this Go function were made on a value, an instance or an expression",
+		"How the calls bound to this definition were made: New ×1,", "a call on an expression ×1"} {
+		if !strings.Contains(text, want) {
+			t.Errorf("answer does not say %q:\n%s", want, text)
+		}
+	}
+	if strings.Contains(text, "?.New") {
+		t.Errorf("the opaque receiver of an expression was printed as a qualifier:\n%s", text)
+	}
 	if !strings.HasPrefix(firstLine(text), leadUnverified+" — ") {
 		t.Errorf("first line = %q, want it to open with %s", firstLine(text), leadUnverified)
 	}
 	if !strings.Contains(text, "verdict: mixed") {
-		t.Errorf("three rows labelled high, two of them visibly calls to other packages, were not graded mixed:\n%s", text)
+		t.Errorf("rows labelled high, two of them provably wrong, were not graded mixed:\n%s", text)
 	}
 	if _, urged := containsAny(text, goAheadWords); urged {
 		t.Errorf("the answer tells the agent to act on rows it has evidence against:\n%s", text)
@@ -844,8 +883,8 @@ func TestMethodReceiversAreNotAConflict(t *testing.T) {
 	fs := serverFor(t, func(b *indexBuilder) {
 		b.file("r.go", "go", 80, method("Read", 10, 20, 1), fn("a", 30, 40), fn("b", 50, 60))
 		target := symKey("r.go", "Read", 10)
-		b.call(symKey("r.go", "a", 30), target, "Read", "reader", "r.go", 32, model.ConfidenceHigh)
-		b.call(symKey("r.go", "b", 50), target, "Read", "in", "r.go", 52, model.ConfidenceHigh)
+		b.callOn(symKey("r.go", "a", 30), target, "Read", model.ReceiverValue, "reader", "r.go", 32, model.ConfidenceHigh)
+		b.callOn(symKey("r.go", "b", 50), target, "Read", model.ReceiverValue, "in", "r.go", 52, model.ConfidenceHigh)
 		b.wellBound("go", ".go")
 	})
 	text, _ := answer(t, fs.sess, "find_callers", map[string]any{"name": "Read"})
@@ -854,6 +893,65 @@ func TestMethodReceiversAreNotAConflict(t *testing.T) {
 	}
 	if !strings.Contains(text, "written as reader.Read") {
 		t.Errorf("the rows still say how each call is written:\n%s", text)
+	}
+}
+
+// TestCallsOnAValueAreSaidToRestOnTheName: a call on a value whose type the
+// source does not state is bound on the member name alone, and the answer must
+// not describe it as bound through its qualifier.
+func TestCallsOnAValueAreSaidToRestOnTheName(t *testing.T) {
+	fs := serverFor(t, func(b *indexBuilder) {
+		b.file("r.go", "go", 80, method("Read", 10, 20, 1), fn("a", 30, 40), fn("b", 50, 60))
+		target := symKey("r.go", "Read", 10)
+		b.callOn(symKey("r.go", "a", 30), target, "Read", model.ReceiverValue, "reader", "r.go", 32, model.ConfidenceHigh)
+		b.callOn(symKey("r.go", "b", 50), target, "Read", model.ReceiverType, "buf", "r.go", 52, model.ConfidenceHigh)
+		b.wellBound("go", ".go")
+	})
+	text, _ := answer(t, fs.sess, "find_callers", map[string]any{"name": "Read"})
+	want := "1 of them were made on a value or an expression whose type the source does not state. " +
+		"Those were bound on the member NAME alone"
+	if !strings.Contains(text, want) {
+		t.Errorf("answer does not say %q:\n%s", want, text)
+	}
+	if strings.Contains(text, "different import aliases") {
+		t.Errorf("the alias sentence was printed for a name-only binding:\n%s", text)
+	}
+}
+
+// ---------------------------------------------------------------- constructors
+
+// TestAClassOnlyEverConstructedIsNotReportedAsUnused: a constructor call is an
+// INSTANTIATES edge to the type, and find_callers reads CALLS only. Its first
+// line used to say "0 caller(s)" and nothing else, which reads as "nothing
+// uses this type" for a class that is constructed in two places.
+func TestAClassOnlyEverConstructedIsNotReportedAsUnused(t *testing.T) {
+	fs := serverFor(t, func(b *indexBuilder) {
+		b.file("lib/widget.py", "python", 30, typ("Widget", model.KindClass, 1, 10))
+		b.file("lib/factory.py", "python", 30, fn("make", 3, 6), fn("make_big", 8, 12))
+		target := symKey("lib/widget.py", "Widget", 1)
+		b.ref("lib/factory.py", "Widget", "", 5, registry.ResolutionResolved, target)
+		b.edge(symKey("lib/factory.py", "make", 3), target, model.EdgeInstantiates, model.ConfidenceHigh, "lib/factory.py", 5)
+		b.ref("lib/factory.py", "Widget", "", 10, registry.ResolutionResolved, target)
+		b.edge(symKey("lib/factory.py", "make_big", 8), target, model.EdgeInstantiates, model.ConfidenceHigh, "lib/factory.py", 10)
+		b.wellBound("python", ".py")
+	})
+	callers, _ := answer(t, fs.sess, "find_callers", map[string]any{"name": "Widget"})
+	if want := "2 construct it, which is not a call"; !strings.Contains(firstLine(callers), want) {
+		t.Errorf("first line = %q, want it to say %q", firstLine(callers), want)
+	}
+	if want := "all 2 construct it (INSTANTIATES)"; !strings.Contains(callers, want) {
+		t.Errorf("answer does not say %q:\n%s", want, callers)
+	}
+
+	// The tool that follows both kinds lists them under their own label, and the
+	// blast radius says what each row does.
+	refs, _ := answer(t, fs.sess, "find_references", map[string]any{"name": "Widget"})
+	if !strings.Contains(refs, "- instantiates make ") {
+		t.Errorf("find_references does not list the constructions as instantiates:\n%s", refs)
+	}
+	impact, _ := answer(t, fs.sess, "analyze_impact", map[string]any{"symbol": "Widget"})
+	if !strings.Contains(impact, "constructs the target directly") || strings.Contains(impact, "calls the target directly") {
+		t.Errorf("analyze_impact does not say the callers construct the type:\n%s", impact)
 	}
 }
 

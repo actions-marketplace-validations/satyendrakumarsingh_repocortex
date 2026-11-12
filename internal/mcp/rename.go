@@ -193,9 +193,10 @@ func (s *Server) referencesFor(
 	}
 	page.Total = total
 
-	// How each bound call is WRITTEN, read back so a row can show it. The
-	// binding matched a name; the text in front of that name is evidence about
-	// whether it matched the right one, and it was being thrown away.
+	// How each bound call was MADE, read back so a row can show it: the text in
+	// front of the name, and what that text is (a package, a type, a value).
+	// A call on a value of unknown type is bound on the member name alone, and
+	// a note can say so only if this is read.
 	sites := s.boundSites(ctx, runID, target)
 
 	resp := &Response{IndexRevision: runID, IndexStatus: status, Page: page}
@@ -317,30 +318,53 @@ func bindingNote(b capability.TargetBinding, listed int) string {
 }
 
 // maxBoundSites bounds how many bound references are read to learn how each
-// call is written. A symbol with more than this has its busiest rows
-// annotated and the rest not, which the qualifier note says.
+// call was made. A symbol with more than this has its first rows annotated and
+// the rest not, which the note says.
 const maxBoundSites = 2000
 
 // maxQualifiersNamed bounds the qualifiers a note lists.
 const maxQualifiersNamed = 5
 
-// boundSiteSet is how the references bound to one definition are written.
+// boundSiteSet is how the references bound to one definition were made.
 type boundSiteSet struct {
 	name string
-	// at maps "path:line" to the qualifier written there. A site with two
-	// references to the name on one line keeps the first.
-	at map[string]string
-	// counts is occurrences per qualifier, "" for an unqualified call.
+	// at maps "path:line" to the site read there. A site with two references
+	// to the name on one line keeps the first.
+	at map[string]registry.BoundSite
+	// counts is occurrences per spelling, "" for an unqualified call.
 	counts map[string]int
+	// onValue counts calls made on a value, or on an expression, whose type
+	// the source does not state. The resolver binds those on the member name
+	// alone, because nothing it can read says which type the receiver is.
+	onValue int
+	// impossible counts, per receiver, the calls made on an instance, a value,
+	// a stated type or an expression. See conflict.
+	impossible map[string]int
 	// capped is true when the read stopped at maxBoundSites.
 	capped bool
 }
 
-// boundSites reads how the references bound to target are written. A read that
+// anExpression is how a call on an expression with no name is spelled in a
+// note. The index stores model.OpaqueReceiver for it, which is not a name.
+const anExpression = "an expression"
+
+// spelling is what a note prints for the qualifier of a site: "" for a call
+// with none.
+func spelling(b registry.BoundSite) string {
+	if b.ReceiverKind == model.ReceiverExpr {
+		return anExpression
+	}
+	return b.Qualifier
+}
+
+// boundSites reads how the references bound to target were made. A read that
 // fails yields an empty set: the rows are still correct without the
 // annotation, and it is not worth failing an answer over.
 func (s *Server) boundSites(ctx context.Context, runID int64, target registry.SymbolCandidate) boundSiteSet {
-	set := boundSiteSet{name: target.Name, at: map[string]string{}, counts: map[string]int{}}
+	set := boundSiteSet{
+		name: target.Name, at: map[string]registry.BoundSite{},
+		counts: map[string]int{}, impossible: map[string]int{},
+	}
 	sites, err := s.deps.Registry.BoundSites(ctx, runID, target.ID, maxBoundSites)
 	if err != nil {
 		return set
@@ -349,9 +373,16 @@ func (s *Server) boundSites(ctx context.Context, runID int64, target registry.Sy
 	for _, b := range sites {
 		key := fmt.Sprintf("%s:%d", b.Path, b.Line)
 		if _, seen := set.at[key]; !seen {
-			set.at[key] = b.Qualifier
+			set.at[key] = b
 		}
-		set.counts[b.Qualifier]++
+		set.counts[spelling(b)]++
+		switch b.ReceiverKind {
+		case model.ReceiverValue, model.ReceiverExpr:
+			set.onValue++
+			set.impossible[spelling(b)]++
+		case model.ReceiverSelf, model.ReceiverSuper, model.ReceiverType:
+			set.impossible[spelling(b)]++
+		}
 	}
 	return set
 }
@@ -359,14 +390,20 @@ func (s *Server) boundSites(ctx context.Context, runID int64, target registry.Sy
 // writtenAs is "written as errors.New" for a site whose call carries a
 // qualifier, and "" for an unqualified call or an unknown site.
 func (b boundSiteSet) writtenAs(path string, line int) string {
-	q := b.at[fmt.Sprintf("%s:%d", path, line)]
-	if q == "" {
+	site, ok := b.at[fmt.Sprintf("%s:%d", path, line)]
+	if !ok {
 		return ""
 	}
-	return fmt.Sprintf("written as %s.%s", clip(q, 60), b.name)
+	if site.ReceiverKind == model.ReceiverExpr {
+		return "written as a call on " + anExpression
+	}
+	if site.Qualifier == "" {
+		return ""
+	}
+	return fmt.Sprintf("written as %s.%s", clip(site.Qualifier, 60), b.name)
 }
 
-// qualifiers returns the distinct non-empty qualifiers, most frequent first.
+// qualifiers returns the distinct non-empty spellings, most frequent first.
 func (b boundSiteSet) qualifiers() []nameCount {
 	return sortedCounts(withoutKey(b.counts, ""))
 }
@@ -381,11 +418,14 @@ func withoutKey(m map[string]int, key string) map[string]int {
 	return out
 }
 
-// note lists how the bound calls are written, when they are not all written
-// the same way. Silent otherwise: one spelling is nothing to report.
+// note says how the bound calls were made, when that is worth a sentence: the
+// calls are spelled more than one way, or some of them were bound on the
+// member name alone. Silent otherwise: one spelling bound through its
+// qualifier is nothing to report.
 func (b boundSiteSet) note(name string) string {
 	quals := b.qualifiers()
-	if len(quals) == 0 || len(quals) == 1 && b.counts[""] == 0 {
+	oneSpelling := len(quals) == 0 || len(quals) == 1 && b.counts[""] == 0
+	if oneSpelling && b.onValue == 0 {
 		return ""
 	}
 	var parts []string
@@ -394,50 +434,81 @@ func (b boundSiteSet) note(name string) string {
 	}
 	for i, q := range quals {
 		if i == maxQualifiersNamed {
-			parts = append(parts, fmt.Sprintf("and %d more qualifier(s)", len(quals)-maxQualifiersNamed))
+			parts = append(parts, fmt.Sprintf("and %d more spelling(s)", len(quals)-maxQualifiersNamed))
 			break
+		}
+		if q.name == anExpression {
+			parts = append(parts, fmt.Sprintf("a call on %s ×%d", anExpression, q.count))
+			continue
 		}
 		parts = append(parts, fmt.Sprintf("%s.%s ×%d", clip(q.name, 60), name, q.count))
 	}
-	out := "How the calls bound to this definition are written: " + strings.Join(parts, ", ") +
-		". The binding matched the NAME. It does not show that the qualifier in front of it refers to " +
-		"this definition, so a row qualified by another package, module or object is probably not a call to it."
+	out := "How the calls bound to this definition were made: " + strings.Join(parts, ", ") + "."
+	if b.onValue > 0 {
+		out += fmt.Sprintf(" %d of them were made on a value or an expression whose type the source does not "+
+			"state. Those were bound on the member NAME alone, because no other type in the repository "+
+			"declares a member of it; nothing showed that the receiver is this definition's type, so "+
+			"they are the rows most likely to be a call to something else.", b.onValue)
+	} else {
+		out += " A qualified call is bound through what its qualifier names (an imported package, a " +
+			"module, a type, or a field of a stated type), so one definition is expected to be spelled " +
+			"several ways, such as a package under different import aliases; the reason on each row " +
+			"says which rule bound it."
+	}
 	if b.capped {
 		out += fmt.Sprintf(" Only the first %d bound references were read for this.", maxBoundSites)
 	}
 	return out
 }
 
-// conflict reports qualifiers that cannot all name the target, for the one
-// case where that is provable from syntax alone.
+// conflict reports calls that cannot be calls to the target, for the one case
+// where that is provable from the shape of the call alone.
 //
-// A Go package-level function is called by its bare name inside its package
-// and as `pkg.Name` outside it, so every qualified call to it carries the same
-// qualifier (an import alias aside). Two different qualifiers on calls bound
-// to one such function therefore mean at least one row is a call to something
-// else: `errors.New` and `template.New` bound to this repository's `New`.
+// A Go package-level function is reached by its bare name inside its package
+// and as `pkg.Name` outside it. It is never reached through an instance, a
+// value, a value of a stated type or an expression: `x.New()` calls a method
+// of x. A call recorded as made on one of those, and bound to a Go function,
+// was bound to the wrong thing.
+//
+// This is NOT a test of how many different qualifiers the calls carry. It was:
+// two package qualifiers on calls to one function meant one of them named
+// another package, back when a qualified call was bound by its name. A call is
+// now bound through its qualifier, and one package is imported under different
+// aliases in different files, so `devmcp.New` and `mcp.New` can both be right.
+//
+// The current resolver binds a call on a value only to a member, so this does
+// not fire on an index it wrote. It is a check on the resolver: it fires if a
+// regression, or a rule added later, binds such a call to a free function.
 //
 // It is deliberately not applied to methods, or to other languages. There the
-// qualifier is a variable or an expression, different at every correct call
+// receiver is a variable or an expression, different at every correct call
 // site, and reading that as a conflict would mark every method unverified.
 func (b boundSiteSet) conflict(target registry.SymbolCandidate) string {
 	if strings.ToLower(target.Language) != "go" || target.Kind != "function" {
 		return ""
 	}
-	quals := b.qualifiers()
-	if len(quals) < 2 {
+	var total int
+	for _, n := range b.impossible {
+		total += n
+	}
+	if total == 0 {
 		return ""
 	}
+	recv := sortedCounts(b.impossible)
 	names := make([]string, 0, maxQualifiersNamed)
-	for i, q := range quals {
+	for i, q := range recv {
 		if i == maxQualifiersNamed {
 			break
 		}
+		if q.name == anExpression {
+			names = append(names, "a call on "+anExpression)
+			continue
+		}
 		names = append(names, clip(q.name, 60)+"."+b.name)
 	}
-	return fmt.Sprintf("the calls bound to this Go function are written with %d different package "+
-		"qualifiers (%s), and at most one of them can be this package.",
-		len(quals), strings.Join(names, ", "))
+	return fmt.Sprintf("%d call(s) bound to this Go function were made on a value, an instance or an "+
+		"expression (%s), and a Go function cannot be called that way.",
+		total, strings.Join(names, ", "))
 }
 
 // joinWhy joins the non-empty parts of a row's explanation.

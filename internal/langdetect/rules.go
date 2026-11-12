@@ -52,6 +52,11 @@ type extRule struct {
 	// neighbours places a file by its directory when no content rule matched.
 	neighbours func(Neighbours) (language string, ok bool)
 
+	// noGrammar marks an extension the library maps to a language only some of
+	// its files are. When no content rule matches, the file has no grammar at
+	// all, which is what a plain-text file is.
+	noGrammar bool
+
 	// quiet marks an extension whose plain reading is safe when no rule
 	// matched, so the file is not reported as ambiguous. A `.h` with no C++ or
 	// Objective-C construct in it is, for the purpose of parsing it, C.
@@ -68,7 +73,7 @@ type extRule struct {
 // unsettled is the result when the content was not read or no rule matched.
 func (r *extRule) unsettled(byName string) Result {
 	switch {
-	case byName == "":
+	case r.noGrammar, byName == "":
 		return Result{}
 	case r.quiet:
 		return Result{Language: byName, Method: ByExtension}
@@ -247,6 +252,20 @@ func extensionRules() map[string]*extRule {
 
 func buildRules() map[string]*extRule {
 	return map[string]*extRule{
+		// .txt — a Vim help file, or plain text. The library says Vim help
+		// for every one, so a repository's llms.txt, requirements.txt and
+		// licence text were indexed as vimdoc. A help file announces itself
+		// with a `*tag*` ending a line that starts with it or that is
+		// right-aligned after two or more spaces, or with a `vim:` modeline
+		// setting the help file type. Anything else has no grammar.
+		".txt": {noGrammar: true, content: []contentRule{
+			is("vimdoc",
+				col0("*", `[^\s*|"]+\*[ \t\r]*$`),
+				onLine("*", `.*\S[ \t]{2,}\*[^\s*|"]+\*[ \t\r]*$`),
+				has("vim:", `.*\b(ft|filetype)=help\b`),
+			),
+		}},
+
 		// .m — Objective-C, MATLAB, MUMPS, Mercury, Wolfram, Limbo, MUF.
 		// The library says MATLAB for all of them. Order after Linguist:
 		// languages with an unmistakable directive first, MATLAB's `%` comment

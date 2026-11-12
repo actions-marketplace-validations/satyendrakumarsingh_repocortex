@@ -378,6 +378,11 @@ func runIndex(cmd *cobra.Command, g *Global, workers int, showDigest bool, accur
 	// `repocortex status` then printed 6,745. The 48 was 43 files that failed
 	// and 5 that parsed in part, which is how they are shown: the same two
 	// numbers, from the same rows, that `status` prints.
+	//
+	// `repocortex resolve` can still lower the symbol count afterwards: it
+	// folds an event topic declared in several files into one node, and says
+	// how many it merged. This repository's index reads 14,550 and its status
+	// 14,549 for that reason, which is not a miscount.
 	counts, err := reg.Counts(ctx, run.ID)
 	if err != nil {
 		return fmt.Errorf("count the published revision: %w", err)
@@ -430,7 +435,7 @@ func renderIndexReport(cmd *cobra.Command, g *Global, r indexReport) error {
 	}
 	_, _ = fmt.Fprintf(out, "  Files:         %d indexed, %d skipped (%d discovered)\n", r.Indexed, r.Skipped, r.Files)
 	_, _ = fmt.Fprintf(out, "  Symbols:       %d\n", r.Symbols)
-	_, _ = fmt.Fprintf(out, "  References:    %d (unresolved until M2)\n", r.References)
+	_, _ = fmt.Fprintf(out, "  References:    %d (bound by `repocortex resolve`)\n", r.References)
 	_, _ = fmt.Fprintf(out, "  Imports:       %d\n", r.Imports)
 	// What happened to each file, from the index itself. "Skipped" above is
 	// every file no syntax tree was built for; these rows say which of them

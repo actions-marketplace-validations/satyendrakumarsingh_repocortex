@@ -31,8 +31,9 @@ type EventEndpoint struct {
 
 // UnifyEventSymbols collapses duplicate event topic symbols (same FQN) across files
 // into a single canonical node, retargeting edges so that all publishers and consumers
-// meet at the same graph node.
-func (r *Registry) UnifyEventSymbols(ctx context.Context, runID int64) error {
+// meet at the same graph node. It returns how many duplicate symbols it removed,
+// so a caller can say why the run now holds fewer symbols than `index` counted.
+func (r *Registry) UnifyEventSymbols(ctx context.Context, runID int64) (int, error) {
 	rows, err := r.db.QueryContext(ctx, `
 		SELECT s.id, s.fqn
 		  FROM symbols s
@@ -41,7 +42,7 @@ func (r *Registry) UnifyEventSymbols(ctx context.Context, runID int64) error {
 		 ORDER BY s.fqn, f.path, s.start_line, s.id`,
 		runID, string(model.KindEvent))
 	if err != nil {
-		return fmt.Errorf("registry: query event symbols: %w", err)
+		return 0, fmt.Errorf("registry: query event symbols: %w", err)
 	}
 	defer func() { _ = rows.Close() }()
 
@@ -53,7 +54,7 @@ func (r *Registry) UnifyEventSymbols(ctx context.Context, runID int64) error {
 		var id int64
 		var fqn string
 		if err := rows.Scan(&id, &fqn); err != nil {
-			return err
+			return 0, err
 		}
 		if canonID, ok := canonical[fqn]; ok {
 			rebinds = append(rebinds, [2]int64{id, canonID})
@@ -63,51 +64,54 @@ func (r *Registry) UnifyEventSymbols(ctx context.Context, runID int64) error {
 		}
 	}
 	if err := rows.Err(); err != nil {
-		return err
+		return 0, err
 	}
 	if len(rebinds) == 0 {
-		return nil
+		return 0, nil
 	}
 
 	tx, err := r.db.BeginTx(ctx, nil)
 	if err != nil {
-		return err
+		return 0, err
 	}
 	defer func() { _ = tx.Rollback() }()
 
 	updateDst, err := tx.PrepareContext(ctx, `UPDATE edges SET dst_id = ? WHERE dst_id = ? AND index_run_id = ?`)
 	if err != nil {
-		return err
+		return 0, err
 	}
 	defer func() { _ = updateDst.Close() }()
 
 	updateSrc, err := tx.PrepareContext(ctx, `UPDATE edges SET src_id = ? WHERE src_id = ? AND index_run_id = ?`)
 	if err != nil {
-		return err
+		return 0, err
 	}
 	defer func() { _ = updateSrc.Close() }()
 
 	deleteSym, err := tx.PrepareContext(ctx, `DELETE FROM symbols WHERE id = ? AND index_run_id = ?`)
 	if err != nil {
-		return err
+		return 0, err
 	}
 	defer func() { _ = deleteSym.Close() }()
 
 	for _, pair := range rebinds {
 		dupID, canonID := pair[0], pair[1]
 		if _, err := updateDst.ExecContext(ctx, canonID, dupID, runID); err != nil {
-			return err
+			return 0, err
 		}
 		if _, err := updateSrc.ExecContext(ctx, canonID, dupID, runID); err != nil {
-			return err
+			return 0, err
 		}
 	}
 	for _, id := range toDelete {
 		if _, err := deleteSym.ExecContext(ctx, id, runID); err != nil {
-			return err
+			return 0, err
 		}
 	}
-	return tx.Commit()
+	if err := tx.Commit(); err != nil {
+		return 0, err
+	}
+	return len(toDelete), nil
 }
 
 // EventTopologyReport lists all message broker topics and their producers and consumers.

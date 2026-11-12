@@ -177,12 +177,12 @@ in place.
 $ repocortex index --full --digest
   Files:         708 indexed, 15 skipped (723 discovered)
   Symbols:       10832
-  References:    60185 (unresolved until M2)
+  References:    60185 (bound by `repocortex resolve`)
   Imports:       3829
   Parsed:         708 (702 clean, 6 with syntax errors)
   Syntax errors:  6 files read to the end with errors the parser recovered from; definitions inside the unreadable regions may be missing
-  Text only:      9 files searchable by text, no definitions (no definition query for the language): yaml 3, html 2, vimdoc 2, dockerfile 1, gomod 1
-  Skipped:        6 files not indexed: no_grammar 6
+  Text only:      7 files searchable by text, no definitions (no definition query for the language): yaml 3, html 2, dockerfile 1, gomod 1
+  Skipped:        8 files not indexed: no_grammar 8
   Digest:        747fbf7969c177e83eeb413fa7f568e843936546d22db05c7b888354d39cb52e
   Duration:      10895ms
 ```
@@ -297,7 +297,15 @@ The one low-confidence reference has no edge of its own: a stronger reference
 between the same two definitions already made it. A second `resolve` with
 nothing new to bind prints no tiers under `Resolved`, because a reference's tier
 is known only to the pass that binds it, and still prints the edges that are in
-the graph ("0 written by this pass").
+the graph ("this pass found nothing new to bind"). `Edges` counts every kind
+this pass writes: `CALLS`, `INSTANTIATES` (a call that constructs a type; the
+`Constructs:` line above says how many), `REFERENCES`, `EXTENDS` and
+`IMPLEMENTS`.
+
+An event topic declared in several files is one symbol per file until
+resolution folds them into one node. When that happens an `Events:` line says
+how many were merged, and `status` then counts that many fewer symbols than
+`index` printed. `--json` carries it as `events_merged`.
 
 **Unresolved** means no definition with that name is in the index. That is
 every call into a library, and it is equally every call to code in this
@@ -381,10 +389,10 @@ Symbols:        10534
 Relationships:  0
 Parsed:         956 (895 clean, 61 with syntax errors)
 Syntax errors:  61 files read to the end with errors the parser recovered from; definitions inside the unreadable regions may be missing
-Text only:      45 files searchable by text, no definitions (no definition query for the language): json 24, xml 11, markdown 5, vimdoc 3, yaml 2
+Text only:      42 files searchable by text, no definitions (no definition query for the language): json 24, xml 11, markdown 5, yaml 2
 Too large:      1 file over the size limit, not parsed and not searchable (raise index.max_file_bytes in .repocortex.yml to include them)
                   Src/Newtonsoft.Json.Tests/large.json (6.6 MiB)
-Skipped:        174 files not indexed: no_grammar 165, binary 9
+Skipped:        177 files not indexed: no_grammar 168, binary 9
 Last indexed:   2026-11-12T20:19:35+05:30
 Index size:     22.0 MiB
 Accuracy mode:  auto

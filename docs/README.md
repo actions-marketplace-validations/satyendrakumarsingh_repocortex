@@ -25,6 +25,7 @@ Quick onboarding paths to get RepoCortex running in your project and connected t
 | [**Quickstart Guide**](getting-started/quickstart.md) | 60-second end-to-end guide: install, index, resolve, and verify |
 | [**Protocols**](guides/protocols.md) | Reach the same tools over MCP, plain HTTP with OpenAPI, or the shell; profiles and the audit log |
 | [**Agent Integration**](getting-started/agent-integration.md) | Wiring instructions for Cursor, Claude Code, Windsurf, Antigravity, Claude Desktop, and Zed |
+| [**Editor Extension**](guides/editor-extension.md) | The VS Code extension: callers, impact, tests and implementations for the symbol under the cursor, from the installed binary |
 | [**Installation**](getting-started/installation.md) | Automated curl installer, Go install, precompiled release binaries, container image, Scoop, winget and the MCP bundle |
 
 ---
@@ -37,7 +38,7 @@ The engineering rationale and formal models behind deterministic code graphs.
 |---|---|
 | [**Why Not Vector RAG?**](concepts/why-not-vector-rag.md) | Lexical similarity vs causal call-graph reachability for code intelligence |
 | [**Architecture & Invariants**](concepts/architecture.md) | Hexagonal pipeline, in-memory CSR graph, and zero-CGO design |
-| [**Accuracy & Provenance**](reference/accuracy-and-benchmarks.md) | Adjudication of 30,975 edges against compiler ground truth across 4 confidence tiers |
+| [**Accuracy & Provenance**](reference/accuracy-and-benchmarks.md) | 30,975 edges adjudicated against compiler ground truth, then a hand check of nine projects after calls began to bind by what they are made on |
 | [**Non-Goals**](NON-GOALS.md) | Deliberate architectural refusals and scope boundaries |
 | [**Competitive Analysis**](COMPETITIVE_ANALYSIS.md) | 40 open-source and paid tools, and what each has that RepoCortex lacked |
 | [**Implementation Plan**](IMPLEMENTATION_PLAN.md) | What is shipped, planned and declined in answer to that analysis |

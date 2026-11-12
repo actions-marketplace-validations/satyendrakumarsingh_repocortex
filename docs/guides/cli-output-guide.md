@@ -218,7 +218,7 @@ Indexed payment-platform
   Git:           eae0f8a662b9
   Files:         11 indexed, 7 skipped (18 discovered)
   Symbols:       49
-  References:    63 (unresolved until M2)
+  References:    63 (bound by `repocortex resolve`)
   Imports:       3
   Duration:      321ms
 
@@ -248,7 +248,7 @@ payment-platform is up to date (18 files, revision 4, 86ms)
   files left out for their size; see [CLI.md](../CLI.md#index).
 - `Symbols` counts definitions extracted in this run. `status` reports a larger
   number because it also counts tables, config keys, endpoints and units.
-- `References … (unresolved until M2)` means references are stored but not yet
+- `References … (bound by `repocortex resolve`)` means references are stored but not yet
   joined to definitions. Run [`repocortex resolve`](#repocortex-resolve) next.
 - Without `--full`, only changed files are re-parsed (`Added`, `Modified`,
   `Deleted`, `Unchanged`). The revision number does not go up.
@@ -1968,8 +1968,11 @@ time=… level=INFO msg="serving MCP on stdio" project=payment-platform profile=
   verdict is never stronger than the coverage it rests on; see
   [reading an answer](../reference/mcp-tools.md#reading-an-answer).
 - A caller row says how its call is written when the call carries a qualifier.
-  The binding matched the name `updateStatus`; the row shows the text in front
-  of it so a reader can check it.
+  A qualified call is bound through what the qualifier names (an imported
+  package, a module or a type); the row shows the text in front of the name and
+  the rule that bound it, so a reader can check it. A call on a value whose type
+  the source does not state is bound on the member name alone, and a note
+  counts those.
 - The text is split into labelled sections. `SYSTEM METADATA` is RepoCortex's
   own report. `INFERRED` holds results it derived from the graph.
   `SOURCE EVIDENCE` holds verbatim repository content and comes with a note to
