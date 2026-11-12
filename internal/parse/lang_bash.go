@@ -16,7 +16,9 @@ import "strings"
 // assigned inside a function, loop or conditional) are not recorded, and a
 // bare `export NAME` re-exports a name that is declared elsewhere and is not
 // recorded. A name assigned twice at the top level is recorded at each
-// assignment.
+// assignment. An append (`NAME+=value`, `NAME+=(...)`) changes a variable
+// that is declared elsewhere and is not an assignment of its own, so it is not
+// recorded.
 //
 // An `alias name=value` anywhere in the file is a `function`: it defines a
 // command. The grammar gives the name together with its `=` (`ll=`), which
@@ -25,8 +27,10 @@ func init() {
 	registerDefinitions("bash", `
 (function_definition name: (word) @name) @definition.function
 
-(program (variable_assignment name: (variable_name) @name) @definition.variable)
-(program (variable_assignments (variable_assignment name: (variable_name) @name) @definition.variable))
+(program (variable_assignment name: (variable_name) @name) @definition.variable
+  (#not-match? @definition.variable "^[^=]*[+]="))
+(program (variable_assignments (variable_assignment name: (variable_name) @name) @definition.variable
+  (#not-match? @definition.variable "^[^=]*[+]=")))
 
 (program (declaration_command (variable_assignment name: (variable_name) @name)) @definition.constant
   (#match? @definition.constant "^(readonly\\b|(declare|typeset)\\s+(-\\S+\\s+)*-[A-Za-z]*r)"))
