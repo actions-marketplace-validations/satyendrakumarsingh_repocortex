@@ -226,7 +226,7 @@ func TestFSharpAbstractTupleResult(t *testing.T) {
 	spans := findFSharpConstraintCalls([]byte(src))
 	var got []string
 	for _, s := range spans {
-		got = append(got, string(src[s.start:s.start+len(s.repl)]))
+		got = append(got, src[s.start:s.start+len(s.repl)])
 	}
 	want := []string{"int * int option", "int * int", "a * b"}
 	if strings.Join(got, "|") != strings.Join(want, "|") {
