@@ -438,6 +438,11 @@ func (p *genericParser) Parse(ctx context.Context, path string, src []byte) (*Re
 		skip(res, model.ParseReasonTooLarge, tooLargeDetail(int64(len(src)), int64(limit)))
 		return res, nil
 	}
+	if norm := sourceNormalizers[p.entry.Name]; norm != nil {
+		// A same-length rewrite of text the grammar cannot read, made before
+		// the first parse; see mask_fsharp.go.
+		src = norm(src)
+	}
 	if p.initErr != nil {
 		// A grammar that yields no definitions degrades THAT LANGUAGE, not the
 		// run. The gap is recorded on the result so it is visible in the
@@ -804,9 +809,11 @@ const (
 // probeSecondLook is how many times the first allowance the plain parse is
 // given when it ran out of the first one and the masked reading that replaced
 // it still has errors. It bounds what a file the parser never finishes costs
-// (the 60 s ceiling is not paid again) and is what keeps a verdict the same on
-// a machine several times slower than the one the allowance was measured on.
-const probeSecondLook = 4
+// (the 60 s ceiling is not paid again: a five-line C++ file that stalls costs
+// 2 s for the first parse and 4 s for this one) and is what keeps a verdict
+// the same on a machine up to three times slower than the one the allowance
+// was measured on.
+const probeSecondLook = 2
 
 // probeMicros is the wall-clock allowance of the first parse of a file, in
 // microseconds.
@@ -840,10 +847,16 @@ const probeSecondLook = 4
 // strength of the short allowance alone.
 func (c parserConfig) probeMicros(language string, srcLen int) uint64 {
 	full := c.ceilingMicros()
-	if !maskedLanguages[language] && !condLanguages[language] {
+	if !maskedLanguages[language] && !condLanguages[language] || language == "fsharp" {
+		// F# reads conditional compilation through the same mask but keeps
+		// the whole ceiling for its first parse: with a short allowance the
+		// parser returned a finished tree with no definitions in it for a
+		// file it reads in about 2.5 s (Fable's tests/Rust DateTimeTests.fs,
+		// 15 definitions with the ceiling, none with 2.27 s), without
+		// reporting a stop.
 		return full
 	}
-	us := (probeBase + time.Duration(srcLen>>10)*probePerKiB).Microseconds()
+	us := (probeBase + time.Duration(srcLen>>10)*probePerKiB).Microseconds() * probeScale
 	if us < 1 {
 		us = 1
 	}

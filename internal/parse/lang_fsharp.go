@@ -1,6 +1,10 @@
 package parse
 
-import "strings"
+import (
+	"strings"
+
+	ts "github.com/odvcencio/gotreesitter"
+)
 
 // F#: modules, namespaces, types, exceptions, module-level lets and members.
 //
@@ -40,6 +44,9 @@ func init() {
 		"(declaration_expression (function_or_value_defn (value_declaration_left " + strings.Replace(pat, "%s", ". (_)", 1) + ")) @definition.function)",
 		"(declaration_expression (function_or_value_defn (value_declaration_left " + strings.Replace(pat, "%s", ".", 1) + ") . (fun_expression)) @definition.function)",
 		"(declaration_expression (function_or_value_defn (value_declaration_left " + strings.Replace(pat, "%s", ".", 1) + ") . (function_expression)) @definition.function)",
+		// an access modifier moves the name: `let internal f (x: int) =` is a function_declaration_left
+		// with the modifier first, `let inline private f x =` likewise
+		"(declaration_expression (function_or_value_defn (function_declaration_left (access_modifier) . [(identifier) (op_identifier) (active_pattern)] @name)) @definition.function)",
 		// values
 		"(declaration_expression (function_or_value_defn (value_declaration_left " + strings.Replace(pat, "%s", ".", 1) + ") . (_) @_body) @definition.variable (#not-match? @_body \"^(fun|function)\\\\b\"))",
 		// types
@@ -51,7 +58,11 @@ func init() {
 		// modules
 		"(module_defn . (identifier) @name) @definition.module",
 		"(module_defn (attributes) . (identifier) @name) @definition.module",
+		// `module internal Inner =`, `module private P =`, with or without attributes
+		"(module_defn (access_modifier) . (identifier) @name) @definition.module",
+		"(module_defn (attributes) (access_modifier) . (identifier) @name) @definition.module",
 		"(exception_definition . [(identifier) @name (long_identifier . (identifier) @name .)]) @definition.class",
+		"(exception_definition (access_modifier) . [(identifier) @name (long_identifier . (identifier) @name .)]) @definition.class",
 	}
 	// The grammar sometimes reads a top-level let as a value_declaration
 	// rather than a declaration_expression (after a module it lost track of).
@@ -84,4 +95,50 @@ func init() {
 (member_defn (member_signature . (identifier) @name (curried_spec (arguments_spec))) @definition.method)
 `)
 	registerDefinitions("fsharp", b.String(), true)
+	definitionRefiners["fsharp"] = refineFSharpDefinitions
+}
+
+// refineFSharpDefinitions repairs the name of a definition written with
+// `inline` behind an access modifier, or a module written `module rec`. The
+// grammar reads the keyword as an identifier, so `let private inline c x = ...`,
+// `static member private inline S(x) = ...` and `module rec Parent.Name` come
+// out named `inline` and `rec`; the name is the word after it.
+func refineFSharpDefinitions(_ *ts.Node, _ *ts.Language, _ string, src []byte, tags []ts.Tag) map[uint32]definitionFix {
+	var fixes map[uint32]definitionFix
+	for _, t := range tags {
+		if t.Name != "inline" && t.Name != "rec" || !strings.HasPrefix(t.Kind, "definition") {
+			continue
+		}
+		if fixes == nil {
+			fixes = map[uint32]definitionFix{}
+		}
+		if name := fsharpWordAfter(src, int(t.NameRange.EndByte)); name != "" {
+			fixes[t.NameRange.StartByte] = definitionFix{name: name}
+		} else {
+			fixes[t.NameRange.StartByte] = definitionFix{drop: true}
+		}
+	}
+	return fixes
+}
+
+// fsharpWordAfter is the first identifier after pos that is not a modifier.
+func fsharpWordAfter(src []byte, pos int) string {
+	for pos < len(src) {
+		for pos < len(src) && (src[pos] == ' ' || src[pos] == '\t') {
+			pos++
+		}
+		start := pos
+		for pos < len(src) && (src[pos] == '_' || src[pos] == '.' || src[pos] == '\'' || src[pos] == '`' || src[pos] >= '0' && src[pos] <= '9' || src[pos] >= 'a' && src[pos] <= 'z' || src[pos] >= 'A' && src[pos] <= 'Z' || src[pos] >= 0x80) {
+			pos++
+		}
+		if pos == start {
+			return ""
+		}
+		switch w := string(src[start:pos]); w {
+		case "private", "internal", "public", "mutable", "rec", "inline":
+		default:
+			return w
+		}
+	}
+	return ""
 }
