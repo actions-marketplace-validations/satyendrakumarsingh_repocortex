@@ -148,6 +148,13 @@ type Result struct {
 	// such a branch is not in Symbols. Zero for every other file.
 	BranchesBlanked int
 
+	// ConstructsMasked is how many spans of a language's own unreadable
+	// construct were overwritten before the tree that produced this result was
+	// parsed, for an F# or Groovy file whose masked parse the guard in
+	// cmacro.go kept: a statically resolved member constraint call in F#, a
+	// one-line doc comment in Groovy. Zero for every other file.
+	ConstructsMasked int
+
 	// Err explains a status other than ok. Its text starts with Reason, so it
 	// can be stored as files.parse_error unchanged. It is diagnostic text for
 	// the file's record, never a reason to abort the indexing run.

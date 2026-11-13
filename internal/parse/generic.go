@@ -511,6 +511,7 @@ func (p *genericParser) Parse(ctx context.Context, path string, src []byte) (*Re
 		tree, stop, src, tags, implementers = mp.tree, mp.stop, mp.src, mp.tags, mp.implementers
 		res.MacrosMasked = mp.count
 		res.BranchesBlanked = mp.branches
+		res.ConstructsMasked = mp.constructs
 	}
 	if cerr := ctx.Err(); cerr != nil {
 		return nil, cerr
@@ -559,10 +560,10 @@ func (p *genericParser) Parse(ctx context.Context, path string, src []byte) (*Re
 
 	// The verdict on the parse itself, also read from the tree.
 	p.describeParse(res, tree, stop, src)
-	if res.Status == StatusOK && res.BranchesBlanked > 0 {
+	if res.Status == StatusOK && (res.BranchesBlanked > 0 || res.ConstructsMasked > 0) {
 		// A clean masked parse has no error to carry the note, and a reader
 		// asking why a definition is missing must be able to see that a
-		// branch was blanked. The status stays ok: the file was read.
+		// branch was blanked or a construct masked. The status stays ok: the file was read.
 		res.Err = errors.New(strings.TrimPrefix(res.maskNote(), "; "))
 	}
 
