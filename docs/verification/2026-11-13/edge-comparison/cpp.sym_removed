@@ -1,0 +1,13 @@
+include/benchmark/benchmark_api.h|236|function|LambdaBenchmark
+include/benchmark/state.h|291|function|ScopedPauseTiming
+include/benchmark/state.h|294|function|ScopedPauseTiming
+src/check.h|72|function|CheckHandler
+src/check.h|73|function|CheckHandler
+src/log.h|27|function|LogType
+src/perf_counters.h|100|function|PerfCounters
+src/perf_counters.h|101|function|PerfCounters
+src/perf_counters.h|102|function|PerfCounters
+src/sysinfo.cc|135|function|ValueUnion
+src/sysinfo.cc|606|function|ThreadAffinityGuard
+src/sysinfo.cc|607|function|ThreadAffinityGuard
+test/memory_results_gtest.cc|50|function|TestReporter

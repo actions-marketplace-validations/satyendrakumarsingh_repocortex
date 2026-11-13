@@ -1,0 +1,79 @@
+{
+ "language": "solidity",
+ "project": "OpenZeppelin/openzeppelin-contracts",
+ "project_commit": "efaa6f78ab1dde05416246e801c0baaf4f900d49",
+ "repocortex_commit": "f783fa5",
+ "files": [
+  {
+   "path": "contracts/access/manager/AccessManager.sol",
+   "lines": 764,
+   "assigned_language": "solidity",
+   "parse_status": "ok",
+   "parse_error": "",
+   "expected": 57,
+   "correct": 54,
+   "missed": 3,
+   "missed_known_gap": 0,
+   "spurious": 0,
+   "line_on_attribute": 0
+  },
+  {
+   "path": "contracts/utils/math/Math.sol",
+   "lines": 723,
+   "assigned_language": "solidity",
+   "parse_status": "ok",
+   "parse_error": "",
+   "expected": 38,
+   "correct": 38,
+   "missed": 0,
+   "missed_known_gap": 0,
+   "spurious": 0,
+   "line_on_attribute": 0
+  },
+  {
+   "path": "contracts/utils/Strings.sol",
+   "lines": 530,
+   "assigned_language": "solidity",
+   "parse_status": "ok",
+   "parse_error": "",
+   "expected": 39,
+   "correct": 32,
+   "missed": 7,
+   "missed_known_gap": 0,
+   "spurious": 0,
+   "line_on_attribute": 0
+  }
+ ],
+ "totals": {
+  "expected": 134,
+  "correct": 124,
+  "missed": 10,
+  "missed_known_gap": 0,
+  "spurious": 0,
+  "line_on_attribute": 0
+ },
+ "examples": {
+  "missed": [
+   "AccessManager.sol:135 constructor(address initialAdmin)",
+   "AccessManager.sol:111 uint64 public constant ADMIN_ROLE",
+   "AccessManager.sol:116 uint64 public constant PUBLIC_ROLE",
+   "Strings.sol:17 bytes16 private constant HEX_DIGITS",
+   "Strings.sol:18 uint8 private constant ADDRESS_LENGTH"
+  ],
+  "spurious": []
+ },
+ "rule_objections": [
+  "No fixtures/langs/solidity exists, so no stated rule; counted under the brief's default rule (functions, methods, contracts/libraries/structs/enums, top-level constants). Constructors and custom errors counted as expected too (a constructor is a method; an error is a named type declaration) - arguable.",
+  "Modifier is recorded as kind method, not a distinct kind; acceptable.",
+  "Events/state variables/user-defined value types not checked (none appear in these three files besides one non-constant private state variable _executionId, which I did not count)."
+ ],
+ "findings": [
+  "No spurious symbols and all 115 functions, 6 contracts/libraries/structs/enums and the modifier are found with correct lines (overloads kept as separate rows).",
+  "Constants are never extracted: ADMIN_ROLE, PUBLIC_ROLE, HEX_DIGITS, ADDRESS_LENGTH, SPECIAL_CHARS_LOOKUP, ABS_MIN_INT256 (6 of the 10 misses).",
+  "Custom errors (3 in Strings.sol) and the constructor in AccessManager.sol are not extracted."
+ ],
+ "not_done": [
+  "Text-search check not required for this language.",
+  "Events, user-defined value types and non-constant state variables did not occur in the files and were not exercised."
+ ]
+}

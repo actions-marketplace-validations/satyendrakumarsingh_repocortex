@@ -1,0 +1,333 @@
+{
+ "language": "php",
+ "project": "Seldaek/monolog",
+ "project_commit": "3bed304",
+ "repocortex_commit": "8748b29",
+ "files_checked": [
+  "src/Monolog/Logger.php",
+  "src/Monolog/Handler/TelegramBotHandler.php",
+  "src/Monolog/Handler/SocketHandler.php",
+  "src/Monolog/Formatter/NormalizerFormatter.php",
+  "src/Monolog/Handler/Slack/SlackRecord.php"
+ ],
+ "index": {
+  "files": 262,
+  "files_indexed": 250,
+  "symbols": 2222,
+  "symbol_kinds": {
+   "method": 1594,
+   "class": 250,
+   "function": 17,
+   "interface": 11,
+   "package": 156,
+   "configuration": 194
+  },
+  "edges_by_kind_and_tier": {
+   "CALLS": {
+    "high": 1662,
+    "low": 386
+   },
+   "INSTANTIATES": {
+    "high": 877
+   },
+   "EXTENDS": {
+    "high": 18,
+    "medium": 89,
+    "low": 82
+   },
+   "IMPLEMENTS": {
+    "high": 9,
+    "medium": 40
+   }
+  },
+  "round1_edges_by_kind_and_tier": {
+   "CALLS": {
+    "high": 1722,
+    "low": 360
+   },
+   "INSTANTIATES": {
+    "high": 877
+   },
+   "EXTENDS": {
+    "high": 18,
+    "medium": 90,
+    "low": 85
+   },
+   "IMPLEMENTS": {
+    "high": 9,
+    "medium": 40
+   }
+  },
+  "parse_summary": {
+   "Parsed": "250 (250 clean)",
+   "Syntax errors": 0,
+   "Incomplete": 0,
+   "Failed": 0,
+   "Too large": 0,
+   "Text only": "1 (editorconfig)",
+   "Skipped": "11 (no_grammar 9, binary 2)"
+  },
+  "index_seconds": 1.7,
+  "resolve_seconds": 0.47,
+  "notes": "Status READY. No medium CALLS/INSTANTIATES edges exist. Resolve prints 'Data access: 1 statement(s), 0 bound to a declared table' as in round one (unrelated to PHP code). References 8726."
+ },
+ "definitions": {
+  "expected": 130,
+  "correct": 130,
+  "missed": 0,
+  "spurious": 0,
+  "line_on_attribute": 0,
+  "per_file": {
+   "src/Monolog/Logger.php": {
+    "expected": 38,
+    "correct": 38,
+    "missed": 0,
+    "spurious": 0
+   },
+   "src/Monolog/Handler/TelegramBotHandler.php": {
+    "expected": 21,
+    "correct": 21,
+    "missed": 0,
+    "spurious": 0
+   },
+   "src/Monolog/Handler/SocketHandler.php": {
+    "expected": 33,
+    "correct": 33,
+    "missed": 0,
+    "spurious": 0
+   },
+   "src/Monolog/Formatter/NormalizerFormatter.php": {
+    "expected": 22,
+    "correct": 22,
+    "missed": 0,
+    "spurious": 0
+   },
+   "src/Monolog/Handler/Slack/SlackRecord.php": {
+    "expected": 16,
+    "correct": 16,
+    "missed": 0,
+    "spurious": 0
+   }
+  },
+  "rule_notes": "Rule from fixtures/langs/php/expected.tsv: functions, classes, interfaces, traits (as interface), enums (as class), methods and constructors; enum cases as function; calls, new, use and promoted constructor parameters are not definitions. Class constants, properties, closures not counted. Expected found by line-anchored regex and compared with the symbols table by (line, name): exact agreement. Unchanged from round one.",
+  "examples": {
+   "missed": [],
+   "spurious": []
+  }
+ },
+ "call_precision": {
+  "high": {
+   "right": 30,
+   "wrong": 0,
+   "unclear": 0,
+   "judged": 30,
+   "examples": [],
+   "note": "sample is 9 INSTANTIATES and 21 CALLS, 22 of 30 from test files. High CALLS edges 1722 -> 1662: the removed ones are the overridden-method guesses now at low."
+  },
+  "medium": {
+   "right": 0,
+   "wrong": 0,
+   "unclear": 0,
+   "judged": 0,
+   "examples": [],
+   "note": "no medium CALLS/INSTANTIATES edges exist for PHP"
+  },
+  "low": {
+   "right": 26,
+   "wrong": 3,
+   "unclear": 1,
+   "judged": 30,
+   "examples": [
+    "tests/Monolog/Handler/RotatingFileHandlerTest.php:509 -> src/Monolog/Handler/Handler.php:34: $handler->close() where $handler = new RotatingFileHandler(..), which overrides close (RotatingFileHandler.php:63); detail text says descendants declare close again, edge kept anyway (also LogMonsterHandlerTest.php:73, LogMonsterHandler::close at :114)",
+    "tests/Monolog/Formatter/GelfMessageFormatterTest.php:114 -> src/Monolog/LogRecord.php:106: $message->toArray() where $message is a Gelf\\Message (external, asserted by assertInstanceOf at :112) bound to LogRecord::toArray",
+    "(unclear) src/Monolog/Handler/WhatFailureGroupHandler.php:60 -> Handler.php:24: $handler->handleBatch over HandlerInterface elements; dynamic dispatch"
+   ]
+  },
+  "note": "Fresh sample (id*40503%65521). All hedged low edges carry a reason text; the overrides case now says 'X, Y, Z descend from Handler and declare close again, so the receiver may be an instance of one of them'. PHPUnit mock-builder with()/expects() calls: 0 edges to LogRecord::with from tests (3 edges to LogRecord::with remain, all from src and high, legitimate).",
+  "round1_wrong_examples": [
+   {
+    "site": "tests/Monolog/Handler/MailHandlerTest.php:35 $handler->handleBatch (MailHandler overrides)",
+    "round1_tier": "high",
+    "now": "lower_tier",
+    "note": "now low, still bound to Handler::handleBatch, reason text names descendants that redeclare it"
+   },
+   {
+    "site": "tests/Monolog/Handler/ElasticaHandlerTest.php:204 $handler->handleBatch",
+    "round1_tier": "high",
+    "now": "lower_tier",
+    "note": "low, still the base Handler::handleBatch (ElasticaHandler overrides, and the reason text names ElasticaHandler)"
+   },
+   {
+    "site": "tests/Monolog/Handler/SocketHandlerTest.php:251 $this->handler->close()",
+    "round1_tier": "high",
+    "now": "lower_tier",
+    "note": "low, still base Handler::close"
+   },
+   {
+    "site": "tests/Monolog/Handler/ZendMonitorHandlerTest.php:56 ->with(..)",
+    "round1_tier": "low",
+    "now": "gone",
+    "note": "with is a reference resolved 'ambiguous' (no edge); expects unresolved"
+   },
+   {
+    "site": "tests/Monolog/Handler/RedisHandlerTest.php:58",
+    "round1_tier": "low",
+    "now": "gone",
+    "note": "same"
+   },
+   {
+    "site": "tests/Monolog/Handler/RedisPubSubHandlerTest.php:59",
+    "round1_tier": "low",
+    "now": "gone",
+    "note": "same"
+   },
+   {
+    "site": "tests/Monolog/Handler/UdpSocketTest.php:60",
+    "round1_tier": "low",
+    "now": "gone",
+    "note": "no edge on the line"
+   },
+   {
+    "site": "tests/Monolog/Formatter/NormalizerFormatterTest.php:591 $thrower->boom() on an anonymous class",
+    "round1_tier": "low",
+    "now": "still_wrong",
+    "note": "still low, bound to TestInternalFrame::boom :799"
+   },
+   {
+    "site": "src/Monolog/Handler/GroupHandler.php:93 $handler->handleBatch (unclear)",
+    "round1_tier": "low",
+    "now": "still_wrong",
+    "note": "unchanged: low, bound to Handler::handleBatch with the 'descendants redeclare' hedge text; still unclear rather than wrong (runtime dispatch over HandlerInterface elements)"
+   }
+  ]
+ },
+ "call_recall": {
+  "sites": 40,
+  "right": 33,
+  "wrong": 0,
+  "none": 7,
+  "none_breakdown": {
+   "not_extracted": 0,
+   "extracted_unresolved": 0,
+   "resolved_but_no_edge": 0,
+   "ambiguous": 7
+  },
+  "examples": [
+   "Logger.php: 7 right; $handler->isHandling($record) at :380 extracted with receiver `handler`, ambiguous, no edge",
+   "TelegramBotHandler.php, SocketHandler.php, NormalizerFormatter.php: 24 of 24 right (new MissingExtensionException, parent::__construct -> AbstractHandler::__construct, $record->toArray() -> LogRecord::toArray)",
+   "SlackRecord.php:91-99 the fluent chain on $this: setChannel (high) and setUserIcon (low) bind; setUsername, useAttachment, useShortAttachment, includeContextAndExtra, excludeFields, setFormatter are extracted (receiver '?') but ambiguous with no edge, because the names exist on other classes"
+  ],
+  "per_file": {
+   "Logger.php": {
+    "sites": 8,
+    "right": 7,
+    "wrong": 0,
+    "none": 1
+   },
+   "TelegramBotHandler.php": {
+    "sites": 8,
+    "right": 8,
+    "wrong": 0,
+    "none": 0
+   },
+   "SocketHandler.php": {
+    "sites": 8,
+    "right": 8,
+    "wrong": 0,
+    "none": 0
+   },
+   "NormalizerFormatter.php": {
+    "sites": 8,
+    "right": 8,
+    "wrong": 0,
+    "none": 0
+   },
+   "SlackRecord.php": {
+    "sites": 8,
+    "right": 2,
+    "wrong": 0,
+    "none": 6
+   }
+  },
+  "round1": {
+   "sites": 40,
+   "right": 33,
+   "wrong": 0,
+   "none": 7
+  }
+ },
+ "hierarchy": {
+  "edges_total": 238,
+  "edges_by_kind": {
+   "EXTENDS": 189,
+   "IMPLEMENTS": 49
+  },
+  "tiers": "EXTENDS 18 high/89 medium/82 low; IMPLEMENTS 9 high/40 medium",
+  "sampled": 20,
+  "right_target": 19,
+  "wrong_target": 1,
+  "wrong_kind": 0,
+  "wrong_examples": [
+   "src/Monolog/JsonSerializableDateTimeImmutable.php:22 `extends \\DateTimeImmutable` (the PHP built-in, written with a leading backslash) -> EXTENDS medium to Monolog\\DateTimeImmutable (src/Monolog/DateTimeImmutable.php:21), a repo class that itself extends JsonSerializableDateTimeImmutable (a circular edge)"
+  ],
+  "declared_relationships_in_files": {
+   "declared_with_repo_target": 4,
+   "edge_present_right": 4,
+   "missing": 0,
+   "details": [
+    "Logger implements ResettableInterface -> IMPLEMENTS medium (LoggerInterface is Psr\\Log, external, no edge)",
+    "TelegramBotHandler extends AbstractProcessingHandler -> EXTENDS medium",
+    "SocketHandler extends AbstractProcessingHandler -> EXTENDS medium",
+    "NormalizerFormatter implements FormatterInterface -> IMPLEMENTS medium",
+    "SlackRecord has no supertypes"
+   ]
+  },
+  "round1": {
+   "edges_total": 242,
+   "sampled": 20,
+   "right": 20,
+   "declared": 4,
+   "present": 4
+  },
+  "note": "4 fewer EXTENDS edges than round one (193 -> 189; low 85->82, medium 90->89). The four classes declared `extends \\PHPUnit\\Framework\\TestCase` (MonologTestCase, RegistryTest, ErrorHandlerTest, SyslogHandlerTest) now have no edge, which is correct for an external class, so I take this as removals of wrong edges but cannot confirm what round one had. Hierarchy tiers are still mostly medium/low (211 of 238) for supertypes declared in the same namespace."
+ },
+ "answers": [
+  {
+   "command": "find_callers name=pushHandler",
+   "first_lines": "=== SYSTEM METADATA ===\nINCOMPLETE \u2014 1 of the 44 references spelled \"pushHandler\" are not among the rows below. pushHandler: its name appears in at least 10 other place(s) that are not recorded as calls: it may be passed as a value. 43 caller(s) of pushHandler (src/Monolog/Logger.php:215) are recorded.\nindex_revision: 1  status: ready\nnote: INCOMPLETE FOR THIS SYMBOL \u2014 1 of the 44 reference(s) ... bound to it from outside any indexed function ...\nnote: INCOMPLETE FOR THIS SYMBOL \u2014 The name of the target occurs in at least 10 other place(s) ... (for example README.md:57, doc/01-usage.md:102, ...)\nnote: References spelled \"pushHandler\" in this index: 44. 44 bound to this definition ...",
+   "true_of_the_code": true,
+   "comment": "45 code lines contain pushHandler( (1 definition + 44 calls); 44 references and 43 listed callers + 1 top-level are exact. The new 'may be passed as a value' warning cites README.md and doc/*.md code samples (calls in documentation), so it is over-cautious but harmless."
+  },
+  {
+   "command": "analyze_impact symbol=pushHandler",
+   "first_lines": "=== SYSTEM METADATA ===\nINCOMPLETE \u2014 1 of the 44 references spelled \"pushHandler\" are not among the rows below. pushHandler: its name appears in at least 10 other place(s) that are not recorded as calls: it may be passed as a value; __construct, on the path to it, is named in at least 2 other place(s) not recorded as calls (it may be passed as a value), so what reaches __construct is not listed. pushHandler (src/Monolog/Logger.php:215): 30 direct, 8 indirect. Risk unknown: ...\nnote: ... 30 direct counts the SYMBOLS that call the target; they make 43 call site(s) between them, which is what find_callers lists, so its count is the larger of the two.",
+   "true_of_the_code": true,
+   "comment": "Counts unchanged and consistent with find_callers (30 distinct caller functions, 43 sites). Limits (top-level reference, doc mentions, __construct named in docs) now on the first line; the doc-based 'passed as value' evidence is noise."
+  },
+  {
+   "command": "find_implementations name=HandlerInterface",
+   "first_lines": "=== SYSTEM METADATA ===\nINCOMPLETE \u2014 rows 1-50 of 69 are shown. HandlerInterface (src/Monolog/Handler/HandlerInterface.php:21): 69 implementing or extending it (4 directly, 65 through other types; direct_only=true lists the direct ones alone), 0 it implements or extends.\nindex_revision: 1  status: ready\ntruncated: showing rows 1-50 of 69 type relationship(s), so 19 are not shown here. Pass offset=50 to read on (limit accepts up to 200)\nnote: ... Note: 48 result(s) are medium or low confidence ...\nverdict: mixed (high=2 medium=48)",
+   "true_of_the_code": true,
+   "comment": "A regex over class/interface declarations in src+tests, followed transitively, gives exactly 69 subtypes and 4 direct (Handler, HandlerWrapper, LoggingHandler, FiberSuspendHandler). Round one gave 4 with no admission that only direct ones were listed; this is now correct and discloses direct vs transitive."
+  }
+ ],
+ "findings": [
+  "Fixed and verified: the three override cases (MailHandler/ElasticaHandler handleBatch, SocketHandler close) are no longer high; the edges are now low and the reason says which descendants redeclare the method. The target is still the base-class method, so they remain wrong-but-hedged edges (2 of the 30 in my low sample are such cases: RotatingFileHandler::close and LogMonsterHandler::close).",
+  "Fixed and verified: PHPUnit mock-builder with()/expects() calls bind to nothing (0 test edges to LogRecord::with); all four round-one cases are gone.",
+  "Fixed and verified: find_implementations HandlerInterface lists transitively (69 = true count) and says how many are direct (4); the first line now also states the truncation.",
+  "Hierarchy defect: `extends \\DateTimeImmutable` (global built-in) in JsonSerializableDateTimeImmutable.php is bound to the repo's own Monolog\\DateTimeImmutable (EXTENDS medium), which is circular since that class extends it; the leading backslash is not honoured. In the 20-edge sample this is 1 wrong (round one 0 of 20).",
+  "A Gelf\\Message->toArray() call (type proven by assertInstanceOf) is bound at low to LogRecord::toArray: external-type method name collisions still produce low-tier wrong edges (1 of 30), as does an anonymous-class boom() -> TestInternalFrame::boom (round one's case, unchanged).",
+  "Fluent chains on $this (SlackRecord constructor) still lose 6 of 8 calls to ambiguity (setUsername, useAttachment, ... have no edge), and $handler->isHandling($record) in Logger::addRecord (a HandlerInterface element) has no edge; unchanged.",
+  "Hierarchy edges remain mostly medium/low (211 of 238) even for same-namespace supertypes, so verdicts say 'mixed' although the targets are right (19 of 20).",
+  "The new 'may be passed as a value' evidence on find_callers/analyze_impact cites README.md and doc/*.md (calls in documentation), not code: over-cautious."
+ ],
+ "not_done": [
+  "No medium tier exists, so only high and low were sampled.",
+  "Closures, class constants and properties not counted as definitions per the stated PHP rule.",
+  "Recall sites per file re-derived by reading and match round one's counts per file (Logger.php sites start at the constructor; built-in `new DateTimeZone` etc. excluded)."
+ ],
+ "regressions": [
+  "Hierarchy sample: 1 wrong EXTENDS (\\DateTimeImmutable -> Monolog\\DateTimeImmutable); round one's sample had 0 wrong, but I cannot tell whether that edge existed in round one (it was simply not drawn).",
+  "Nothing else: no definition, recall site or right edge from round one is missing. 60 high CALLS moved to low (1722 -> 1662; low 360 -> 386) as designed."
+ ]
+}

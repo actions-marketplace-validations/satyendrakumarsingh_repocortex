@@ -1,0 +1,99 @@
+{
+  "language": "go",
+  "project": "spf13/cobra",
+  "project_commit": "adbc8813901bba65827259daa8e22ff94ec1f30e",
+  "repocortex_commit": "53246ac",
+  "files_checked": ["completions.go", "bash_completions.go", "bash_completionsV2.go", "powershell_completions.go", "zsh_completions.go"],
+  "index": {
+    "files": 66,
+    "symbols": 1030,
+    "edges_by_kind_and_tier": {"CALLS": {"high": 2123, "low": 18}, "INSTANTIATES": {"high": 5}},
+    "parse_summary": {"Parsed": "59 (59 clean)", "Syntax errors": 0, "Incomplete": 0, "Failed": 0, "Too large": 0, "Text only": "1 (gomod)", "Skipped": "6 (no_grammar 5, binary 1)"},
+    "index_seconds": 1.36,
+    "resolve_seconds": 0.22
+  },
+  "definitions": {
+    "expected": 90,
+    "correct": 90,
+    "missed": 0,
+    "spurious": 13,
+    "line_on_attribute": 0,
+    "examples": {
+      "missed": [],
+      "spurious": [
+        "completions.go:201 variable 'directives' (local var inside method string())",
+        "completions.go:325 variable 'finalCmd' (local in getCompletions)",
+        "completions.go:327 variable 'err' (local in getCompletions)",
+        "completions.go:429 variable 'completions' (local)",
+        "bash_completions.go:465 variable 'ext' (local inside writeFlagHandler)"
+      ],
+      "note": "Spurious = 13 function-local 'var' declarations indexed as variables: completions.go lines 201,325,326,327,429,430,568,579,604,633,664 (11) and bash_completions.go lines 465,484 (2). Per-file tool rows/expected: completions.go 59/48, bash_completions.go 24/22, bash_completionsV2.go 4/4, powershell_completions.go 7/7, zsh_completions.go 9/9. Expected set was derived from reading declaration lines (func/type/var/const incl. const blocks and interface methods); the documented Go rule (fixtures/langs/go/expected.tsv) is top-level declarations, methods, interface methods, no struct fields. Files chosen: the five largest non-test Go files <=1500 lines (command.go at 2072 skipped)."
+    }
+  },
+  "call_precision": {
+    "high": {"right": 30, "wrong": 0, "unclear": 0, "judged": 30, "examples": []},
+    "low": {"right": 12, "wrong": 6, "unclear": 0, "judged": 18, "examples": [
+      "command.go:1840 HasAvailableInheritedFlags -> command.go:1822 Command.HasAvailableFlags : c.InheritedFlags() returns a pflag *FlagSet, so HasAvailableFlags() is pflag's method, not cobra's Command method",
+      "command.go:1807 HasPersistentFlags -> command.go:1801 Command.HasFlags : c.PersistentFlags().HasFlags() is pflag.FlagSet.HasFlags",
+      "command.go:1812 HasLocalFlags -> command.go:1801 Command.HasFlags : c.LocalFlags().HasFlags() is pflag.FlagSet.HasFlags",
+      "command.go:1828 HasAvailablePersistentFlags -> command.go:1822 Command.HasAvailableFlags : pflag.FlagSet method called on c.PersistentFlags()",
+      "command.go:1817 HasInheritedFlags -> command.go:1801 Command.HasFlags : pflag.FlagSet method called on c.InheritedFlags()"
+    ], "note": "6 wrong in total; the sixth is command.go:1834 HasAvailableLocalFlags -> command.go:1822. Only 18 low edges exist, all judged."},
+    "note": "Tiers present: high, low (no medium, no exact). High sample of 30 contained only CALLS (INSTANTIATES edges are only 5 in total). Sampled edges include test-file callers."
+  },
+  "call_recall": {
+    "sites": 37,
+    "right": 37,
+    "wrong": 0,
+    "none": 0,
+    "none_breakdown": {},
+    "examples": [
+      "completions.go: c.Flag@171, c.Flag@187, MinimumNArgs@238, cmd.getCompletions@243, CompErrorln@245, cmd.CalledAs@251, getEnvConfig@253, GetActiveHelpConfig@257 -> all right",
+      "bash_completions.go: WriteStringAndCheck@37,38,406,407,437,444,448 and activeHelpEnvVar@401 -> all right",
+      "bash_completionsV2.go: 5 sites (genBashComp@26, Name@26, WriteStringAndCheck@37, GenBashCompletionV2@477, genBashCompletion@483) -> all right (file has only 5)",
+      "powershell_completions.go: first 8 -> all right",
+      "zsh_completions.go: first 8 -> all right"
+    ]
+  },
+  "hierarchy": {
+    "extends_implements_edges": 0,
+    "judged": 0,
+    "right": 0,
+    "declared_in_five_files": 0,
+    "right_edges_for_declared": 0,
+    "note": "The index holds no EXTENDS/IMPLEMENTS edge for Go at all (621 Go definitions, zero relationships). cobra's interfaces are satisfied structurally and the five files declare no embedding, so nothing declared was missed; e.g. completions_test.go:678 'var _ SliceValue = (*customMultiString)(nil)' is not recorded as an implementation."
+  },
+  "answers": [
+    {
+      "command": "repocortex --project . tool call find_callers name=CompErrorln",
+      "first_lines": "=== SYSTEM METADATA ===\n1 caller(s) of CompErrorln (completions.go:991) are recorded.\nindex_revision: 1  status: ready\nnote: References spelled \"CompErrorln\" in this index: 1. 1 bound to this definition.\nprovenance: This compares commits only. Staged, unstaged and untracked changes are invisible to the index and are NOT reflected here — a matching commit does not mean the working tree matches.\nverdict: strong (high=1)",
+      "true_of_the_code": true,
+      "comment": "Text search finds exactly one call (completions.go:245). Count matches. The output shows no caller name in the first six lines (metadata first)."
+    },
+    {
+      "command": "repocortex --project . tool call analyze_impact symbol=getCompletions",
+      "first_lines": "=== SYSTEM METADATA ===\ngetCompletions (completions.go:316): 1 direct, 6 indirect. Risk low (score 6).\nindex_revision: 1  status: ready\ntruncated: depth limit 3 reached, and 4 node(s) at the limit were not expanded\nnote: Risk = score = sum(factors), clamped to 0..100; level = low below 25, moderate below 60, high at or above 60; a level that would be low is reported as unknown when the callers could not be determined\nnote:   public_api (+0): The target is unexported, so its blast radius is bounded by this repository.",
+      "true_of_the_code": true,
+      "comment": "1 direct caller matches text search (completions.go:243). Indirect count not independently verified. It admits truncation at depth 3, though 'Risk low' is still stated while 4 nodes were not expanded."
+    },
+    {
+      "command": "repocortex --project . tool call find_implementations name=SliceValue",
+      "first_lines": "=== SYSTEM METADATA ===\nUNKNOWN — this index records no extends or implements relationship for any Go type; nothing about its subtypes or supertypes can be concluded. SliceValue (completions.go:311): 0 implementing or extending it, 0 it implements or extends.\nindex_revision: 1  status: ready\nnote: COVERAGE UNKNOWN — type hierarchy lookup for Go cannot be judged: this index holds 621 Go definition(s) and not one extends or implements relationship between any of them. Either this code declares no inheritance at all or RepoCortex does not record it for Go; an empty list cannot tell the two apart. Do not present what follows as an answer to the question asked.\nnote: This result is a LOWER BOUND, not a complete answer. RepoCortex reports only relationships it could resolve statically in the indexed run; anything it could not resolve is absent from this report, not absent from the code.",
+      "true_of_the_code": false,
+      "comment": "The tool finds no implementor, but customMultiString (completions_test.go:693 GetSlice) implements SliceValue (completions_test.go:678 asserts it). The answer is honest: it says UNKNOWN and explains structural typing is not recorded, so it admits its limit."
+    }
+  ],
+  "findings": [
+    "Low-confidence CALLS edges are wrong 6 of 18: a method called on a pflag FlagSet returned by c.PersistentFlags()/c.LocalFlags()/c.InheritedFlags() (HasFlags, HasAvailableFlags) is bound to cobra's Command method of the same name (command.go:1807,1812,1817,1828,1834,1840).",
+    "No implements/extends relationship is recorded for Go at all (zero hierarchy edges across 621 Go definitions); find_implementations on SliceValue returns 0 while an implementor exists in completions_test.go. The tool says UNKNOWN and explains this honestly.",
+    "13 function-local 'var' declarations are indexed as 'variable' symbols (completions.go: 11, bash_completions.go: 2), contradicting the Go rule of top-level declarations only; 13 of 103 symbols in the five files are spurious.",
+    "Definition recall in the five files was complete (0 missed) and the 30 sampled high-confidence edges were all right; call recall was 37 of 37. The high tier is strong on this project.",
+    "analyze_impact reports 'Risk low' even though 4 nodes at the depth limit were not expanded (it does state the truncation).",
+    "Index 1.36 s, resolve 0.22 s; no crash, error or hang."
+  ],
+  "not_done": [
+    "Indirect-impact count (6) for getCompletions was not verified by hand.",
+    "Edges whose caller is in a test file were included in the precision sample; not separated.",
+    "No medium or exact tier exists, so none sampled."
+  ]
+}

@@ -1,0 +1,274 @@
+{
+ "language": "cpp",
+ "project": "google/benchmark",
+ "project_commit": "cf4d7fedd59473f99042806fcba407ea767c5327",
+ "repocortex_commit": "8748b29",
+ "files_checked": [
+  "src/benchmark.cc (1002 lines)",
+  "src/sysinfo.cc (910)",
+  "src/benchmark_runner.cc (592)",
+  "src/benchmark_register.cc (559)",
+  "src/json_reporter.cc (377)"
+ ],
+ "index": {
+  "files": 224,
+  "indexed_files": 207,
+  "cpp_files": 119,
+  "cpp_files_partial": 31,
+  "symbols": 2024,
+  "cpp_symbols": 1044,
+  "edges_by_kind_and_tier": {
+   "caller_in_cpp_file": "CALLS high 437 medium 235 low 307; INSTANTIATES high 27 medium 5 low 16; EXTENDS high 6 low 27; IMPLEMENTS 0",
+   "round1_caller_in_cpp_file": "CALLS high 447 medium 203 low 239; INSTANTIATES high 9 low 2; EXTENDS high 3 low 12",
+   "all_languages": "high 611, medium 241, low 351 (1203 edges; round one 1060)"
+  },
+  "parse_summary": {
+   "Parsed": "207 (176 clean, 31 with syntax errors)",
+   "Syntax errors": 31,
+   "Incomplete": 0,
+   "Failed": 0,
+   "Too large": 0,
+   "Text only": 1,
+   "Skipped": "16 (no_grammar 12, binary 4)",
+   "round1": "172 clean, 32 with syntax errors, 3 incomplete (iteration limit / wall-clock ceiling)"
+  },
+  "files_with_macro_tokens_masked_in_parse_error": 16,
+  "files_with_conditional_branches_blanked_in_parse_error": 8,
+  "masked_or_blanked_detail": "16 files say 'macro tokens masked' (counter.h, benchmark_api.h, registration.h, utils.h, check.h, benchmark.cc, cycleclock.h, mutex.h, perf_counters.h, string_util.h, string_util.cc, thread_manager.h, sysinfo.cc, output_test_helper.cc, perf_counters_gtest.cc, benchmark_test.cc); 8 say 'conditional branch(es) blanked' (registration.h, cycleclock.h, mutex.h, re.h, benchmark.cc and others); 17 distinct files carry at least one of the two. Round one: 10 files masked.",
+  "index_seconds": 3.06,
+  "resolve_seconds": 0.28,
+  "status": "READY (round one: DEGRADED), schema v18",
+  "resolve_summary": "edges 1203 (high 611, medium 241, low 351); 62 resolved calls are INSTANTIATES (round one 25); 367 references shown to leave the repository"
+ },
+ "definitions": {
+  "expected": 166,
+  "correct": 149,
+  "missed": 17,
+  "spurious": 4,
+  "line_on_attribute": 0,
+  "per_file": {
+   "benchmark.cc": {
+    "expected": 44,
+    "correct": 38,
+    "missed": 6,
+    "spurious": 1
+   },
+   "sysinfo.cc": {
+    "expected": 38,
+    "correct": 30,
+    "missed": 8,
+    "spurious": 3
+   },
+   "benchmark_runner.cc": {
+    "expected": 20,
+    "correct": 20,
+    "missed": 0,
+    "spurious": 0
+   },
+   "benchmark_register.cc": {
+    "expected": 51,
+    "correct": 48,
+    "missed": 3,
+    "spurious": 0
+   },
+   "json_reporter.cc": {
+    "expected": 13,
+    "correct": 13,
+    "missed": 0,
+    "spurious": 0
+   }
+  },
+  "examples": {
+   "missed": [
+    "src/benchmark.cc:174 GetGlobalContext() and :184 UseCharPointer() (namespace internal), :241 State::PauseTimingImpl, :691 AddCustomContext, :966 Initialize, :994 ReportUnrecognizedArguments",
+    "src/sysinfo.cc:278, :323, :350, :405, :442 GetCacheSizesFromKVFS / MacOSX / Windows / QNX / GetCacheSizes; :587 ~ThreadAffinityGuard; :116 union DataT; :137 explicit operator bool",
+    "src/benchmark_register.cc:106 BenchmarkFamilies::AddBenchmark, :120 BenchmarkFamilies::FindBenchmarks, :200 RegisterBenchmarkInternal (unchanged from round one)"
+   ],
+   "spurious": [
+    "src/benchmark.cc:514 class PtrType: function-local `typedef` recorded as a class (unchanged)",
+    "src/sysinfo.cc:135 ValueUnion(ValueUnion&&) = default, :606 and :607 ThreadAffinityGuard(...) = delete: declarations without a body recorded as functions (the stated rule excludes declarations without a body)"
+   ],
+   "round1_missed_now": [
+    "benchmark.cc CreateReporter :512 and GetOutputOptions :537: FIXED",
+    "benchmark.cc PrintDefaultHelp :941 and Shutdown :992: FIXED; Initialize :966 and ReportUnrecognizedArguments :994: NOT fixed",
+    "sysinfo.cc GetNumCPUsImpl, GetNumCPUs, class ThreadAffinityGuard with its constructor and SetAffinity, GetCPUCyclesPerSecond, GetLoadAvg, CPUInfo::Get and CPUInfo::CPUInfo, SystemInfo::Get and SystemInfo::SystemInfo: FIXED (R1 had only GetSystemName and GetASLR after line 258); GetCacheSizes* x5, destructor, DataT, operator bool: NOT fixed",
+    "benchmark_register.cc AddBenchmark, FindBenchmarks, RegisterBenchmarkInternal: NOT fixed",
+    "benchmark.cc GetGlobalContext, UseCharPointer, PauseTimingImpl, AddCustomContext: NOT fixed"
+   ],
+   "round1_spurious_now": [
+    "benchmark.cc:514 PtrType: NOT fixed"
+   ],
+   "header_classes": [
+    "Of the six named in the brief, BenchmarkReporter (reporter.h:56), ConsoleReporter (:161), JSONReporter (:186), Mutex (mutex.h:90), MutexLock (:102) and PerfCounters (perf_counters.h:91) are now classes (FIXED); also CSVReporter, PerfCounterValues, BenchmarkName, Run, Barrier. Still no class symbol for Counter (counter.h:31; its constructor at :53 is a function symbol), PerfCountersMeasurement, ThreadManager (thread_manager.h) or State::StateIterator."
+   ],
+   "notes": [
+    "Rule from fixtures/langs/cpp/expected.tsv: classes/structs with a body, enums, functions, out-of-line members as methods; declarations without a body, out-of-line destructors and using aliases are not listed. Counting differs from round one in sysinfo.cc (38 vs 39): I treat `= default` and `= delete` declarations as bodiless (not expected), so the tool's 3 symbols for them are spurious; round one counted none of them. Union DataT still counted expected as in round one although the rule text does not list unions.",
+    "benchmark_runner.cc 20/20 and json_reporter.cc 13/13 unchanged. benchmark.cc is still partial (16 error nodes, first at line 1), sysinfo.cc partial (7 error nodes) and benchmark_register.cc partial (7 error nodes, first at line 1); only benchmark_runner.cc is status ok.",
+    "The round-one 'Incomplete' status on benchmark.cc (iteration limit) no longer occurs."
+   ]
+  }
+ },
+ "call_precision": {
+  "high": {
+   "right": 22,
+   "wrong": 0,
+   "unclear": 8,
+   "judged": 30,
+   "examples": [
+    "8 of 30 sampled high edges are setenv(...)/unsetenv(...) in test/commandlineflags_gtest.cc bound to the local wrappers at :12/:23 that exist only under #if defined(BENCHMARK_OS_WINDOWS); on other platforms libc is called. Counted unclear (as in round one, where 3 of 30 were)."
+   ]
+  },
+  "medium": {
+   "right": 30,
+   "wrong": 0,
+   "unclear": 0,
+   "judged": 30,
+   "examples": []
+  },
+  "low": {
+   "right": 26,
+   "wrong": 4,
+   "unclear": 0,
+   "judged": 30,
+   "examples": [
+    "src/json_reporter.cc:297 FormatKV(\"error_occurred\", true) -> json_reporter.cc:81 FormatKV(string, string); callee is the bool overload at :91 (same at :319 double, :266 int64_t)",
+    "src/benchmark_name.cc:49 size_impl(ts...) -> :23 zero-argument size_impl; callee is the variadic template at :26"
+   ]
+  },
+  "note": "All 47 FormatKV references bind to the first overload at json_reporter.cc:81 (the other five have 0 inbound edges); the edge says 'overloaded: 6 declarations ... the first was taken' at low tier."
+ },
+ "round1_wrong_examples": [
+  {
+   "site": "src/json_reporter.cc:105 FormatKV(key, static_cast<int64_t>(value))",
+   "round1_tier": "high",
+   "now": "lower_tier",
+   "note": "now low, still bound to FormatKV(string,string) at :81"
+  },
+  {
+   "site": "src/json_reporter.cc:178 FormatKV(\"level\", int64_t)",
+   "round1_tier": "high",
+   "now": "lower_tier",
+   "note": "now low, still :81"
+  },
+  {
+   "site": "src/json_reporter.cc:317 FormatKV(\"time_unit\", const char*)",
+   "round1_tier": "high",
+   "now": "lower_tier",
+   "note": "now low, still :81 (the const char* overload is at :86, 5 lines away)"
+  },
+  {
+   "site": "src/colorprint.cc:127 ColorPrintf(out, color, fmt, args)",
+   "round1_tier": "high",
+   "now": "lower_tier",
+   "note": "now low, still bound to itself (:124); callee is the va_list overload at :131"
+  },
+  {
+   "site": "src/complexity.cc:211 MinimalLeastSq(n, real_time, *InitialBigO)",
+   "round1_tier": "high",
+   "now": "lower_tier",
+   "note": "now low, still the BigOFunc* overload at :90 rather than :136"
+  },
+  {
+   "site": "test/commandlineflags_gtest.cc:45, :137, :109 setenv/unsetenv (round one: unclear)",
+   "round1_tier": "high",
+   "now": "still_wrong",
+   "note": "unchanged: still high edges to the Windows-only wrappers (8 of 30 in the new high sample)"
+  },
+  {
+   "site": "test/skip_with_error_test.cc:220 EB->CheckRun(run)",
+   "round1_tier": "low",
+   "now": "still_wrong",
+   "note": "still low, bound to register_benchmark_test.cc TestCase.CheckRun@34"
+  },
+  {
+   "site": "src/benchmark.cc:328 profiler_manager_->BeforeTeardownStopWithState(*this)",
+   "round1_tier": "low",
+   "now": "gone",
+   "note": "reference is now unresolved; no edge to the test subclass"
+  }
+ ],
+ "call_recall": {
+  "sites": 40,
+  "right": 26,
+  "wrong": 1,
+  "none": 13,
+  "none_breakdown": {
+   "reference extracted and resolved but no edge (caller definition missed)": 5,
+   "reference extracted, ambiguous": 4,
+   "reference extracted, unresolved": 3,
+   "not extracted": 1
+  },
+  "per_file": {
+   "benchmark.cc": "3 right, 5 none (223 names unresolved; 243 StopTimer resolved, no edge because State::PauseTimingImpl is missed; 246 and 262 perf_counters_measurement_->Stop/Start ambiguous; 269 manager_->GetBenchmarkMutex unresolved); right: 224 Counter(...) construction, 260 timer_->StartTimer(), 269 MutexLock l(...)",
+   "sysinfo.cc": "6 right, 1 wrong, 1 none: 101 PrintImp terminal case right, 106 PrintImp(std::cerr, std::forward<Args>(args)...) bound to the zero-argument overload at :96 (callee is the variadic template at :99) wrong, 141 and 156 data() right, 167 `ValueUnion buff(sizeof(int))` now right, 175 buff.data() unresolved, 176 and 180 ValueUnion(...) right",
+   "benchmark_runner.cc": "8 right (94,95,96,102,103,108,113,116)",
+   "benchmark_register.cc": "1 right (115 MutexLock), 7 none: 108 (caller AddBenchmark missed), 153, 154, 176 (caller FindBenchmarks missed; references resolved to Benchmark::ArgsCnt, Benchmark::Args, BenchmarkInstance), 133 re.Init and 180 instance.name() ambiguous, 143 MutexLock l(mutex_) not extracted",
+   "json_reporter.cc": "8 right (StrFormat at 82, 87, 92 and StrEscape x5)"
+  },
+  "examples": [
+   "Round one: 23 right, 1 wrong, 16 none. The six declaration-style constructions that were 'not extracted' are now extracted in 5 of 6 places (MutexLock at benchmark.cc:269 and benchmark_register.cc:115, ValueUnion buff at sysinfo.cc:167 and the other ValueUnion constructions) but benchmark_register.cc:143 `MutexLock l(mutex_);` inside the unparsed FindBenchmarks has no reference at all.",
+   "Sites re-derived by source order; benchmark.cc, sysinfo.cc and register sites may differ by one or two from round one's list, which was only partly recorded."
+  ]
+ },
+ "hierarchy": {
+  "edges_total": 33,
+  "by_kind_tier": {
+   "EXTENDS/high": 6,
+   "EXTENDS/low": 27,
+   "IMPLEMENTS": 0
+  },
+  "judged": 20,
+  "right": 20,
+  "wrong": 0,
+  "unclear": 0,
+  "relationships_in_checked_files_with_repo_target": 1,
+  "relationships_with_correct_edge": 1,
+  "examples": [
+   "All 20 sampled edges point at the declared base (NullReporter/TestReporter/CapturingReporter -> BenchmarkReporter or ConsoleReporter, TestProfilerManager -> ProfilerManager, TestMemoryManager -> MemoryManager, LambdaBenchmark/Fixture/DummyBenchmark -> Benchmark, ManualThreadRunner -> ThreadRunnerBase); ConsoleReporter and JSONReporter -> BenchmarkReporter are high, most test classes low.",
+   "Round one had 15 edges (ConsoleReporter, JSONReporter and about 15 test subclasses missing); now 33. In the five files the only relationship with a repository target is ThreadRunnerDefault : ThreadRunnerBase (benchmark_runner.cc:205), recorded at low."
+  ]
+ },
+ "answers": [
+  {
+   "command": "repocortex --project . tool call find_callers name=FormatKV",
+   "first_lines": "=== SYSTEM METADATA ===\nAMBIGUOUS - \"FormatKV\" names 6 definitions and find_callers answered for none of them. Pass the path and line of one row below.\nindex_revision: 1  status: ready\noutcome: ambiguous_name\nnote: Each row is one definition. Repeat the call with the row's path and line, for example: find_callers name=FormatKV path=src/json_reporter.cc line=81\nnote: A qualified name does not select one: it is the file and the identifier, so overloads and same-named methods in one file share it. The path and line always do.",
+   "true_of_the_code": true,
+   "comment": "6 FormatKV overloads exist (json_reporter.cc:81, 86, 91, 96, 104, 108) and 6 candidates are listed. Honest, but the underlying binding is lopsided: all 47 references bind to the :81 overload and the other five report 0 callers (with 'References spelled FormatKV: 47. 0 bound to this definition, 47 bound to other definitions'), so choosing the overload at :96 gives 'No results' which, though flagged a lower bound, hides real int64_t callers. Index status now 'ready' (round one 'degraded')."
+  },
+  {
+   "command": "repocortex --project . tool call analyze_impact symbol=IsZero",
+   "first_lines": "=== SYSTEM METADATA ===\nINCOMPLETE - 0 direct callers are shown only because 2 at low confidence are excluded (pass min_confidence=low). IsZero: its name appears in 3 other place(s) that are not recorded as calls: it may be passed as a value. IsZero (src/benchmark.cc:533): 0 direct, 0 indirect; 3 more symbol(s) at low confidence are excluded (2 of them direct); pass min_confidence=low. Risk low or higher (score 0; the name occurs where no call is recorded, so a function passed as a value may reach the target; 2 caller(s) at low confidence were excluded).\nindex_revision: 1  status: ready\nnote: INCOMPLETE - 0 direct callers are shown only because 2 at low confidence are excluded (pass min_confidence=low).\nnote: INCOMPLETE FOR THIS SYMBOL - The name of the target occurs in 3 other place(s) ... (for example src/benchmark_api_internal.h:85, src/benchmark_register.cc:394, src/benchmark_register.cc:395).",
+   "true_of_the_code": true,
+   "comment": "IsZero has 5 call sites (benchmark_runner.cc:181, benchmark_register.cc:394 and :395 inside BM_CHECK, benchmark_api_internal.cc:53 and :57). The first line now says that 0 direct is a product of the confidence floor (2 low callers excluded) and that 3 further name occurrences are not recorded as calls: this is the disclosure round one lacked (it appeared only after line 6). Risk 'score 0' is still low."
+  },
+  {
+   "command": "repocortex --project . tool call find_implementations name=BenchmarkReporter",
+   "first_lines": "=== SYSTEM METADATA ===\nINCOMPLETE - at least 1 other line(s) read as a type declaration naming it and are not recorded as a subtype, so subtypes exist that this list does not carry. BenchmarkReporter (include/benchmark/reporter.h:56): 18 implementing or extending it (11 directly, 7 through other types; direct_only=true lists the direct ones alone), 0 it implements or extends.\nindex_revision: 1  status: ready\nnote: INCOMPLETE FOR THIS TYPE - at least 1 other line(s) ... (declaration-like lines: include/benchmark/types.h:39).\nnote: A type relationship is recorded only where the source states it ...",
+   "true_of_the_code": true,
+   "comment": "Round one said '0 implementing' for the constructor symbol. Now it resolves to the class at reporter.h:56 and lists 18: 11 direct (ConsoleReporter, JSONReporter, CSVReporter and 8 test classes) and 7 TestReporter classes through ConsoleReporter. I counted by text search 10 direct class declarations with a one-line `: public BenchmarkReporter` plus the multi-line CSVReporter = 11, and 7 TestReporter : ConsoleReporter = 7, so the list is complete. The INCOMPLETE warning is caused by `class BenchmarkReporter;` at types.h:39, a forward declaration, so 'subtypes exist that this list does not carry' is not true here (over-warning)."
+  }
+ ],
+ "regressions": [
+  "Three new spurious function symbols: `ValueUnion(ValueUnion&&) = default` (sysinfo.cc:135) and the two `= delete` ThreadAffinityGuard constructors (:606, :607) are extracted as functions now that the surrounding code is read (they are bodiless declarations); the destructor with a body at :587 is missed in the same class.",
+  "Overload edges moved to the lowest tier but remain wrong: FormatKV calls (47 references) all bound to the first overload; size_impl(ts...) bound to the zero-argument overload.",
+  "No right edge or definition from round one is missing in the five files."
+ ],
+ "findings": [
+  "Speed and health: indexing took 3.06 s (round one 60.9 s), no file is Incomplete and the index is READY; benchmark.cc is no longer cut at its iteration limit, but it is still partial with 16 error nodes (first at line 1), so 6 of 44 definitions are missing.",
+  "Definitions in the five files: 149 correct, 17 missed, 4 spurious of 166 expected (round one 135 correct, 32 missed, 1 spurious of 167). The conditional-compilation loss in sysinfo.cc is largely fixed (30 of 38 vs 20 of 39); BenchmarkFamilies::AddBenchmark/FindBenchmarks and RegisterBenchmarkInternal are still missing, as are GetGlobalContext, UseCharPointer, Initialize and the five GetCacheSizes functions.",
+  "The reporter and mutex classes named in round one (BenchmarkReporter, ConsoleReporter, JSONReporter, Mutex, MutexLock, PerfCounters) are now symbols; Counter, PerfCountersMeasurement and ThreadManager are not.",
+  "find_implementations BenchmarkReporter now lists 18 subtypes (11 direct, 7 transitive) which matches the source.",
+  "Overloaded calls still bind to a fixed overload: FormatKV (47 refs, all to :81), size_impl, PrintImp, MinimalLeastSq, ColorPrintf; they are now low-tier instead of high (round one 5 wrong at high) but 4 of 30 low samples are wrong.",
+  "Unix test code binds setenv/unsetenv to Windows-only wrappers at high confidence (8 of 30 sampled high edges, counted unclear).",
+  "Googletest macros are functions named Suite.Name (101 symbols, none named TEST_F). Declaration-style constructions (MutexLock l(mutex_); ValueUnion buff(n);) now produce references (62 INSTANTIATES, round one 25).",
+  "Call recall on the same kind of sites: 26 right / 1 wrong / 13 none (round one 23 / 1 / 16); the largest remaining loss is benchmark_register.cc, 7 of 8 sites none because FindBenchmarks and AddBenchmark are not symbols.",
+  "Function-local typedef PtrType still recorded as a class; `= default` / `= delete` declarations recorded as functions.",
+  "analyze_impact IsZero and find_implementations BenchmarkReporter now state their limits on the first line."
+ ],
+ "not_done": [
+  "Call recall sites for benchmark.cc, sysinfo.cc and benchmark_register.cc re-derived by source order; they may differ from round one's unrecorded list.",
+  "The test directory was not measured for definitions.",
+  "Macro invocations such as BM_CHECK were not counted as recall sites.",
+  "Whether setenv/unsetenv in the test is right or wrong depends on the platform build; counted unclear."
+ ]
+}

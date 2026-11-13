@@ -1,0 +1,224 @@
+{
+ "language": "rust",
+ "project": "sharkdp/fd",
+ "project_commit": "24d90b2",
+ "repocortex_commit": "53246ac",
+ "files_checked": [
+  "src/cli.rs",
+  "src/walk.rs",
+  "src/main.rs",
+  "src/exec/mod.rs",
+  "src/filesystem.rs"
+ ],
+ "index": {
+  "files": 60,
+  "files_indexed": 49,
+  "symbols": 972,
+  "edges_by_kind_and_tier": {
+   "CALLS": {
+    "high": 356,
+    "medium": 412,
+    "low": 10
+   },
+   "INSTANTIATES": {
+    "high": 6
+   },
+   "IMPLEMENTS": {
+    "high": 3
+   }
+  },
+  "parse_summary": {
+   "Parsed": "49 (49 clean)",
+   "Syntax errors": 0,
+   "Incomplete": 0,
+   "Failed": 0,
+   "Too large": 0,
+   "Text only": "1 (awk)",
+   "Skipped": "10 (no_grammar 9, binary 1)"
+  },
+  "index_seconds": 0.6,
+  "resolve_seconds": 0.15,
+  "notes": "Symbol kinds for Rust: function 400, class (struct/enum) 40, constant 14, interface (trait) 2. No method kind (methods are 'function' with Type.name fqn). Only 3 hierarchy edges in the whole repository."
+ },
+ "definitions": {
+  "expected": 135,
+  "correct": 128,
+  "missed": 7,
+  "spurious": 0,
+  "line_on_attribute": 0,
+  "per_file": {
+   "src/cli.rs": {
+    "expected": 22,
+    "correct": 22,
+    "missed": 0,
+    "spurious": 0
+   },
+   "src/walk.rs": {
+    "expected": 40,
+    "correct": 37,
+    "missed": 3,
+    "spurious": 0
+   },
+   "src/main.rs": {
+    "expected": 15,
+    "correct": 14,
+    "missed": 1,
+    "spurious": 0
+   },
+   "src/exec/mod.rs": {
+    "expected": 34,
+    "correct": 33,
+    "missed": 1,
+    "spurious": 0
+   },
+   "src/filesystem.rs": {
+    "expected": 24,
+    "correct": 22,
+    "missed": 2,
+    "spurious": 0
+   }
+  },
+  "rule_notes": "No fixtures/langs/rust directory exists, so no stated rule. Expected = fn (free, impl, trait-impl, #[cfg] duplicates, #[test] fns), struct, enum, trait, type aliases, const, static, inline `mod name {}` blocks. NOT counted: struct fields, enum variants, `mod x;` file declarations (17 in main.rs), `impl` headers, macro_rules! defined inside a test fn (2). Matching by exact start line; every extracted symbol matched an expected one.",
+  "examples": {
+   "missed": [
+    "src/main.rs:60 static ALLOC (jemalloc global allocator)",
+    "src/walk.rs:64 type Item = WorkerResult; and :65 type IntoIter (associated types in impl IntoIterator for Batch)",
+    "src/walk.rs:718 mod tests {...}; src/exec/mod.rs:276 mod tests; src/filesystem.rs:182 mod tests; :202 mod windows_tests",
+    "(inline mod blocks are never emitted as symbols)"
+   ],
+   "spurious": []
+  }
+ },
+ "call_precision": {
+  "high": {
+   "right": 28,
+   "wrong": 2,
+   "unclear": 0,
+   "judged": 30,
+   "examples": [
+    "tests/tests.rs:1812 -> tests/tests.rs:1919: the std format!(...) macro is bound to the test function `fn format()` (same at tests.rs:2708)"
+   ]
+  },
+  "medium": {
+   "right": 30,
+   "wrong": 0,
+   "unclear": 0,
+   "judged": 30,
+   "examples": [],
+   "note": "28 of 30 are TestEnv method calls in tests/tests.rs (the other 2: build_patterns and DirEntry::style); the tier is dominated by one receiver type in the test file, so it says little about general precision."
+  },
+  "low": {
+   "right": 8,
+   "wrong": 2,
+   "unclear": 0,
+   "judged": 10,
+   "examples": [
+    "src/walk.rs:351 -> src/cli.rs:762: builder.max_depth(config.max_depth) on the ignore crate's WalkBuilder is bound to the repo's Opts::max_depth",
+    "src/patterns.rs:27 -> src/filter/owner.rs:69: self.matches(haystack) on regex::bytes::RegexSet (external) bound to OwnerFilter::matches"
+   ]
+  },
+  "note": "Only 10 low-tier call edges exist, so all 10 were judged. No exact tier."
+ },
+ "call_recall": {
+  "sites": 37,
+  "right": 32,
+  "wrong": 0,
+  "none": 5,
+  "none_breakdown": {
+   "not_extracted": 1,
+   "extracted_unresolved": 2,
+   "ambiguous": 2,
+   "resolved_but_no_edge": 0
+  },
+  "examples": [
+   "cli.rs:723 vec![self.normalize_path(current_directory)]: not extracted (call inside a vec! macro invocation)",
+   "cli.rs:733 print_error!(...) (repo macro_rules! macro): extracted, unresolved; no macro symbol exists",
+   "main.rs:78 ExitCode::GeneralError.exit(): extracted, unresolved (the sibling exit_code.exit() at :72 is right)",
+   "exec/mod.rs:86 c.generate(input, path_separator) and :104 builder.push(&path, path_separator): extracted, resolution ambiguous, no edge",
+   "walk.rs 8 of 8 right; filesystem.rs only 5 call sites with an in-repo target (all right)"
+  ],
+  "per_file": {
+   "cli.rs": {
+    "sites": 8,
+    "right": 6,
+    "none": 2
+   },
+   "main.rs": {
+    "sites": 8,
+    "right": 7,
+    "none": 1
+   },
+   "walk.rs": {
+    "sites": 8,
+    "right": 8,
+    "none": 0
+   },
+   "exec/mod.rs": {
+    "sites": 8,
+    "right": 6,
+    "none": 2
+   },
+   "filesystem.rs": {
+    "sites": 5,
+    "right": 5,
+    "none": 0
+   }
+  }
+ },
+ "hierarchy": {
+  "edges_total": 3,
+  "edges_by_kind": {
+   "IMPLEMENTS": 3
+  },
+  "sampled": 3,
+  "right_target": 3,
+  "wrong_target": 0,
+  "wrong_kind": 0,
+  "tier_of_sample": "all high",
+  "declared_relationships_in_files": {
+   "declared_with_repo_target": 0,
+   "edge_present_right": 0,
+   "missing": 0,
+   "details": [
+    "None of the five files declares `impl RepoTrait for Type`: cli.rs implements clap::FromArgMatches / clap::Args for Exec, walk.rs implements IntoIterator for Batch (all external traits, deliberately not recorded)."
+   ]
+  },
+  "repo_wide_check": "Repo-defined traits: Matcher, SanitizeErr. `impl Matcher for FixedStrings/ExactStrings/MatchAll` (3) are recorded correctly. `impl Matcher for RegexSet/GlobSet/GlobMatcher` and `impl SanitizeErr for &str/io::Error/ignore::Error` (6) have external implementing types and no edge; no supertraits exist in the repo.",
+  "note": "Hierarchy is tiny for this project; 3/3 right, nothing else to judge."
+ },
+ "answers": [
+  {
+   "command": "find_callers name=is_existing_directory",
+   "first_lines": "=== SYSTEM METADATA ===\n3 caller(s) of is_existing_directory (src/filesystem.rs:97) are recorded.\nindex_revision: 1  status: ready\nnote: References spelled \"is_existing_directory\" in this index: 3. 3 bound to this definition.\nprovenance: This compares commits only. Staged, unstaged and untracked changes are invisible to the index and are NOT reflected here — a matching commit does not mean the working tree matches.\nverdict: strong (high=3)",
+   "true_of_the_code": true,
+   "comment": "grep finds exactly 3 call sites (cli.rs 728, cli.rs 984, main.rs 140). Correct and complete."
+  },
+  {
+   "command": "analyze_impact symbol=build_patterns",
+   "first_lines": "=== SYSTEM METADATA ===\nbuild_patterns (src/patterns.rs:73): 2 direct, 1 indirect. Risk moderate (score 30).\nindex_revision: 1  status: ready\nnote: Risk = score = sum(factors), clamped to 0..100; ...\nnote:   public_api (+0): Whether the target is exported is UNKNOWN. The index does not read the visibility rules of Rust, so it cannot say whether callers outside this repository exist. No points are added, and none should be read as subtracted.\nnote:   direct_callers (+10): 2 symbol(s) reference the target directly (depth 1). ...",
+   "true_of_the_code": true,
+   "comment": "There are 3 call sites in 2 functions (run in main.rs, and empty_matches_all-style test in patterns.rs:171/173); '2 direct' is distinct caller functions. States that Rust visibility is not read, a good limit disclosure."
+  },
+  {
+   "command": "find_implementations name=Matcher",
+   "first_lines": "=== SYSTEM METADATA ===\nMatcher (src/patterns.rs:10): 3 implementing or extending it, 0 it implements or extends.\nindex_revision: 1  status: ready\nnote: A type relationship is recorded only where the source states it ... Treat an empty list as 'none declared', not 'none exist'.\nprovenance: This compares commits only. ...\nverdict: strong (high=3)",
+   "true_of_the_code": false,
+   "comment": "The code has 6 `impl Matcher for ...` blocks (RegexSet, GlobSet, GlobMatcher, FixedStrings, ExactStrings, MatchAll). The answer lists 3 and says 'strong' with no mention that 3 implementations on external types (regex/globset) are not recorded; the disclaimer only warns about structural typing, so the first line understates the implementors by half."
+  }
+ ],
+ "findings": [
+  "find_implementations name=Matcher reports 3 implementors with verdict 'strong', but the trait has 6 `impl Matcher for` blocks; the 3 on external types (RegexSet, GlobSet, GlobMatcher) are silently absent and the answer does not say so.",
+  "The std `format!` macro is bound at high confidence to a test function named `format` (tests/tests.rs:1919) in 2 of 30 sampled high edges; macros are matched by bare name against repo functions.",
+  "Calls on external-crate types are sometimes bound to repo functions of the same name at low confidence (WalkBuilder::max_depth -> Opts::max_depth; regex RegexSet::matches -> OwnerFilter::matches): 2 of 10 low edges.",
+  "Calls inside macro invocations (vec![self.f(x)]) are not extracted; calls to repo macro_rules! macros (print_error!) are extracted but unresolved because macros are not definitions.",
+  "Method calls whose name collides with another method (c.generate, builder.push) stay 'ambiguous' and produce no edge even when the receiver's type is declared on a field (CommandTemplate.commands: Vec<CommandTemplate>).",
+  "Not definitions in the index: static items (ALLOC), associated types (type Item/IntoIter), and inline `mod x { }` blocks (tests modules); 7 misses of 135.",
+  "Definitions are otherwise exact: 0 spurious symbols and every extracted symbol on the declaration line; both #[cfg] variants of is_block_device etc. are kept.",
+  "All 49 files parse clean; index and resolve take under 1 second; tool admits that Rust visibility is unknown in analyze_impact."
+ ],
+ "not_done": [
+  "Hierarchy sample is the full set of 3 edges, not 20.",
+  "The medium-tier sample is dominated by one receiver type (TestEnv) so it cannot say much about precision on library code; I did not draw additional samples.",
+  "Struct fields and enum variants were not counted as definitions (no stated rule available)."
+ ]
+}

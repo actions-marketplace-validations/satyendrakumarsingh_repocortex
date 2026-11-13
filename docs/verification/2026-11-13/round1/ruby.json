@@ -1,0 +1,238 @@
+{
+ "language": "ruby",
+ "project": "rack/rack",
+ "project_commit": "da90464",
+ "repocortex_commit": "53246ac",
+ "files_checked": [
+  "lib/rack/lint.rb",
+  "lib/rack/request.rb",
+  "lib/rack/utils.rb",
+  "lib/rack/mime.rb",
+  "lib/rack/multipart/parser.rb"
+ ],
+ "index": {
+  "files": 186,
+  "files_indexed": 130,
+  "symbols": 1691,
+  "edges_by_kind_and_tier": {
+   "CALLS": {
+    "high": 429,
+    "medium": 258,
+    "low": 553
+   },
+   "INSTANTIATES": {
+    "high": 59,
+    "medium": 87
+   },
+   "EXTENDS": {
+    "high": 11,
+    "low": 1
+   },
+   "IMPLEMENTS": {
+    "high": 17
+   }
+  },
+  "parse_summary": {
+   "Parsed": "130 (127 clean, 1 with syntax errors, 2 incomplete)",
+   "Syntax errors": 1,
+   "Incomplete": "2 (test/cgi/assets/folder/test.js and test/cgi/assets/javascripts/app.js, 17 bytes each, 'parser stopped at byte 17 of 17')",
+   "Failed": 0,
+   "Too large": "1 (contrib/logo-lossless.webp 3.3 MiB)",
+   "Text only": "1 (editorconfig)",
+   "Skipped": "54 (no_grammar 50, binary 4)"
+  },
+  "index_seconds": 1.28,
+  "resolve_seconds": 0.39,
+  "notes": "status reports Index: DEGRADED because of the two 17-byte JavaScript fixture files flagged incomplete (they are not Ruby). References 13431."
+ },
+ "definitions": {
+  "expected": 327,
+  "correct": 305,
+  "missed": 22,
+  "spurious": 0,
+  "line_on_attribute": 0,
+  "per_file": {
+   "lib/rack/lint.rb": {
+    "expected": 56,
+    "correct": 56,
+    "missed": 0,
+    "spurious": 0
+   },
+   "lib/rack/request.rb": {
+    "expected": 131,
+    "correct": 119,
+    "missed": 12,
+    "spurious": 0
+   },
+   "lib/rack/utils.rb": {
+    "expected": 63,
+    "correct": 54,
+    "missed": 9,
+    "spurious": 0
+   },
+   "lib/rack/mime.rb": {
+    "expected": 5,
+    "correct": 5,
+    "missed": 0,
+    "spurious": 0
+   },
+   "lib/rack/multipart/parser.rb": {
+    "expected": 72,
+    "correct": 71,
+    "missed": 1,
+    "spurious": 0
+   }
+  },
+  "rule_notes": "No fixtures/langs/ruby/expected.tsv exists, so no stated rule. Expected = modules (tool kind 'package'), classes, def/def self., constants assigned at class/module level, attr_accessor/reader/writer names, alias, define_method. Of the 22 misses, 11 are attr_* names, 4 are alias/define_method and 7 are setter/operator/upper-case defs. Matching was by exact start line; every extracted symbol matched an expected one (0 spurious).",
+  "examples": {
+   "missed": [
+    "lib/rack/request.rb:95 def [](k) and :99 def []=(k, v) (operator methods)",
+    "lib/rack/request.rb:597 def GET and :649 def POST (upper-case method names)",
+    "lib/rack/request.rb:278 def script_name=(s) and :281 def path_info=(s) (setter methods; def path_info on the next line IS found)",
+    "lib/rack/utils.rb:85 def self.param_depth_limit=(v) (setter); utils.rb:242 define_method(:escape_html, ...)",
+    "lib/rack/request.rb:291 alias referrer referer; utils.rb:68/69 alias multipart_part_limit...; attr_accessor/attr_reader/attr_writer names at request.rb:18,31,40,170,669, utils.rb:29,62,64,563 (x2), parser.rb:302"
+   ],
+   "spurious": []
+  }
+ },
+ "call_precision": {
+  "high": {
+   "right": 28,
+   "wrong": 1,
+   "unclear": 1,
+   "judged": 30,
+   "examples": [
+    "lib/rack/ractorize.rb:11 -> lib/rack/request.rb:922: Request.x_forwarded_proto_priority is the class-level attr_accessor (request.rb:40) but is bound to the instance method Helpers#x_forwarded_proto_priority",
+    "lib/rack/deflater.rb:85 -> lib/rack/headers.rb:127 (unclear): headers.delete(...) where headers is the app's response headers, a plain Hash or Rack::Headers; cannot tell"
+   ]
+  },
+  "medium": {
+   "right": 30,
+   "wrong": 0,
+   "unclear": 0,
+   "judged": 30,
+   "examples": [],
+   "note": "all 30 are qualified calls (Rack::MockRequest.env_for, Rack::X.new, Rack::Utils.x) from test files; the tier is dominated by qualified-name calls, which resolve well."
+  },
+  "low": {
+   "right": 25,
+   "wrong": 5,
+   "unclear": 0,
+   "judged": 30,
+   "examples": [
+    "test/spec_request.rb:23 -> test/spec_builder.rb:23: req.env on a Rack::Request bound to the unrelated NothingMiddleware.env test helper",
+    "lib/rack/multipart.rb:53 -> test/spec_builder.rb:23: request.env (a Rack::Request) bound to test helper NothingMiddleware.env; a library file bound to a test-file symbol",
+    "test/spec_request.rb:959 -> lib/rack/response.rb:253: req.media_type_params on a Request bound to Response::Helpers#media_type_params although Request defines its own at request.rb:548 (also :1749)",
+    "lib/rack/show_exceptions.rb:50 -> lib/rack/files.rb:162: body.bytesize on a String bound to Files::BaseIterator#bytesize"
+   ]
+  },
+  "note": "Sample is test-heavy (the callers of 23 medium and ~20 low edges are test/spec files). Not in the sample but seen: 18 low-tier CALLS edges bind the Ruby keyword-method call `include X` (class bodies, e.g. parser.rb:11,15,21,27,239, request.rb:927,928) to Rack::Recursive#include (recursive.rb:52), an unrelated method that merely shares the name; and utils.rb:46 URI_PARSER.escape (stdlib parser object) is bound to Utils#escape at low."
+ },
+ "call_recall": {
+  "sites": 32,
+  "right": 22,
+  "wrong": 0,
+  "none": 10,
+  "none_breakdown": {
+   "not_extracted": 7,
+   "extracted_unresolved": 2,
+   "ambiguous": 1,
+   "resolved_but_no_edge": 0
+  },
+  "examples": [
+   "request.rb:68,72,77,82 `super` in ip/params/update_param/delete_param -> Helpers#ip etc.: not extracted (no reference at all)",
+   "multipart/parser.rb:161 default arg `query_parser: default_query_parser`, :172 `|| default_tempfile_factory`, :173 `|| default_bufsize`: not extracted",
+   "multipart/parser.rb:128 MultipartInfo.new(nil, ...) and :199 new(boundary, tmpfile, bufsize, qp): extracted, unresolved (MultipartInfo is a Struct constant; bare `new` inside self.parse)",
+   "utils.rb:102 Rack::Utils.default_query_parser.parse_query(...): extracted, resolution ambiguous, no edge (the sibling parse_nested_query at :106 does bind)",
+   "lint.rb 8 of 8 right; mime.rb has no call sites with an in-repo target"
+  ],
+  "per_file": {
+   "lint.rb": {
+    "sites": 8,
+    "right": 8,
+    "none": 0
+   },
+   "request.rb": {
+    "sites": 8,
+    "right": 4,
+    "none": 4
+   },
+   "utils.rb": {
+    "sites": 8,
+    "right": 7,
+    "none": 1
+   },
+   "mime.rb": {
+    "sites": 0,
+    "right": 0,
+    "none": 0
+   },
+   "multipart/parser.rb": {
+    "sites": 8,
+    "right": 3,
+    "none": 5
+   }
+  },
+  "note": "Calls whose target is an attr_accessor/attr_reader were not used as sites (no definition exists in the index for them)."
+ },
+ "hierarchy": {
+  "edges_total": 29,
+  "edges_by_kind": {
+   "EXTENDS": 12,
+   "IMPLEMENTS": 17
+  },
+  "sampled": 20,
+  "right_target": 20,
+  "wrong_target": 0,
+  "wrong_kind": 0,
+  "tier_of_sample": "all 20 high",
+  "declared_relationships_in_files": {
+   "declared_with_repo_target": 9,
+   "edge_present_right": 9,
+   "missing": 0,
+   "details": [
+    "request.rb: Request includes Env, Helpers (IMPLEMENTS high x2); MultipartParser < Multipart::Parser (EXTENDS low)",
+    "parser.rb: 4 error classes `include BadRequest` (IMPLEMENTS high x4); BufferPart < MimePart, TempfilePart < MimePart (EXTENDS high x2)",
+    "not counted (target outside repo): LintError < RuntimeError, extend Forwardable, MultipartPartLimitError < Errno::EMFILE, MimePart < Struct.new(...), include Enumerable"
+   ]
+  },
+  "note": "Hierarchy is the best-performing measure for Ruby. Only 29 edges exist in total, so small base."
+ },
+ "answers": [
+  {
+   "command": "find_callers name=build_nested_query",
+   "first_lines": "=== SYSTEM METADATA ===\nINCOMPLETE — 32 of the 37 references spelled \"build_nested_query\" are not among the rows below. 5 caller(s) of build_nested_query (lib/rack/utils.rb:119) are recorded.\nindex_revision: 1  status: degraded\nnote: INCOMPLETE FOR THIS SYMBOL — 32 of the 37 reference(s) spelled like this name are not listed as its callers: 32 bound to it from outside any indexed function (module top level or an anonymous callback), which no caller list records. Any of them may be a use of this definition. Run search_code for the name before concluding anything from what is absent.\nnote: References spelled \"build_nested_query\" in this index: 37. 37 bound to this definition (32 of them from outside any indexed function, so bound but not listed).\nnote: How the calls bound to this definition were made: build_nested_query x2, Rack::Utils.build_nested_query x33, Utils.build_nested_query x2. ...",
+   "true_of_the_code": true,
+   "comment": "Text search finds exactly 37 call sites (4 in lib, 33 in test/spec_utils.rb at top level of spec blocks). The answer states 5 callers and says plainly that 32 are not listed and why. Honest, but 'status: degraded' is shown because of two unrelated 17-byte JS files."
+  },
+  {
+   "command": "analyze_impact symbol=build_nested_query",
+   "first_lines": "=== SYSTEM METADATA ===\nINCOMPLETE — 32 of the 37 references spelled \"build_nested_query\" are not among the rows below. build_nested_query (lib/rack/utils.rb:119): 2 direct, 10 indirect. Risk unknown: 32 of the 37 reference(s) spelled like this name are not listed as its callers: 32 bound to it from outside any indexed function (module top level or an anonymous callback), which no caller list records.\nindex_revision: 1  status: degraded\ntruncated: depth limit 3 reached, and 2 node(s) at the limit were not expanded\nnote: INCOMPLETE FOR THIS SYMBOL — 32 of the 37 reference(s) ...\nnote: Risk = score = sum(factors), clamped to 0..100; ...",
+   "true_of_the_code": true,
+   "comment": "Risk is reported as 'unknown' rather than guessed; consistent with the 32 unlisted test references. Correctly cautious."
+  },
+  {
+   "command": "find_implementations name=BadRequest",
+   "first_lines": "=== SYSTEM METADATA ===\nBadRequest (lib/rack/bad_request.rb:6): 9 implementing or extending it, 0 it implements or extends.\nindex_revision: 1  status: degraded\nnote: A type relationship is recorded only where the source states it (extends, implements, an embedded type) or a compiler index proved it. Structural typing — ... Treat an empty list as 'none declared', not 'none exist'.\nprovenance: This compares commits only. ...\nverdict: strong (high=9)",
+   "true_of_the_code": true,
+   "comment": "BadRequest is a module included by error classes; grep shows 9 `include BadRequest`/`include Rack::BadRequest` sites. Count matches. (Initial ambiguity check: find_callers name=get_header was refused as ambiguous with 3 definitions, with a helpful hint to pass path and line.)"
+  }
+ ],
+ "findings": [
+  "Methods whose name is a setter (def x=), an operator ([] and []=) or starts with an upper-case letter (GET, POST) are never emitted as symbols: 22 such defs in lib/ (13 setters, 6 operator, 3 upper-case), 7 of them in my five files, and they cannot be search targets. attr_accessor/attr_reader/attr_writer names, alias and define_method are also never definitions (15 of the 22 misses).",
+  "18 low-confidence CALLS edges bind the Module#include keyword (`include BadRequest`, `include Env`, ...) to Rack::Recursive#include in recursive.rb, an unrelated method; all 18 are wrong and show up as callers of that method.",
+  "`super` calls are not extracted at all (Request#ip, #params, #update_param, #delete_param have no outgoing edge to the Helpers method they delegate to).",
+  "Low-tier receiver-less-type guesses are wrong in about 1 of 6 (5 of 30): `req.env`/`request.env` bound to a test helper in test/spec_builder.rb (including from a lib file), req.media_type_params bound to Response::Helpers although Request has its own, String#bytesize bound to Files::BaseIterator#bytesize.",
+  "Class-level attribute reader called as Request.x_forwarded_proto_priority is bound to the unrelated instance method of the same name in Helpers (1 wrong in 30 high).",
+  "Calls with unknown targets of stdlib objects are sometimes bound: utils.rb:46 URI_PARSER.escape bound to Utils#escape (low).",
+  "Bare `new` inside a class method (Parser.parse -> new(...)) and Struct-built constants (MultipartInfo.new) are extracted but stay unresolved, so no INSTANTIATES edge; default-argument expressions and `x || helper` fallbacks lose the call.",
+  "Index status reads DEGRADED for the whole repository because two 17-byte JavaScript test assets are flagged as incomplete parses.",
+  "Definitions in clean files are otherwise exact: 0 spurious symbols in the five files and every extracted symbol on the exact declaration line.",
+  "Most CALLS edges are test-file edges (about 3/4 of sampled medium and low edges have test callers), so lib-only precision cannot be read off these samples."
+ ],
+ "not_done": [
+  "Only the lib/ files were chosen by the fixed rule; no test files were measured for definitions.",
+  "Count of 8 recall sites per file excludes calls to attr_* methods and to external/stdlib targets; lint.rb and parser.rb sites were read from the first 130-200 lines.",
+  "No fixtures/langs/ruby/expected.tsv exists in the repository so no documented rule for Ruby definitions could be consulted."
+ ]
+}

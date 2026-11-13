@@ -1,0 +1,162 @@
+{
+  "language": "tsx",
+  "project": "tremorlabs/tremor",
+  "project_commit": "ca4d588f47820ff3d514d37fa4ee08a4222dec11",
+  "repocortex_commit": "53246ac",
+  "files_checked": [
+    "src/components/DatePicker/DatePicker.tsx (1209 lines)",
+    "src/components/ComboChart/ComboChart.tsx (1178)",
+    "src/components/AreaChart/AreaChart.tsx (989)",
+    "src/components/LineChart/LineChart.tsx (907)",
+    "src/components/BarChart/BarChart.tsx (885)"
+  ],
+  "index": {
+    "files": 198,
+    "symbols": 1736,
+    "edges_by_kind_and_tier": {
+      "tsx_callers": {"CALLS": {"high": 1221, "low": 1}, "EXTENDS": {"high": 4}, "REFERENCES": {"high": 1}},
+      "typescript_callers": {"CALLS": {"high": 11}},
+      "javascript_callers": {"CALLS": {"high": 7}},
+      "exact": {}
+    },
+    "parse_summary": {
+      "Parsed": "191 (187 clean, 4 with syntax errors)",
+      "Syntax errors": "4 files read to the end with errors the parser recovered from: AreaChart.tsx (first at line 331), BarChart.tsx (388), ComboChart.tsx (402), LineChart.tsx (330)",
+      "Incomplete": "0",
+      "Failed": "0",
+      "Too large": "0",
+      "Text only": "0",
+      "Skipped": "7 (no_grammar 6, binary 1)"
+    },
+    "resolution": "4996 references; 3687 unresolved (1418 shown to leave the repository); 12 ambiguous; 1245 edges",
+    "index_seconds": 1.17,
+    "resolve_seconds": 0.23,
+    "note": "The repository layout has the components in src/components/<Name>/<Name>.tsx and is as expected. Fixed rule picked 4 chart files that are exactly the 4 files the parser reports syntax errors in."
+  },
+  "definitions": {
+    "expected": 143,
+    "correct": 139,
+    "missed": 4,
+    "spurious": 0,
+    "line_on_attribute": 0,
+    "per_file": {
+      "src/components/DatePicker/DatePicker.tsx": {"expected": 43, "correct": 43, "missed": 0, "spurious": 0},
+      "src/components/ComboChart/ComboChart.tsx": {"expected": 27, "correct": 26, "missed": 1, "spurious": 0},
+      "src/components/AreaChart/AreaChart.tsx": {"expected": 25, "correct": 24, "missed": 1, "spurious": 0},
+      "src/components/LineChart/LineChart.tsx": {"expected": 23, "correct": 22, "missed": 1, "spurious": 0},
+      "src/components/BarChart/BarChart.tsx": {"expected": 25, "correct": 24, "missed": 1, "spurious": 0}
+    },
+    "basis": "Per the stated TSX rule: forwardRef components, arrow consts and locals at any depth count; const x = React.useCallback(...) and const x = tv(...) results and non-exported constants do not.",
+    "examples": {
+      "missed": [
+        "src/components/AreaChart/AreaChart.tsx:331 calculateHeight (arrow const inside ChartLegend, exactly where the syntax error is reported)",
+        "src/components/LineChart/LineChart.tsx:330 calculateHeight (same)",
+        "src/components/BarChart/BarChart.tsx:388 calculateHeight (same)",
+        "src/components/ComboChart/ComboChart.tsx:402 calculateHeight (same)"
+      ],
+      "spurious": []
+    }
+  },
+  "call_precision": {
+    "high": {
+      "right": 30, "wrong": 0, "unclear": 0, "judged": 30,
+      "examples": [],
+      "note": "Each was checked against the import; 19 of the 30 have a story file as caller, and 11 are in component sources (cx, LegendItem, ScrollButton, getColorClassName, Button)."
+    },
+    "medium": {"right": 0, "wrong": 0, "unclear": 0, "judged": 0, "examples": [], "note": "no medium edges exist for tsx callers"},
+    "low": {
+      "right": 0, "wrong": 1, "unclear": 0, "judged": 1,
+      "examples": [
+        "src/components/Callout/Callout.tsx:70 <Icon .../> -> src/components/Tooltip/tooltip.stories.tsx:71 Icon: Icon is a prop of Callout (const Icon rendered from props), and the target is an unrelated Storybook export named Icon in a story file"
+      ],
+      "note": "Only 1 low edge exists for tsx callers; judged."
+    },
+    "exact": {"right": 0, "wrong": 0, "unclear": 0, "judged": 0, "examples": [], "note": "no exact edges exist"}
+  },
+  "call_recall": {
+    "sites": 40,
+    "right": 40,
+    "wrong": 0,
+    "none": 0,
+    "none_breakdown": {"ambiguous": 0, "unresolved": 0, "not_extracted": 0, "resolved_but_no_edge": 0},
+    "per_file": {
+      "DatePicker.tsx": "8 sites (cx x3, <TimeSegment>, isDateRangePresets, isDatePresets, compareDates x2), 8 right",
+      "ComboChart.tsx": "8 sites (deepEqual x2, getColorClassName, cx x4, keyDownHandler), 8 right",
+      "AreaChart.tsx": "8 sites (cx x5, getColorClassName, keyDownHandler x2), 8 right",
+      "LineChart.tsx": "8 sites, 8 right",
+      "BarChart.tsx": "8 sites (deepEqual x2, cx x4, getColorClassName, keyDownHandler), 8 right"
+    },
+    "examples": [
+      "DatePicker.tsx:137 <TimeSegment .../> -> TimeSegment: JSX use bound as a CALLS edge from TimeInput, right",
+      "ComboChart.tsx:80 deepEqual(...) in renderShape -> deepEqual: right"
+    ],
+    "supplementary": "The first-8 rule reaches mostly cx(...) and local helper calls, because the JSX usages come later in each file. A supplementary check of every JSX use of a repository component in the five files found 45 uses; 39 have the right edge and 6 have none: <CalendarPrimitive> at DatePicker.tsx:639 and :941 (a component imported under another name: import { Calendar as CalendarPrimitive }; reference extracted, unresolved), and <CustomTooltip> at ComboChart.tsx:966, AreaChart.tsx:778, LineChart.tsx:730, BarChart.tsx:817 (a prop alias with no repository definition; not counted as a miss)."
+  },
+  "hierarchy": {
+    "edges_total": 4,
+    "by_kind_tier": {"EXTENDS high": 4},
+    "sample_judged": 4,
+    "sample_right": 4,
+    "sample_note": "Only 4 EXTENDS/IMPLEMENTS edges exist for tsx callers, so the 20-edge draw was not possible; all 4 judged: DatePreset and DateRangePreset to Preset, PickerProps to CalendarProps, RangeProps to PickerProps.",
+    "five_files_declared": 5,
+    "five_files_right": 4,
+    "five_files_note": "Repository-target relationships in the five files: DatePreset->Preset, DateRangePreset->Preset, PickerProps->CalendarProps, RangeProps->PickerProps, and SingleProps extends Omit<PickerProps, 'translations'>. The last has no edge (supertype written inside a generic wrapper). Excluded as external: LegendProps extends React.OlHTMLAttributes, ComboChartProps/AreaChartProps/LineChartProps/BarChartProps extends React.HTMLAttributes."
+  },
+  "answers": [
+    {
+      "command": "repocortex --project . tool call find_callers name=Button",
+      "first_lines": [
+        "=== SYSTEM METADATA ===",
+        "INCOMPLETE — rows 1-50 of 67 are shown. 67 caller(s) of Button (src/components/Button/Button.tsx:104) are recorded.",
+        "index_revision: 1  status: ready",
+        "truncated: showing rows 1-50 of 67 caller(s), so 17 are not shown here. Pass offset=50 to read on (limit accepts up to 200)",
+        "note: References spelled \"Button\" in this index: 67. 67 bound to this definition.",
+        "provenance: This compares commits only. Staged, unstaged and untracked changes are invisible to the index and are NOT reflected here — a matching commit does not mean the working tree matches."
+      ],
+      "true_of_the_code": true,
+      "comment": "A text search for '<Button' finds 67 uses in 21 files, matching the 67 references exactly. The rows are JSX usages shown as 'calls <story or component>', which is correct but reads oddly for React. The answer says plainly that it is truncated."
+    },
+    {
+      "command": "repocortex --project . tool call analyze_impact symbol=getColorClassName",
+      "first_lines": [
+        "=== SYSTEM METADATA ===",
+        "INCOMPLETE — 2 of the 32 references spelled \"getColorClassName\" are not among the rows below; rows 1-50 of 52 are shown. getColorClassName (src/utils/chartColors.ts:83): 19 direct, 33 indirect. Risk moderate or higher (score 41 counts only the callers that were bound).",
+        "index_revision: 1  status: ready",
+        "truncated: showing rows 1-50 of 52 impacted symbol(s), so 2 are not shown here. Pass offset=50 to read on (limit accepts up to 200); depth limit 3 reached, and 6 node(s) at the limit were not expanded",
+        "note: INCOMPLETE FOR THIS SYMBOL — 2 of the 32 reference(s) spelled like this name are not listed as its callers: 2 bound to it from outside any indexed function (module top level or an anonymous callback), which no caller list records. Any of them may be a use of this definition. Run search_code for the name before concluding anything from what is absent.",
+        "note: Risk = score = sum(factors), clamped to 0..100; level = low below 25, moderate below 60, high at or above 60; a level that would be low is reported as unknown when the callers could not be determined"
+      ],
+      "true_of_the_code": true,
+      "comment": "A text search finds 32 call sites of getColorClassName(...) outside chartColors.ts in 8 files, matching the 32 references. The 2 unlisted are admitted. The answer does not mention that the four chart files had syntax errors, where a caller inside the broken region could be missing."
+    },
+    {
+      "command": "repocortex --project . tool call find_implementations name=Preset",
+      "first_lines": [
+        "=== SYSTEM METADATA ===",
+        "INCOMPLETE — TypeScript types can satisfy this interface without declaring it, and those are not listed. Preset (src/components/DatePicker/DatePicker.tsx:263): 2 implementing or extending it, 0 it implements or extends.",
+        "index_revision: 1  status: ready",
+        "note: INCOMPLETE FOR THIS TYPE — TypeScript is structurally typed: an object or class that merely fits this interface is not listed. Only declared `implements` and `extends` clauses appear below, unless a compiler index was imported ('repocortex scip import').",
+        "note: A type relationship is recorded only where the source states it (extends, implements, an embedded type) or a compiler index proved it. Structural typing — a Go type that satisfies an interface without naming it, a TypeScript object that happens to fit — is visible only after 'repocortex scip import'. Treat an empty list as 'none declared', not 'none exist'.",
+        "provenance: This compares commits only. Staged, unstaged and untracked changes are invisible to the index and are NOT reflected here — a matching commit does not mean the working tree matches."
+      ],
+      "true_of_the_code": true,
+      "comment": "DatePreset and DateRangePreset are the two declared extenders, which is what the source says. The answer states its structural-typing limit."
+    }
+  ],
+  "findings": [
+    "The parser reports syntax errors in exactly the 4 chart components (AreaChart, BarChart, ComboChart, LineChart) at an ordinary arrow function with a typed parameter followed by a ternary on the next line: const calculateHeight = (height: number | undefined) =>\\n  height ? Number(height) + 15 : 60. That valid TSX is misparsed, and the arrow 'calculateHeight' is lost in all 4 files (4 missed definitions). Everything else in the 4 files was still extracted, and the status text says definitions inside unreadable regions may be missing.",
+    "Lists of a component's users omit JSX uses written through a renamed import: import { Calendar as CalendarPrimitive } and <CalendarPrimitive .../> at DatePicker.tsx:639 and :941 leave an extracted reference unresolved and no edge, so find_callers for Calendar misses the date picker.",
+    "The one low-tier tsx edge is wrong: <Icon .../> inside Callout, where Icon is a prop, is bound to an unrelated Storybook export named Icon in tooltip.stories.tsx. A prop component bound to a same-named story export is the same class of error as in the other languages.",
+    "SingleProps extends Omit<PickerProps, 'translations'> gets no EXTENDS edge: a repository supertype wrapped in a generic utility type is not recorded.",
+    "The first-8 recall rule produced 40 of 40 right, but the sample is easy (cx(...) and local helper calls dominate). JSX uses of repository components in the same five files: 39 of 41 bound (the 2 unbound are the renamed import), plus 4 <CustomTooltip> uses of a prop alias with no repository target.",
+    "Precision was clean in the sampled high tier (30 of 30), but 19 of the 30 sampled edges have a story file as caller; there is no medium tier and a single low edge, so the tiers say little about harder cases.",
+    "Calls and component usage share one edge kind: a JSX use <TimeSegment/> is stored as CALLS from the rendering component to the rendered one, which is the right direction.",
+    "find_callers and analyze_impact counts matched a text search exactly for Button (67) and getColorClassName (32), and both answers state their truncation or incompleteness."
+  ],
+  "not_done": [
+    "Precision was drawn from the whole tsx population (stories and specs included), as the brief specifies; no separate source-only number was computed.",
+    "Only the first 8 sites per file were used for the main recall figure; the supplementary JSX check covered every <Component> use of the 14 component names found in the five files, not other call kinds beyond the first 8.",
+    "Hierarchy sampling could not reach 20 because only 4 edges exist.",
+    "src/components/*/ story and spec files were not used for definitions or recall."
+  ]
+}

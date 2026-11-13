@@ -1,0 +1,255 @@
+{
+ "language": "c_sharp",
+ "project": "serilog/serilog",
+ "project_commit": "43105b3",
+ "repocortex_commit": "53246ac",
+ "files_checked": [
+  "src/Serilog/Core/Logger.cs",
+  "src/Serilog/ILogger.cs",
+  "src/Serilog/Log.cs",
+  "src/Serilog/Formatting/Json/JsonValueFormatter.cs",
+  "src/Serilog/Capturing/PropertyValueConverter.cs"
+ ],
+ "index": {
+  "files": 282,
+  "files_indexed": 261,
+  "symbols": 2051,
+  "edges_by_kind_and_tier": {
+   "CALLS": {
+    "high": 844,
+    "medium": 53,
+    "low": 338
+   },
+   "EXTENDS": {
+    "high": 8,
+    "medium": 9,
+    "low": 5
+   },
+   "IMPLEMENTS": {
+    "high": 1,
+    "medium": 1,
+    "low": 62
+   },
+   "INSTANTIATES": {}
+  },
+  "parse_summary": {
+   "Parsed": "261 (239 clean, 22 with syntax errors)",
+   "Syntax errors": 22,
+   "Incomplete": 0,
+   "Failed": 0,
+   "Too large": 0,
+   "Text only": "13 (xml 12, editorconfig 1)",
+   "Skipped": "8 (no_grammar 6, binary 2)"
+  },
+  "index_seconds": 1.81,
+  "resolve_seconds": 0.23,
+  "notes": "22 C# files parse as 'partial' incl. 4 of the 5 checked files (ILogger.cs: 224 error nodes + 80 missing tokens; Logger.cs 7+1; PropertyValueConverter.cs 2+1). References 3591; extracted reference kinds for C#: call, call.indirect, extends, implementation only (no object-creation kind)."
+ },
+ "definitions": {
+  "expected": 299,
+  "correct": 288,
+  "missed": 11,
+  "spurious": 102,
+  "line_on_attribute": 212,
+  "per_file": {
+   "src/Serilog/Core/Logger.cs": {
+    "expected": 89,
+    "correct": 87,
+    "missed": 2,
+    "spurious": 6,
+    "line_on_attribute": 72
+   },
+   "src/Serilog/ILogger.cs": {
+    "expected": 80,
+    "correct": 72,
+    "missed": 8,
+    "spurious": 82,
+    "line_on_attribute": 68
+   },
+   "src/Serilog/Log.cs": {
+    "expected": 83,
+    "correct": 82,
+    "missed": 1,
+    "spurious": 6,
+    "line_on_attribute": 71
+   },
+   "src/Serilog/Formatting/Json/JsonValueFormatter.cs": {
+    "expected": 29,
+    "correct": 29,
+    "missed": 0,
+    "spurious": 0,
+    "line_on_attribute": 0
+   },
+   "src/Serilog/Capturing/PropertyValueConverter.cs": {
+    "expected": 18,
+    "correct": 18,
+    "missed": 0,
+    "spurious": 8,
+    "line_on_attribute": 1
+   }
+  },
+  "rule_notes": "Expected = types, constructors, methods, and properties (properties counted because a developer expects them; the tool emits only kinds class/interface/method for C#, never property/struct/enum/delegate). Fields and local functions not counted. 'correct' counted by name within the 6 lines above the declaration; line_on_attribute = start line is an [Attribute] or #if line above the declaration (counted among correct).",
+  "examples": {
+   "missed": [
+    "src/Serilog/ILogger.cs:18 interface ILogger (no interface symbol at all; only methods)",
+    "src/Serilog/ILogger.cs:237 Write(level, exception, template) (symbol named Write exists only on the => line of the previous method; same for Verbose 451, Debug 610, Information 769, Warning 928, Error 1087, Fatal 1246)",
+    "src/Serilog/Core/Logger.cs:75 property HasOverrideMap",
+    "src/Serilog/Core/Logger.cs:1469 property None",
+    "src/Serilog/Log.cs:42 property Logger"
+   ],
+   "spurious": [
+    "src/Serilog/Core/Logger.cs:82 'Logger.ForContext.<locals>.ILogger' (the return type recorded as a nested method symbol; same at 105,121,167,181 and ValueTask at 1460)",
+    "src/Serilog/Log.cs:62 return type ValueTask recorded as a method; ILogger at 82,92,101,112,120",
+    "src/Serilog/ILogger.cs:69 method named 'if' (an if statement inside a default interface method); 70 method named 'return'",
+    "src/Serilog/ILogger.cs:226 method 'Write' that is just the call expression '=> Write(level, (Exception?)null, ...)' (55 such Write/Verbose/... call-expression symbols in the file)",
+    "src/Serilog/Capturing/PropertyValueConverter.cs:84 'CreateProperty.<locals>.LogEventProperty' (return type as nested method; 8 such in the file)"
+   ]
+  }
+ },
+ "call_precision": {
+  "high": {
+   "right": 30,
+   "wrong": 0,
+   "unclear": 0,
+   "judged": 30,
+   "examples": []
+  },
+  "medium": {
+   "right": 18,
+   "wrong": 11,
+   "unclear": 1,
+   "judged": 30,
+   "examples": [
+    "src/Serilog/Core/Logger.cs:421 -> src/Serilog/Core/PropertiesInlineArray.cs:13: propertyValues.AsSpan() on object?[] is System.MemoryExtensions.AsSpan, bound to repo PropertiesInlineArray.AsSpan(int)",
+    "src/Serilog/Context/LogContext.cs:97 -> PropertiesInlineArray.cs:13: enrichers.AsSpan() on an array, same standard-library extension bound to the repo struct method",
+    "test/Serilog.Tests/Core/LoggerTests.cs:131 -> src/Serilog/Log.cs:1200: log.BindProperty on an ILogger/Logger bound to the static Log.BindProperty of the unrelated static class Log",
+    "test/Serilog.Tests/Core/LoggerTests.cs:92 -> src/Serilog/Log.cs:722: log.Warning(...) on an ILogger bound to static Log.Warning (same for Information 91/Error 98/Debug in DelegatingLogger test; 7 of the 11 wrongs are this pattern)",
+    "test/Serilog.Tests/Core/LoggerTests.cs:102 -> src/Serilog/Events/LogEvent.cs:124: evt.RenderMessage() with no args calls the string-returning overload at :134, bound to the void RenderMessage(TextWriter,...) overload"
+   ]
+  },
+  "low": {
+   "right": 6,
+   "wrong": 24,
+   "unclear": 0,
+   "judged": 30,
+   "examples": [
+    "src/Serilog/Log.cs:888 -> src/Serilog/Log.cs:126: Write(level,template,value) is the generic Write<T> at :149, bound to Write(LogEvent) (first declaration); the same first-declaration pick wrongs 8 Write/Error/Debug/Fatal wrappers in Log.cs and Logger.cs",
+    "src/Serilog/Formatting/Json/JsonValueFormatter.cs:221 -> :352: FormatExactNumericValue(dc /*decimal*/) is the overload at :404, bound to the int overload",
+    "src/Serilog/Debugging/SelfLog.cs:38 -> :34: Enable(m => ...) lambda is the Action<string> overload at :51, bound to Enable(TextWriter)",
+    "test/Serilog.Tests/Support/TemporarySelfLog.cs:7 -> src/Serilog/Debugging/SelfLog.cs:34: output is Action<string>, so overload at :51 is called, bound to Enable(TextWriter)",
+    "src/Serilog/Formatting/Display/MessageTemplateTextFormatter.cs:153 -> src/Serilog/Rendering/Padding.cs:24: argument is a StringBuilder, overload at :56 is called, bound to the string overload"
+   ]
+  },
+  "note": "No exact tier and no INSTANTIATES edges exist for C#. In the low tier the right TYPE is almost always chosen (the edge detail says 'overloaded: the first declaration') but the overload is wrong in 24 of 30; counted wrong per the brief's 'exactly that definition' rule. Medium wrongs include 7 where the type is wrong (static class Log vs instance Logger/ILogger) and 2 where a BCL extension method is bound to a repo method."
+ },
+ "call_recall": {
+  "sites": 40,
+  "right": 14,
+  "wrong": 0,
+  "none": 26,
+  "none_breakdown": {
+   "not_extracted": 19,
+   "extracted_unresolved": 7,
+   "resolved_but_no_edge": 0,
+   "ambiguous": 0
+  },
+  "examples": [
+   "Logger.cs:87 new Logger(...) none, not extracted (C# object creation is never extracted; zero INSTANTIATES edges in the whole index)",
+   "Logger.cs:110 new SafeAggregateEnricher none, not extracted; Logger.cs:110 ForContext(...) right (low tier)",
+   "Logger.cs:131 _messageTemplateProcessor.CreatePropertyValue(...) none: extracted, receiver_kind=type, unresolved (receiver is a field typed MessageTemplateProcessor)",
+   "ILogger.cs lines 40-73 (8 sites: new LoggerConfiguration(), CreateLogger(), .Is(), .Logger(this), ForContext, ...) all none, not extracted: file has no references before line 147",
+   "Log.cs:84,94,103,120,128,139 Logger.ForContext/Write via the static property Logger (type ILogger) none, extracted with receiver 'ILogger' but unresolved; Log.cs:112 ForContext<TSource>() expression-bodied not extracted",
+   "PropertyValueConverter.cs:63-75 six 'new XxxPolicy()' sites none, not extracted; Guard.AgainstNull at :51,:52 right",
+   "JsonValueFormatter.cs: 8 of 8 right (Visit, Guard.AgainstNull, FormatLiteralValue, WriteQuotedJsonString)"
+  ],
+  "per_file": {
+   "Logger.cs": {
+    "sites": 8,
+    "right": 3,
+    "none": 5
+   },
+   "ILogger.cs": {
+    "sites": 8,
+    "right": 0,
+    "none": 8
+   },
+   "Log.cs": {
+    "sites": 8,
+    "right": 1,
+    "none": 7
+   },
+   "JsonValueFormatter.cs": {
+    "sites": 8,
+    "right": 8,
+    "none": 0
+   },
+   "PropertyValueConverter.cs": {
+    "sites": 8,
+    "right": 2,
+    "none": 6
+   }
+  }
+ },
+ "hierarchy": {
+  "edges_total": 86,
+  "edges_by_kind": {
+   "EXTENDS": 22,
+   "IMPLEMENTS": 64
+  },
+  "sampled": 20,
+  "right_target": 20,
+  "wrong_target": 0,
+  "wrong_kind": 0,
+  "tiers_of_sample": "1 high, 3 medium, 16 low",
+  "declared_relationships_in_files": {
+   "declared_with_repo_target": 5,
+   "edge_present_right": 4,
+   "missing": 1,
+   "details": [
+    "Logger : ILogger (repo interface) -> NO edge: reference.implementation 'ILogger' unresolved (ILogger interface symbol absent from index because ILogger.cs parses badly)",
+    "Logger : ILogEventSink -> IMPLEMENTS medium, right",
+    "JsonValueFormatter : LogEventPropertyValueVisitor<..> -> EXTENDS low, right",
+    "PropertyValueConverter : ILogEventPropertyFactory -> IMPLEMENTS low, right",
+    "PropertyValueConverter : ILogEventPropertyValueFactory -> IMPLEMENTS low, right"
+   ]
+  },
+  "note": "Kinds: all 20 sampled have the correct kind (I-prefixed -> IMPLEMENTS, others -> EXTENDS). Tier: 62 of 64 IMPLEMENTS and 5 of 22 EXTENDS are low; the tool's own find_implementations verdict is 'weak' because 23 of 24 results are low."
+ },
+ "answers": [
+  {
+   "command": "find_callers name=AgainstNull",
+   "first_lines": "=== SYSTEM METADATA ===\nINCOMPLETE — 4 of the 152 references spelled \"AgainstNull\" are not among the rows below; rows 1-50 of 148 are shown. 148 caller(s) of AgainstNull (src/Serilog/Guard.cs:13) are recorded.\nindex_revision: 1  status: ready\ntruncated: showing rows 1-50 of 148 caller(s), so 98 are not shown here. Pass offset=50 to read on (limit accepts up to 200)\nnote: INCOMPLETE FOR THIS SYMBOL — 4 of the 152 reference(s) spelled like this name are not listed as its callers: 4 bound to it from outside any indexed function (module top level or an anonymous callback), which no caller list records. Any of them may be a use of this definition. Run search_code for the name before concluding anything from what is absent.\nnote: References spelled \"AgainstNull\" in this index: 152 bound to this definition (4 of them from outside any indexed function, so bound but not listed).",
+   "true_of_the_code": true,
+   "comment": "Text search finds about 152 AgainstNull call sites in src+test (141 in src alone); 152 references / 148 callers matches. Admits truncation and the 4 unlisted references. High-confidence rows."
+  },
+  {
+   "command": "analyze_impact symbol=AgainstNull",
+   "first_lines": "=== SYSTEM METADATA ===\nINCOMPLETE — 4 of the 152 references spelled \"AgainstNull\" are not among the rows below; rows 1-50 of 179 are shown. AgainstNull (src/Serilog/Guard.cs:13): 110 direct, 69 indirect. Risk moderate or higher (score 38 counts only the callers that were bound).\nindex_revision: 1  status: ready\ntruncated: showing rows 1-50 of 179 impacted symbol(s), so 129 are not shown here. Pass offset=50 to read on (limit accepts up to 200); depth limit 3 reached, and 7 node(s) at the limit were not expanded\nnote: INCOMPLETE FOR THIS SYMBOL — 4 of the 152 reference(s) spelled like this name are not listed as its callers: ...\nnote: Risk = score = sum(factors), clamped to 0..100; level = low below 25, moderate below 60, high at or above 60; ...",
+   "true_of_the_code": true,
+   "comment": "Plausible; '110 direct' differs from find_callers' 148 callers with no explanation of the difference (distinct callers vs call sites?). The qualified form symbol=Guard.AgainstNull returned 'No symbol named \"Guard.AgainstNull\" in the index' (first attempt), so a qualified name is not accepted. Admits limits well."
+  },
+  {
+   "command": "find_implementations name=ILogEventSink",
+   "first_lines": "=== SYSTEM METADATA ===\nILogEventSink (src/Serilog/Core/ILogEventSink.cs:21): 24 implementing or extending it, 0 it implements or extends.\nindex_revision: 1  status: ready\nnote: A type relationship is recorded only where the source states it (extends, implements, an embedded type) or a compiler index proved it. Structural typing ... is visible only after 'repocortex scip import'. Treat an empty list as 'none declared', not 'none exist'.\nnote: 3 definitions are named \"ILogEventSink\". This answer is for the interface at src/Serilog/Core/ILogEventSink.cs:21 ...\nnote: Note: 24 result(s) are medium or low confidence (heuristic inference with higher error rates). Pass min_confidence='high' to restrict to compiler-verified and high-precision edges.",
+   "true_of_the_code": true,
+   "comment": "A regex over class declarations lists about 26 types naming ILogEventSink as a base; 24 reported. All 24 listed look like real implementers (spot-checked). Verdict 'weak' (23 low, 1 medium) is honest."
+  }
+ ],
+ "findings": [
+  "ILogger.cs (a core interface file using #if default-interface-method blocks) parses with 224 error nodes; the interface ILogger itself is not in the index at all, 82 of its 154 symbols are spurious (methods named 'if', 'return', 'Write' made from => expression bodies, return types), and 7 real methods are missing or misnamed. Consequently 'Logger : ILogger' gets no edge and anything calling ILogger members cannot bind.",
+  "C# object creation is never recorded: no INSTANTIATES edge exists in the index and there is no reference kind for 'new X(...)'. 19 of my 40 recall sites (all constructor calls plus ILogger.cs sites) were not extracted.",
+  "Low-tier CALLS edges pick the first declaration among overloads: 24 of 30 sampled low edges have the right type but the wrong overload (e.g. Write<T> -> Write(LogEvent), Enable(Action<string>) -> Enable(TextWriter), decimal -> int overload). Each is recorded as a call to a method with a different signature.",
+  "Medium-tier edges bind a call on an instance (ILogger/Logger) to the same-named method of the unrelated static class Log (log.Warning/Error/Information/Debug/BindProperty): 7 of 30 sampled medium edges. Also System.MemoryExtensions.AsSpan on arrays bound to repo PropertiesInlineArray.AsSpan (2 of 30), and a no-arg RenderMessage() bound to the TextWriter overload.",
+  "Return types are recorded as spurious nested method symbols (e.g. Logger.ForContext.<locals>.ILogger) in 3 of 5 files: 20 spurious symbols of this kind in the 5 files.",
+  "Static property access chains such as Log.Logger.Write(...) (receiver typed ILogger) are extracted but left unresolved; Log.cs calls to the interface methods have no edges.",
+  "Properties are never emitted as symbols (kinds are only class/interface/method); structs/enums/delegates also not present as separate kinds.",
+  "Call resolution within files parsed cleanly (JsonValueFormatter.cs) is good: 8/8 recall, 29/29 definitions.",
+  "Hierarchy edges are accurate (20/20 right target, right kind) but 67 of 86 hierarchy edges are low confidence, and find_implementations returns verdict 'weak'.",
+  "analyze_impact symbol=Guard.AgainstNull (qualified name) answered 'No symbol named' while the bare name works."
+ ],
+ "not_done": [
+  "Did not hand-judge all 154 ILogger.cs symbols individually; matching was by name within 6 lines of each declaration found with a regex, then residual mismatches inspected.",
+  "Local functions (e.g. MapToDictionaryElements in PropertyValueConverter.cs) were not counted as expected definitions.",
+  "C# recall counts 'new X()' as call sites per the brief; excluding them the 21 remaining sites give 14 right, 0 wrong, 7 none."
+ ]
+}

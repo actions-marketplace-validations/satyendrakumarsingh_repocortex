@@ -1,0 +1,335 @@
+{
+ "language": "ruby",
+ "project": "rack/rack",
+ "project_commit": "da90464",
+ "repocortex_commit": "8748b29",
+ "files_checked": [
+  "lib/rack/lint.rb",
+  "lib/rack/request.rb",
+  "lib/rack/utils.rb",
+  "lib/rack/mime.rb",
+  "lib/rack/multipart/parser.rb"
+ ],
+ "index": {
+  "files": 186,
+  "files_indexed": 130,
+  "symbols": 1752,
+  "symbol_kinds": {
+   "method": 864,
+   "class": 101,
+   "constant": 178,
+   "field": 55,
+   "package": 410,
+   "configuration": 144
+  },
+  "edges_by_kind_and_tier": {
+   "CALLS": {
+    "high": 421,
+    "medium": 258,
+    "low": 451
+   },
+   "INSTANTIATES": {
+    "high": 59,
+    "medium": 87
+   },
+   "EXTENDS": {
+    "high": 12
+   },
+   "IMPLEMENTS": {
+    "high": 17
+   }
+  },
+  "round1_edges_by_kind_and_tier": {
+   "CALLS": {
+    "high": 429,
+    "medium": 258,
+    "low": 553
+   },
+   "INSTANTIATES": {
+    "high": 59,
+    "medium": 87
+   },
+   "EXTENDS": {
+    "high": 11,
+    "low": 1
+   },
+   "IMPLEMENTS": {
+    "high": 17
+   }
+  },
+  "parse_summary": {
+   "Parsed": "130 (127 clean, 3 with syntax errors)",
+   "Syntax errors": 3,
+   "Incomplete": 0,
+   "Failed": 0,
+   "Too large": "1 (contrib/logo-lossless.webp 3.3 MiB)",
+   "Text only": "1 (editorconfig)",
+   "Skipped": "54 (no_grammar 50, binary 4)"
+  },
+  "index_seconds": 1.94,
+  "resolve_seconds": 0.5,
+  "notes": "Status now reads READY (round one: DEGRADED). The two 17-byte .js files and test/cgi/assets/stylesheets/app.css are listed as 'partial' syntax errors but no longer degrade the index. References 13440. 'package' kind count of 410 includes 256+ Markdown headings (CHANGELOG.md etc.), not Ruby modules."
+ },
+ "definitions": {
+  "expected": 327,
+  "correct": 327,
+  "missed": 0,
+  "spurious": 0,
+  "line_on_attribute": 0,
+  "per_file": {
+   "lib/rack/lint.rb": {
+    "expected": 56,
+    "correct": 56,
+    "missed": 0,
+    "spurious": 0
+   },
+   "lib/rack/request.rb": {
+    "expected": 131,
+    "correct": 131,
+    "missed": 0,
+    "spurious": 0
+   },
+   "lib/rack/utils.rb": {
+    "expected": 63,
+    "correct": 63,
+    "missed": 0,
+    "spurious": 0
+   },
+   "lib/rack/mime.rb": {
+    "expected": 5,
+    "correct": 5,
+    "missed": 0,
+    "spurious": 0
+   },
+   "lib/rack/multipart/parser.rb": {
+    "expected": 72,
+    "correct": 72,
+    "missed": 0,
+    "spurious": 0
+   }
+  },
+  "rule_notes": "Rule now stated in fixtures/langs/ruby/expected.tsv header: modules as package, classes, constants assigned in a body, methods named as written (setter, operator, constant name, predicate/bang, def self.x); attr_* one field per literal symbol; alias and alias_method define a method; define_method(:x) a method; not include/extend/calls. Expected counted by regex of def / class / module / attr_* / alias / define_method / constant assignment plus reading `private def` lines (2 found), and compared by (line,name) with the symbols table: exact agreement on all 327 in the five files.",
+  "examples": {
+   "missed": [],
+   "spurious": [],
+   "round1_missed_now": [
+    "request.rb:95 def [] and :99 def []= -> fixed (method, exact lines)",
+    "request.rb:597 GET and :649 POST -> fixed",
+    "request.rb:278 script_name= and :281 path_info= -> fixed",
+    "utils.rb:85 param_depth_limit= -> fixed",
+    "utils.rb:242 define_method(:escape_html, ...) -> fixed",
+    "request.rb:291 alias referrer, utils.rb:68/69 alias multipart_part_limit(=) -> fixed (method)",
+    "attr_accessor/attr_reader/attr_writer names (request.rb:18,31,40,170,669; utils.rb:29,62,64,563 x2; parser.rb:302) -> fixed (kind field)"
+   ]
+  }
+ },
+ "call_precision": {
+  "high": {
+   "right": 28,
+   "wrong": 1,
+   "unclear": 1,
+   "judged": 30,
+   "examples": [
+    "lib/rack/mock_request.rb:88 -> lib/rack/multipart/parser.rb:181: @parser.parse(uri) where @parser ||= URI::Parser.new (stdlib) bound to Multipart::Parser.parse because the receiver name matches the type name (high)",
+    "lib/rack/etag.rb:57 -> lib/rack/headers.rb:148 (unclear): headers.key?(ETAG_STRING) where headers is a response header hash that may be a plain Hash or Rack::Headers"
+   ]
+  },
+  "medium": {
+   "right": 30,
+   "wrong": 0,
+   "unclear": 0,
+   "judged": 30,
+   "examples": [],
+   "note": "all 30 are qualified Rack::X.method / Rack::X.new calls from test files (Rack::MockRequest.env_for x22, Rack::Lint.new etc.)"
+  },
+  "low": {
+   "right": 27,
+   "wrong": 3,
+   "unclear": 0,
+   "judged": 30,
+   "examples": [
+    "test/spec_lint.rb:526 -> test/spec_builder.rb:23: self.env.merge(env) inside `def self.app` bound to NothingMiddleware.env of another spec file; the right target is def env at spec_lint.rb:16",
+    "lib/rack/multipart/uploaded_file.rb:67 -> lib/rack/request.rb:711: @tempfile.path (stdlib Tempfile) bound to Request::Helpers#path ('only member of this name in the repository')",
+    "test/spec_request.rb:1681 -> request.rb:280: req.path_info = '/foo' (a setter call) bound to the getter path_info; the setter path_info= is at :281"
+   ]
+  },
+  "note": "Fresh sample (id*40503%65521). Sample is test-heavy again. The 'only member of this name in the repository' reason text is false when an attr field of that name exists (req.env: request.rb:170 attr_reader :env is a field, yet the reason claims the test helper is the only member). 18 `include X` -> Recursive#include edges are gone (0 now) and no library file binds to a test file any more (0 lib->test edges).",
+  "round1_wrong_examples": [
+   {
+    "site": "lib/rack/ractorize.rb:11 Request.x_forwarded_proto_priority",
+    "round1_tier": "high",
+    "now": "still_wrong",
+    "note": "still high, bound to instance method Helpers#x_forwarded_proto_priority (request.rb:922) although the class-level attr_accessor is now a symbol at request.rb:40"
+   },
+   {
+    "site": "lib/rack/deflater.rb:85 headers.delete (unclear)",
+    "round1_tier": "high",
+    "now": "gone",
+    "note": "no edge on the line"
+   },
+   {
+    "site": "test/spec_request.rb:23 req.env",
+    "round1_tier": "low",
+    "now": "still_wrong",
+    "note": "still low, bound to test/spec_builder.rb:23 NothingMiddleware.env"
+   },
+   {
+    "site": "lib/rack/multipart.rb:53 request.env",
+    "round1_tier": "low",
+    "now": "gone",
+    "note": "the env edge is gone (the line now has only parse_multipart, high, right)"
+   },
+   {
+    "site": "test/spec_request.rb:959 req.media_type_params",
+    "round1_tier": "low",
+    "now": "gone",
+    "note": "no edge on the line"
+   },
+   {
+    "site": "lib/rack/show_exceptions.rb:50 body.bytesize",
+    "round1_tier": "low",
+    "now": "gone",
+    "note": "no edge on the line"
+   },
+   {
+    "site": "18 low `include X` calls -> Recursive#include (recursive.rb:52)",
+    "round1_tier": "low",
+    "now": "gone",
+    "note": "include/extend/prepend are no longer references: 0 edges to Recursive#include; the only reference spelled prepend is utils.rb:702 clean_path.prepend (unresolved, correct)"
+   },
+   {
+    "site": "lib/rack/utils.rb:46 URI_PARSER.escape",
+    "round1_tier": "low",
+    "now": "gone",
+    "note": "no edge on the line"
+   }
+  ]
+ },
+ "call_recall": {
+  "sites": 32,
+  "right": 25,
+  "wrong": 0,
+  "none": 7,
+  "none_breakdown": {
+   "not_extracted": 3,
+   "extracted_unresolved": 2,
+   "ambiguous": 2,
+   "resolved_but_no_edge": 0
+  },
+  "examples": [
+   "lint.rb 8/8 right (Wrapper.new INSTANTIATES, .response, check_environment/check_status/check_headers/check_hijack_response/check_content_type_header/check_content_length_header)",
+   "request.rb: the four `super` sites now extracted; :68 ip, :76 update_param, :81 delete_param right (high, to Helpers#...); :72 `@params ||= super` ambiguous (several `params` definitions), no edge; :87 Headers.new and header_to_env_key :96/:100/:104 right",
+   "utils.rb: 7 right; :102 Rack::Utils.default_query_parser.parse_query still ambiguous with no edge while the sibling :106 parse_nested_query binds (low)",
+   "multipart/parser.rb: 3 right (:175 parse, :197 BoundedIO.new, :200 parser.parse low); none: :128 MultipartInfo.new unresolved (Struct constant), :199 bare `new(...)` unresolved, :161/:172/:173 default_query_parser / default_tempfile_factory / default_bufsize identifiers not extracted",
+   "mime.rb has no call sites with an in-repo target"
+  ],
+  "per_file": {
+   "lint.rb": {
+    "sites": 8,
+    "right": 8,
+    "wrong": 0,
+    "none": 0
+   },
+   "request.rb": {
+    "sites": 8,
+    "right": 7,
+    "wrong": 0,
+    "none": 1
+   },
+   "utils.rb": {
+    "sites": 8,
+    "right": 7,
+    "wrong": 0,
+    "none": 1
+   },
+   "mime.rb": {
+    "sites": 0,
+    "right": 0,
+    "wrong": 0,
+    "none": 0
+   },
+   "multipart/parser.rb": {
+    "sites": 8,
+    "right": 3,
+    "wrong": 0,
+    "none": 5
+   }
+  },
+  "round1": {
+   "sites": 32,
+   "right": 22,
+   "wrong": 0,
+   "none": 10
+  },
+  "note": "Same sites as round one (calls whose target is an attr_* were again not used as sites)."
+ },
+ "hierarchy": {
+  "edges_total": 29,
+  "edges_by_kind": {
+   "EXTENDS": 12,
+   "IMPLEMENTS": 17
+  },
+  "tiers": "all 29 high (round one: one EXTENDS low, now high)",
+  "sampled": 20,
+  "right_target": 20,
+  "wrong_target": 0,
+  "wrong_kind": 0,
+  "declared_relationships_in_files": {
+   "declared_with_repo_target": 9,
+   "edge_present_right": 9,
+   "missing": 0,
+   "details": [
+    "Request includes Env, Helpers (IMPLEMENTS high x2)",
+    "MultipartParser < Multipart::Parser (EXTENDS high; was low)",
+    "parser.rb: 4 error classes `include BadRequest` (IMPLEMENTS high x4); BufferPart, TempfilePart < MimePart (EXTENDS high x2)",
+    "not counted (target outside repo): LintError < RuntimeError, extend Forwardable, MultipartPartLimitError < Errno::EMFILE, MimePart < Struct.new(...), include Enumerable"
+   ]
+  },
+  "round1": {
+   "edges_total": 29,
+   "sampled": 20,
+   "right": 20,
+   "declared": 9,
+   "present": 9
+  }
+ },
+ "answers": [
+  {
+   "command": "find_callers name=build_nested_query",
+   "first_lines": "=== SYSTEM METADATA ===\nINCOMPLETE \u2014 32 of the 37 references spelled \"build_nested_query\" are not among the rows below. build_nested_query: its name appears in 1 other place(s) that are not recorded as calls: it may be passed as a value. 5 caller(s) of build_nested_query (lib/rack/utils.rb:119) are recorded.\nindex_revision: 1  status: ready\nnote: INCOMPLETE FOR THIS SYMBOL \u2014 32 of the 37 reference(s) spelled like this name are not listed as its callers: 32 bound to it from outside any indexed function ...\nnote: INCOMPLETE FOR THIS SYMBOL \u2014 The name of the target occurs in 1 other place(s) ... (for example CHANGELOG.md:1363). A function passed as a value ...\nnote: References spelled \"build_nested_query\" in this index: 37. 37 bound to this definition (32 of them from outside any indexed function, so bound but not listed).",
+   "true_of_the_code": true,
+   "comment": "Text search: 38 lines with the name, 37 non-definition lines; 37 bound, 5 listed, 32 explained as top-level in spec blocks. True. The new 'may be passed as a value' warning points at a CHANGELOG.md line, i.e. a prose mention: over-cautious but harmless. status now ready (round one degraded)."
+  },
+  {
+   "command": "analyze_impact symbol=build_nested_query",
+   "first_lines": "=== SYSTEM METADATA ===\nINCOMPLETE \u2014 32 of the 37 references spelled \"build_nested_query\" are not among the rows below. build_nested_query: its name appears in 1 other place(s) that are not recorded as calls: it may be passed as a value. build_nested_query (lib/rack/utils.rb:119): 2 direct, 10 indirect; at least 9 more symbol(s) at low confidence are excluded; pass min_confidence=low. Risk unknown: 32 of the 37 reference(s) ...\nindex_revision: 1  status: ready\ntruncated: depth limit 3 reached, and 2 node(s) at the limit were not expanded\nnote: ... 2 direct counts the SYMBOLS that call the target; they make 3 call site(s) between them, which is what find_callers lists, so its count is the larger of the two.",
+   "true_of_the_code": true,
+   "comment": "Now states the confidence-floor exclusion (9 low symbols), the depth cut and keeps Risk unknown. One inconsistency: it says find_callers lists 3 call sites, but find_callers lists 5 (it includes the medium test caller and the recursive self-calls)."
+  },
+  {
+   "command": "find_implementations name=BadRequest",
+   "first_lines": "=== SYSTEM METADATA ===\nBadRequest (lib/rack/bad_request.rb:6): 9 implementing or extending it, all directly, 0 it implements or extends.\nindex_revision: 1  status: ready\nnote: A type relationship is recorded only where the source states it ...\nprovenance: ...\nverdict: strong (high=9)",
+   "true_of_the_code": true,
+   "comment": "9 `include BadRequest` sites in lib/ match. Says 'all directly', which is true (no transitive includers)."
+  }
+ ],
+ "findings": [
+  "Fixed and verified: all 22 round-one missed definitions (setters, operators, GET/POST, attr_* fields, alias, literal define_method) are now symbols; the five files score 327 expected / 327 correct / 0 missed / 0 spurious. Index status is READY.",
+  "Fixed: `include`/`extend`/`prepend` are no longer references (0 edges to Recursive#include, was 18 wrong low edges); no lib file binds to a test file any more; `super` is extracted: 3 of the 4 recall sites bind to the right Helpers method, the 4th (`@params ||= super`) is ambiguous and has no edge.",
+  "Most round-one wrong edges are gone (deflater, show_exceptions bytesize, media_type_params, URI_PARSER.escape, lib->test env) but two remain wrong at the same tier: ractorize.rb:11 Request.x_forwarded_proto_priority (high, class-level attr bound to the instance method of Helpers) and spec_request.rb:23 req.env (low).",
+  "New wrong edge at HIGH tier in a fresh sample: mock_request.rb:88 `@parser.parse(uri)` where @parser is a URI::Parser (stdlib) is bound to Multipart::Parser.parse with reason 'receiver is named after the type that declares it'. The receiver-named-after-type rule (also behind headers.key? in etag.rb, unclear) can bind a stdlib object at high.",
+  "Low-tier reason text 'the only member of this name in the repository' is false whenever an attr_* field of that name exists (req.env: attr_reader :env at request.rb:170 is a symbol, but the edge goes to a test helper NothingMiddleware.env). Also a setter call `req.path_info = x` binds to the getter path_info instead of path_info=, and `@tempfile.path` (stdlib) binds to Request::Helpers#path at low.",
+  "Remaining recall gaps: bare identifiers without parentheses used as calls (default arguments `query_parser: default_query_parser`, `x || default_bufsize`) are not extracted; `MultipartInfo.new` on a Struct constant and bare `new(...)` inside a class method are extracted but unresolved; Rack::Utils.default_query_parser.parse_query is ambiguous with no edge.",
+  "analyze_impact says find_callers lists 3 call sites while find_callers lists 5 callers for build_nested_query (small inconsistency in the note).",
+  "Pre-existing: the 'weak self-call via top-level spec blocks' limit remains (32 of 37 references are in spec blocks and are not callers), but is declared on the first line.",
+  "The 'package' kind is also used for Markdown headings (410 packages, 256+ from CHANGELOG.md): not Ruby-specific but inflates the module count."
+ ],
+ "not_done": [
+  "Definitions were compared with a regex-generated expected list plus a manual look at lines the regex could not classify (`private def`); local lambdas and block-local helpers were not counted.",
+  "Sample callers are test-heavy again; lib-only precision cannot be read off.",
+  "line_on_attribute is not applicable for Ruby."
+ ],
+ "regressions": [
+  "None found: no definition, recall site, hierarchy edge or round-one right edge disappeared. One quality change: the MultipartParser < Multipart::Parser edge moved from low to high (improvement). Raw edge count fell (CALLS low 553 -> 451) mostly from the removed `include` edges."
+ ]
+}

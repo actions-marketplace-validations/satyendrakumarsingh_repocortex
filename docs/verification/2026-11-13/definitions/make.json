@@ -1,0 +1,81 @@
+{
+ "language": "make",
+ "project": "micropython/micropython",
+ "project_commit": "d2d095d0fe6e83c53fd0ef90643f7d2b8b1c1645",
+ "repocortex_commit": "f783fa5",
+ "files": [
+  {
+   "path": "ports/stm32/Makefile",
+   "lines": 744,
+   "assigned_language": "make",
+   "parse_status": "partial",
+   "parse_error": "syntax_errors: 117 error nodes and 0 missing tokens, first at line 1; definitions inside the regions the parser could not read may be missing",
+   "expected": 75,
+   "correct": 0,
+   "missed": 75,
+   "missed_known_gap": 0,
+   "spurious": 0,
+   "line_on_attribute": 0,
+   "total_symbols": 0
+  },
+  {
+   "path": "ports/mimxrt/Makefile",
+   "lines": 628,
+   "assigned_language": "make",
+   "parse_status": "partial",
+   "parse_error": "syntax_errors: 218 error nodes and 0 missing tokens, first at line 1; definitions inside the regions the parser could not read may be missing",
+   "expected": 45,
+   "correct": 0,
+   "missed": 45,
+   "missed_known_gap": 0,
+   "spurious": 0,
+   "line_on_attribute": 0,
+   "total_symbols": 0
+  },
+  {
+   "path": "extmod/extmod.mk",
+   "lines": 699,
+   "assigned_language": "make",
+   "parse_status": "ok",
+   "parse_error": "",
+   "expected": 22,
+   "correct": 22,
+   "missed": 0,
+   "missed_known_gap": 0,
+   "spurious": 0,
+   "line_on_attribute": 0,
+   "total_symbols": 22
+  }
+ ],
+ "totals": {
+  "expected": 142,
+  "correct": 22,
+  "missed": 120,
+  "missed_known_gap": 0,
+  "spurious": 0,
+  "line_on_attribute": 0
+ },
+ "examples": {
+  "missed": [
+   "ports/stm32/Makefile:5 BOARD ?= $(notdir $(BOARD_DIR:/=))",
+   "ports/stm32/Makefile:553 all: $(TOP)/lib/stm32lib/README.md all_main $(BUILD)/firmware.hex",
+   "ports/stm32/Makefile:572 define RUN_DFU",
+   "ports/mimxrt/Makefile:20 BUILD ?= build-$(BOARD)",
+   "ports/mimxrt/Makefile:580 all: $(BUILD)/firmware.hex ..."
+  ],
+  "spurious": []
+ },
+ "rule_objections": [
+  "Rule is fine. Whole-file loss is a parser problem, not a rule problem.",
+  "Expected counts come from my own line scanner (variables with = := ::= ?= != at column 0 incl. inside ifeq, define NAME, literal targets once per rule line, no += / .PHONY / $(var)-spelled targets) reviewed by eye; repeated names (BOARD at lines 5 and 8, all_main x4) counted once per occurrence, which is how the tool treats repeats in extmod.mk. Counts may be off by a couple."
+ ],
+ "findings": [
+  "SERIOUS: two of three files yield ZERO symbols (stm32/Makefile and mimxrt/Makefile: ~120 definitions: dozens of variables, 8 define macros, deploy/all targets). Both are flagged parse_status=partial with 'first at line 1'. Cause isolated by bisection in a scratch directory: the single line `BOARD ?= $(notdir $(BOARD_DIR:/=))` (a substitution reference `$(VAR:/=)`) makes the grammar fail and the extractor then returns nothing for the entire file, even for plain `A = 1` lines elsewhere. Reproduced with a 2-line file; `ifdef/else/endif`, `$(error ...)`, `$(wildcard)`, `$(shell)` alone are fine. The idiom is a standard GNU make substitution reference (it appears in both of the port Makefiles I took, and is not mentioned in KNOWN_GAPS.md).",
+  "extmod/extmod.mk (clean parse): 22 expected, 22 found, correct names, lines and kind.",
+  "Partial-parse behaviour differs from CSS/SCSS, where partial files keep the definitions that parsed; for Make a partial parse means all-or-nothing.",
+  "Text search still works on the zero-symbol files (`search pydfu` finds ports/stm32/Makefile)."
+ ],
+ "not_done": [
+  "Did not re-run on a Makefile without `$(X:/=)` to measure the normal case beyond extmod.mk (only one clean file). Did not measure define/target kinds on a clean file with targets (extmod.mk has none)."
+ ]
+}

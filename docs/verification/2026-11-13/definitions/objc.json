@@ -1,0 +1,74 @@
+{
+ "language": "objc",
+ "project": "AFNetworking/AFNetworking (AFNetworking/AFURLSessionManager.h, AFNetworking/AFURLRequestSerialization.h, UIKit+AFNetworking/AFImageDownloader.m)",
+ "project_commit": "d9f589c",
+ "repocortex_commit": "f783fa5",
+ "files": [
+  {
+   "path": "AFNetworking/AFURLSessionManager.h",
+   "lines": 516,
+   "assigned_language": "objc",
+   "parse_status": "partial",
+   "parse_error": "syntax_errors: 97 error nodes and 33 missing tokens, first at line 91",
+   "expected": 38,
+   "correct": 0,
+   "missed": 38,
+   "spurious": 12,
+   "missed_known_gap": 0,
+   "line_on_attribute": 0
+  },
+  {
+   "path": "AFNetworking/AFURLRequestSerialization.h",
+   "lines": 479,
+   "assigned_language": "objc",
+   "parse_status": "partial",
+   "parse_error": "syntax_errors: 2 error nodes and 2 missing tokens, first at line 47",
+   "expected": 37,
+   "correct": 37,
+   "spurious": 1,
+   "missed": 0,
+   "missed_known_gap": 0,
+   "line_on_attribute": 0
+  },
+  {
+   "path": "UIKit+AFNetworking/AFImageDownloader.m",
+   "lines": 421,
+   "assigned_language": "objc",
+   "parse_status": "ok",
+   "parse_error": "",
+   "expected": 43,
+   "correct": 43,
+   "missed": 0,
+   "missed_known_gap": 0,
+   "spurious": 0,
+   "line_on_attribute": 0
+  }
+ ],
+ "totals": {
+  "expected": 118,
+  "correct": 80,
+  "missed": 38,
+  "missed_known_gap": 0,
+  "spurious": 13,
+  "line_on_attribute": 0
+ },
+ "examples": [
+  "AFURLSessionManager.h:91 @interface AFURLSessionManager : NSObject <NSURLSessionDelegate, ...> (missed; also its 11 @property and 26 method declarations, lines 96-448)",
+  "AFURLSessionManager.h:179 - (instancetype)initWithSessionConfiguration:(...)configuration NS_DESIGNATED_INITIALIZER; (missed)",
+  "AFURLSessionManager.h:464 FOUNDATION_EXPORT NSString * const AFNetworkingTaskDidCompleteNotification; (spurious variable: an extern declaration, and it is const; 12 such, lines 459-514)",
+  "AFURLRequestSerialization.h:31 symbol 'NSString' kind variable (spurious: the line is NS_ASSUME_NONNULL_BEGIN; the name is a type from the function prototype at line 47)"
+ ],
+ "rule_objections": [
+  "Not recording extern const NSString* keys (FOUNDATION_EXPORT) or NS_ENUM typedefs leaves out public API names developers look up (notification names, enum types)."
+ ],
+ "findings": [
+  "AFURLSessionManager.h (516 lines): the grammar fails from the first @interface (97 error nodes) and none of the 38 declarations (class, 11 properties, 26 methods) is extracted; the file yields only 12 spurious symbols.",
+  "The 12 spurious are 'FOUNDATION_EXPORT NSString * const X;' extern declarations recorded as kind variable. The rule says extern declarations are not listed and file-level const should be constant, so they are wrong twice (not a known gap). The same pattern at AFURLRequestSerialization.h:447-477 produced nothing, so the behaviour is inconsistent.",
+  "AFURLRequestSerialization.h: all 37 expected definitions correct, but one spurious variable named 'NSString' at line 31, a type name taken from the prototype 'FOUNDATION_EXPORT NSString * AFPercentEscapedStringFromString(...)' at line 47, with the symbol starting at the wrong line.",
+  "Detection: .h and .m files of this project were assigned objc by content (detected_by=content), not C/MATLAB as KNOWN_GAPS says; good. The three largest by the stated rule include two .h files.",
+  "Supplementary check, not in the counts: the three largest .m files (AFImageDownloader.m, AFHTTPSessionManager.m, AFSecurityPolicy.m) gave 87 expected, 87 correct, 0 missed, 0 spurious, including static C functions, @interface () extension properties and categories-free classes."
+ ],
+ "not_done": [
+  "Expected sets built from a grep of ObjC declaration shapes and read by eye; the supplementary .m trio was compared only by line and name."
+ ]
+}

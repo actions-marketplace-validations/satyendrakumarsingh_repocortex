@@ -1,0 +1,169 @@
+{
+  "language": "python",
+  "project": "pallets/click",
+  "project_commit": "e38188e9e205005d5af5f9e59df51904c984586a",
+  "repocortex_commit": "53246ac",
+  "files_checked": [
+    "src/click/types.py",
+    "src/click/termui.py",
+    "src/click/_termui_impl.py",
+    "src/click/testing.py",
+    "src/click/shell_completion.py"
+  ],
+  "index": {
+    "files": 178,
+    "symbols": 2989,
+    "edges_by_kind_and_tier": {
+      "CALLS": {
+        "high": 2068,
+        "medium": 279,
+        "low": 209
+      },
+      "INSTANTIATES": {
+        "high": 588,
+        "medium": 2,
+        "low": 10
+      },
+      "EXTENDS": {
+        "high": 42,
+        "medium": 2,
+        "low": 35
+      }
+    },
+    "parse_summary": {
+      "Parsed": "151 (151 clean)",
+      "Syntax errors": 0,
+      "Incomplete": 0,
+      "Failed": 0,
+      "Too large": 0,
+      "Text only": "2 (editorconfig 1, ini 1)",
+      "Skipped": "27 (no_grammar 18, empty 5, binary 2)"
+    },
+    "index_seconds": 1.37,
+    "resolve_seconds": 0.32
+  },
+  "definitions": {
+    "expected": 281,
+    "correct": 281,
+    "missed": 0,
+    "spurious": 7,
+    "line_on_attribute": 0,
+    "examples": {
+      "missed": [],
+      "spurious": [
+        "src/click/termui.py:235 function prompt_func (nested def inside prompt())",
+        "src/click/_termui_impl.py:800 function _unquote_file (nested def inside open_url())",
+        "src/click/testing.py:504 function visible_input (nested def inside CliRunner.isolation)",
+        "src/click/testing.py:515 hidden_input, :524 _getchar, :535 should_strip_ansi, :554 _patched_pdb_init (all nested defs inside isolation())"
+      ],
+      "note": "Tool rows per file: types.py 111, termui.py 34, _termui_impl.py 49, testing.py 48, shell_completion.py 46 = 288. A line-number diff between my declaration scan (def/class/top-level assignments) and the symbols table showed no missing declaration. Methods are kind 'function'; I treated that as the same kind family. No python fixtures/expected.tsv exists in the repository, so the rule used was: functions, methods, classes, top-level constants/variables, not class-body fields. Nested closures are counted spurious as locals (7). The overloaded def stubs (types.py convert_type x4, shell_completion.py get_completion_class x5, termui.py prompt/progressbar/edit) are separate real declarations and counted correct; a stricter reader might call them duplicates. core.py (4018 lines) skipped by the size rule."
+    }
+  },
+  "call_precision": {
+    "high": {
+      "right": 29,
+      "wrong": 1,
+      "unclear": 0,
+      "judged": 30,
+      "examples": [
+        "src/click/_termui_impl.py:963 -> src/click/_termui_impl.py:882: raw_terminal() is called in the non-Windows branch (def at 936) but bound to the Windows-branch definition at 882"
+      ]
+    },
+    "medium": {
+      "right": 28,
+      "wrong": 1,
+      "unclear": 1,
+      "judged": 30,
+      "examples": [
+        "tests/test_stream_lifecycle.py:329 -> src/click/testing.py:124: t.start() on a threading.Thread bound to _FDCapture.start",
+        "unclear: tests/test_testing.py:877 sys.stdout.fileno() -> src/click/testing.py:216 _NamedTextIOWrapper.fileno; true only at runtime because CliRunner swaps sys.stdout, the static call is on sys.stdout"
+      ]
+    },
+    "low": {
+      "right": 8,
+      "wrong": 20,
+      "unclear": 2,
+      "judged": 30,
+      "examples": [
+        "tests/test_commands.py:84 -> tests/test_commands.py:171: runner.invoke (CliRunner.invoke) bound to a test-local Command subclass's invoke",
+        "tests/test_context.py:693 -> src/click/core.py:1423: runner.invoke (CliRunner) bound to Command.invoke (same pattern at 329, 293, 390, 504, 161, 487 and others)",
+        "src/click/_termui_impl.py:610 -> src/click/_termui_impl.py:414: stdin.close() on a subprocess pipe bound to _PagerWriter.close",
+        "tests/test_termui.py:409 -> src/click/_termui_impl.py:885: click.getchar() bound to the Windows implementation instead of termui.getchar (termui.py:957)",
+        "src/click/core.py:1395 -> src/click/core.py:2029: parser.parse_args (the option parser object) bound to Group.parse_args"
+      ],
+      "note": "Also wrong in the low sample: test_commands.py:285 ctx.invoke -> test class invoke; _compat.py:82 self._stream.isatty() -> _winconsole.py:215; test_termui.py:1160 pager.close() and :1315 f.close() -> _AtomicFile.close; testing.py:755 sys.stdout.flush() -> BytesIOCopy.flush; test_termui.py:1001 pager.write -> RecordingStream.write. Unclear: test_testing.py:146 o.flush(), test_termui.py:706 pager.write. Right (8): core.py:1398, core.py:754, test_info_dict.py:281, test_context.py:29, core.py:2150, examples/repo/repo.py:110, test_info_dict.py:68, testing.py:767."
+    },
+    "note": "Tiers present: high, medium, low (no exact). 30 drawn per tier, edges include test and example callers. Outside the sample, src/click/testing.py:76 self._input.read1(n) (a BinaryIO) is bound at medium to _compat.py:108 read1."
+  },
+  "call_recall": {
+    "sites": 40,
+    "right": 36,
+    "wrong": 0,
+    "none": 4,
+    "none_breakdown": {
+      "extracted_ambiguous": 3,
+      "extracted_unresolved": 1,
+      "not_extracted": 0,
+      "resolved_but_no_edge": 0
+    },
+    "examples": [
+      "src/click/types.py:263 super().to_info_dict() -> ParamType.to_info_dict (types.py:122): reference extracted, state ambiguous, no edge",
+      "src/click/types.py:367 super().to_info_dict(): same, ambiguous, no edge",
+      "src/click/shell_completion.py:48 comp.source() (ShellComplete.source, shell_completion.py:338): receiver comp, ambiguous, no edge",
+      "src/click/_termui_impl.py:75 _default_text_stdout() (defined as a module constant, _compat.py:576): reference extracted but unresolved, though a symbol of that name exists in the index"
+    ],
+    "note": "Per file right/sites: types.py 6/8, termui.py 8/8, _termui_impl.py 7/8, testing.py 8/8, shell_completion.py 7/8. In shell_completion.py I skipped line 44 comp_cls(...) as a dynamic class call (reference unresolved)."
+  },
+  "hierarchy": {
+    "extends_implements_edges": 79,
+    "judged": 20,
+    "right": 20,
+    "wrong": 0,
+    "declared_in_five_files": 30,
+    "right_edges_for_declared": 13,
+    "missing_examples": [
+      "src/click/types.py:242 CompositeParamType(ParamType[_ValueT_co])",
+      "src/click/types.py:294 StringParamType(ParamType[str])",
+      "src/click/types.py:603 _NumberRangeBase(_NumberParamTypeBase[...], t.Generic[...])",
+      "src/click/types.py:715 IntRange(_NumberRangeBase[int, int], IntParamType): the IntParamType edge exists, the _NumberRangeBase edge does not",
+      "src/click/types.py:1229 Tuple(CompositeParamType[tuple[...]])"
+    ],
+    "note": "Edges by kind: EXTENDS only (42 high, 2 medium, 35 low); no IMPLEMENTS. Precision of the 20 sampled is perfect (all targets correct, 12 of them low/medium tier test classes written as click.Group etc.). Recall in the five files is poor: every base written with a subscript (ParamType[...], _NumberParamTypeBase[...], CompositeParamType[...]) has no edge, 17 of 30 declared relationships; whole-project text search finds 31 direct subclasses of ParamType, 18 with a subscripted base, and the index has the 13 plain ones only."
+  },
+  "answers": [
+    {
+      "command": "repocortex --project . tool call find_callers name=resolve_color_default",
+      "first_lines": "=== SYSTEM METADATA ===\n5 caller(s) of resolve_color_default (src/click/globals.py:54) are recorded.\nindex_revision: 1  status: ready\nnote: References spelled \"resolve_color_default\" in this index: 5. 5 bound to this definition.\nprovenance: This compares commits only. Staged, unstaged and untracked changes are invisible to the index and are NOT reflected here — a matching commit does not mean the working tree matches.\nverdict: strong (high=5)",
+      "true_of_the_code": true,
+      "comment": "A text search finds exactly 5 call sites (termui.py:99,362,581; exceptions.py:48; utils.py:326). Count matches."
+    },
+    {
+      "command": "repocortex --project . tool call analyze_impact symbol=convert_type",
+      "first_lines": "=== SYSTEM METADATA ===\nAMBIGUOUS — \"convert_type\" names 4 definitions and analyze_impact answered for none of them. Pass the path and line of one row below.\nindex_revision: 1  status: ready\noutcome: ambiguous_name\nnote: Each row is one definition. Repeat the call with the row's path and line, for example: analyze_impact symbol=convert_type path=src/click/types.py line=1318\nnote: A qualified name does not select one: it is the file and the identifier, so overloads and same-named methods in one file share it. The path and line always do.",
+      "true_of_the_code": true,
+      "comment": "The file has 4 declarations of convert_type (three @overload stubs and the implementation, types.py:1318-1327), so the statement is true, but the tool gives no impact for what is really one function."
+    },
+    {
+      "command": "repocortex --project . tool call find_implementations name=ParamType",
+      "first_lines": "=== SYSTEM METADATA ===\nParamType (src/click/types.py:65): 13 implementing or extending it, 0 it implements or extends.\nindex_revision: 1  status: ready\nnote: A type relationship is recorded only where the source states it (extends, implements, an embedded type) or a compiler index proved it. Structural typing — a Go type that satisfies an interface without naming it, a TypeScript object that happens to fit — is visible only after 'repocortex scip import'. Treat an empty list as 'none declared', not 'none exist'.\nnote: Note: 13 result(s) are medium or low confidence (heuristic inference with higher error rates). Pass min_confidence='high' to restrict to compiler-verified and high-precision edges.",
+      "true_of_the_code": false,
+      "comment": "Text search finds 31 direct subclasses of ParamType (src/tests/examples); the index lists 13 and misses all 18 written ParamType[...], including every built-in type (StringParamType, Choice, Path, File, ...). The first line states 13 as a plain fact, and the note says empty means 'none declared', which does not warn that generic-subscripted bases are not read. It does flag the results as low/medium confidence (verdict: weak)."
+    }
+  ],
+  "findings": [
+    "Base classes written with a subscript (ParamType[str], _NumberParamTypeBase[...], CompositeParamType[...]) produce no EXTENDS edge: 17 of 30 declared repo-internal supertypes in the five files are missing, and find_implementations ParamType returns 13 of 31 subclasses (all 11 built-in subclasses in src/click/types.py are absent) while reporting the count as a plain fact.",
+    "Low-confidence CALLS edges are wrong 20 of 30 (8 right, 2 unclear): runner.invoke (CliRunner) is bound to Command.invoke or to a test class's invoke; methods on stdlib or generic objects (.close(), .flush(), .write(), .start(), .isatty()) are bound to same-named repo methods.",
+    "Medium-tier CALLS: 28 right, 1 wrong (threading.Thread.start bound to _FDCapture.start), 1 unclear of 30. One unsampled medium edge, testing.py:76 self._input.read1 bound to _compat.py:108 read1, is also wrong.",
+    "High tier: 29 of 30 right; the wrong one binds raw_terminal() in the non-Windows branch to the Windows-branch definition (_termui_impl.py:963 -> :882). A call to click.getchar() (tests/test_termui.py:409) is bound at low to the Windows impl at _termui_impl.py:885 instead of termui.getchar.",
+    "super().to_info_dict() calls (types.py:263, :367) and comp.source() (shell_completion.py:48) get no edge: the reference is recorded as ambiguous. _default_text_stdout() (_termui_impl.py:75) is left unresolved although a symbol of that name is indexed (as a constant, _compat.py:576). Call recall in the five files was 36 of 40, no wrong bindings.",
+    "7 nested def closures are indexed as definitions (termui.py:235, _termui_impl.py:800, testing.py:504,515,524,535,554); no definition was missed in the five files (0 of 281).",
+    "analyze_impact refuses an overloaded function (ambiguous_name, 4 definitions for convert_type) rather than answering; true to the code but the agent gets no impact numbers.",
+    "No crash or error; index 1.37 s, resolve 0.32 s."
+  ],
+  "not_done": [
+    "No python fixtures/expected.tsv exists in the repository, so the exact documented rule for Python could not be read; I used a general rule.",
+    "core.py (4018 lines) is the largest file but was skipped by the 1,500-line rule; the hardest code was not measured.",
+    "Call recall excluded dynamic class calls such as comp_cls(...) (one skipped).",
+    "Hierarchy sample draws came from the whole project including test classes, not only the five files."
+  ]
+}

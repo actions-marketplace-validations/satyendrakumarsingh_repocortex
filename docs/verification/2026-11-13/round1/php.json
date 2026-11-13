@@ -1,0 +1,228 @@
+{
+ "language": "php",
+ "project": "Seldaek/monolog",
+ "project_commit": "3bed304",
+ "repocortex_commit": "53246ac",
+ "files_checked": [
+  "src/Monolog/Logger.php",
+  "src/Monolog/Handler/TelegramBotHandler.php",
+  "src/Monolog/Handler/SocketHandler.php",
+  "src/Monolog/Formatter/NormalizerFormatter.php",
+  "src/Monolog/Handler/Slack/SlackRecord.php"
+ ],
+ "index": {
+  "files": 262,
+  "files_indexed": 250,
+  "symbols": 2222,
+  "edges_by_kind_and_tier": {
+   "CALLS": {
+    "high": 1722,
+    "low": 360
+   },
+   "INSTANTIATES": {
+    "high": 877
+   },
+   "EXTENDS": {
+    "high": 18,
+    "medium": 90,
+    "low": 85
+   },
+   "IMPLEMENTS": {
+    "high": 9,
+    "medium": 40
+   }
+  },
+  "parse_summary": {
+   "Parsed": "250 (250 clean)",
+   "Syntax errors": 0,
+   "Incomplete": 0,
+   "Failed": 0,
+   "Too large": 0,
+   "Text only": "1 (editorconfig)",
+   "Skipped": "11 (no_grammar 9, binary 2)"
+  },
+  "index_seconds": 1.16,
+  "resolve_seconds": 0.39,
+  "notes": "Symbols: method 1594, class 250, function 17, interface 11 (traits are listed as interfaces per fixtures/langs/php/expected.tsv). No medium tier for CALLS/INSTANTIATES. Resolve printed 'Data access: 1 statement(s), 0 bound to a declared table' (unrelated to PHP code)."
+ },
+ "definitions": {
+  "expected": 130,
+  "correct": 130,
+  "missed": 0,
+  "spurious": 0,
+  "line_on_attribute": 0,
+  "per_file": {
+   "src/Monolog/Logger.php": {
+    "expected": 38,
+    "correct": 38,
+    "missed": 0,
+    "spurious": 0
+   },
+   "src/Monolog/Handler/TelegramBotHandler.php": {
+    "expected": 21,
+    "correct": 21,
+    "missed": 0,
+    "spurious": 0
+   },
+   "src/Monolog/Handler/SocketHandler.php": {
+    "expected": 33,
+    "correct": 33,
+    "missed": 0,
+    "spurious": 0
+   },
+   "src/Monolog/Formatter/NormalizerFormatter.php": {
+    "expected": 22,
+    "correct": 22,
+    "missed": 0,
+    "spurious": 0
+   },
+   "src/Monolog/Handler/Slack/SlackRecord.php": {
+    "expected": 16,
+    "correct": 16,
+    "missed": 0,
+    "spurious": 0
+   }
+  },
+  "rule_notes": "Rule from fixtures/langs/php/expected.tsv: functions, classes, interfaces, traits, enums, methods and constructors; calls, new, use and promoted constructor parameters are not definitions. Class constants, properties and closures were not counted. Expected set found by a line-anchored regex (every function/class/interface/trait/enum/case declaration), matched to the tool by exact start line.",
+  "examples": {
+   "missed": [],
+   "spurious": []
+  }
+ },
+ "call_precision": {
+  "high": {
+   "right": 27,
+   "wrong": 3,
+   "unclear": 0,
+   "judged": 30,
+   "examples": [
+    "tests/Monolog/Handler/MailHandlerTest.php:35 -> src/Monolog/Handler/Handler.php:24: $handler is a partial mock of MailHandler, which overrides handleBatch (MailHandler.php:28); bound to the base Handler::handleBatch",
+    "tests/Monolog/Handler/ElasticaHandlerTest.php:204 -> src/Monolog/Handler/Handler.php:24: $handler = new ElasticaHandler, which overrides handleBatch (ElasticaHandler.php:121)",
+    "tests/Monolog/Handler/SocketHandlerTest.php:251 -> src/Monolog/Handler/Handler.php:34: $this->handler is a SocketHandler mock; SocketHandler::close (SocketHandler.php:93) overrides Handler::close"
+   ]
+  },
+  "medium": {
+   "right": 0,
+   "wrong": 0,
+   "unclear": 0,
+   "judged": 0,
+   "examples": [],
+   "note": "No medium-tier CALLS/INSTANTIATES edges exist for PHP."
+  },
+  "low": {
+   "right": 24,
+   "wrong": 5,
+   "unclear": 1,
+   "judged": 30,
+   "examples": [
+    "tests/Monolog/Handler/ZendMonitorHandlerTest.php:56 -> src/Monolog/LogRecord.php:119: PHPUnit mock builder ->with(...) bound to LogRecord::with; same at RedisHandlerTest.php:58, RedisPubSubHandlerTest.php:59, UdpSocketTest.php:60 (4 of 30)",
+    "tests/Monolog/Formatter/NormalizerFormatterTest.php:591 -> NormalizerFormatterTest.php:799: $thrower->boom() on an anonymous class instance (its own boom at :582) bound to the static TestInternalFrame::boom",
+    "(unclear) src/Monolog/Handler/GroupHandler.php:93 -> Handler.php:24: $handler->handleBatch on a HandlerInterface element; declared in HandlerInterface, dynamic dispatch, bound to the abstract-base implementation"
+   ]
+  },
+  "note": "Both tiers are dominated by test-file callers (about 24 of 30 high and 25 of 30 low). The low tier's detail text is 'the only member of this name in the repository; the receiver's type is not known' for 28 of 30, i.e. a name-only guess that is right for most names but wrong when the name is also a method of an external library (with, expects)."
+ },
+ "call_recall": {
+  "sites": 40,
+  "right": 33,
+  "wrong": 0,
+  "none": 7,
+  "none_breakdown": {
+   "not_extracted": 0,
+   "extracted_unresolved": 0,
+   "ambiguous": 7,
+   "resolved_but_no_edge": 0
+  },
+  "examples": [
+   "SlackRecord.php:91-99 fluent chain $this->setChannel()->setUsername()->useAttachment()->setUserIcon()->useShortAttachment()->includeContextAndExtra()->excludeFields()->setFormatter(): setChannel and setUserIcon get edges; the other 6 are extracted but 'ambiguous' and have no edge (their names also exist on other handler classes)",
+   "Logger.php:380 $handler->isHandling($record): extracted, ambiguous, no edge",
+   "TelegramBotHandler.php, SocketHandler.php, NormalizerFormatter.php: 24 of 24 right, including parent::__construct and new MissingExtensionException"
+  ],
+  "per_file": {
+   "Logger.php": {
+    "sites": 8,
+    "right": 7,
+    "none": 1
+   },
+   "TelegramBotHandler.php": {
+    "sites": 8,
+    "right": 8,
+    "none": 0
+   },
+   "SocketHandler.php": {
+    "sites": 8,
+    "right": 8,
+    "none": 0
+   },
+   "NormalizerFormatter.php": {
+    "sites": 8,
+    "right": 8,
+    "none": 0
+   },
+   "SlackRecord.php": {
+    "sites": 8,
+    "right": 2,
+    "none": 6
+   }
+  }
+ },
+ "hierarchy": {
+  "edges_total": 242,
+  "edges_by_kind": {
+   "EXTENDS": 193,
+   "IMPLEMENTS": 49
+  },
+  "sampled": 20,
+  "right_target": 20,
+  "wrong_target": 0,
+  "wrong_kind": 0,
+  "tier_of_sample": "6 high, 11 medium, 3 low",
+  "declared_relationships_in_files": {
+   "declared_with_repo_target": 4,
+   "edge_present_right": 4,
+   "missing": 0,
+   "details": [
+    "Logger implements ResettableInterface -> IMPLEMENTS medium (LoggerInterface is Psr\\Log, external)",
+    "TelegramBotHandler extends AbstractProcessingHandler -> EXTENDS medium",
+    "SocketHandler extends AbstractProcessingHandler -> EXTENDS medium",
+    "NormalizerFormatter implements FormatterInterface -> IMPLEMENTS medium",
+    "SlackRecord has no supertypes"
+   ]
+  },
+  "note": "All 10 `use SomeTrait;` lines in src that I checked have an edge. Most edges are medium or low (unnecessarily so for same-namespace names); the targets themselves were right 20 of 20."
+ },
+ "answers": [
+  {
+   "command": "find_callers name=pushHandler",
+   "first_lines": "=== SYSTEM METADATA ===\nINCOMPLETE — 1 of the 44 references spelled \"pushHandler\" are not among the rows below. 43 caller(s) of pushHandler (src/Monolog/Logger.php:215) are recorded.\nindex_revision: 1  status: ready\nnote: INCOMPLETE FOR THIS SYMBOL — 1 of the 44 reference(s) spelled like this name are not listed as its callers: 1 bound to it from outside any indexed function (module top level or an anonymous callback), which no caller list records. Any of them may be a use of this definition. Run search_code for the name before concluding anything from what is absent.\nnote: References spelled \"pushHandler\" in this index: 44. 44 bound to this definition (1 of them from outside any indexed function, so bound but not listed).\nnote: How the calls bound to this definition were made: logger.pushHandler x43, this.pushHandler x1. ...",
+   "true_of_the_code": true,
+   "comment": "A text search finds 53 'pushHandler(' hits in src+tests; 9 are in doc comments (` * $logger->pushHandler(...)`), leaving 44 real calls, exactly the 44 references. Caller count and the one top-level exception are stated."
+  },
+  {
+   "command": "analyze_impact symbol=pushHandler",
+   "first_lines": "=== SYSTEM METADATA ===\nINCOMPLETE — 1 of the 44 references spelled \"pushHandler\" are not among the rows below. pushHandler (src/Monolog/Logger.php:215): 30 direct, 8 indirect. Risk unknown: 1 of the 44 reference(s) spelled like this name are not listed as its callers: 1 bound to it from outside any indexed function (module top level or an anonymous callback), which no caller list records.\nindex_revision: 1  status: ready\nnote: INCOMPLETE FOR THIS SYMBOL — 1 of the 44 reference(s) ...\nnote: Risk = score = sum(factors), clamped to 0..100; ...\nnote:   public_api (+0): Whether the target is exported is UNKNOWN. The index does not read the visibility rules of PHP, so it cannot say whether callers outside this repository exist. ...",
+   "true_of_the_code": true,
+   "comment": "'30 direct' is distinct calling functions (43 call sites); consistent with find_callers. Risk is reported as unknown rather than guessed, and the PHP visibility limit is stated."
+  },
+  {
+   "command": "find_implementations name=HandlerInterface",
+   "first_lines": "=== SYSTEM METADATA ===\nHandlerInterface (src/Monolog/Handler/HandlerInterface.php:21): 4 implementing or extending it, 0 it implements or extends.\nindex_revision: 1  status: ready\nnote: A type relationship is recorded only where the source states it ... Treat an empty list as 'none declared', not 'none exist'.\nnote: Note: 2 result(s) are medium or low confidence (heuristic inference with higher error rates). Pass min_confidence='high' to restrict to compiler-verified and high-precision edges.\nprovenance: ...\nverdict: mixed (high=2 medium=2)",
+   "true_of_the_code": true,
+   "comment": "The 4 are the direct implementers (Handler, HandlerWrapper, and two test classes in LoggerTest.php); true as written. It does not say that the ~100 concrete handlers reach HandlerInterface only transitively (via Handler/AbstractHandler) so an agent asking 'what implements HandlerInterface' gets 4, not the handler family, with no note that the answer is direct-only."
+  }
+ ],
+ "findings": [
+  "Calls on an object whose class overrides a method are bound to the base-class method (Handler::handleBatch instead of MailHandler/ElasticaHandler::handleBatch; Handler::close instead of SocketHandler::close): 3 of 30 sampled high-confidence edges are this wrong override, with no indication of the override.",
+  "Low-confidence name-only guesses bind PHPUnit mock-builder ->with(...) calls to the repository's LogRecord::with (4 of 30 low edges); an anonymous-class method boom() is bound to a named class's static boom() (1 of 30).",
+  "Fluent chains are only partly followed: in SlackRecord's constructor 6 of the 8 chained calls (setUsername, useAttachment, useShortAttachment, includeContextAndExtra, excludeFields, setFormatter) stay 'ambiguous' and produce no edge; $handler->isHandling() in Logger::addRecord also has no edge.",
+  "find_implementations name=HandlerInterface returns only the 4 direct implementers and does not state that it is direct-only, so the answer understates the implementing family (~100 handler classes via Handler/AbstractHandler).",
+  "Most hierarchy edges are medium/low (215 of 242) although the supertype is declared in the same namespace and the targets are all right; the answers then carry 'mixed/weak' verdicts that are more pessimistic than the facts.",
+  "Definitions are exact for the five files (130/130, no spurious, no line off by an attribute); parsing is clean (250/250).",
+  "Sampled call edges are mostly test-file edges (about 80%), so precision on library code alone is not what these samples measure."
+ ],
+ "not_done": [
+  "No medium tier exists, so only high and low were sampled.",
+  "Closures, class constants and properties were not counted as definitions per the stated PHP rule.",
+  "The 8 recall sites per file in Logger.php start at the constructor; the 'new DateTimeZone' / 'new WeakMap' sites were excluded because their targets are PHP built-ins."
+ ]
+}

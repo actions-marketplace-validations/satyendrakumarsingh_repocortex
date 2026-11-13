@@ -1,0 +1,86 @@
+{
+ "language": "scss",
+ "project": "jgthms/bulma (Bulma 1.x, Sass modules)",
+ "project_commit": "c5cd04baf0258cfcc77b4e8610488a0d439effa2",
+ "repocortex_commit": "f783fa5",
+ "files": [
+  {
+   "path": "sass/components/navbar.scss",
+   "lines": 799,
+   "assigned_language": "scss",
+   "parse_status": "partial",
+   "parse_error": "syntax_errors: 344 error nodes and 11 missing tokens, first at line 1; definitions inside the regions the parser could not read may be missing",
+   "expected": 54,
+   "correct": 54,
+   "missed": 0,
+   "missed_known_gap": 0,
+   "spurious": 8,
+   "line_on_attribute": 0,
+   "total_symbols": 68
+  },
+  {
+   "path": "sass/elements/button.scss",
+   "lines": 659,
+   "assigned_language": "scss",
+   "parse_status": "partial",
+   "parse_error": "syntax_errors: 351 error nodes and 20 missing tokens, first at line 3; definitions inside the regions the parser could not read may be missing",
+   "expected": 50,
+   "correct": 50,
+   "missed": 0,
+   "missed_known_gap": 0,
+   "spurious": 1,
+   "line_on_attribute": 0,
+   "total_symbols": 51
+  },
+  {
+   "path": "sass/utilities/css-variables.scss",
+   "lines": 502,
+   "assigned_language": "scss",
+   "parse_status": "partial",
+   "parse_error": "syntax_errors: 155 error nodes and 9 missing tokens, first at line 6; definitions inside the regions the parser could not read may be missing",
+   "expected": 16,
+   "correct": 14,
+   "missed": 2,
+   "missed_known_gap": 0,
+   "spurious": 1,
+   "line_on_attribute": 0,
+   "total_symbols": 15
+  }
+ ],
+ "totals": {
+  "expected": 120,
+  "correct": 118,
+  "missed": 2,
+  "missed_known_gap": 0,
+  "spurious": 10,
+  "line_on_attribute": 0
+ },
+ "examples": {
+  "missed": [
+   "css-variables.scss:61 @mixin register-hsl($name, $value) {",
+   "css-variables.scss:82 @mixin generate-on-scheme-colors($name, $base, $scheme-main) {"
+  ],
+  "spurious": [
+   "css-variables.scss:129 $on-scheme-l: getVar(...) (a local variable inside the mixin at 82, recorded as a top-level variable)",
+   "button.scss:230 `.#{iv.$class-prefix}icon` (nested inside .button; name has interpolation and no dot)",
+   "navbar.scss:463 `#{iv.$class-prefix}navbar-link` (nested in @include mx.until)",
+   "navbar.scss:605 `#{iv.$class-prefix}navbar-item` (nested in @include mx.from)",
+   "navbar.scss:662 `#{iv.$class-prefix}navbar-dropdown` (nested in @include mx.from)"
+  ]
+ },
+ "rule_objections": [
+  "Stated rule is silent on top-level `.#{$prefix}name {}` rule sets (interpolated class names, the normal form in Bulma 1.x). I counted them as NOT expected (not a bare .class). The tool extracts some of them (6 in navbar.scss: lines 257, 264, 276, 394, 410, 795, named `#{iv.$class-prefix}navbar-tabs` without the dot) and skips others of identical shape (navbar 112, 169, 352, 438; button 89, 125, 560). These 6 are not counted as spurious or correct; they are an inconsistency.",
+  "Names of $variables keep the `$` (and CSS custom properties keep `--`) per the fixture; a developer searching `button-padding-vertical` would not match `$button-padding-vertical` by exact name.",
+  "button.scss/navbar.scss: 50+53 `$x: ... !default` theme variables dominate the symbols (that is the rule), while the real structure (the .button / .navbar rule sets) is not represented."
+ ],
+ "findings": [
+  "All three Bulma 1.x files are parse_status=partial (hundreds of ERROR nodes from `@use ... as`, `!default`, named-argument calls like `color.channel($c, \"hue\", $space: hsl)`, `@include mx.until(...)`); this is admitted in KNOWN_GAPS only for @use/as/!default/@forward, not for the module-system function calls that appear everywhere in Bulma 1.",
+  "css-variables.scss lost 2 of 16 mixins (register-hsl, generate-on-scheme-colors) to error recovery. I counted them as `missed`, not `missed_known_gap`, because KNOWN_GAPS lists @use/as/!default/@forward, not mixins lost after named-argument calls; arguably related.",
+  "8 nested rule sets in navbar.scss (all inside `@include mx.until/from` blocks, lines 463-730) plus 1 in button.scss are reported as top-level classes, named with the unresolved interpolation `#{iv.$class-prefix}...` and without the leading dot. Error recovery flattens nesting, so the 'rules nested in blocks are not definitions' rule is violated.",
+  "A local `$on-scheme-l` declared inside a mixin is recorded as a top-level variable (css-variables.scss:129), same cause.",
+  "Text search works (`search burger` finds navbar.scss)."
+ ],
+ "not_done": [
+  "No custom properties, %placeholder, @keyframes, @font-face in these files; those forms not exercised. Expected counts built by reading `^\\$name:`, `@mixin/@function` at column 0 with grep and by reading the files, not by a parser."
+ ]
+}

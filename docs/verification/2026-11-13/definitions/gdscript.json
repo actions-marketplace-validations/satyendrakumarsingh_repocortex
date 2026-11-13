@@ -1,0 +1,70 @@
+{
+ "language": "gdscript",
+ "project": "godotengine/godot-demo-projects",
+ "project_commit": "b761b4cd5718a7118f2c95eb55f181d0a5f004f1",
+ "repocortex_commit": "f783fa5",
+ "files": [
+  {
+   "path": "3d/graphics_settings/settings.gd",
+   "lines": 494,
+   "assigned_language": "gdscript",
+   "parse_status": "ok",
+   "parse_error": "",
+   "expected": 42,
+   "correct": 42,
+   "missed": 0,
+   "missed_known_gap": 0,
+   "spurious": 0,
+   "line_on_attribute": 0
+  },
+  {
+   "path": "loading/runtime_save_load/runtime_save_load.gd",
+   "lines": 273,
+   "assigned_language": "gdscript",
+   "parse_status": "ok",
+   "parse_error": "",
+   "expected": 30,
+   "correct": 30,
+   "missed": 0,
+   "missed_known_gap": 0,
+   "spurious": 0,
+   "line_on_attribute": 0
+  },
+  {
+   "path": "compute/heightmap/main.gd",
+   "lines": 260,
+   "assigned_language": "gdscript",
+   "parse_status": "ok",
+   "parse_error": "",
+   "expected": 30,
+   "correct": 29,
+   "missed": 0,
+   "missed_known_gap": 1,
+   "spurious": 0,
+   "line_on_attribute": 0
+  }
+ ],
+ "totals": {
+  "expected": 102,
+  "correct": 101,
+  "missed": 0,
+  "missed_known_gap": 1,
+  "spurious": 0,
+  "line_on_attribute": 0
+ },
+ "examples": {
+  "missed": [],
+  "spurious": []
+ },
+ "rule_objections": [
+  "Kinds by position (top-level func = function, var = variable) are a stated choice; a top-level script function is really a method of the script's class, so `function` for a node script's callbacks (_ready, _process) is slightly misleading.",
+  "Constructor `_init` not extractable by design (known gap) - a developer would clearly look up the constructor."
+ ],
+ "findings": [
+  "102 expected, 101 correct, 0 spurious, 0 missed outside the known gap; the 1 known-gap miss is `func _init()` at main.gd:24. Names, kinds and lines match on every other declaration (functions incl. static, top-level vars incl. @export/@onready, no locals leaked).",
+  "Sample caveat: the 3 largest non-test files in godot-demo-projects have no inner classes, signals, consts, enums or class_name, so those parts of the rule were not exercised (test_one_way_collision.gd 527 lines and global_illumination/test.gd 272 lines were excluded as tests)."
+ ],
+ "not_done": [
+  "Did not exercise inner classes, signals, enums, class_name, const (none present)."
+ ]
+}

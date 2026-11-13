@@ -1,0 +1,14 @@
+c           jqlang/jq              want 5c001b1  got 5c001b1  edges old   5108 new   5106 added     0 removed     2 | symbols +0 -2
+c_sharp     serilog/serilog        want 43105b3  got 43105b3  edges old   2326 new   2326 added     0 removed     0 | symbols +0 -0
+cpp         google/benchmark       want cf4d7fe  got cf4d7fe  edges old   1203 new   1203 added     1 removed     1 | symbols +0 -13
+go          spf13/cobra            want adbc881  got adbc881  edges old   2146 new   2146 added     0 removed     0 | symbols +0 -0
+java        square/javapoet        want b9017a9  got b9017a9  edges old   2855 new   2855 added     0 removed     0 | symbols +0 -0
+javascript  koajs/koa              want b7ead6f  got b7ead6f  edges old     40 new     40 added     0 removed     0 | symbols +0 -0
+kotlin      square/moshi           want 889013e  got 889013e  edges old   5814 new   5824 added    97 removed    87 | symbols +0 -0
+php         Seldaek/monolog        want 3bed304  got 3bed304  edges old   3163 new   3162 added     0 removed     1 | symbols +0 -0
+python      pallets/click          want e38188e  got e38188e  edges old   3206 new   3206 added     0 removed     0 | symbols +0 -0
+ruby        rack/rack              want da90464  got da90464  edges old   1305 new   1305 added     0 removed     0 | symbols +0 -0
+rust        sharkdp/fd             want 24d90b2  got 24d90b2  edges old    784 new    784 added     0 removed     0 | symbols +0 -0
+scala       com-lihaoyi/os-lib     want 8871ab0  got 8871ab0  edges old   1853 new   1853 added     0 removed     0 | symbols +0 -0
+tsx         tremorlabs/tremor      want ca4d588  got ca4d588  edges old   1254 new   1247 added     0 removed     7 | symbols +0 -0
+typescript  honojs/hono            want f6fbaf0  got f6fbaf0  edges old   2078 new   2058 added     8 removed    28 | symbols +0 -0

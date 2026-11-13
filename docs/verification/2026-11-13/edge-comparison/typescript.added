@@ -1,0 +1,8 @@
+CALLS|high|src/adapter/bun/serve-static.ts|28|src/middleware/serve-static/index.ts:serveStatic
+CALLS|high|src/adapter/bun/ssg.ts|28|src/helper/ssg/ssg.ts:toSSG
+CALLS|high|src/adapter/cloudflare-workers/serve-static.ts|40|src/middleware/serve-static/index.ts:serveStatic
+CALLS|high|src/adapter/deno/serve-static.ts|38|src/middleware/serve-static/index.ts:serveStatic
+CALLS|high|src/adapter/deno/ssg.ts|28|src/helper/ssg/ssg.ts:toSSG
+CALLS|high|src/jsx/components.test.tsx|14|src/utils/html.ts:resolveCallback
+CALLS|high|src/jsx/components.test.tsx|25|src/utils/html.ts:resolveCallback
+CALLS|high|src/jsx/dom/server.ts|68|src/jsx/streaming.ts:renderToReadableStream

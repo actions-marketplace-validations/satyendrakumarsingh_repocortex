@@ -1,0 +1,68 @@
+{
+ "language": "fortran",
+ "project": "fortran-lang/fpm (src/fpm/cmd/new.f90, src/fpm/manifest/dependency.f90, src/fpm_environment.f90)",
+ "project_commit": "73bfaa0",
+ "repocortex_commit": "f783fa5",
+ "files": [
+  {
+   "path": "src/fpm/cmd/new.f90",
+   "lines": 734,
+   "assigned_language": "fortran",
+   "parse_status": "ok",
+   "parse_error": "",
+   "expected": 5,
+   "correct": 5,
+   "missed": 0,
+   "missed_known_gap": 0,
+   "spurious": 0,
+   "line_on_attribute": 0
+  },
+  {
+   "path": "src/fpm/manifest/dependency.f90",
+   "lines": 708,
+   "assigned_language": "fortran",
+   "parse_status": "ok",
+   "parse_error": "",
+   "expected": 19,
+   "correct": 15,
+   "missed_known_gap": 4,
+   "missed": 0,
+   "spurious": 0,
+   "line_on_attribute": 0
+  },
+  {
+   "path": "src/fpm_environment.f90",
+   "lines": 537,
+   "assigned_language": "fortran",
+   "parse_status": "ok",
+   "parse_error": "",
+   "expected": 26,
+   "correct": 26,
+   "missed": 0,
+   "missed_known_gap": 0,
+   "spurious": 0,
+   "line_on_attribute": 0
+  }
+ ],
+ "totals": {
+  "expected": 50,
+  "correct": 46,
+  "missed": 0,
+  "missed_known_gap": 4,
+  "spurious": 0,
+  "line_on_attribute": 0
+ },
+ "examples": [
+  "dependency.f90:84 procedure :: info (missed_known_gap: type-bound binding without '=>'; also 87, 91, 92)"
+ ],
+ "rule_objections": [
+  "Omitting 'procedure :: name' bindings means a type's method list is incomplete in the index (4 of 5 bindings in dependency_config_t), even though the implementing procedures are indexed under the same names."
+ ],
+ "findings": [
+  "46 of 50 expected definitions extracted; the 4 misses are bindings without '=>' (listed in KNOWN_GAPS). Modules, subroutines, functions, an interface-block procedure, the derived type, 'binding => impl', and module-level parameters (OS_* and out_fmt) are right; no spurious symbols.",
+  "All three files were assigned fortran by extension (.f90); no grammar mix-up."
+ ],
+ "not_done": [
+  "Local variables and derived-type components deliberately not counted. Expected set from a regex scan of module/subroutine/function/type/procedure/parameter lines."
+ ]
+}

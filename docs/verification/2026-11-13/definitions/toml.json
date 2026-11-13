@@ -1,0 +1,113 @@
+{
+ "language": "toml",
+ "project": "helix-editor/helix (runtime/themes, 3 files) + starship/starship docs presets fetched raw (2 supplementary files)",
+ "project_commit": "helix a714a818a3a4f6dd5aad3b003a78692f90a1703f ; starship: raw master download, no commit",
+ "repocortex_commit": "f783fa5",
+ "files": [
+  {
+   "path": "runtime/themes/emacs.toml",
+   "lines": 642,
+   "assigned_language": "toml",
+   "parse_status": "ok",
+   "parse_error": "",
+   "expected": 1,
+   "correct": 1,
+   "missed": 0,
+   "missed_known_gap": 0,
+   "spurious": 0,
+   "line_on_attribute": 0,
+   "total_symbols": 632,
+   "configuration": 631,
+   "package": 1
+  },
+  {
+   "path": "runtime/themes/aurara.toml",
+   "lines": 485,
+   "assigned_language": "toml",
+   "parse_status": "ok",
+   "parse_error": "",
+   "expected": 1,
+   "correct": 1,
+   "missed": 0,
+   "missed_known_gap": 0,
+   "spurious": 0,
+   "line_on_attribute": 0,
+   "total_symbols": 159,
+   "configuration": 158,
+   "package": 1
+  },
+  {
+   "path": "runtime/themes/zenburn.toml",
+   "lines": 278,
+   "assigned_language": "toml",
+   "parse_status": "ok",
+   "parse_error": "",
+   "expected": 1,
+   "correct": 1,
+   "missed": 0,
+   "missed_known_gap": 0,
+   "spurious": 0,
+   "line_on_attribute": 0,
+   "total_symbols": 182,
+   "configuration": 181,
+   "package": 1
+  },
+  {
+   "path": "SUPPLEMENTARY starship docs/public/presets/toml/pastel-powerline.toml",
+   "lines": 171,
+   "assigned_language": "toml",
+   "parse_status": "ok",
+   "parse_error": "",
+   "expected": 25,
+   "correct": 25,
+   "missed": 0,
+   "missed_known_gap": 0,
+   "spurious": 0,
+   "line_on_attribute": 0,
+   "total_symbols": 101,
+   "configuration": 76,
+   "package": 25
+  },
+  {
+   "path": "SUPPLEMENTARY starship docs/public/presets/toml/nerd-font-symbols.toml",
+   "lines": 314,
+   "assigned_language": "toml",
+   "parse_status": "ok",
+   "parse_error": "",
+   "expected": 82,
+   "correct": 82,
+   "missed": 0,
+   "missed_known_gap": 0,
+   "spurious": 0,
+   "line_on_attribute": 0,
+   "total_symbols": 229,
+   "configuration": 147,
+   "package": 82
+  }
+ ],
+ "totals": {
+  "expected": 110,
+  "correct": 110,
+  "missed": 0,
+  "missed_known_gap": 0,
+  "spurious": 0,
+  "line_on_attribute": 0
+ },
+ "examples": {
+  "missed": [],
+  "spurious": []
+ },
+ "rule_objections": [
+  "The three largest Helix themes contain a single [palette] table each, so they test almost nothing; I added two table-heavy Starship preset files as supplementary samples (counted in totals).",
+  "The manifest-boilerplate exclusion is applied to non-manifest files: nerd-font-symbols.toml line 235 `[package]` (Starship's package module) is skipped because the name is 'package'. Per the stated rule that is correct, but a developer searching for Starship's `[package]` table finds nothing. The exclusion should depend on the file being a manifest (Cargo.toml / pyproject.toml), not on the table name.",
+  "Arrays of tables are skipped by rule, which hides everything in files like Helix languages.toml ([[language]] x ~300); not exercised here."
+ ],
+ "findings": [
+  "Under the stated rule: 110 expected, 110 correct, 0 missed, 0 spurious; names (`os.symbols`, `directory.substitutions` style dotted paths) and lines are right. A multi-line basic string containing `[](#9A348E)\\` lines in pastel-powerline.toml was NOT misread as table headers.",
+  "Separate analyser (not counted against the rule): 631/158/181/76/147 `configuration` symbols; these dominate each file's totals (e.g. emacs.toml 632 symbols for 1 table) but that is the config analyser, not the grammar rule.",
+  "Text search works (`search powerline` finds pastel-powerline.toml)."
+ ],
+ "not_done": [
+  "Did not test Cargo.toml / pyproject.toml manifests or [[array of tables]] files; helix languages.toml was over 800 lines."
+ ]
+}

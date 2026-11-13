@@ -1,0 +1,76 @@
+{
+ "language": "swift",
+ "project": "Alamofire/Alamofire (Source/Features/ServerTrustEvaluation.swift, Source/Features/Combine.swift, Source/Core/DownloadRequest.swift)",
+ "project_commit": "b3e74e8",
+ "repocortex_commit": "f783fa5",
+ "files": [
+  {
+   "path": "Source/Features/ServerTrustEvaluation.swift",
+   "lines": 723,
+   "assigned_language": "swift",
+   "parse_status": "ok",
+   "parse_error": "",
+   "expected": 96,
+   "correct": 95,
+   "missed": 1,
+   "line_on_attribute": 5,
+   "missed_known_gap": 0,
+   "spurious": 0
+  },
+  {
+   "path": "Source/Features/Combine.swift",
+   "lines": 652,
+   "assigned_language": "swift",
+   "parse_status": "partial",
+   "parse_error": "syntax_errors: 15 error nodes and 5 missing tokens, first at line 39",
+   "expected": 82,
+   "correct": 71,
+   "missed": 11,
+   "line_on_attribute": 26,
+   "missed_known_gap": 0,
+   "spurious": 0
+  },
+  {
+   "path": "Source/Core/DownloadRequest.swift",
+   "lines": 615,
+   "assigned_language": "swift",
+   "parse_status": "partial",
+   "parse_error": "syntax_errors: 97 error nodes and 14 missing tokens, first at line 1",
+   "expected": 41,
+   "correct": 13,
+   "missed": 28,
+   "missed_known_gap": 0,
+   "spurious": 0,
+   "line_on_attribute": 0
+  }
+ ],
+ "totals": {
+  "expected": 219,
+  "correct": 179,
+  "missed": 40,
+  "missed_known_gap": 0,
+  "spurious": 0,
+  "line_on_attribute": 31
+ },
+ "examples": [
+  "DownloadRequest.swift:28 public final class DownloadRequest: Request, @unchecked Sendable { (missed; the class itself and every member after line 149 are gone)",
+  "DownloadRequest.swift:65 public class func suggestedDownloadDestination(...) (missed)",
+  "DownloadRequest.swift:346 public func response(queue:...) (missed, as are all 12 later response*/cancel/validate methods)",
+  "Combine.swift:95 private let request: DataRequest (missed, inside private final class Inner; also 96, 98 init, and the same three in the two other Inner classes)",
+  "Combine.swift:39 private typealias Handler = (@escaping @Sendable (...) -> Void) -> DataRequest (missed; 407 too)",
+  "ServerTrustEvaluation.swift:452 extension [ServerTrustEvaluating] { (missed: extension of an array-literal type has no symbol)"
+ ],
+ "rule_objections": [
+  "The rule records instance/type properties of an extension as field though extensions cannot hold stored properties (computed only); harmless.",
+  "Extensions are recorded as class with the extended type name, so there are several 'class AlamofireExtension' and 'class ServerTrustEvaluating' symbols per file; a class lookup returns many entries. Stated rule, not counted."
+ ],
+ "findings": [
+  "DownloadRequest.swift (615 lines): the grammar reports 97 error nodes starting at line 1 and the file yields 13 of 41 definitions: the class DownloadRequest itself and every member after line 149 are missing (28 missed, none matches a KNOWN_GAPS entry). I could not reproduce it with a small class using '@unchecked Sendable' or a computed property; the trigger is something else in the file.",
+  "Combine.swift: 11 missed, all in the three 'private final class Inner' bodies (two stored properties and the init each) plus the two 'private typealias Handler = (@escaping @Sendable ...) -> X' lines; KNOWN_GAPS names the attribute-on-function-type problem only for parameters, so counted as missed not known gap.",
+  "ServerTrustEvaluation.swift is clean except 'extension [ServerTrustEvaluating]' (array-sugar type) which gets no symbol.",
+  "Start lines of declarations preceded by @available are the attribute line (31 of 59 expected cases per KNOWN_GAPS); counted as line_on_attribute (26+5)."
+ ],
+ "not_done": [
+  "Expected sets were built by a regex over the declaration keywords at indent <=8 then reviewed by hand against the file and the symbols table, not by reading every line of every file."
+ ]
+}

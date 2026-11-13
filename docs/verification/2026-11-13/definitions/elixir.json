@@ -1,0 +1,66 @@
+{
+ "language": "elixir",
+ "project": "phoenixframework/phoenix (lib/phoenix/channel.ex, lib/phoenix/presence.ex, lib/mix/phoenix/schema.ex)",
+ "project_commit": "789f851",
+ "repocortex_commit": "f783fa5",
+ "files": [
+  {
+   "path": "lib/phoenix/channel.ex",
+   "lines": 732,
+   "assigned_language": "elixir",
+   "parse_status": "ok",
+   "parse_error": "",
+   "expected": 34,
+   "correct": 33,
+   "missed": 1,
+   "missed_known_gap": 0,
+   "spurious": 0,
+   "line_on_attribute": 0
+  },
+  {
+   "path": "lib/phoenix/presence.ex",
+   "lines": 719,
+   "assigned_language": "elixir",
+   "parse_status": "ok",
+   "parse_error": "",
+   "expected": 53,
+   "correct": 53,
+   "missed": 0,
+   "missed_known_gap": 0,
+   "spurious": 0,
+   "line_on_attribute": 0
+  },
+  {
+   "path": "lib/mix/phoenix/schema.ex",
+   "lines": 671,
+   "assigned_language": "elixir",
+   "parse_status": "ok",
+   "parse_error": "",
+   "expected": 48,
+   "correct": 48,
+   "missed": 0,
+   "missed_known_gap": 0,
+   "spurious": 0,
+   "line_on_attribute": 0
+  }
+ ],
+ "totals": {
+  "expected": 135,
+  "correct": 134,
+  "missed": 1,
+  "missed_known_gap": 0,
+  "spurious": 0,
+  "line_on_attribute": 0
+ },
+ "examples": [
+  "channel.ex:438 @callback code_change(old_vsn, Socket.t(), extra :: term) :: {:ok, Socket.t()} | {:error, reason :: term} (missed; the other @callback specs, including multi-line ones, are found)"
+ ],
+ "rule_objections": [],
+ "findings": [
+  "134 of 135 expected definitions extracted: modules, one symbol per name/arity with adjacent clauses folded, defmacro/__using__ bodies, @type, @callback and value attributes are all right; no spurious symbols.",
+  "One @callback is missing (channel.ex:438); its argument list contains a named type annotation 'extra :: term', which the other callbacks lack. Not in KNOWN_GAPS."
+ ],
+ "not_done": [
+  "Expected set from a script that folds adjacent same-name/arity heads and ignores heredoc docs, then reviewed by hand; arity of multi-line heads was checked manually for the one case that differed (schema.ex 523/532)."
+ ]
+}

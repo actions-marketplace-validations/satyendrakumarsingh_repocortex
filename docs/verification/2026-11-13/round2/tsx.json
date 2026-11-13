@@ -1,0 +1,174 @@
+{
+  "language": "tsx",
+  "project": "tremorlabs/tremor",
+  "project_commit": "ca4d588f47820ff3d514d37fa4ee08a4222dec11",
+  "repocortex_commit": "8748b29",
+  "files_checked": [
+    "src/components/DatePicker/DatePicker.tsx (1209 lines)",
+    "src/components/ComboChart/ComboChart.tsx (1178)",
+    "src/components/AreaChart/AreaChart.tsx (989)",
+    "src/components/LineChart/LineChart.tsx (907)",
+    "src/components/BarChart/BarChart.tsx (885)"
+  ],
+  "index": {
+    "files": 198,
+    "symbols": 1736,
+    "edges_by_kind_and_tier": {
+      "tsx_callers": {"CALLS": {"high": 1230, "low": 1}, "EXTENDS": {"high": 4}, "REFERENCES": {"high": 1}},
+      "typescript_callers": {"CALLS": {"high": 11}},
+      "javascript_callers": {"CALLS": {"high": 7}},
+      "exact": {}
+    },
+    "round1_for_comparison": {"tsx_callers CALLS high": 1221, "total edges": 1245, "symbols": 1736},
+    "parse_summary": {
+      "Parsed": "191 (187 clean, 4 with syntax errors)",
+      "Syntax errors": "4 files read to the end with errors the parser recovered from: AreaChart.tsx (first at line 331), BarChart.tsx (388), ComboChart.tsx (402), LineChart.tsx (330)",
+      "Incomplete": "0",
+      "Failed": "0",
+      "Too large": "0",
+      "Text only": "0",
+      "Skipped": "7 (no_grammar 6, binary 1)"
+    },
+    "resolution": "4996 references; 3690 unresolved (1532 shown to leave the repository); 0 ambiguous; 1254 edges (round one: 3687 unresolved, 12 ambiguous, 1245 edges)",
+    "index_seconds": 1.39,
+    "resolve_seconds": 0.26,
+    "note": "Same four chart files are the five-largest-file choice and the same four files with the known grammar misparse."
+  },
+  "definitions": {
+    "expected": 143,
+    "correct": 139,
+    "missed": 4,
+    "spurious": 0,
+    "line_on_attribute": 0,
+    "per_file": {
+      "src/components/DatePicker/DatePicker.tsx": {"expected": 43, "correct": 43, "missed": 0, "spurious": 0},
+      "src/components/ComboChart/ComboChart.tsx": {"expected": 27, "correct": 26, "missed": 1, "spurious": 0},
+      "src/components/AreaChart/AreaChart.tsx": {"expected": 25, "correct": 24, "missed": 1, "spurious": 0},
+      "src/components/LineChart/LineChart.tsx": {"expected": 23, "correct": 22, "missed": 1, "spurious": 0},
+      "src/components/BarChart/BarChart.tsx": {"expected": 25, "correct": 24, "missed": 1, "spurious": 0}
+    },
+    "basis": "Same TSX rule as round one (forwardRef components, arrow consts and locals at any depth; const x = React.useCallback(...) and tv(...) results and non-exported constants do not count). Symbol lists compared with the source line by line.",
+    "examples": {
+      "missed": [
+        "src/components/AreaChart/AreaChart.tsx:331 calculateHeight (arrow const inside ChartLegend, where the parse error is reported); NOT FIXED (known)",
+        "src/components/LineChart/LineChart.tsx:330 calculateHeight; NOT FIXED",
+        "src/components/BarChart/BarChart.tsx:388 calculateHeight; NOT FIXED",
+        "src/components/ComboChart/ComboChart.tsx:402 calculateHeight; NOT FIXED"
+      ],
+      "spurious": []
+    }
+  },
+  "call_precision": {
+    "high": {
+      "right": 30, "wrong": 0, "unclear": 0, "judged": 30,
+      "examples": [],
+      "note": "Each of the 30 was checked against the caller's import (path of the import matches the target file) or, for local functions, against the declaration. 19 of the 30 have a story file as caller. The 7 NEW wrong high edges described under regressions were not drawn by the rule."
+    },
+    "medium": {"right": 0, "wrong": 0, "unclear": 0, "judged": 0, "examples": [], "note": "no medium edges exist for tsx callers"},
+    "low": {
+      "right": 0, "wrong": 1, "unclear": 0, "judged": 1,
+      "examples": [
+        "src/components/Callout/Callout.tsx:70 <Icon .../> -> src/components/Tooltip/tooltip.stories.tsx:71 Icon: Icon is a prop component of Callout, the target is an unrelated Storybook constant; NOT FIXED"
+      ],
+      "note": "Only 1 low edge exists; judged."
+    },
+    "exact": {"right": 0, "wrong": 0, "unclear": 0, "judged": 0, "examples": [], "note": "no exact edges exist"},
+    "sampling_rule": "ORDER BY (id * 40503) % 65521 LIMIT 30, caller in a tsx file (84 files, stories and component sources)"
+  },
+  "round1_wrong_examples": [
+    {"site": "src/components/Callout/Callout.tsx:70 <Icon />", "round1_tier": "low", "now": "still_wrong", "note": "same edge, same tier, same unrelated story export"},
+    {"site": "src/components/DatePicker/DatePicker.tsx:639 <CalendarPrimitive> (recall miss, not a wrong edge)", "round1_tier": "none", "now": "right_target", "note": "reference is now recorded under the original name Calendar and bound high to src/components/Calendar/Calendar.tsx:95"},
+    {"site": "src/components/DatePicker/DatePicker.tsx:941 <CalendarPrimitive>", "round1_tier": "none", "now": "right_target", "note": "same, from RangeDatePicker"}
+  ],
+  "call_recall": {
+    "sites": 40,
+    "right": 40,
+    "wrong": 0,
+    "none": 0,
+    "none_breakdown": {"ambiguous": 0, "unresolved": 0, "not_extracted": 0, "resolved_but_no_edge": 0},
+    "per_file": {
+      "DatePicker.tsx": "8 sites (cx 70, <TimeSegment> 137, cx 193, cx 230, isDateRangePresets 299, isDatePresets 301, compareDates 321, 334): 8 right",
+      "ComboChart.tsx": "8 sites (deepEqual 53, 80; getColorClassName 107; cx 111, 124, 136, 184; keyDownHandler 284): 8 right",
+      "AreaChart.tsx": "8 sites (cx 52, 65, 73, 121, 258; getColorClassName 67; keyDownHandler 219, 221): 8 right",
+      "LineChart.tsx": "8 sites (cx 51, 64, 72, 120, 257; getColorClassName 66; keyDownHandler 218, 220): 8 right",
+      "BarChart.tsx": "8 sites (deepEqual 51, 82; cx 109, 122, 130, 178; getColorClassName 124; keyDownHandler 276): 8 right"
+    },
+    "examples": [
+      "DatePicker.tsx:137 <TimeSegment .../> -> TimeSegment: right",
+      "ComboChart.tsx:53 deepEqual(...) -> deepEqual: right"
+    ],
+    "supplementary": "ALL JSX usages of repository components in the five files, re-derived by reading: 38 (DatePicker 18: Button 4, CalendarPopover 2, CalendarPrimitive 2, PresetContainer 2, SingleDatePicker 1, RangeDatePicker 1, TimeInput 3, TimeSegment 1, Trigger 2; each chart 5: ChartTooltip, Legend, LegendItem, ScrollButton x2). All 38 have an edge to the right definition (round one: 39 of 41 by its count, the 2 misses being <CalendarPrimitive>; I count 38 uses, not 41, and could not reproduce round one's 3 extra). Not counted as repository uses: 4 <CustomTooltip> (a prop alias with no repository target; reference unresolved, no edge, correct)."
+  },
+  "hierarchy": {
+    "edges_total": 4,
+    "by_kind_tier": {"EXTENDS high": 4},
+    "sample_judged": 4,
+    "sample_right": 4,
+    "sample_note": "Only 4 EXTENDS/IMPLEMENTS edges exist for tsx callers (as in round one), so the 20-edge draw was not possible; all 4 judged: DatePreset and DateRangePreset to Preset, PickerProps to CalendarProps, RangeProps to PickerProps.",
+    "five_files_declared": 5,
+    "five_files_right": 4,
+    "five_files_note": "SingleProps extends Omit<PickerProps, 'translations'> (DatePicker.tsx:462) still has no EXTENDS edge: the reference to PickerProps inside the Omit<> wrapper is not extracted (Omit is recorded unresolved). NOT FIXED. Excluded as external: LegendProps extends React.OlHTMLAttributes, the four chart Props extends React.HTMLAttributes."
+  },
+  "answers": [
+    {
+      "command": "repocortex --project . tool call find_callers name=Button",
+      "first_lines": [
+        "=== SYSTEM METADATA ===",
+        "INCOMPLETE — Button: its name appears in at least 7 other place(s) that are not recorded as calls: it may be passed as a value; rows 1-50 of 67 are shown. 67 caller(s) of Button (src/components/Button/Button.tsx:104) are recorded.",
+        "index_revision: 1  status: ready",
+        "truncated: showing rows 1-50 of 67 caller(s), so 17 are not shown here. Pass offset=50 to read on (limit accepts up to 200)",
+        "note: INCOMPLETE FOR THIS SYMBOL — The name of the target occurs in at least 7 other place(s) that are neither a definition of it nor a reference the index recorded (for example src/components/Accordion/accordion.stories.tsx:433, src/components/Button/Button.tsx:146, src/components/Button/Button.tsx:148, src/components/Button/button.stories.tsx:6, src/components/Button/button.stories.tsx:8). ...",
+        "note: References spelled \"Button\" in this index: 67. 67 bound to this definition."
+      ],
+      "true_of_the_code": true,
+      "comment": "67 callers is right (67 '<Button' uses in the project, unchanged from round one) and the truncation is on line 1. New: the 'name appears in at least 7 other places not recorded as calls: it may be passed as a value' warning; the places named are mixed: a closing tag (accordion.stories.tsx:433), Button.displayName and the export list (Button.tsx:146, 148), and Storybook meta lines (button.stories.tsx:6-8, where 'component: Button' really is a value use). Mostly not value uses, but not wrong to flag."
+    },
+    {
+      "command": "repocortex --project . tool call analyze_impact symbol=getColorClassName",
+      "first_lines": [
+        "=== SYSTEM METADATA ===",
+        "INCOMPLETE — 2 of the 32 references spelled \"getColorClassName\" are not among the rows below. getColorClassName: its name appears in 8 other place(s) that are not recorded as calls: it may be passed as a value; CategoryBar, on the path to it, is named in 5 other place(s) not recorded as calls (it may be passed as a value), so what reaches CategoryBar is not listed; rows 1-50 of 52 are shown. getColorClassName (src/utils/chartColors.ts:83): 19 direct, 33 indirect. Risk moderate or higher (score 41 counts only the callers that were bound; the analysis was cut at depth 3; the name occurs where no call is recorded, so a function passed as a value may reach the target).",
+        "index_revision: 1  status: ready",
+        "truncated: showing rows 1-50 of 52 impacted symbol(s), so 2 are not shown here. Pass offset=50 to read on (limit accepts up to 200); depth limit 3 reached, and 6 node(s) at the limit were not expanded",
+        "note: INCOMPLETE FOR THIS SYMBOL — 2 of the 32 reference(s) spelled like this name are not listed as its callers: ...",
+        "note: INCOMPLETE FOR THIS SYMBOL — The name of the target occurs in 8 other place(s) ... (for example src/components/AreaChart/AreaChart.tsx:28, ... ) ..."
+      ],
+      "true_of_the_code": true,
+      "comment": "32 references matches the text search (32 calls outside chartColors.ts). The first line now also says the analysis was cut at depth 3 and that rows are truncated (the second requested fix is present for this answer). The '8 other places' are the import lines of getColorClassName in 8 files, i.e. false 'may be passed as a value' leads; the CategoryBar caveat is the same. Still no mention that the four chart files had syntax errors (a caller in the unreadable region could be missing)."
+    },
+    {
+      "command": "repocortex --project . tool call find_implementations name=Preset",
+      "first_lines": [
+        "=== SYSTEM METADATA ===",
+        "INCOMPLETE — TypeScript types can satisfy this interface without declaring it, and those are not listed. 2 other line(s) read as a type declaration naming it and are not recorded as a subtype, so subtypes exist that this list does not carry. Preset (src/components/DatePicker/DatePicker.tsx:263): 2 implementing or extending it, all directly, 0 it implements or extends.",
+        "index_revision: 1  status: ready",
+        "note: INCOMPLETE FOR THIS TYPE — TypeScript is structurally typed: ...",
+        "note: INCOMPLETE FOR THIS TYPE — 2 other line(s) read as a type declaration naming it and are not recorded as a subtype. Each of them may be a type that extends or implements Preset and is missing from the list, so the count above is a floor (declaration-like lines: src/components/DatePicker/DatePicker.tsx:275, src/components/DatePicker/DatePicker.tsx:281). ...",
+        "note: A type relationship is recorded only where the source states it ..."
+      ],
+      "true_of_the_code": true,
+      "comment": "2 subtypes (DatePreset, DateRangePreset) is right and is listed directly. The new warning that 2 other declaration-like lines name Preset (lines 275 and 281) is wrong in substance: they are generic constraints (type PresetContainerProps<TPreset extends Preset, ...> and PresetContainer = <TPreset extends Preset, ...>), not subtype declarations, so the claim that subtypes exist that the list does not carry is false. Over-cautious; it points at nothing real."
+    }
+  ],
+  "regressions": [
+    "NEW WRONG EDGES from the renamed-import fix. The fix binds a JSX tag used under an import alias to the original name, but it also does this for aliases of EXTERNAL packages and binds to a same-named repository symbol: <RechartsAreaChart> (import { AreaChart as RechartsAreaChart } from 'recharts') at AreaChart.tsx:653 now has a high CALLS edge from AreaChart to AreaChart ITSELF; likewise <RechartsBarChart> BarChart.tsx:657 and <RechartsLineChart> LineChart.tsx:608 (self edges), and <RechartsLegend> (Legend as RechartsLegend from recharts) at AreaChart.tsx:796, BarChart.tsx:834, LineChart.tsx:748, ComboChart.tsx:984 bound to the repository's own Legend component. 7 of the 9 edges that are new in this project relative to the round-one binary are wrong; the other 2 are the intended <CalendarPrimitive> -> Calendar edges. A diff of the complete edge set (round-one binary vs this one, same checkout) shows nothing else added and nothing removed.",
+    "These 7 wrong edges are high tier and were not drawn by the 30-edge rule, so the 30 of 30 high figure hides them: the true count of wrong edges in the full high population is at least 7 of 1230.",
+    "No definition, no right edge and no right recall site from round one was lost."
+  ],
+  "findings": [
+    "The renamed-import fix works for repository components (<CalendarPrimitive> now has an edge to Calendar at DatePicker.tsx:639 and :941; JSX supplementary figure 38 of 38) but at the same time creates 7 new wrong high edges in this project by binding aliases of recharts imports (RechartsAreaChart, RechartsBarChart, RechartsLineChart, RechartsLegend) to same-named repository components, including self-edges.",
+    "The known grammar misparse is unchanged: 4 chart files report a syntax error at 'const calculateHeight = (height: number | undefined) =>' followed by a ternary on the next line; calculateHeight is lost in all four (4 definitions missed), everything else in the files is extracted.",
+    "The one low-tier edge is still wrong (<Icon> prop in Callout bound to a story constant named Icon).",
+    "SingleProps extends Omit<PickerProps, ...> still has no EXTENDS edge.",
+    "Recall on the first-8 rule is 40 of 40 and all 38 JSX uses of repository components in the five files are bound; the 4 <CustomTooltip> uses of a prop alias are correctly unbound.",
+    "find_callers (Button, 67) and analyze_impact (getColorClassName, 32 references) match a text search exactly; analyze_impact now states the depth cut and truncation on its first line.",
+    "The new 'name appears in other places not recorded as calls: may be passed as a value' warning fires mostly on import lines, closing tags and displayName assignments (Button, getColorClassName), with a few real value uses, and find_implementations reports 2 'declaration-like lines' that are generic constraints (extends Preset in a type parameter); these are false leads, not wrong facts.",
+    "No precision information beyond one tier: tsx has no medium edges and one low edge."
+  ],
+  "not_done": [
+    "Precision was drawn from the whole tsx population (stories and specs included), as the brief specifies; no source-only number was computed.",
+    "Hierarchy sampling could not reach 20 because only 4 edges exist.",
+    "Round one's count of 41 repository-component JSX uses could not be reproduced (I count 38); I did not find which 3 it counted additionally.",
+    "Story and spec files were not used for definitions or recall."
+  ]
+}

@@ -1,0 +1,74 @@
+{
+ "language": "svelte",
+ "project": "huntabyte/shadcn-svelte (docs site, Svelte 5 runes)",
+ "project_commit": "28f5a3bef5ea7934044a7fb60a3e6f201b3b090a",
+ "repocortex_commit": "f783fa5",
+ "files": [
+  {
+   "path": "docs/src/lib/components/command-menu/command-menu.svelte",
+   "lines": 456,
+   "assigned_language": "svelte",
+   "parse_status": "ok",
+   "parse_error": "",
+   "expected": 32,
+   "correct": 32,
+   "missed": 0,
+   "missed_known_gap": 0,
+   "spurious": 0,
+   "line_on_attribute": 0
+  },
+  {
+   "path": "docs/src/lib/components/cards/notion-prompt-form.svelte",
+   "lines": 374,
+   "assigned_language": "svelte",
+   "parse_status": "ok",
+   "parse_error": "",
+   "expected": 18,
+   "correct": 18,
+   "missed": 0,
+   "missed_known_gap": 0,
+   "spurious": 0,
+   "line_on_attribute": 0
+  },
+  {
+   "path": "docs/src/routes/(app)/(layout)/examples/dashboard/components/data-table.svelte",
+   "lines": 355,
+   "assigned_language": "svelte",
+   "parse_status": "ok",
+   "parse_error": "",
+   "expected": 11,
+   "correct": 11,
+   "missed": 0,
+   "missed_known_gap": 0,
+   "spurious": 2,
+   "line_on_attribute": 0
+  }
+ ],
+ "totals": {
+  "expected": 61,
+  "correct": 61,
+  "missed": 0,
+  "missed_known_gap": 0,
+  "spurious": 2,
+  "line_on_attribute": 0
+ },
+ "examples": {
+  "missed": [],
+  "spurious": [
+   "data-table.svelte:108 `get data()` getter in the object literal passed to createTable({...}) (method)",
+   "data-table.svelte:116 `get rowSelection()` getter nested in `state:` of the createTable argument (method)"
+  ]
+ },
+ "rule_objections": [
+  "Every `{#snippet child({ props })}` render-prop passed to a library component (8 in notion-prompt-form.svelte alone) becomes a function named `child`; the rule says snippets are functions so this is counted correct, but it floods lookups with an anonymous-in-spirit name (child appears 8 times in one file). Arguably only top-level / named snippets should count.",
+  "Selection rule excluded the docs registry/ (generated example blocks) and tests; all three files are Svelte 5 runes ($props/$state/$derived)."
+ ],
+ "findings": [
+  "0 missed. Runes handled: $props() destructure -> fields, `let x = $state()` -> variable, `const x = $derived()` -> constant, snippets in markup (including nested and after a comment) -> function.",
+  "2 spurious: getters (`get data()`, `get rowSelection()`) inside an object literal that is an argument of createTable() are recorded as `method`, although the Svelte rule says only top-level declarations count (it admits no options-object concept for Svelte).",
+  "Component symbol is the file name verbatim as a class even when it is not an identifier (command-menu, data-table, notion-prompt-form: kebab-case); rule allows it, but the names cannot be written in code."
+ ],
+ "not_done": [
+  "Legacy (export let / $:) Svelte not exercised in these three files."
+ ]
+}

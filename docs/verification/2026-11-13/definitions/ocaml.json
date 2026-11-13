@@ -1,0 +1,74 @@
+{
+ "language": "ocaml",
+ "project": "janestreet/base (src/float_intf.ml, src/hashtbl_intf.ml, src/container_intf.ml)",
+ "project_commit": "49a861e",
+ "repocortex_commit": "f783fa5",
+ "files": [
+  {
+   "path": "src/float_intf.ml",
+   "lines": 760,
+   "assigned_language": "ocaml",
+   "parse_status": "ok",
+   "parse_error": "",
+   "expected": 166,
+   "correct": 162,
+   "missed": 4,
+   "missed_known_gap": 0,
+   "spurious": 0,
+   "line_on_attribute": 0
+  },
+  {
+   "path": "src/hashtbl_intf.ml",
+   "lines": 706,
+   "assigned_language": "ocaml",
+   "parse_status": "ok",
+   "parse_error": "",
+   "expected": 127,
+   "correct": 88,
+   "missed": 39,
+   "missed_known_gap": 0,
+   "spurious": 0,
+   "line_on_attribute": 0
+  },
+  {
+   "path": "src/container_intf.ml",
+   "lines": 700,
+   "assigned_language": "ocaml",
+   "parse_status": "ok",
+   "parse_error": "",
+   "expected": 115,
+   "correct": 61,
+   "missed": 54,
+   "missed_known_gap": 0,
+   "spurious": 0,
+   "line_on_attribute": 0
+  }
+ ],
+ "totals": {
+  "expected": 408,
+  "correct": 311,
+  "missed": 97,
+  "missed_known_gap": 0,
+  "spurious": 0,
+  "line_on_attribute": 0
+ },
+ "examples": [
+  "container_intf.ml:74 module type Generic_without_mem = sig (missed; inside 'include struct ... end', as is everything in lines 58-435 that follows: about 40 module types, vals and types)",
+  "container_intf.ml:14 module Either = Either0 (missed: module alias; also 15, 16, 17)",
+  "hashtbl_intf.ml:493 val length : 'k 'v. ('k, 'v) t -> int [@@zero_alloc] (missed; one of ~35 vals inside 'include sig ... end' at lines 474-560)",
+  "float_intf.ml:306 val fractional : t -> outer (missed; inside 'module Parts : sig ... end with type outer := t', also 303 type outer, 304 type t, 307)",
+  "hashtbl_intf.ml:656 val hashable : 'a t Hashable.t (missed; inside the signature of the functor-like 'module Creators (Key : sig ... end) : sig')"
+ ],
+ "rule_objections": [
+  "The rule's 'up to four modules deep' is stated in terms of modules, but include struct/sig, a functor argument and a constrained module hide contents from the tool without being modules; the rule should say so."
+ ],
+ "findings": [
+  "Items inside 'include struct ... end' and 'include sig ... end' blocks are not extracted; in container_intf.ml that hides about 54 definitions (module types, types, vals) in one 380-line stretch, in hashtbl_intf.ml about 39. This is the normal shape of Jane Street's _intf files. Not in KNOWN_GAPS.",
+  "Module aliases (module List = List0) and the contents of a module with a 'with type' constraint or a functor parameter signature are also missed.",
+  "What is found is right: 313 symbols, no spurious; operators such as ( + ) and ( +. ) are named by the operator; externals are functions; module types are interface.",
+  "Destructive substitutions ('type t := ...') were not counted as expected definitions."
+ ],
+ "not_done": [
+  "Expected sets from a regex over val/module/type/external/exception/let lines with comment lines skipped, reconciled against the symbols; I did not read all 2,166 lines, and the symbols the regex missed (names on the line after val) were treated as correct after sampling."
+ ]
+}

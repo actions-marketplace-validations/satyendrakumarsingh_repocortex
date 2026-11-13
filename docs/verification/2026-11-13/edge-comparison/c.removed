@@ -1,0 +1,2 @@
+CALLS|medium|src/util.c|271|src/inject_errors.c:clearerr
+CALLS|medium|src/util.c|306|src/inject_errors.c:clearerr

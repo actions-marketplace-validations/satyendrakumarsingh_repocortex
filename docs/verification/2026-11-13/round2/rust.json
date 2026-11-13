@@ -1,0 +1,290 @@
+{
+ "language": "rust",
+ "project": "sharkdp/fd",
+ "project_commit": "24d90b2",
+ "repocortex_commit": "8748b29",
+ "files_checked": [
+  "src/cli.rs",
+  "src/walk.rs",
+  "src/main.rs",
+  "src/exec/mod.rs",
+  "src/filesystem.rs"
+ ],
+ "index": {
+  "files": 60,
+  "files_indexed": 49,
+  "symbols": 1009,
+  "symbol_kinds": {
+   "function": 421,
+   "class": 40,
+   "constant": 21,
+   "variable": 24,
+   "type_alias": 9,
+   "interface": 2,
+   "package": 266,
+   "configuration": 203,
+   "dependency": 23
+  },
+  "edges_by_kind_and_tier": {
+   "CALLS": {
+    "high": 344,
+    "medium": 421,
+    "low": 10
+   },
+   "INSTANTIATES": {
+    "high": 6
+   },
+   "IMPLEMENTS": {
+    "high": 3
+   }
+  },
+  "round1_edges_by_kind_and_tier": {
+   "CALLS": {
+    "high": 356,
+    "medium": 412,
+    "low": 10
+   },
+   "INSTANTIATES": {
+    "high": 6
+   },
+   "IMPLEMENTS": {
+    "high": 3
+   }
+  },
+  "parse_summary": {
+   "Parsed": "49 (49 clean)",
+   "Syntax errors": 0,
+   "Incomplete": 0,
+   "Failed": 0,
+   "Too large": 0,
+   "Text only": "1 (awk)",
+   "Skipped": "10 (no_grammar 9, binary 1)"
+  },
+  "index_seconds": 1.15,
+  "resolve_seconds": 0.3,
+  "notes": "Status READY. Symbols 972 -> 1009 (statics, associated types, inline mods and macro_rules! added). 286 macro-invocation references: 9 print_error! + 8 check! + owner_tests/func_tests/gen_size_filter_* resolve to their macro_rules! definition (7 macro definitions in the repo, all symbols of kind function named `name!`); all others (assert, assert_eq, format, vec, anyhow, cfg...) stay unresolved."
+ },
+ "definitions": {
+  "expected": 137,
+  "correct": 137,
+  "missed": 0,
+  "spurious": 0,
+  "line_on_attribute": 0,
+  "per_file": {
+   "src/cli.rs": {
+    "expected": 22,
+    "correct": 22,
+    "missed": 0,
+    "spurious": 0
+   },
+   "src/walk.rs": {
+    "expected": 40,
+    "correct": 40,
+    "missed": 0,
+    "spurious": 0
+   },
+   "src/main.rs": {
+    "expected": 15,
+    "correct": 15,
+    "missed": 0,
+    "spurious": 0
+   },
+   "src/exec/mod.rs": {
+    "expected": 36,
+    "correct": 36,
+    "missed": 0,
+    "spurious": 0
+   },
+   "src/filesystem.rs": {
+    "expected": 24,
+    "correct": 24,
+    "missed": 0,
+    "spurious": 0
+   }
+  },
+  "rule_notes": "Rule from fixtures/langs/rust/expected.tsv header (a directory that did not exist for round one): fn (free, impl, trait signature), struct/enum as class, trait as interface, const/static as constant (static mut variable), type aliases including associated types, inline `mod name { }` as package, macro_rules! as function; not `mod x;`, use, call, macro invocation, field, local binding. Expected counted by regex over fn/struct/enum/trait/type/const/static/inline mod/macro_rules lines and compared with the symbols table by (line,name): exact agreement. Round one expected 135 because it excluded the 2 macro_rules! inside a test fn (exec/mod.rs:448, :463), which the rule now counts: 137 here.",
+  "examples": {
+   "missed": [],
+   "spurious": [],
+   "round1_missed_now": [
+    "main.rs:60 static ALLOC -> fixed (constant)",
+    "walk.rs:64/65 type Item / type IntoIter in impl IntoIterator -> fixed (type_alias)",
+    "walk.rs:718, exec/mod.rs:276, filesystem.rs:182/:202 inline mod tests / windows_tests -> fixed (package)"
+   ]
+  }
+ },
+ "call_precision": {
+  "high": {
+   "right": 30,
+   "wrong": 0,
+   "unclear": 0,
+   "judged": 30,
+   "examples": [],
+   "note": "16 of 30 are TestEnv::new in tests/tests.rs; includes a macro invocation check!(...) at exec/mod.rs:475 correctly bound to the check! macro_rules! defined in the same test fn (:463)."
+  },
+  "medium": {
+   "right": 30,
+   "wrong": 0,
+   "unclear": 0,
+   "judged": 30,
+   "examples": [],
+   "note": "27 of 30 are method calls on `te`/`te2` (TestEnv) in tests/tests.rs; the others: patterns_match_strings_with_leading_dots (imported), b.exit_code() on a Vec<CommandBuilder> item, entry.style(..). Dominated by one receiver type, so little information beyond the test file."
+  },
+  "low": {
+   "right": 8,
+   "wrong": 2,
+   "unclear": 0,
+   "judged": 10,
+   "examples": [
+    "src/walk.rs:351 -> src/cli.rs:762: builder.max_depth(config.max_depth) on the ignore crate's WalkBuilder bound to Opts::max_depth ('the only member of this name in the repository')",
+    "src/patterns.rs:27 -> src/filter/owner.rs:69: self.matches(haystack) inside `impl Matcher for RegexSet` (regex crate RegexSet::matches) bound to OwnerFilter::matches"
+   ]
+  },
+  "note": "All 10 low edges judged (only 10 exist, same as round one). No exact tier. Fresh high/medium samples (id*40503%65521) contain no macro binding to a function, and no sampled edge from a std macro.",
+  "round1_wrong_examples": [
+   {
+    "site": "tests/tests.rs:1812 format!(..)",
+    "round1_tier": "high",
+    "now": "gone",
+    "note": "the format reference is kind reference.call.macro and unresolved; no edge"
+   },
+   {
+    "site": "tests/tests.rs:2708 format!(..)",
+    "round1_tier": "high",
+    "now": "gone",
+    "note": "the line now has only the te.assert_output edge (medium); format! unresolved"
+   },
+   {
+    "site": "src/walk.rs:351 builder.max_depth",
+    "round1_tier": "low",
+    "now": "still_wrong",
+    "note": "unchanged: bound at low to Opts::max_depth"
+   },
+   {
+    "site": "src/patterns.rs:27 self.matches",
+    "round1_tier": "low",
+    "now": "still_wrong",
+    "note": "unchanged: bound at low to OwnerFilter::matches"
+   }
+  ]
+ },
+ "call_recall": {
+  "sites": 37,
+  "right": 32,
+  "wrong": 0,
+  "none": 5,
+  "none_breakdown": {
+   "not_extracted": 1,
+   "extracted_unresolved": 1,
+   "ambiguous": 3,
+   "resolved_but_no_edge": 0
+  },
+  "examples": [
+   "cli.rs 7 right / 1 none: print_error!(..) at :733 now binds (medium) to the macro_rules! definition (was unresolved); :723 self.normalize_path(..) inside vec![..] is still not extracted",
+   "main.rs 7 right / 1 none: ExitCode::GeneralError.exit() at :78 still unresolved (receiver an enum variant path); exit_code.exit() :72 right (medium)",
+   "walk.rs 8/8 right",
+   "exec/mod.rs 5 right / 3 none: c.generate(..) :86, builder.push(..) :104 and builder.finish() :111 are ambiguous with no edge (execute_commands, OutputBuffer::new, CommandBuilder::new, number_of_tokens, handle_cmd_error right). Round one reported 6/2 here; my first-8 derivation includes builder.finish() at :111 and the closure-held CommandBuilder::new :97, so one site differs from round one's list",
+   "filesystem.rs 5/5 right (the rule used in round one gave 5 sites). Extra, not counted: strip_current_dir(..) calls at :188,189,191,195 sit inside assert_eq!(..) in the test module and are not extracted (no reference rows at all)"
+  ],
+  "per_file": {
+   "cli.rs": {
+    "sites": 8,
+    "right": 7,
+    "wrong": 0,
+    "none": 1
+   },
+   "main.rs": {
+    "sites": 8,
+    "right": 7,
+    "wrong": 0,
+    "none": 1
+   },
+   "walk.rs": {
+    "sites": 8,
+    "right": 8,
+    "wrong": 0,
+    "none": 0
+   },
+   "exec/mod.rs": {
+    "sites": 8,
+    "right": 5,
+    "wrong": 0,
+    "none": 3
+   },
+   "filesystem.rs": {
+    "sites": 5,
+    "right": 5,
+    "wrong": 0,
+    "none": 0
+   }
+  },
+  "round1": {
+   "sites": 37,
+   "right": 32,
+   "wrong": 0,
+   "none": 5
+  }
+ },
+ "hierarchy": {
+  "edges_total": 3,
+  "edges_by_kind": {
+   "IMPLEMENTS": 3
+  },
+  "tiers": "3 high",
+  "sampled": 3,
+  "right_target": 3,
+  "wrong_target": 0,
+  "wrong_kind": 0,
+  "declared_relationships_in_files": {
+   "declared_with_repo_target": 0,
+   "edge_present_right": 0,
+   "missing": 0,
+   "details": [
+    "None of the five files declares `impl RepoTrait for Type` (cli.rs: clap traits for Exec; walk.rs: IntoIterator for Batch; all external)."
+   ]
+  },
+  "repo_wide_check": "6 `impl Matcher for ...` blocks in patterns.rs; 3 (FixedStrings, ExactStrings, MatchAll) have edges; 3 (RegexSet, GlobSet, GlobMatcher) have external implementing types and no edge, and the SanitizeErr impls for &str/io::Error/ignore::Error likewise",
+  "round1": {
+   "edges_total": 3,
+   "sampled": 3,
+   "right": 3
+  }
+ },
+ "answers": [
+  {
+   "command": "find_callers name=is_existing_directory",
+   "first_lines": "=== SYSTEM METADATA ===\n3 caller(s) of is_existing_directory (src/filesystem.rs:97) are recorded.\nindex_revision: 1  status: ready\nnote: References spelled \"is_existing_directory\" in this index: 3. 3 bound to this definition.\nprovenance: ...\nverdict: strong (high=3)",
+   "true_of_the_code": true,
+   "comment": "grep finds the definition plus exactly 3 call sites (cli.rs 728, 984; main.rs 140). Unchanged from round one."
+  },
+  {
+   "command": "analyze_impact symbol=build_patterns",
+   "first_lines": "=== SYSTEM METADATA ===\nINCOMPLETE \u2014 build_patterns: its name appears in 1 other place(s) that are not recorded as calls: it may be passed as a value; 2 symbols on the path to it (run, main) are named in 39 other place(s) not recorded as calls (they may be passed as values), so what reaches them is not listed. build_patterns (src/patterns.rs:73): 2 direct, 1 indirect. Risk low or higher (score 10; the name occurs where no call is recorded, so a function passed as a value may reach the target).\nindex_revision: 1  status: ready\nnote: INCOMPLETE FOR THIS SYMBOL \u2014 ... (for example src/main.rs:41) ... The name of run (src/main.rs:83) ... occurs in at least 37 other place(s) ... (for example .github/workflows/CICD.yml:29 ...)",
+   "true_of_the_code": true,
+   "comment": "The counts hold (3 call sites in 2 functions + 1 indirect). It now says the answer may be incomplete because of values passed by name, but the evidence is noise: src/main.rs:41 is the `use` line, and the 37 places for the common word `run` are YAML steps in CICD.yml. Honest but over-cautious; the score drops from 30 (moderate) to 10 (low or higher)."
+  },
+  {
+   "command": "find_implementations name=Matcher",
+   "first_lines": "=== SYSTEM METADATA ===\nINCOMPLETE \u2014 3 of the 6 supertype reference(s) spelled \"Matcher\" did not become a subtype below (3 on a type this index does not define), so subtypes exist that this list does not carry. Matcher (src/patterns.rs:10): 3 implementing or extending it, all directly, 0 it implements or extends.\nindex_revision: 1  status: ready\nnote: INCOMPLETE FOR THIS TYPE \u2014 3 of the 6 supertype reference(s) ... (3 on a type this index does not define) ... the count above is a floor.\nverdict: incomplete (high=3)",
+   "true_of_the_code": true,
+   "comment": "True and now admits the limit on the first line: 6 `impl Matcher for` blocks, 3 recorded. Round one's answer was 'strong' with no admission."
+  }
+ ],
+ "findings": [
+  "Fixed and verified: find_implementations Matcher now says on its first line that 3 of 6 impl blocks did not become a subtype and the verdict is 'incomplete' (round one: 'strong').",
+  "Fixed and verified: macro invocations bind only to macro_rules! definitions (7 definitions; 286 macro references, only the 28 that name a repository macro are resolved); std format! no longer binds to the test fn `format` (0 CALLS edges to it); print_error! binds to its definition at all 9 call sites (medium).",
+  "Fixed: statics, associated types and inline mods are symbols; definitions in the five files are 137 expected / 137 correct / 0 missed / 0 spurious (round one 135/128/7/0).",
+  "Still wrong: low-tier calls on external-crate types bound to a same-named repo method (walk.rs:351 WalkBuilder::max_depth -> Opts::max_depth; patterns.rs:27 RegexSet::matches -> OwnerFilter::matches), 2 of the 10 low edges, unchanged.",
+  "Still missing: calls inside macro invocation arguments are not extracted (vec![self.normalize_path(..)] cli.rs:723; assert_eq!(strip_current_dir(..), ..) filesystem.rs:188-195 in the test module); ExitCode::GeneralError.exit() stays unresolved; c.generate / builder.push / builder.finish stay ambiguous with no edge although the receiver's type is declared.",
+  "analyze_impact's new 'passed as a value' evidence is noisy for Rust: a `use` line and the word `run` in CI YAML files (37 places) count as possible uses, which lowers trust in the warning.",
+  "Medium tier remains dominated by TestEnv method calls in tests/tests.rs (27 of 30 in this sample), so its 30/30 says little about library code."
+ ],
+ "not_done": [
+  "Hierarchy: the whole set of 3 edges was judged, not 20.",
+  "The first-8 recall sites for exec/mod.rs were re-derived by reading and differ by one site from round one's (round one's list for that file is not recorded precisely); totals happen to equal round one's (32 right, 5 none) but the composition changed (+1 print_error! right, -1 in exec/mod.rs).",
+  "Struct fields and enum variants not counted as definitions."
+ ],
+ "regressions": [
+  "None found: no definition, previously right edge or hierarchy edge disappeared. 12 high CALLS edges fewer than in round one (356 -> 344) are the format!/assert-style macro bindings that were wrong; medium CALLS rose from 412 to 421."
+ ]
+}

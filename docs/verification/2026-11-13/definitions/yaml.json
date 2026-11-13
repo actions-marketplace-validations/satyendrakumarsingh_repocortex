@@ -1,0 +1,80 @@
+{
+ "language": "yaml",
+ "project": "gitlab-org/gitlab-foss (GitLab CI config)",
+ "project_commit": "b8cb14c7b1dfa990e52559ba627b9d6f1e8dd0c1",
+ "repocortex_commit": "f783fa5",
+ "files": [
+  {
+   "path": "tests.yml",
+   "lines": 610,
+   "assigned_language": "yaml",
+   "parse_status": "ok",
+   "parse_error": "",
+   "expected": 0,
+   "correct": 0,
+   "missed": 0,
+   "missed_known_gap": 0,
+   "spurious": 0,
+   "line_on_attribute": 0,
+   "total_symbols": 2,
+   "configuration": 2
+  },
+  {
+   "path": ".gitlab-ci.yml",
+   "lines": 546,
+   "assigned_language": "yaml",
+   "parse_status": "ok",
+   "parse_error": "",
+   "expected": 9,
+   "correct": 9,
+   "missed": 0,
+   "missed_known_gap": 0,
+   "spurious": 0,
+   "line_on_attribute": 0,
+   "total_symbols": 137,
+   "variable": 9,
+   "configuration": 128
+  },
+  {
+   "path": "lib/gitlab/ci/templates/Jobs/Dependency-Scanning.v2.gitlab-ci.yml",
+   "lines": 482,
+   "assigned_language": "yaml",
+   "parse_status": "ok",
+   "parse_error": "",
+   "expected": 1,
+   "correct": 1,
+   "missed": 0,
+   "missed_known_gap": 0,
+   "spurious": 0,
+   "line_on_attribute": 0,
+   "total_symbols": 156,
+   "variable": 1,
+   "configuration": 155
+  }
+ ],
+ "totals": {
+  "expected": 10,
+  "correct": 10,
+  "missed": 0,
+  "missed_known_gap": 0,
+  "spurious": 0,
+  "line_on_attribute": 0
+ },
+ "examples": {
+  "missed": [],
+  "spurious": []
+ },
+ "rule_objections": [
+  "Rule is explicit and sound for anchors: aliases and keys excluded. Since GitLab CI hidden jobs (`.default-ruby-variables`) are the real 'definitions' referred to by `extends:`, but they are plain keys, they are only `configuration` symbols; a developer cannot ask for them as definitions. Arguable but consistent with the stated rule.",
+  "tests.yml (610 lines, a mapping table: `mapping: - source: ... test: ...`) legitimately has 0 anchors, and counts only 2 configuration symbols for 610 lines because the config analyser records only mapping keys, not sequence-item keys."
+ ],
+ "findings": [
+  "Against the stated rule: 10 anchors expected (9 in .gitlab-ci.yml, 1 in Dependency-Scanning.v2.gitlab-ci.yml), 10 extracted as `variable`, named without '&', on the right lines; 0 missed, 0 spurious. Shell `&&` / `&` in script blocks were not mistaken for anchors. All parse ok.",
+  "Totals are dominated by the separate config analyser (not counted against the rule): 2 / 128 / 155 `configuration` symbols vs 10 anchors.",
+  "Sample is thin for anchors: only 10 in three files, and none in `<<: *alias` merge-key form beyond the aliases themselves (aliases correctly not recorded).",
+  "Text search works: `search more` (a word taken from comment text) finds both files that contain it."
+ ],
+ "not_done": [
+  "No YAML with anchors inside flow collections / sequences (`- &x`) was available in these three files."
+ ]
+}

@@ -1,0 +1,73 @@
+{
+ "language": "markdown",
+ "project": "rust-lang/book (src/)",
+ "project_commit": "2771df165f092a4fbb9f46b5b2e7450f19010adb",
+ "repocortex_commit": "f783fa5",
+ "files": [
+  {
+   "path": "src/ch21-02-multithreaded.md",
+   "lines": 728,
+   "assigned_language": "markdown",
+   "parse_status": "ok",
+   "parse_error": "",
+   "expected": 11,
+   "correct": 11,
+   "missed": 0,
+   "missed_known_gap": 0,
+   "spurious": 0,
+   "line_on_attribute": 0,
+   "total_symbols": 11
+  },
+  {
+   "path": "src/ch10-03-lifetime-syntax.md",
+   "lines": 641,
+   "assigned_language": "markdown",
+   "parse_status": "ok",
+   "parse_error": "",
+   "expected": 13,
+   "correct": 13,
+   "missed": 0,
+   "missed_known_gap": 0,
+   "spurious": 0,
+   "line_on_attribute": 0,
+   "total_symbols": 13
+  },
+  {
+   "path": "src/ch19-03-pattern-syntax.md",
+   "lines": 639,
+   "assigned_language": "markdown",
+   "parse_status": "ok",
+   "parse_error": "",
+   "expected": 18,
+   "correct": 18,
+   "missed": 0,
+   "missed_known_gap": 0,
+   "spurious": 0,
+   "line_on_attribute": 0,
+   "total_symbols": 18
+  }
+ ],
+ "totals": {
+  "expected": 42,
+  "correct": 42,
+  "missed": 0,
+  "missed_known_gap": 0,
+  "spurious": 0,
+  "line_on_attribute": 0
+ },
+ "examples": {
+  "missed": [],
+  "spurious": []
+ },
+ "rule_objections": [
+  "Rule is sensible (headings only). Duplicate generic headings across files will repeat, as the gaps file admits.",
+  "The nostarch/ manuscript (chapter01.md, 654 lines) was excluded as generated from src/ by the book's tooling; including it would only have changed the sample."
+ ],
+ "findings": [
+  "42 headings expected by my own line-based scan (ATX; fenced code skipped; no setext in these files), 42 extracted with the right line and name; 0 missed, 0 spurious, all kind package. Code-span backticks removed correctly, underscore-only code spans kept (`_` becomes `_`).",
+  "No flood: total symbols per file equal the heading count. Text search works (`search dangling` finds ch10-03-lifetime-syntax.md)."
+ ],
+ "not_done": [
+  "Setext headings, front matter, headings in block quotes and HTML-in-heading cases did not occur in these files, so were not exercised."
+ ]
+}

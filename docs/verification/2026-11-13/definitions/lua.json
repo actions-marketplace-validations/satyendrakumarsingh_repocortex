@@ -1,0 +1,66 @@
+{
+ "language": "lua",
+ "project": "luarocks/luarocks (src/luarocks/tools/patch.lua, src/luarocks/repos.lua, src/luarocks/fetch.lua)",
+ "project_commit": "85bfe36",
+ "repocortex_commit": "f783fa5",
+ "files": [
+  {
+   "path": "src/luarocks/tools/patch.lua",
+   "lines": 740,
+   "assigned_language": "lua",
+   "parse_status": "ok",
+   "parse_error": "",
+   "expected": 26,
+   "correct": 26,
+   "missed": 0,
+   "missed_known_gap": 0,
+   "spurious": 0,
+   "line_on_attribute": 0
+  },
+  {
+   "path": "src/luarocks/repos.lua",
+   "lines": 722,
+   "assigned_language": "lua",
+   "parse_status": "ok",
+   "parse_error": "",
+   "expected": 35,
+   "correct": 35,
+   "missed": 0,
+   "missed_known_gap": 0,
+   "spurious": 0,
+   "line_on_attribute": 0
+  },
+  {
+   "path": "src/luarocks/fetch.lua",
+   "lines": 624,
+   "assigned_language": "lua",
+   "parse_status": "ok",
+   "parse_error": "",
+   "expected": 15,
+   "correct": 15,
+   "missed": 0,
+   "missed_known_gap": 0,
+   "spurious": 0,
+   "line_on_attribute": 0
+  }
+ ],
+ "totals": {
+  "expected": 76,
+  "correct": 76,
+  "missed": 0,
+  "missed_known_gap": 0,
+  "spurious": 0,
+  "line_on_attribute": 0
+ },
+ "examples": [],
+ "rule_objections": [
+  "Plain top-level constants (local X = 5) are intentionally not recorded."
+ ],
+ "findings": [
+  "76 of 76 expected definitions extracted (module functions 'function M.f', local functions at any depth, and the module table variable) with no spurious symbols; local tables inside function bodies were correctly not recorded.",
+  "The files hold no function-valued table fields, 'M.f = function' or 'function M:m' forms, so those rule branches were not exercised."
+ ],
+ "not_done": [
+  "Expected set from a regex over the function/assignment shapes cross-checked with grep, not a full read."
+ ]
+}

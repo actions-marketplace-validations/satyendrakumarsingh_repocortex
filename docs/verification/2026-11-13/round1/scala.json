@@ -1,0 +1,153 @@
+{
+  "language": "scala",
+  "project": "com-lihaoyi/os-lib",
+  "project_commit": "8871ab0bda9bbcc4edbef9b1a402eb4c47ef9398",
+  "repocortex_commit": "53246ac",
+  "files_checked": [
+    "os/src/Path.scala (680 lines)",
+    "os/src/ProcessOps.scala (678)",
+    "os/src/SubProcess.scala (598)",
+    "os/src-jvm/ZipOps.scala (500)",
+    "os/src/FileOps.scala (419)"
+  ],
+  "index": {
+    "files": 102,
+    "indexed_files": 72,
+    "scala_files": 61,
+    "symbols": 931,
+    "edges_by_kind_and_tier": {
+      "all_callers": {"CALLS/high": 625, "CALLS/medium": 189, "CALLS/low": 310},
+      "scala_callers_only": {"CALLS/high": 504, "CALLS/medium": 169, "CALLS/low": 263, "INSTANTIATES/high": 64, "INSTANTIATES/medium": 19, "INSTANTIATES/low": 31, "EXTENDS/high": 54, "EXTENDS/medium": 1, "EXTENDS/low": 13, "IMPLEMENTS": 0}
+    },
+    "parse_summary": {"Parsed": "72 (70 clean, 2 with syntax errors)", "Syntax errors": 2, "Incomplete": 0, "Failed": 0, "Too large": 0, "Text only": 2, "Skipped": "28 (no_grammar 21, symlink 3, binary 2, unreadable 2)"},
+    "index_seconds": 0.87,
+    "resolve_seconds": 0.23,
+    "resolve_summary": "References 4957; resolved 1138 (62.4% of the 1825 that name something indexed); ambiguous 687; unresolved 3132; 115 resolved calls are INSTANTIATES; edges 1124"
+  },
+  "definitions": {
+    "expected": 370,
+    "correct": 362,
+    "missed": 8,
+    "spurious": 26,
+    "line_on_attribute": 11,
+    "per_file": {
+      "Path.scala": {"expected": 164, "correct": 156, "missed": 8, "spurious": 4, "line_on_attribute": 2},
+      "ProcessOps.scala": {"expected": 22, "correct": 22, "missed": 0, "spurious": 8, "line_on_attribute": 1},
+      "SubProcess.scala": {"expected": 118, "correct": 118, "missed": 0, "spurious": 8, "line_on_attribute": 4},
+      "ZipOps.scala": {"expected": 24, "correct": 24, "missed": 0, "spurious": 1, "line_on_attribute": 2},
+      "FileOps.scala": {"expected": 42, "correct": 42, "missed": 0, "spurious": 5, "line_on_attribute": 2}
+    },
+    "examples": {
+      "missed": [
+        "Path.scala:125 def /(chunk: PathChunk) in trait BasePath (also :229 SegmentedPath, :241 BasePathImpl, :601 class Path): the `/` operator method is never extracted (4 misses)",
+        "Path.scala:266 type IAE = IllegalArgumentException (type alias)",
+        "Path.scala:321 type ThisType = RelPath (also :393 SubPath, :597 Path): concrete type aliases not extracted"
+      ],
+      "spurious": [
+        "Path.scala:181 BasePath.checkSegment.<locals>.fail and :182 considerStr (local defs); :300 FilePath.apply.<locals>.f",
+        "Path.scala:515 Path.compare (method of an anonymous `new Ordering[Path]`)",
+        "ProcessOps.scala:310 proc.spawn.<locals>.resolve (local def); :329/:334 `run` of anonymous Thread; :588/:589/:595/:608 members of anonymous ProcessInput/Runnable; :644 addToProcessEnv",
+        "SubProcess.scala:174 destroy0 and :188 rec (local defs); :338, :350, :491, :518, :527 `run` of anonymous Runnables; :431 waitForRec",
+        "FileOps.scala:73/74 and :156/157 isDefinedAt/apply of anonymous PartialFunction; :203 copyOne (local def)"
+      ],
+      "notes": [
+        "Counting rule: fixtures/langs/scala/expected.tsv lists traits, classes, case classes, enums, objects (as variables) and defs; vals/vars and type aliases are not in the stated rule. I counted type aliases as expected (4 in Path.scala, all missed) and did NOT count object-level vals (e.g. relPathOrdering, pathSerializer, driveRoot). I counted the secondary constructor SubProcess.this (line 113) as a definition (extracted).",
+        "Local defs and members of anonymous classes were counted spurious (26); if the project owner considers those acceptable the spurious count would be 0 but correct/expected unchanged.",
+        "Objects are kind 'variable' by design (companions do not collide with classes).",
+        "end_line is wrong for brace-less one-line defs: unzip.isSymLink 352-362 (really 352-353), PathError.errorMsg 267-270 (really 267-268): the range runs into the next declaration."
+      ]
+    }
+  },
+  "call_precision": {
+    "high": {"right": 28, "wrong": 2, "unclear": 0, "judged": 30, "examples": [
+      "os/test/src-jvm/PathTestsCustomFilesystem.scala:214 os.move.matching { case p / \"test\" => p } -> os/src/FileOps.scala:67 move.matching (3-parameter-list version): the one-argument overload at FileOps.scala:82 is the callee",
+      "os/test/src/OpTests.scala:139 os.move.matching { case d / \"py\" / x => d / x } -> FileOps.scala:67: same wrong overload"
+    ]},
+    "medium": {"right": 13, "wrong": 17, "unclear": 0, "judged": 30, "examples": [
+      "os/test/src/SubProcessTests.scala:242 os.proc(...) -> os/test/src/TestUtil.scala:41 TestUtil.proc: `os.proc` is the case class in ProcessOps.scala (9 of the 17 wrong are this os.proc -> TestUtil.proc binding, in SubProcessTests, ProcessPipelineTests, SpawningSubprocessesTests, PathTestsCustomFilesystem, OpTestsJvmOnly, and os/src/ProcessOps.scala:97)",
+      "os/test/src-jvm/PathTestsCustomFilesystem.scala:181 os.root(\"/\", fileSystem) -> os/src/Path.scala:591 Path.root (a String-valued instance method); the callee is def root in os/src/package.scala:17 (5 of the 17 wrong are os.root: PathTestsCustomFilesystem.scala lines 50, 89, 106, 118, 181)",
+      "os/test/src/FilesystemMetadataTests.scala:31 os.isFile(...) -> os/src/Model.scala:258 StatInfo.isFile; the callee is object isFile in StatOps.scala (also os.isDir at :41 and ZipOpTests.scala:451)",
+      "os/src/ProcessOps.scala:97 os.proc(cmd).spawn(...) -> TestUtil.proc: library code bound to a test helper"
+    ]},
+    "low": {"right": 25, "wrong": 5, "unclear": 0, "judged": 30, "examples": [
+      "os/test/src/SubProcessTests.scala:133 proc(\"bash\",...) (file has `import os._`) -> TestUtil.scala:41 TestUtil.proc; callee is os.proc (also :50)",
+      "os/src/Internals.scala:11 transfer0(src, sink, true) -> Internals.scala:10 itself (the 2-arg overload calling the 3-arg overload at line 13)",
+      "os/src/PermsOps.scala:38 apply(p, followLinks = true) -> PermsOps.scala:38 itself; callee is the overload at :39",
+      "os/src/ProcessOps.scala:552 proc.spawn(cwd, env, stdin, Pipe, stderr, mergeErrIntoOut, propagateEnv) -> ProcessOps.scala:295 (9-param version with defaults); the 7-param overload at :362 is the callee"
+    ]}
+  },
+  "call_recall": {
+    "sites": 40,
+    "right": 20,
+    "wrong": 4,
+    "none": 16,
+    "none_breakdown": {
+      "reference extracted, ambiguous (no edge)": 8,
+      "reference extracted, unresolved": 8,
+      "not extracted": 0
+    },
+    "examples": [
+      "Path.scala:43 throw InvalidSegment(...) and :47 NonCanonicalLiteral(...) (imported case classes, defined at :270/:281): none, unresolved",
+      "ProcessOps.scala:31 and :97 os.proc(cmd) -> WRONG, bound to os/test/src/TestUtil.scala:41 TestUtil.proc (medium); :31 .call(...) and :97 .spawn(...) none (ambiguous); :62 call(...) and :123 spawn(...) none (unresolved); :214 os.ProcessOutput.ReadBytes none (unresolved)",
+      "ZipOps.scala:65/:67 checker.value.onWrite/onRead none (ambiguous); :69 os.exists and :73 os.walk none (unresolved, although `object exists` and `object walk` are indexed); :74 openedPath.relativeTo none (ambiguous)",
+      "FileOps.scala:43 apply(path, null, true) -> WRONG, bound to itself (makeDir.all.apply:43, should be :44); :50 os.isDir -> WRONG, StatInfo.isDir; :50 os.isLink none (unresolved); :26/:30/:45 checker.value.onWrite none (ambiguous)",
+      "SubProcess.scala:68-84: 8/8 right; Path.scala 6/8 right"
+    ]
+  },
+  "hierarchy": {
+    "edges_total": 68,
+    "by_kind_tier": {"EXTENDS/high": 54, "EXTENDS/medium": 1, "EXTENDS/low": 13, "IMPLEMENTS": 0},
+    "judged": 20,
+    "right": 20,
+    "wrong": 0,
+    "unclear": 0,
+    "relationships_in_checked_files_with_repo_target": 43,
+    "relationships_with_correct_edge": 39,
+    "examples": [
+      "Missing: `object PathChunk extends PathChunkMacros`, `object RelPath extends RelPathMacros`, `object SubPath extends SubPathMacros`, `object Path extends PathMacros` (Path.scala:24, 356, 417, 444) have no edge; the *Macros traits exist in os/src-2 and os/src-3 Macros.scala (two versions each).",
+      "WRONG edges outside the sample (SubProcess.scala:240 `class InputStream extends java.io.OutputStream` -> SubProcess.OutputStream:281, and :282 `class OutputStream extends java.io.InputStream` -> SubProcess.InputStream:239): the fully-qualified java.io supertypes were bound to the repository's same-named nested classes, swapped, both high confidence.",
+      "Scala traits are recorded as EXTENDS (no IMPLEMENTS edges exist for Scala)."
+    ]
+  },
+  "answers": [
+    {
+      "command": "repocortex --project . tool call find_callers name=shouldInclude",
+      "first_lines": "=== SYSTEM METADATA ===\n6 caller(s) of shouldInclude (os/src-jvm/ZipOps.scala:192) are recorded.\nindex_revision: 1  status: ready\nnote: References spelled \"shouldInclude\" in this index: 6. 6 bound to this definition.\nnote: How the calls bound to this definition were made: shouldInclude ×4, os.zip.shouldInclude ×2. A qualified call is bound through what its qualifier names ...\nprovenance: This compares commits only. Staged, unstaged and untracked changes are invisible to the index ...",
+      "true_of_the_code": true,
+      "comment": "Text search finds exactly 6 call sites (ZipOps.scala 149,153,154,159,372,486). Correct, and it explains how calls were bound."
+    },
+    {
+      "command": "repocortex --project . tool call analyze_impact symbol=checkSegment",
+      "first_lines": "=== SYSTEM METADATA ===\ncheckSegment (os/src/Path.scala:180): 3 direct, 2 indirect. Risk moderate (score 35).\nindex_revision: 1  status: ready\nnote: Risk = score = sum(factors), clamped to 0..100; level = low below 25, moderate below 60, high at or above 60; ...\nnote:   public_api (+0): Whether the target is exported is UNKNOWN. The index does not read the visibility rules of Scala, so it cannot say whether callers outside this repository exist. ...\nnote:   direct_callers (+15): 3 symbol(s) reference the target directly (depth 1). ...",
+      "true_of_the_code": false,
+      "comment": "Text search finds 5 direct uses of BasePath.checkSegment (Path.scala 54, 72, 85, and two method-reference uses `segments0.foreach(BasePath.checkSegment)` at 369 and 433). The answer says 3 direct and does not admit that the two uses passed as values are not counted; it does state that Scala visibility is not read."
+    },
+    {
+      "command": "repocortex --project . tool call find_implementations name=ProcessOutput",
+      "first_lines": "=== SYSTEM METADATA ===\nProcessOutput (os/src/SubProcess.scala:505): 7 implementing or extending it, 0 it implements or extends.\nindex_revision: 1  status: ready\nnote: A type relationship is recorded only where the source states it ... Treat an empty list as 'none declared', not 'none exist'.\nnote: 2 definitions are named \"ProcessOutput\". This answer is for the interface at os/src/SubProcess.scala:505, chosen because find_implementations is about types and it is the only one that is. Pass path and line to choose another.\nprovenance: This compares commits only. ...",
+      "true_of_the_code": true,
+      "comment": "7 matches the source (ReadBytes, Readlines, Inherit, InheritRaw, Pipe, PathRedirect, PathAppendRedirect). It discloses the trait/object name clash."
+    }
+  ],
+  "findings": [
+    "Calls written os.<name>(...) where <name> is an object in the repository (os.exists, os.walk, os.isLink, os.copy, os.remove, os.perms, os.symlink ...) mostly do not resolve: for call references whose name equals an indexed Scala object, 772 are unresolved, 380 ambiguous and only 179 resolved. os.exists alone has 121 unresolved references and os.walk 52. This is the library's main calling style, so most calls to it have no edge.",
+    "os.proc(...), os.root(...), os.isFile(...), os.isDir(...) are bound at medium confidence to unrelated same-named definitions (a test helper TestUtil.proc, the instance method Path.root, the instance method StatInfo.isFile/isDir). 17 of 30 sampled medium edges are wrong: 9 os.proc -> TestUtil.proc, 5 os.root -> Path.root, 3 os.isFile/os.isDir -> StatInfo; library code (ProcessOps.scala:31, :97) is bound to a test file.",
+    "Overloads are not told apart: a call binds to the first/an arbitrary overload (os.move.matching { ... } -> the 3-parameter-list matching, apply(p, followLinks=true) -> itself in PermsOps.scala:38 and Internals.scala:11, makeDir.all.apply self-edge, proc.spawn 7-arg call bound to the 9-arg version). This also appears at high confidence (2 of 30).",
+    "Unqualified proc(...) in a file with `import os._` is bound to TestUtil.proc rather than os.proc (2 of 30 low edges).",
+    "Fully-qualified java.io supertypes were bound to same-named repository classes: SubProcess.InputStream extends java.io.OutputStream is recorded as extending SubProcess.OutputStream, and OutputStream extends java.io.InputStream as extending SubProcess.InputStream, both at high confidence.",
+    "Calls through `checker.value.onWrite/onRead` are all ambiguous (8 of 40 recall sites are ambiguous with no edge) because Checker has several implementations.",
+    "Case-class construction through an imported name (throw InvalidSegment(...), NonCanonicalLiteral(...)) is unresolved at Path.scala:43/:47.",
+    "The `/` operator method is not extracted anywhere (4 definitions in Path.scala), nor are type aliases (type IAE, type ThisType x3).",
+    "26 local defs and members of anonymous classes (run, apply, isDefinedAt, copyOne, resolve ...) are recorded as ordinary functions.",
+    "Objects extending a macro trait (object PathChunk extends PathChunkMacros etc.) have no EXTENDS edge; 4 of 43 supertype relationships in the five files are missing.",
+    "end_line of one-line brace-less defs runs into the next declaration (unzip.isSymLink 352-362, PathError.errorMsg 267-270).",
+    "analyze_impact for checkSegment counts 3 direct callers while the code has 5 direct uses (two as method references) and does not say that value-position references are not counted.",
+    "Two files (os/src/Internals.scala line 16 and os/watch/test/src/WatchTests.scala line 251) parse with syntax errors and are flagged partial.",
+    "Positive: definitions 362/370 in the five largest files with no missed class, trait, object or ordinary def other than the `/` operator; SubProcess.scala call recall 8/8; hierarchy sample 20/20 right; find_callers/find_implementations counts match a text search."
+  ],
+  "not_done": [
+    "Java files in the repository (os/zip shaded sources) were not measured.",
+    "Object-level vals/vars and parameter-less members were not counted as expected definitions.",
+    "Call recall counted calls whose callee is defined in the repo; calls through implicit conversions or infix operators (such as `/`) were not counted as sites."
+  ]
+}

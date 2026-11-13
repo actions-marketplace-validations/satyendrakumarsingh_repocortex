@@ -1,0 +1,178 @@
+{
+  "language": "javascript",
+  "project": "koajs/koa",
+  "project_commit": "b7ead6f7a2bb56e2948b1c5e1cca77483e89c885",
+  "repocortex_commit": "8748b29",
+  "files_checked": [
+    "lib/request.js (761 lines)",
+    "lib/response.js (674)",
+    "lib/application.js (365)",
+    "lib/context.js (254)",
+    "lib/search-params.js (39)"
+  ],
+  "index": {
+    "files": 111,
+    "symbols": 500,
+    "edges_by_kind_and_tier": {
+      "CALLS": {"high": 36, "medium": 0, "low": 4},
+      "INSTANTIATES": {},
+      "EXTENDS": {},
+      "IMPLEMENTS": {},
+      "exact": {}
+    },
+    "round1_for_comparison": {"CALLS high": 43, "CALLS medium": 2, "CALLS low": 3, "total": 48},
+    "parse_summary": {
+      "Parsed": "104 (104 clean)",
+      "Syntax errors": "0",
+      "Incomplete": "0",
+      "Failed": "0",
+      "Too large": "0",
+      "Text only": "1 (editorconfig)",
+      "Skipped": "6 (no_grammar 4, binary 2)"
+    },
+    "resolution": "4081 references; resolved 496 (59.3% of the 837 that name something the index defines); 341 ambiguous; 3244 unresolved (1909 shown to leave the repository); 40 edges. Round one: 7 ambiguous, 3678 unresolved, 48 edges.",
+    "index_seconds": 0.88,
+    "resolve_seconds": 0.20
+  },
+  "definitions": {
+    "expected": 107,
+    "correct": 107,
+    "missed": 0,
+    "spurious": 1,
+    "line_on_attribute": 0,
+    "per_file": {
+      "lib/request.js": {"expected": 45, "correct": 45, "missed": 0, "spurious": 0},
+      "lib/response.js": {"expected": 35, "correct": 35, "missed": 0, "spurious": 0},
+      "lib/application.js": {"expected": 18, "correct": 18, "missed": 0, "spurious": 1},
+      "lib/context.js": {"expected": 6, "correct": 6, "missed": 0, "spurious": 0},
+      "lib/search-params.js": {"expected": 3, "correct": 3, "missed": 0, "spurious": 0}
+    },
+    "basis": "Same as round one: getter/setter pairs two each, locals and module.exports forms per the JavaScript rule; delegated methods are not declarations. Symbol lists of all five files compared with the source.",
+    "examples": {
+      "missed": [],
+      "spurious": [
+        "lib/application.js:37 method 'value' (shorthand method inside the object literal passed to Object.defineProperty(..., Symbol.hasInstance, {...})); NOT FIXED, unchanged from round one, and it still acts as a caller (application.js:41 value -> isHttpErrorLike)"
+      ]
+    }
+  },
+  "call_precision": {
+    "high": {
+      "right": 30, "wrong": 0, "unclear": 0, "judged": 30,
+      "examples": [],
+      "note": "30 of the 36 high edges sampled by the rule; the other 6 were read from the full edge list and are the same kinds (cleanupPreviousStream, isStream, only, addKey, handleRequest): right. No library function (vary, fresh, accepts, URL) is bound to a same-file member any more."
+    },
+    "medium": {"right": 0, "wrong": 0, "unclear": 0, "judged": 0, "examples": [], "note": "no medium edges exist (round one had 2, both wrong)"},
+    "low": {
+      "right": 4, "wrong": 0, "unclear": 0, "judged": 4,
+      "examples": [],
+      "note": "All 4 low edges judged: this.redirect(...) in response.back (x2) -> Response.redirect; this.ctx.accepts('html') at response.js:326 -> request.js:578 accepts (right through the delegates mapping); test-helpers/context.js:15 app.createContext -> Application.createContext. The two wrong ctx.onerror low edges of round one are gone."
+    },
+    "exact": {"right": 0, "wrong": 0, "unclear": 0, "judged": 0, "examples": [], "note": "no exact edges exist"},
+    "sampling_rule": "ORDER BY (id * 40503) % 65521 LIMIT 30, caller in a javascript file; the population is small (36 high, 4 low), so the sample is 30 of 36."
+  },
+  "round1_wrong_examples": [
+    {"site": "lib/response.js:300 vary(this.res, field)", "round1_tier": "high", "now": "gone", "note": "reference is unresolved and external"},
+    {"site": "lib/request.js:338 fresh(...)", "round1_tier": "high", "now": "gone", "note": "unresolved, external"},
+    {"site": "lib/request.js:523 accepts(this.req)", "round1_tier": "high", "now": "gone", "note": "unresolved, external"},
+    {"site": "lib/request.js:290 new URL(...)", "round1_tier": "high", "now": "gone", "note": "unresolved, external"},
+    {"site": "lib/request.js:312 new URL(...)", "round1_tier": "high", "now": "gone", "note": "unresolved, external"},
+    {"site": "lib/response.js:355 new URL(referrer, ...)", "round1_tier": "medium", "now": "gone", "note": "unresolved, external"},
+    {"site": "lib/response.js:318 new URL(url)", "round1_tier": "medium", "now": "gone", "note": "unresolved, external"},
+    {"site": "lib/application.js:347 ctx.onerror(err)", "round1_tier": "low", "now": "gone", "note": "reference is now ambiguous (context.js onerror vs Application.onerror), no edge"},
+    {"site": "lib/application.js:221 ctx.onerror(err)", "round1_tier": "low", "now": "gone", "note": "ambiguous, no edge"}
+  ],
+  "call_recall": {
+    "sites": 31,
+    "right": 17,
+    "wrong": 0,
+    "none": 14,
+    "none_breakdown": {
+      "ambiguous": 14,
+      "unresolved": 0,
+      "not_extracted": 0,
+      "resolved_but_no_edge": 0
+    },
+    "per_file": {
+      "lib/search-params.js": "2 sites (15, 18), 2 right",
+      "lib/application.js": "8 sites (41, 115, 118, 135, 148, 159, 193, 195), 8 right",
+      "lib/context.js": "5 sites (32, 49, 50, 51 toJSON; 151 set), 0 right, 5 none (all ambiguous)",
+      "lib/request.js": "8 sites (177, 188, 255, 257, 258, 261, 404, 425), 3 right, 5 none (this.get x5, ambiguous)",
+      "lib/response.js": "8 sites (30, 153, 156, 173, 174, 175, 176, 184), 4 right, 4 none (this.remove x3, this.has, ambiguous)"
+    },
+    "examples": [
+      "request.js:255,257,258,404,425 this.get(...): ambiguous (was unresolved in round one)",
+      "response.js:173,174,175 this.remove(...), 184 this.has(...): ambiguous (was unresolved)",
+      "context.js:32,49,50,51 toJSON: ambiguous (unchanged); context.js:151 this.set(...): ambiguous (was unresolved)"
+    ],
+    "note": "Same 31 sites, same 17 right. The 14 misses moved from unresolved to ambiguous; none became right and none became wrong."
+  },
+  "hierarchy": {
+    "edges_total": 0,
+    "sample_judged": 0,
+    "sample_right": 0,
+    "five_files_declared": 0,
+    "five_files_right": 0,
+    "note": "The only declared supertype in the five files is 'class Application extends Emitter' (node:events, outside the repository), so 0 of 0 repository-target relationships. Unchanged."
+  },
+  "answers": [
+    {
+      "command": "repocortex --project . tool call find_callers name=isStream",
+      "first_lines": [
+        "=== SYSTEM METADATA ===",
+        "UNRELIABLE — only 59% of the JavaScript references that name something this index defines are bound. 5 caller(s) of isStream (lib/is-stream.js:7) are recorded.",
+        "index_revision: 1  status: ready",
+        "note: COVERAGE TOO LOW — relationship lookup for JavaScript is unreliable here: 59% of the 837 JavaScript references that name something this index defines are bound to a definition (341 ambiguous; a further 3244 matched no definition here at all, out of 4081 JavaScript references in total). ... Do not present what follows as an answer to the question asked.",
+        "note: This result is a LOWER BOUND, not a complete answer. ...",
+        "note: References spelled \"isStream\" in this index: 5. 5 bound to this definition."
+      ],
+      "true_of_the_code": true,
+      "comment": "5 callers is right and complete (a text search finds 5 call sites). The first line is a true statement about index coverage. But it tells the agent 'Do not present what follows as an answer' about a list that is exactly correct; round one said 'strong'. More honest about the whole index, but over-pessimistic for this symbol (one of 5 references, all bound)."
+    },
+    {
+      "command": "repocortex --project . tool call analyze_impact symbol=respond",
+      "first_lines": [
+        "=== SYSTEM METADATA ===",
+        "UNRELIABLE — only 59% of the JavaScript references that name something this index defines are bound. respond (lib/application.js:288): 1 direct, 0 indirect. Risk low or higher (score 5; the name occurs where no call is recorded, so a function passed as a value may reach the target).",
+        "index_revision: 1  status: ready",
+        "note: COVERAGE TOO LOW — impact for JavaScript is unreliable here: ... Do not present what follows as an answer to the question asked.",
+        "note: This result is a LOWER BOUND, not a complete answer. ...",
+        "note: Risk = score = sum(factors), clamped to 0..100; ..."
+      ],
+      "true_of_the_code": true,
+      "comment": "Does not open with the word INCOMPLETE; it opens with UNRELIABLE (coverage below the floor), and the first line does say the name occurs where no call is recorded and a function passed as a value may reach the target. The later notes say respond's name occurs in at least 9 other places and that handleResponse (which the answer reaches it through) is named in 1 other place not recorded as a call (application.js:224, the .then(handleResponse)). It no longer claims tests are absent: observed_tests says 'NOT KNOWN', +0 points, and Certainty is 'medium' not high. So the specific round-one defect (0 indirect asserted as fact, 'no test reaches this') is fixed in substance. '1 direct, 0 indirect' is still printed in the first line, hedged by the rest of the line. The 9 'other places' include prose (docs/api/*.md) and describe() strings in respond.test.js, so the evidence is partly noise."
+    },
+    {
+      "command": "repocortex --project . tool call find_implementations name=Application",
+      "first_lines": [
+        "=== SYSTEM METADATA ===",
+        "UNKNOWN — this index records no extends or implements relationship for any JavaScript type; nothing about its subtypes or supertypes can be concluded. Application (lib/application.js:71): 0 implementing or extending it, all directly, 0 it implements or extends.",
+        "index_revision: 1  status: ready",
+        "note: COVERAGE UNKNOWN — type hierarchy lookup for JavaScript cannot be judged: ... an empty list cannot tell the two apart. ...",
+        "note: This result is a LOWER BOUND, not a complete answer. ...",
+        "note: A type relationship is recorded only where the source states it ... Treat an empty list as 'none declared', not 'none exist'."
+      ],
+      "true_of_the_code": true,
+      "comment": "No class in koa extends Application, so 0 is true, and the answer refuses to treat it as a negative. '0 it implements or extends' remains factually off (Application extends the external Emitter) but is covered by UNKNOWN. A new note says two definitions are named Application and the class was chosen because the command is about types."
+    }
+  ],
+  "regressions": [
+    "find_callers for isStream went from 'strong (high=5)' to 'UNRELIABLE ... Do not present what follows as an answer' because the index-wide bound fraction (59%) now gates every answer; the 5 callers listed are exactly right, so the answer is over-warned. Not a wrong answer, but an agent is told to disregard a correct one.",
+    "The 14 sampled recall misses moved from 'unresolved' to 'ambiguous' (this.get, this.remove, this.has, this.set, toJSON): not better or worse in outcome, still no edge.",
+    "No right edge was lost: a diff of the full edge set between the round-one binary and this one (same project, same commit) removed 7 high edges and 2 medium and 2 low, all of which were wrong (URL x4 incl. request.js:266 and :311 that round one's sample had not reached, fresh, accepts, vary; URL x2 medium; ctx.onerror x2 low); and added 3 low edges that are right (response.js:326, 357, 363)."
+  ],
+  "findings": [
+    "The reported defect is fixed: calls to the imported libraries vary, fresh, accepts and new URL no longer bind to the same-named getter or method in the file. The full edge set shrank from 48 to 40 with no right edge lost, and every one of the 36 high and 4 low edges now present reads as right.",
+    "Calls through this inside object-literal methods (this.get, this.remove, this.has, this.set, toJSON) are still not bound: 14 of 31 recall sites, now all 'ambiguous'. The index records 341 ambiguous references against 7 in round one.",
+    "Only 40 CALLS edges exist in a 111-file project; 59.3% of the references that name something defined in the index are bound, which makes every JavaScript answer carry the UNRELIABLE flag.",
+    "A method shorthand inside the object literal passed to Object.defineProperty (application.js:37 'value') is still extracted as a method definition and still produces a caller edge; not fixed.",
+    "analyze_impact for respond (reached only as handleResponse passed to .then): the stated defect is fixed in substance (no 'no test reaches this' claim, Certainty medium, the unrecorded-name evidence listed, handleResponse named), but the first word is UNRELIABLE (coverage floor) rather than INCOMPLETE, and '1 direct, 0 indirect' is still printed on the first line.",
+    "The coverage gate makes a correct and complete answer (find_callers isStream, 5 of 5) read 'Do not present what follows as an answer'.",
+    "Definitions: 107 of 107 expected found, plus the 1 known spurious."
+  ],
+  "not_done": [
+    "Precision 'unclear' category: none arose.",
+    "The 'name appears in at least 9 other places' evidence for respond was not itemised beyond the examples the answer prints.",
+    "Hierarchy could not be measured (no repository-target supertypes).",
+    "No call site at module top level was in the first-8 sample, so the top-level limitation was not exercised."
+  ]
+}

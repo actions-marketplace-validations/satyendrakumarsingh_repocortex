@@ -1,0 +1,143 @@
+{
+ "language": "proto",
+ "project": "protocolbuffers/protobuf (src/google/protobuf) + grpc/grpc route_guide.proto and googleapis annotations.proto/client.proto fetched raw",
+ "project_commit": "protobuf 24c2df635c6860929c76730ad985463966e52b82 ; grpc/googleapis: raw master download, no commit",
+ "repocortex_commit": "f783fa5",
+ "files": [
+  {
+   "path": "src/google/protobuf/field_mask.proto",
+   "lines": 220,
+   "assigned_language": "proto",
+   "parse_status": "ok",
+   "parse_error": "",
+   "expected": 1,
+   "correct": 1,
+   "missed": 0,
+   "missed_known_gap": 0,
+   "spurious": 0,
+   "line_on_attribute": 0,
+   "total_symbols": 1
+  },
+  {
+   "path": "src/google/protobuf/api.proto",
+   "lines": 206,
+   "assigned_language": "proto",
+   "parse_status": "ok",
+   "parse_error": "",
+   "expected": 3,
+   "correct": 3,
+   "missed": 0,
+   "missed_known_gap": 0,
+   "spurious": 0,
+   "line_on_attribute": 0,
+   "total_symbols": 3
+  },
+  {
+   "path": "src/google/protobuf/type.proto",
+   "lines": 194,
+   "assigned_language": "proto",
+   "parse_status": "ok",
+   "parse_error": "",
+   "expected": 8,
+   "correct": 8,
+   "missed": 0,
+   "missed_known_gap": 0,
+   "spurious": 0,
+   "line_on_attribute": 0,
+   "total_symbols": 8
+  },
+  {
+   "path": "SUPPLEMENTARY src/google/protobuf/util/json_format_proto3.proto",
+   "lines": 326,
+   "assigned_language": "proto",
+   "parse_status": "ok",
+   "parse_error": "",
+   "expected": 42,
+   "correct": 42,
+   "missed": 0,
+   "missed_known_gap": 0,
+   "spurious": 0,
+   "line_on_attribute": 0,
+   "total_symbols": 42
+  },
+  {
+   "path": "SUPPLEMENTARY src/google/protobuf/compiler/plugin.proto",
+   "lines": 180,
+   "assigned_language": "proto",
+   "parse_status": "ok",
+   "parse_error": "",
+   "expected": 5,
+   "correct": 5,
+   "missed": 0,
+   "missed_known_gap": 0,
+   "spurious": 0,
+   "line_on_attribute": 0,
+   "total_symbols": 5
+  },
+  {
+   "path": "SUPPLEMENTARY grpc examples/protos/route_guide.proto (service/rpc)",
+   "lines": 111,
+   "assigned_language": "proto",
+   "parse_status": "ok",
+   "parse_error": "",
+   "expected": 10,
+   "correct": 10,
+   "missed": 0,
+   "missed_known_gap": 0,
+   "spurious": 0,
+   "line_on_attribute": 0,
+   "total_symbols": 10
+  },
+  {
+   "path": "SUPPLEMENTARY googleapis google/api/annotations.proto (extend)",
+   "lines": 31,
+   "assigned_language": "proto",
+   "parse_status": "ok",
+   "parse_error": "",
+   "expected": 1,
+   "correct": 1,
+   "missed": 0,
+   "missed_known_gap": 0,
+   "spurious": 0,
+   "line_on_attribute": 0,
+   "total_symbols": 1
+  },
+  {
+   "path": "SUPPLEMENTARY googleapis google/api/client.proto (extend, nested messages, enums)",
+   "lines": 598,
+   "assigned_language": "proto",
+   "parse_status": "ok",
+   "parse_error": "",
+   "expected": 25,
+   "correct": 25,
+   "missed": 0,
+   "missed_known_gap": 0,
+   "spurious": 0,
+   "line_on_attribute": 0,
+   "total_symbols": 25
+  }
+ ],
+ "totals": {
+  "expected": 95,
+  "correct": 95,
+  "missed": 0,
+  "missed_known_gap": 0,
+  "spurious": 0,
+  "line_on_attribute": 0
+ },
+ "examples": {
+  "missed": [],
+  "spurious": []
+ },
+ "rule_objections": [
+  "Rule fine. Fields are deliberately not definitions (a field like `http` or `name` is not looked up by name), except extend fields.",
+  "Selection: the protobuf repo's largest .proto under 800 lines are benchmark/test/sample files, which I excluded (message_benchmark, sample_messages_edition, more_messages); of the remaining, json_format_proto3.proto is a test-message file I kept only as supplementary. The three real picks have no service/rpc/extend, so I added route_guide.proto, annotations.proto and client.proto (supplementary) to exercise those forms."
+ ],
+ "findings": [
+  "All forms in the rule are right in all 8 files: 95 expected (message/enum nested or not -> class, service -> interface, rpc -> method, extend fields -> field), 95 found with correct names, kinds and lines; 0 missed, 0 spurious; no total flood (symbols = definitions). Nested ExperimentalFeatures / LongRunning in client.proto are found. All files parse ok.",
+  "Not exercised: proto2 `group` fields (the known gap), oneof, map fields, editions features."
+ ],
+ "not_done": [
+  "Expected counts for the supplementary files were obtained by grep of message/enum/service/rpc/extend lines, and by script-matching file+line+name against the table for the first five files."
+ ]
+}

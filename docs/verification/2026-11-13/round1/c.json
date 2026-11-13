@@ -1,0 +1,111 @@
+{
+  "language": "c",
+  "project": "jqlang/jq",
+  "project_commit": "5c001b18d7237cce1fdba63608732163f978dd23",
+  "repocortex_commit": "53246ac",
+  "files_checked": [
+    "src/compile.c (1404 lines)",
+    "src/execute.c (1346)",
+    "src/util.c (1268)",
+    "src/jv_parse.c (899)",
+    "src/jv_aux.c (853)"
+  ],
+  "index": {
+    "files": 399,
+    "indexed_files": 127,
+    "c_files": 49,
+    "c_files_partial": 20,
+    "symbols": 1743,
+    "c_symbols": 809,
+    "edges_by_kind_and_tier": {
+      "CALLS/high": 1524, "CALLS/medium": 3413, "CALLS/low": 0,
+      "note": "all callers; edges whose caller is in a C file: CALLS high 1382, CALLS medium 3413, no low, no INSTANTIATES, no EXTENDS/IMPLEMENTS"
+    },
+    "parse_summary": {"Parsed": "127 (101 clean, 26 with syntax errors)", "Syntax errors": 26, "Incomplete": 0, "Failed": 0, "Too large": 0, "Text only": 8, "Skipped": "264 (no_grammar 262, binary 1, symlink 1)"},
+    "macro_tokens_masked_files": 3,
+    "macro_tokens_masked_detail": "src/builtin.c (2 tokens), src/jv.h (2 tokens), src/opcode_list.h (41 tokens); all three are still status 'partial' after masking. None of the five measured files was masked.",
+    "index_seconds": 1.86,
+    "resolve_seconds": 0.35,
+    "resolve_summary": "References 7622; resolved 5493 (98.8% of the 5557 that name something indexed); ambiguous 64; unresolved 2065; edges 4937; high 1875 refs, medium 3617, low 1"
+  },
+  "definitions": {
+    "expected": 223,
+    "correct": 219,
+    "missed": 4,
+    "spurious": 0,
+    "line_on_attribute": 0,
+    "per_file": {
+      "compile.c": {"expected": 85, "correct": 85, "missed": 0, "spurious": 0},
+      "execute.c": {"expected": 58, "correct": 57, "missed": 1, "spurious": 0},
+      "util.c": {"expected": 24, "correct": 23, "missed": 1, "spurious": 0},
+      "jv_parse.c": {"expected": 33, "correct": 31, "missed": 2, "spurious": 0},
+      "jv_aux.c": {"expected": 23, "correct": 23, "missed": 0, "spurious": 0}
+    },
+    "examples": {
+      "missed": [
+        "util.c:627 char* strptime(const char *buf, const char *fmt, struct tm *tm): the whole function (about 600 lines with goto labels) is not extracted; util.c is status partial, 4 error nodes and 3 missing tokens, first at line 40; the functions around it (fromzone:595, conv_num:1220, find_string:1247) are extracted",
+        "execute.c:59 union frame_entry (unions are a documented gap in fixtures/langs/c/expected.tsv)",
+        "jv_parse.c:25 enum last_seen (enums are a documented gap)",
+        "jv_parse.c:12 typedef const char* presult (typedef of a pointer type, not extracted)"
+      ],
+      "spurious": [],
+      "notes": [
+        "Rule from fixtures/langs/c/expected.tsv: structs and typedef names are classes, functions are functions; file-level variables, enums and unions are not listed. I counted enums, unions and pointer typedefs as expected (4 misses of which 2 are documented gaps).",
+        "Excluded by the fixed rule: src/parser.c and src/lexer.c/lexer.h (bison/flex generated), jq_test.c (test), and files over 1500 lines (builtin.c 2217, jv.c 2190, jv_dtoa.c 4276).",
+        "Outside the five files the index holds 3 spurious function symbols named after keywords: 'if' in jv_dtoa.c:2621 and lexer.c:1492, 'switch' in parser.c:1981."
+      ]
+    }
+  },
+  "call_precision": {
+    "high": {"right": 30, "wrong": 0, "unclear": 0, "judged": 30, "examples": []},
+    "medium": {"right": 29, "wrong": 1, "unclear": 0, "judged": 30, "examples": [
+      "src/jq_test.c:111 fgets(prog, sizeof(prog), testdata) -> src/inject_errors.c:69 fgets: libc fgets bound to the fault-injection interposer defined in inject_errors.c (a library call bound to a repo symbol)",
+      "src/parser.c:2004 jv_free(...) inside the caller symbol 'switch' -> jv.c:2019 jv_free: the target is right but the caller is a spurious symbol named 'switch' (counted right)"
+    ]},
+    "low": {"right": 0, "wrong": 0, "unclear": 0, "judged": 0, "examples": ["no low-tier CALLS edge with a C caller exists"]}
+  },
+  "call_recall": {
+    "sites": 40,
+    "right": 40,
+    "wrong": 0,
+    "none": 0,
+    "none_breakdown": {"reference extracted and resolved but no edge": 0, "reference extracted, ambiguous": 0, "reference extracted, unresolved": 0, "not extracted": 0},
+    "examples": [
+      "compile.c:68-92 jv_mem_alloc, gen_noop x2, jv_mem_free, block_free x2, locfile_free, opcode_describe: 8/8 right (cross-file calls to jv_alloc.c, locfile.c, bytecode.c bound to the right files)",
+      "execute.c:78-111 stack_block/stack_block_next in exec_stack.h and frame_get_level: 8/8 right",
+      "util.c:84-90 jv_get_kind, jv_string_value, jv_string_length_bytes, jv_copy, get_home, jv_is_valid, jv_string_fmt: 8/8 right",
+      "jv_parse.c:72-101 and jv_aux.c:14-41: 16/16 right"
+    ]
+  },
+  "hierarchy": null,
+  "answers": [
+    {
+      "command": "repocortex --project . tool call find_callers name=jv_parser_free",
+      "first_lines": "=== SYSTEM METADATA ===\nINCOMPLETE — 1 of the 4 references spelled \"jv_parser_free\" are not among the rows below. 3 caller(s) of jv_parser_free (src/jv_parse.c:725) are recorded.\nindex_revision: 1  status: ready\nnote: INCOMPLETE FOR THIS SYMBOL — 1 of the 4 reference(s) spelled like this name are not listed as its callers: 1 ambiguous (several definitions share the name and none was chosen). Any of them may be a use of this definition. Run search_code for the name before concluding anything from what is absent.\nnote: References spelled \"jv_parser_free\" in this index: 4. 3 bound to this definition, 1 ambiguous.\nnote: Note: 3 result(s) are medium or low confidence (heuristic inference with higher error rates). Pass min_confidence='high' to restrict to compiler-verified and high-precision edges.",
+      "true_of_the_code": true,
+      "comment": "Text search finds exactly 3 call sites (util.c:237, jq_test.c:565, jv_file.c:87) plus the prototype in jv.h:272, which is presumably the 4th reference. The ambiguity caveat is stated."
+    },
+    {
+      "command": "repocortex --project . tool call analyze_impact symbol=stack_pop",
+      "first_lines": "=== SYSTEM METADATA ===\nstack_pop (src/execute.c:169): 2 direct, 16 indirect. Risk low (score 13).\nindex_revision: 1  status: ready\ntruncated: depth limit 3 reached, and 8 node(s) at the limit were not expanded\nnote: Risk = score = sum(factors), clamped to 0..100; level = low below 25, moderate below 60, high at or above 60; ...\nnote:   public_api (+0): Whether the target is exported is UNKNOWN. The index does not read the visibility rules of C, so it cannot say whether callers outside this repository exist. ...",
+      "true_of_the_code": true,
+      "comment": "stack_pop is called from two functions only (stack_restore at execute.c:273 and jq_next, about 40 call sites in jq_next). It states that traversal was truncated and that C visibility is not read."
+    }
+  ],
+  "findings": [
+    "util.c:627 strptime (a ~600-line function with goto labels) is entirely missing from the index; util.c is only partially parsed (4 error nodes, 3 missing tokens, first at line 40). Neighbouring functions are extracted, so the loss is silent apart from the file's partial status.",
+    "20 of 49 C/H files and 26 of 127 parsed files are status partial (syntax errors), including compile.c, execute.c, util.c, jv_aux.c, jv.c and builtin.c. Definitions inside unreadable regions may be missing; in the five files measured only one function was lost.",
+    "The macro-masking retry applied to 3 files (builtin.c with 2 tokens, jv.h with 2, opcode_list.h with 41) and all three remain 'partial' afterwards; jv.h reports an error from line 1.",
+    "Three function symbols are named after keywords: 'if' at jv_dtoa.c:2621 and lexer.c:1492, 'switch' at parser.c:1981. One medium edge in the sample has the spurious 'switch' as its caller.",
+    "A call to libc fgets in jq_test.c:111 is bound (medium) to the fgets interposer in inject_errors.c.",
+    "Enums, unions and typedefs of pointer types are not extracted (union frame_entry, enum last_seen, typedef presult); two of these are documented gaps.",
+    "Positive: call recall on the five files was 40/40, high-tier precision 30/30 and medium-tier 29/30; static helpers with the same name in different files did not cause cross-file mis-bindings in what I checked (only 3 function names are defined more than once besides interposers and test stubs).",
+    "The tool answers admit their limits (ambiguous reference, depth truncation, unknown C visibility)."
+  ],
+  "not_done": [
+    "No hierarchy measurement: C has no EXTENDS/IMPLEMENTS edges.",
+    "Low-tier precision could not be measured: no low-tier CALLS edge exists for C callers.",
+    "Generated sources (parser.c, lexer.c) were excluded from the definitions and recall files by the fixed size/generated rule, so the 'switch'/'if' spurious symbols were counted outside the measured files.",
+    "find_implementations was skipped (no interfaces in C)."
+  ]
+}

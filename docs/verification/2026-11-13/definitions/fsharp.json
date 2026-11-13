@@ -1,0 +1,73 @@
+{
+ "language": "fsharp",
+ "project": "demystifyfp/FsToolkit.ErrorHandling (src/FsToolkit.ErrorHandling/TaskValueOptionCE.fs, TaskOptionCE.fs, TaskValidationCE.fs)",
+ "project_commit": "d7110b0",
+ "repocortex_commit": "f783fa5",
+ "files": [
+  {
+   "path": "src/FsToolkit.ErrorHandling/TaskValueOptionCE.fs",
+   "lines": 691,
+   "assigned_language": "fsharp",
+   "parse_status": "partial",
+   "parse_error": "budget_exceeded: parser stopped at byte ... of 27... on its iteration limit",
+   "expected": 61,
+   "correct": 8,
+   "missed": 37,
+   "spurious": 16,
+   "missed_known_gap": 0,
+   "line_on_attribute": 0
+  },
+  {
+   "path": "src/FsToolkit.ErrorHandling/TaskOptionCE.fs",
+   "lines": 691,
+   "assigned_language": "fsharp",
+   "parse_status": "partial",
+   "parse_error": "budget_exceeded: parser stopped at byte 18683 of 27516 (line 457) on its iteration limit (3218 of 825480)",
+   "expected": 61,
+   "correct": 8,
+   "missed": 37,
+   "spurious": 16,
+   "missed_known_gap": 0,
+   "line_on_attribute": 0
+  },
+  {
+   "path": "src/FsToolkit.ErrorHandling/TaskValidationCE.fs",
+   "lines": 683,
+   "assigned_language": "fsharp",
+   "parse_status": "partial",
+   "parse_error": "budget_exceeded: parser stopped at byte 19557 of 27941 (line 469) on its iteration limit (3283 of 838230)",
+   "expected": 64,
+   "correct": 7,
+   "missed": 41,
+   "spurious": 16,
+   "missed_known_gap": 0,
+   "line_on_attribute": 0
+  }
+ ],
+ "totals": {
+  "expected": 186,
+  "correct": 23,
+  "missed": 115,
+  "missed_known_gap": 0,
+  "spurious": 48,
+  "line_on_attribute": 0
+ },
+ "examples": [
+  "TaskOptionCE.fs:1 namespace FsToolkit.ErrorHandling (missed; every namespace/module/type header in all three files is missing: lines 20, 23, 45-52, 54, 274, 361, 424 ...)",
+  "TaskOptionCE.fs:63 member inline _.Zero<'TOverall>() : TaskOptionCode<'TOverall, unit> = ... (spurious: recorded as kind field, takes arguments so should be method; same for Delay, Return, Combine, While, TryWith, TryFinally, For, ...)",
+  "TaskOptionCE.fs:564 static member BindDynamic ... (missed: after the parser's iteration budget ran out at line 457)",
+  "TaskValidationCE.fs:592 member inline _.Bind (...) (missed, same cause; 41 missed in this file)"
+ ],
+ "rule_objections": [
+  "Type extensions ('type X with' blocks adding members) are not definitions of a new type and were excluded from expected, but their members are expected."
+ ],
+ "findings": [
+  "Wrong kind: 16 members per file (48 in all) that take arguments and are declared 'member inline ...' are recorded as kind field, not method. The members declared with 'inline' are the large majority of a computation-expression builder. Counted as spurious (wrong) while they are also expected, so correct excludes them.",
+  "No type, module or namespace header is extracted in any of the three files (about 12 per file: namespace, 'type X<T> =' abbreviations, 'and X = ...' aliases, builder classes, the AutoOpen modules), although their members are; this matches the KNOWN_GAPS description of a type_name that is a direct child of the file but here it happens in files with a plain 'namespace X' header and 'type Name() =' classes. Counted as plain missed.",
+  "Two of three files hit 'budget_exceeded' (parser stopped at line 457 / 469 of ~690): everything after is lost (about 25 definitions each). The third file is reported partial too.",
+  "Language assignment: all three .fs files were assigned fsharp by content, not Forth as KNOWN_GAPS says for .fs; assignment is right."
+ ],
+ "not_done": [
+  "Expected sets from a script over namespace/module/type/and/member/let headers, with my own argument-taking test for members (multi-line argument lists included) spot-checked; the .fsx/.fsi route was not run."
+ ]
+}

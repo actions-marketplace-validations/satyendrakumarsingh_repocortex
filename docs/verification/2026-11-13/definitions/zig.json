@@ -1,0 +1,71 @@
+{
+ "language": "zig",
+ "project": "zigtools/zls (src/TrigramStore.zig, src/DiagnosticsCollection.zig, src/features/inlay_hints.zig)",
+ "project_commit": "066658e",
+ "repocortex_commit": "f783fa5",
+ "files": [
+  {
+   "path": "src/TrigramStore.zig",
+   "lines": 694,
+   "assigned_language": "zig",
+   "parse_status": "ok",
+   "parse_error": "",
+   "expected": 55,
+   "correct": 52,
+   "missed": 3,
+   "missed_known_gap": 0,
+   "spurious": 0,
+   "line_on_attribute": 0
+  },
+  {
+   "path": "src/DiagnosticsCollection.zig",
+   "lines": 644,
+   "assigned_language": "zig",
+   "parse_status": "ok",
+   "parse_error": "",
+   "expected": 24,
+   "correct": 17,
+   "missed": 7,
+   "missed_known_gap": 0,
+   "spurious": 0,
+   "line_on_attribute": 0
+  },
+  {
+   "path": "src/features/inlay_hints.zig",
+   "lines": 615,
+   "assigned_language": "zig",
+   "parse_status": "ok",
+   "parse_error": "",
+   "expected": 28,
+   "correct": 28,
+   "missed": 0,
+   "missed_known_gap": 0,
+   "spurious": 0,
+   "line_on_attribute": 0
+  }
+ ],
+ "totals": {
+  "expected": 107,
+  "correct": 97,
+  "missed": 10,
+  "missed_known_gap": 0,
+  "spurious": 0,
+  "line_on_attribute": 0
+ },
+ "examples": [
+  "TrigramStore.zig:29 filter_buckets: ?[]CuckooFilter.Bucket, (missed: fields of the file-level container, i.e. the struct that is the file itself; also lines 30, 31)",
+  "DiagnosticsCollection.zig:9 io: std.Io, (missed; also allocator, mutex, tag_set, outdated_files, transport, offset_encoding: all 7 file-level fields)"
+ ],
+ "rule_objections": [
+  "pub const Trigram = [3]u8; is recorded as constant (an array type is not in the rule's type_alias list); a developer would treat it as a type alias.",
+  "Fields of an anonymous struct that is the type of a field (tag_set: std.array_hash_map.Auto(Tag, struct {...}), 7 fields) are not counted as expected; KNOWN_GAPS covers only local/result-type inline containers."
+ ],
+ "findings": [
+  "Zig files whose root is a struct (const Name = @This(); with fields at file level) lose every file-level field: 10 missed across two files. Fields of named nested structs (Declaration, TrigramIterator, Builder, CuckooFilter.Triplet) are all found. Not in KNOWN_GAPS.",
+  "Everything else is right: functions, methods, enum variants as constants, nested containers as class, string-named test, doc tests (test Name {}) correctly skipped; no spurious symbols.",
+  "Function name '@\"textDocument/inlayHint\"' is stored with its @\"...\" quoting; counted correct (that is the identifier syntax) but a lookup by textDocument/inlayHint will not match."
+ ],
+ "not_done": [
+  "Expected sets built from a grep of declarations at nesting depth <= 2 and read by eye; parameters and locals excluded."
+ ]
+}

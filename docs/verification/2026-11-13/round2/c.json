@@ -1,0 +1,198 @@
+{
+ "language": "c",
+ "project": "jqlang/jq",
+ "project_commit": "5c001b18d7237cce1fdba63608732163f978dd23",
+ "repocortex_commit": "8748b29",
+ "files_checked": [
+  "src/compile.c (1404 lines)",
+  "src/execute.c (1346)",
+  "src/util.c (1268)",
+  "src/jv_parse.c (899)",
+  "src/jv_aux.c (853)"
+ ],
+ "index": {
+  "files": 399,
+  "indexed_files": 127,
+  "c_files": 49,
+  "c_files_partial": 15,
+  "symbols": 1753,
+  "c_symbols": 817,
+  "edges_by_kind_and_tier": {
+   "caller_in_c_or_h_file": "CALLS high 1513, CALLS medium 3449, no low, no INSTANTIATES, no EXTENDS/IMPLEMENTS",
+   "round1_caller_in_c_file": "CALLS high 1382, CALLS medium 3413",
+   "all_languages": "high 1655, medium 3449 (5104 edges; round one 4937)"
+  },
+  "parse_summary": {
+   "Parsed": "127 (106 clean, 21 with syntax errors)",
+   "Syntax errors": 21,
+   "Incomplete": 0,
+   "Failed": 0,
+   "Too large": 0,
+   "Text only": 8,
+   "Skipped": "264 (no_grammar 262, binary 1, symlink 1)",
+   "round1": "101 clean, 26 with syntax errors"
+  },
+  "files_with_macro_tokens_masked_in_parse_error": 6,
+  "files_with_conditional_branches_blanked_in_parse_error": 8,
+  "masked_or_blanked_detail": "6 files say 'macro tokens masked' (builtin.c, jv.h, libm.h, lexer.c, opcode_list.h, parser.c); 8 say 'conditional branch(es) blanked' (jq_test.c, jv.h, jv.c, jv_dtoa.c, libm.h, lexer.c, util.c, parser.c); 10 files carry at least one of the two. Of the five measured files only util.c (1 conditional branch blanked) is affected.",
+  "index_seconds": 2.26,
+  "resolve_seconds": 0.43,
+  "status": "READY, schema v18",
+  "resolve_summary": "edges 5104 (high 1655, medium 3449); unresolved 2092, of which 48 shown to leave the repository"
+ },
+ "definitions": {
+  "expected": 223,
+  "correct": 220,
+  "missed": 3,
+  "spurious": 0,
+  "line_on_attribute": 0,
+  "per_file": {
+   "compile.c": {
+    "expected": 85,
+    "correct": 85,
+    "missed": 0,
+    "spurious": 0
+   },
+   "execute.c": {
+    "expected": 58,
+    "correct": 57,
+    "missed": 1,
+    "spurious": 0
+   },
+   "util.c": {
+    "expected": 24,
+    "correct": 24,
+    "missed": 0,
+    "spurious": 0
+   },
+   "jv_parse.c": {
+    "expected": 33,
+    "correct": 31,
+    "missed": 2,
+    "spurious": 0
+   },
+   "jv_aux.c": {
+    "expected": 23,
+    "correct": 23,
+    "missed": 0,
+    "spurious": 0
+   }
+  },
+  "examples": {
+   "missed": [
+    "execute.c:59 union frame_entry (unions are a documented gap in fixtures/langs/c/expected.tsv)",
+    "jv_parse.c:25 enum last_seen (enums are a documented gap)",
+    "jv_parse.c:12 typedef const char* presult (typedef of a pointer type; same as round one)"
+   ],
+   "spurious": [],
+   "round1_missed_now": [
+    "util.c:627 strptime (~600 lines): FIXED, extracted (util.c is now status 'ok' with one conditional branch blanked, was 'partial' with error nodes from line 40)",
+    "execute.c union frame_entry, jv_parse.c enum last_seen, typedef presult: NOT fixed"
+   ],
+   "round1_spurious_now": [
+    "Round one had none inside the five files; its out-of-sample note was symbols named 'if' (jv_dtoa.c:2621, lexer.c:1492) and 'switch' (parser.c:1981): FIXED, no C symbol is named if/switch or any other keyword. Two symbols named 'if' now exist in Makefile.am (language make, kinds variable and function, lines 36 and 138: automake `if MAINTAINER_MODE` conditionals)."
+   ],
+   "notes": [
+    "Compared against BSD ctags -x output for each file (names and lines); the only differences were line numbers where the return type is on the line above, plus ctags noise ('__declspec' in jv_aux.c). Rule from fixtures/langs/c/expected.tsv: structs and typedef names are classes, functions are functions; enums and unions not listed (documented gap); I count them expected as in round one.",
+    "Sizes: compile.c 85, execute.c 57 symbols, util.c 24, jv_parse.c 31, jv_aux.c 23."
+   ]
+  }
+ },
+ "call_precision": {
+  "high": {
+   "right": 30,
+   "wrong": 0,
+   "unclear": 0,
+   "judged": 30,
+   "examples": []
+  },
+  "medium": {
+   "right": 30,
+   "wrong": 0,
+   "unclear": 0,
+   "judged": 30,
+   "examples": [
+    "All 30 are cross-file calls of the jv.c / compile.c / execute.c / jv_alloc.c / bytecode.c family bound by 'same directory, but the language requires an import'; each target is the single definition of that name. priv_fwrite binds to its static inline definition in util.h (correct)."
+   ]
+  },
+  "low": {
+   "right": 0,
+   "wrong": 0,
+   "unclear": 0,
+   "judged": 0,
+   "examples": [
+    "no low-tier CALLS edge with a C caller exists"
+   ]
+  }
+ },
+ "round1_wrong_examples": [
+  {
+   "site": "src/jq_test.c:111 fgets(prog, sizeof(prog), testdata) -> inject_errors.c:69 fgets",
+   "round1_tier": "medium",
+   "now": "gone",
+   "note": "no edge; the fgets, fclose, ferror, fread, fwrite references are all 'unresolved'"
+  },
+  {
+   "site": "src/parser.c:2004 jv_free(...) with caller symbol 'switch'",
+   "round1_tier": "medium",
+   "now": "right_target",
+   "note": "edge jv_free target still right and the caller is now yydestruct (the 'switch' symbol is gone)"
+  }
+ ],
+ "call_recall": {
+  "sites": 40,
+  "right": 40,
+  "wrong": 0,
+  "none": 0,
+  "none_breakdown": {
+   "reference extracted and resolved but no edge": 0,
+   "reference extracted, ambiguous": 0,
+   "reference extracted, unresolved": 0,
+   "not extracted": 0
+  },
+  "examples": [
+   "compile.c 68,78,79,86,87,88,90,91 (jv_mem_alloc, gen_noop x2, jv_mem_free, block_free x2, locfile_free, opcode_describe): 8/8",
+   "execute.c 78,80,82,94,101,101,110,111 (stack_block, stack_block_next, frame_get_level): 8/8",
+   "util.c 84,85,87,87,88,89,90,90: 8/8",
+   "jv_parse.c 72,74,80,81,83,95,100,101: 8/8",
+   "jv_aux.c 14,15,39,39,39,40,40,41: 8/8",
+   "Same as round one: 40/40."
+  ]
+ },
+ "hierarchy": null,
+ "answers": [
+  {
+   "command": "repocortex --project . tool call find_callers name=jv_parser_free",
+   "first_lines": "=== SYSTEM METADATA ===\nINCOMPLETE - 1 of the 4 references spelled \"jv_parser_free\" are not among the rows below. jv_parser_free: its name appears in 1 other place(s) that are not recorded as calls: it may be passed as a value. 3 caller(s) of jv_parser_free (src/jv_parse.c:725) are recorded.\nindex_revision: 1  status: ready\nnote: INCOMPLETE FOR THIS SYMBOL - 1 of the 4 reference(s) spelled like this name are not listed as its callers: 1 ambiguous (several definitions share the name and none was chosen). ...\nnote: INCOMPLETE FOR THIS SYMBOL - The name of the target occurs in 1 other place(s) ... (for example src/jv.h:272). A function passed as a value ...",
+   "true_of_the_code": true,
+   "comment": "3 call sites (jq_test.c:565, jv_file.c:87, util.c:237) match text search. The 'other place' is the prototype jv.h:272, not a value use, so the 'passed as a value' hint is a mild false alarm; the ambiguity caveat is still stated. New verdict line 'weak (medium=3)'."
+  },
+  {
+   "command": "repocortex --project . tool call analyze_impact symbol=stack_pop",
+   "first_lines": "=== SYSTEM METADATA ===\nINCOMPLETE - 4 symbols on the path to it (run_jq_tests, run_jq_recompile_tests, run_jq_exhaust_and_reuse_tests and 1 more) are named in 11 other place(s) not recorded as calls (they may be passed as values), so what reaches them is not listed. stack_pop (src/execute.c:169): 2 direct, 16 indirect. Risk low or higher (score 13; the analysis was cut at depth 3; the name occurs where no call is recorded, so a function passed as a value may reach the target).\nindex_revision: 1  status: ready\ntruncated: depth limit 3 reached, and 8 node(s) at the limit were not expanded\nnote: INCOMPLETE FOR THIS SYMBOL - ...",
+   "true_of_the_code": true,
+   "comment": "stack_pop is called only from stack_restore (execute.c:273) and jq_next (about 36 sites), so '2 direct' is right and a note says those are 38 call sites. The first line now states the depth cut and the value-position caveat, which round one only gave on the second line. The run_jq_tests functions are referenced from jq_test.c:12/15 as prototypes/ calls, so the 'passed as values' hint is likely over-cautious."
+  }
+ ],
+ "regressions": [
+  "A libc call is still bound to the fault-injection interposer: util.c:271 and :306 clearerr(...) -> inject_errors.c:103 clearerr (medium, 2 edges). Round one's fgets example is fixed but clearerr (the only interposed function with a single definition) slips through.",
+  "Symbols named `if` now exist in Makefile.am (make language): the keyword-symbol defect moved from C to automake conditionals (not C, but the same kind of defect).",
+  "No right edge or definition from round one is missing in the five files."
+ ],
+ "findings": [
+  "Round-one C defects are fixed: no C symbol named if/switch; util.c strptime is extracted; fgets/fclose/ferror/fread/fwrite no longer bind to the interposer; the spurious 'switch' caller is gone.",
+  "Remaining libc binding: clearerr in util.c (2 medium edges) binds to the interposer in inject_errors.c.",
+  "Remaining definition gaps in the five files are the documented ones (union frame_entry, enum last_seen) plus the pointer typedef presult: 3 of 223.",
+  "Precision on this sample: high 30/30, medium 30/30 (round one 30/30 and 29/30); call recall 40/40 unchanged.",
+  "Partial files: 15 of 49 C files (round one 20), 21 of 127 parsed files (round one 26). 6 files report macro tokens masked and 8 report conditional branches blanked (10 distinct); masked files that stay partial: builtin.c, jv.h, lexer.c, opcode_list.h, parser.c.",
+  "Answers state truncation, ambiguity and value-position limits on the first line.",
+  "Index 2.26 s, resolve 0.43 s, status READY."
+ ],
+ "not_done": [
+  "No hierarchy measurement: C has no EXTENDS/IMPLEMENTS edges.",
+  "No low-tier edges exist for C callers, so low precision could not be measured.",
+  "Generated sources (parser.c, lexer.c) and files over 1500 lines were excluded from the definition/recall files by the fixed rule.",
+  "find_implementations skipped (no interfaces in C).",
+  "Whether the util.h static inline priv_fwrite should count as the definition (vs the header) was not questioned; treated as right."
+ ]
+}

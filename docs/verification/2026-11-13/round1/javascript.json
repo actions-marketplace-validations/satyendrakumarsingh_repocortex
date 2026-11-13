@@ -1,0 +1,224 @@
+{
+  "language": "javascript",
+  "project": "koajs/koa",
+  "project_commit": "b7ead6f7a2bb56e2948b1c5e1cca77483e89c885",
+  "repocortex_commit": "53246ac",
+  "files_checked": [
+    "lib/request.js (761 lines)",
+    "lib/response.js (674)",
+    "lib/application.js (365)",
+    "lib/context.js (254)",
+    "lib/search-params.js (39)"
+  ],
+  "index": {
+    "files": 111,
+    "symbols": 500,
+    "edges_by_kind_and_tier": {
+      "CALLS": {
+        "high": 43,
+        "medium": 2,
+        "low": 3
+      },
+      "INSTANTIATES": {},
+      "EXTENDS": {},
+      "IMPLEMENTS": {},
+      "exact": {}
+    },
+    "parse_summary": {
+      "Parsed": "104 (104 clean)",
+      "Syntax errors": "0",
+      "Incomplete": "0",
+      "Failed": "0",
+      "Too large": "0",
+      "Text only": "1 (editorconfig)",
+      "Skipped": "6 (no_grammar 4, binary 2)"
+    },
+    "resolution": "4081 references; 3678 unresolved (1821 shown to leave the repository); 7 ambiguous; 48 edges",
+    "index_seconds": 0.72,
+    "resolve_seconds": 0.16,
+    "note": "lib/ holds only 7 files (is-stream.js and only.js are 20 and 9 lines), so the five largest are the five checked; search-params.js (39 lines) is the fifth."
+  },
+  "definitions": {
+    "expected": 107,
+    "correct": 107,
+    "missed": 0,
+    "spurious": 1,
+    "line_on_attribute": 0,
+    "per_file": {
+      "lib/request.js": {
+        "expected": 45,
+        "correct": 45,
+        "missed": 0,
+        "spurious": 0
+      },
+      "lib/response.js": {
+        "expected": 35,
+        "correct": 35,
+        "missed": 0,
+        "spurious": 0
+      },
+      "lib/application.js": {
+        "expected": 18,
+        "correct": 18,
+        "missed": 0,
+        "spurious": 1
+      },
+      "lib/context.js": {
+        "expected": 6,
+        "correct": 6,
+        "missed": 0,
+        "spurious": 0
+      },
+      "lib/search-params.js": {
+        "expected": 3,
+        "correct": 3,
+        "missed": 0,
+        "spurious": 0
+      }
+    },
+    "basis": "Getter and setter pairs counted as two definitions each; entries of module.exports = {...}, nested arrow locals and static getters counted, per the stated JavaScript rule. Methods delegated by name through delegates (.method('set')) are not declarations and were not expected.",
+    "examples": {
+      "missed": [],
+      "spurious": [
+        "lib/application.js:37 method 'value' - a method shorthand inside the object literal passed to Object.defineProperty(..., Symbol.hasInstance, {...}); it is not a named definition (caller edge from it to isHttpErrorLike exists, so it also appears as a caller)"
+      ]
+    }
+  },
+  "call_precision": {
+    "high": {
+      "right": 25,
+      "wrong": 5,
+      "unclear": 0,
+      "judged": 30,
+      "examples": [
+        "lib/response.js:300 vary(this.res, field) -> lib/response.js:297 vary (method): the call is the 'vary' npm package required at line 18, and the edge is a self-call to the enclosing method",
+        "lib/request.js:338 fresh(this.header, this.response.header) -> lib/request.js:329 fresh (getter): the call is the 'fresh' package required at line 16",
+        "lib/request.js:523 accepts(this.req) -> lib/request.js:578 accepts (method): the call is the 'accepts' package required at line 9",
+        "lib/request.js:290 new URL(...) -> lib/request.js:305 URL (getter): URL is const URL = require('url').URL, not the getter",
+        "lib/request.js:312 new URL(...) -> lib/request.js:305 URL (getter): same"
+      ],
+      "note": "All 5 wrong edges are a library function whose local name equals a same-file method or getter. All other 25 bind to the function written in the same file or to a required local file."
+    },
+    "medium": {
+      "right": 0,
+      "wrong": 2,
+      "unclear": 0,
+      "judged": 2,
+      "examples": [
+        "lib/response.js:355 new URL(referrer, this.ctx.href) -> lib/request.js:305 URL getter: URL is the global; response.js has no URL definition or import",
+        "lib/response.js:318 new URL(url) -> lib/request.js:305 URL getter: same"
+      ],
+      "note": "Only 2 medium edges exist; both judged."
+    },
+    "low": {
+      "right": 1,
+      "wrong": 2,
+      "unclear": 0,
+      "judged": 3,
+      "examples": [
+        "lib/application.js:347 ctx.onerror(err) -> lib/application.js:258 Application.onerror: ctx is the per-request context, whose onerror is lib/context.js:106",
+        "lib/application.js:221 ctx.onerror(err) -> lib/application.js:258 Application.onerror: same"
+      ],
+      "note": "Only 3 low edges exist; all judged. The right one is test-helpers/context.js:15 app.createContext -> Application.createContext."
+    },
+    "exact": {
+      "right": 0,
+      "wrong": 0,
+      "unclear": 0,
+      "judged": 0,
+      "examples": [],
+      "note": "no exact edges exist"
+    }
+  },
+  "call_recall": {
+    "sites": 31,
+    "right": 17,
+    "wrong": 0,
+    "none": 14,
+    "none_breakdown": {
+      "ambiguous": 4,
+      "unresolved": 10,
+      "not_extracted": 0,
+      "resolved_but_no_edge": 0
+    },
+    "per_file": {
+      "lib/search-params.js": "2 sites, 2 right",
+      "lib/application.js": "8 sites, 8 right",
+      "lib/context.js": "5 sites, 0 right, 5 none (4 ambiguous toJSON, 1 unresolved set)",
+      "lib/request.js": "8 sites, 3 right, 5 none (this.get x5 unresolved)",
+      "lib/response.js": "8 sites, 4 right, 4 none (this.remove x3 and this.has unresolved)"
+    },
+    "examples": [
+      "lib/request.js:255,257,258,404,425 this.get(...) -> request.js:700 get: reference extracted, unresolved",
+      "lib/response.js:173,174,175 this.remove('...') -> response.js:596 remove: extracted, unresolved; 184 this.has(...) -> response.js:528 has: unresolved",
+      "lib/context.js:32,49,50,51 this.toJSON() / this.request.toJSON() / this.response.toJSON() / this.app.toJSON(): extracted, ambiguous between the toJSON of context, request, response and application",
+      "lib/context.js:151 this.set(name, ...) -> response.js:550 set (reached only through the delegates package): unresolved"
+    ],
+    "note": "No call site in the sample was outside any function, so the top-level-call limitation was not exercised. Dispatch through 'this' inside object-literal methods (request, response, context) is almost entirely unbound; calls from a class method through this (Application) were all bound."
+  },
+  "hierarchy": {
+    "edges_total": 0,
+    "sample_judged": 0,
+    "sample_right": 0,
+    "five_files_declared": 0,
+    "five_files_right": 0,
+    "note": "The only declared supertype in the five files is 'class Application extends Emitter' (lib/application.js:71), where Emitter is node:events, outside the repository. No EXTENDS or IMPLEMENTS edge exists for JavaScript in this index, which is correct for this project: no relationship has a target inside the repository, so 0 of 0 repository-target relationships were missed."
+  },
+  "answers": [
+    {
+      "command": "repocortex --project . tool call find_callers name=isStream",
+      "first_lines": [
+        "=== SYSTEM METADATA ===",
+        "5 caller(s) of isStream (lib/is-stream.js:7) are recorded.",
+        "index_revision: 1  status: ready",
+        "note: References spelled \"isStream\" in this index: 5. 5 bound to this definition.",
+        "provenance: This compares commits only. Staged, unstaged and untracked changes are invisible to the index and are NOT reflected here \u2014 a matching commit does not mean the working tree matches.",
+        "verdict: strong (high=5)"
+      ],
+      "true_of_the_code": true,
+      "comment": "A text search for isStream( finds 5 call sites (response.js 153, 156, 203, 273 and application.js 343), so the count of 5 and the rows are right. The row labels read 'calls respond / cleanupPreviousStream / body / length' and name the callers, which is easy to misread. The verdict says 'strong' with no mention that 3,678 references in the run are unresolved."
+    },
+    {
+      "command": "repocortex --project . tool call analyze_impact symbol=respond",
+      "first_lines": [
+        "=== SYSTEM METADATA ===",
+        "respond (lib/application.js:288): 1 direct, 0 indirect. Risk moderate (score 25).",
+        "index_revision: 1  status: ready",
+        "note: Risk = score = sum(factors), clamped to 0..100; level = low below 25, moderate below 60, high at or above 60; a level that would be low is reported as unknown when the callers could not be determined",
+        "note:   public_api (+0): Whether the target is exported is UNKNOWN. The index does not read the visibility rules of JavaScript, so it cannot say whether callers outside this repository exist. No points are added, and none should be read as subtracted.",
+        "note:   direct_callers (+5): 1 symbol(s) reference the target directly (depth 1). Capped at 25 points: caller count grows faster than risk does."
+      ],
+      "true_of_the_code": false,
+      "comment": "The single direct caller (the handleResponse arrow) is right, but '0 indirect' is wrong in fact: handleResponse is passed to .then(handleResponse), so the chain up to handleRequest, callback, listen and every test is cut, and the answer reports 'Certainty high' and 'no test symbol reaches this target' (+20 risk) although the whole suite goes through it. The answer does list the 3,685 unbound references as NOT VISIBLE, but states the 0 indirect as a measurement."
+    },
+    {
+      "command": "repocortex --project . tool call find_implementations name=Application",
+      "first_lines": [
+        "=== SYSTEM METADATA ===",
+        "UNKNOWN \u2014 this index records no extends or implements relationship for any JavaScript type; nothing about its subtypes or supertypes can be concluded. Application (lib/application.js:71): 0 implementing or extending it, 0 it implements or extends.",
+        "index_revision: 1  status: ready",
+        "note: COVERAGE UNKNOWN \u2014 type hierarchy lookup for JavaScript cannot be judged: this index holds 136 JavaScript definition(s) and not one extends or implements relationship between any of them. Either this code declares no inheritance at all or RepoCortex does not record it for JavaScript; an empty list cannot tell the two apart. Do not present what follows as an answer to the question asked.",
+        "note: This result is a LOWER BOUND, not a complete answer. RepoCortex reports only relationships it could resolve statically in the indexed run; anything it could not resolve is absent from this report, not absent from the code.",
+        "note: A type relationship is recorded only where the source states it (extends, implements, an embedded type) or a compiler index proved it. Structural typing \u2014 a Go type that satisfies an interface without naming it, a TypeScript object that happens to fit \u2014 is visible only after 'repocortex scip import'. Treat an empty list as 'none declared', not 'none exist'."
+      ],
+      "true_of_the_code": true,
+      "comment": "Nothing in koa extends Application, so 0 subtypes is true, and the answer refuses to treat it as a negative. It also says 'it implements or extends 0', which is not true in fact (Application extends Emitter, an external class), but the UNKNOWN flag covers it."
+    }
+  ],
+  "findings": [
+    "Library functions that share a local name with a method or getter in the same file are bound to that repository member with high confidence: vary, fresh, accepts and URL in lib/request.js and lib/response.js. 5 of the 30 sampled high edges are this error (all 43 high edges were not checked). The tool's own module-import logic does not see that 'const vary = require(\"vary\")' makes the name a library function.",
+    "Both medium edges are wrong (new URL in response.js bound to the URL getter of request.js), and 2 of 3 low edges are wrong (ctx.onerror bound to Application.onerror instead of context.js onerror).",
+    "analyze_impact for 'respond' reports '0 indirect' callers and 'Certainty high' although the chain is cut at a callback reference (.then(handleResponse)); an agent reading it would believe the function has one caller and no test coverage.",
+    "Calls through 'this' inside object-literal methods are largely unbound: 14 of 31 sampled call sites had no edge (this.get x5, this.remove x3, this.has, this.set, four toJSON). The 4 toJSON sites are ambiguous, the rest unresolved; none was bound to a wrong target. Class-method calls through this (Application) were all bound.",
+    "A method shorthand inside an object literal given to Object.defineProperty (lib/application.js:37 'value') is extracted as a method definition and acts as a caller.",
+    "Only 48 CALLS edges exist in a 111-file project; 3,678 of 4,081 references are unresolved, 1,821 of them shown to leave the repository.",
+    "No EXTENDS edge for 'class Application extends Emitter' (correct, the target is outside the repository), and find_implementations says so as UNKNOWN rather than as an empty answer.",
+    "Definitions were the strong point: 107 of 107 expected definitions found, with getter/setter pairs and the module.exports object-literal forms all handled. The top-level-call limitation was not exercised in the sample."
+  ],
+  "not_done": [
+    "Only 30 of 43 high edges, all 2 medium and all 3 low were judged; the other 13 high edges were not read.",
+    "No call site at module top level was in the first-8 sample, so resolved-but-no-edge was not measured for JavaScript.",
+    "The __tests__ directory was not used for definitions or recall; it contributes 2 of the 30 sampled high edges and 1 of the 3 low ones to the precision sample.",
+    "Hierarchy could not be measured: no supertype in the project has a repository target."
+  ]
+}

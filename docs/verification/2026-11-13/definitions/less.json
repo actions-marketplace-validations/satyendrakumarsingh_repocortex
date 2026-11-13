@@ -1,0 +1,74 @@
+{
+ "language": "less",
+ "project": "Semantic-Org/Semantic-UI",
+ "project_commit": "597843ab84d565cccfd8fd7719416350ae73e734",
+ "repocortex_commit": "f783fa5",
+ "files": [
+  {
+   "path": "src/definitions/modules/popup.less",
+   "lines": 712,
+   "assigned_language": "less",
+   "parse_status": "ok",
+   "parse_error": "",
+   "expected": 2,
+   "correct": 2,
+   "missed": 0,
+   "missed_known_gap": 0,
+   "spurious": 0,
+   "line_on_attribute": 0,
+   "total_symbols": 2
+  },
+  {
+   "path": "src/definitions/elements/header.less",
+   "lines": 708,
+   "assigned_language": "less",
+   "parse_status": "ok",
+   "parse_error": "",
+   "expected": 2,
+   "correct": 2,
+   "missed": 0,
+   "missed_known_gap": 0,
+   "spurious": 0,
+   "line_on_attribute": 0,
+   "total_symbols": 2
+  },
+  {
+   "path": "src/definitions/modules/checkbox.less",
+   "lines": 598,
+   "assigned_language": "less",
+   "parse_status": "ok",
+   "parse_error": "",
+   "expected": 2,
+   "correct": 2,
+   "missed": 0,
+   "missed_known_gap": 0,
+   "spurious": 0,
+   "line_on_attribute": 0,
+   "total_symbols": 2
+  }
+ ],
+ "totals": {
+  "expected": 6,
+  "correct": 6,
+  "missed": 0,
+  "missed_known_gap": 0,
+  "spurious": 0,
+  "line_on_attribute": 0
+ },
+ "examples": {
+  "missed": [],
+  "spurious": []
+ },
+ "rule_objections": [
+  "The rule makes a 700-line Less stylesheet yield 2 symbols (@type and @element, which are boilerplate present in every Semantic-UI file and carry no meaning) because every selector in these files is compound (.ui.popup, .ui.top.left.popup, [data-tooltip]:before). The component name popup/checkbox/header is not discoverable via symbols; the only 'definitions' are the two near-identical variables repeated per file.",
+  "No mixin definitions, namespaces, keyframes or custom properties occur in these files, so the richer parts of the Less rule were not exercised."
+ ],
+ "findings": [
+  "0 missed, 0 spurious: the 6 top-level @variable declarations (@type, @element per file) are all extracted at the right lines. Parse status ok for all three.",
+  "Weak sample for Less: these three files exercise only top-level @variables. KNOWN_GAPS (namespaced calls with named arguments break following rules) was not triggered.",
+  "Text search works (`search flowing` finds popup.less)."
+ ],
+ "not_done": [
+  "Did not test a mixin-heavy Less project (the largest Semantic-UI files contain none)."
+ ]
+}

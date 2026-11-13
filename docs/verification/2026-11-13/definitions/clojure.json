@@ -1,0 +1,65 @@
+{
+ "language": "clojure",
+ "project": "clojure/clojure (src/clj/clojure/genclass.clj, main.clj, core_print.clj)",
+ "project_commit": "33fb064",
+ "repocortex_commit": "f783fa5",
+ "files": [
+  {
+   "path": "src/clj/clojure/main.clj",
+   "lines": 676,
+   "assigned_language": "clojure",
+   "parse_status": "ok",
+   "parse_error": "",
+   "expected": 38,
+   "correct": 38,
+   "missed": 0,
+   "missed_known_gap": 0,
+   "spurious": 0,
+   "line_on_attribute": 0
+  },
+  {
+   "path": "src/clj/clojure/genclass.clj",
+   "lines": 760,
+   "assigned_language": "clojure",
+   "parse_status": "ok",
+   "parse_error": "",
+   "expected": 18,
+   "correct": 18,
+   "missed": 0,
+   "missed_known_gap": 0,
+   "spurious": 0,
+   "line_on_attribute": 0
+  },
+  {
+   "path": "src/clj/clojure/core_print.clj",
+   "lines": 588,
+   "assigned_language": "clojure",
+   "parse_status": "ok",
+   "parse_error": "",
+   "expected": 82,
+   "correct": 82,
+   "missed": 0,
+   "missed_known_gap": 0,
+   "spurious": 0,
+   "line_on_attribute": 0
+  }
+ ],
+ "totals": {
+  "expected": 138,
+  "correct": 138,
+  "missed": 0,
+  "missed_known_gap": 0,
+  "spurious": 0,
+  "line_on_attribute": 0
+ },
+ "examples": [],
+ "rule_objections": [
+  "The files contain no defprotocol/defrecord/deftype/defmulti (core_print uses defmethod on multimethods defined elsewhere), so those branches were not exercised."
+ ],
+ "findings": [
+  "138 of 138 expected top-level definitions (ns, defn, defn-, defmacro, def with metadata maps, 59 defmethod) extracted with correct names; no spurious symbols. A defn inside a top-level (comment ...) at genclass.clj:746 and (declare main) were correctly not recorded."
+ ],
+ "not_done": [
+  "Expected set from a regex over top-level '(def*' heads checked against the symbols; no protocol or record forms available in the chosen files."
+ ]
+}

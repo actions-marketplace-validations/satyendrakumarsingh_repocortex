@@ -1,0 +1,71 @@
+{
+ "language": "sql",
+ "project": "supabase/postgres (migrations and pgmq after-create script)",
+ "project_commit": "47dbfca",
+ "repocortex_commit": "f783fa5",
+ "files": [
+  {
+   "path": "migrations/db/migrations/20261016000001_search_path_for_supa_functions.sql",
+   "lines": 258,
+   "assigned_language": "sql",
+   "parse_status": "partial",
+   "parse_error": "syntax_errors: 12 error nodes and 0 missing tokens, first at line 6",
+   "expected": 6,
+   "correct": 6,
+   "missed": 0,
+   "missed_known_gap": 0,
+   "spurious": 0,
+   "line_on_attribute": 0
+  },
+  {
+   "path": "ansible/files/postgresql_extension_custom_scripts/pgmq/after-create.sql",
+   "lines": 195,
+   "assigned_language": "sql",
+   "parse_status": "partial",
+   "parse_error": "syntax_errors: 2 error nodes and 0 missing tokens, first at line 1",
+   "expected": 2,
+   "correct": 0,
+   "missed": 2,
+   "missed_known_gap": 0,
+   "spurious": 0,
+   "line_on_attribute": 0
+  },
+  {
+   "path": "migrations/db/migrations/20220404205710_pg_graphql-on-by-default.sql",
+   "lines": 161,
+   "assigned_language": "sql",
+   "parse_status": "partial",
+   "parse_error": "syntax_errors: 6 error nodes and 0 missing tokens, first at line 108",
+   "expected": 3,
+   "correct": 3,
+   "missed": 0,
+   "missed_known_gap": 0,
+   "spurious": 0,
+   "line_on_attribute": 0
+  }
+ ],
+ "totals": {
+  "expected": 11,
+  "correct": 9,
+  "missed": 2,
+  "missed_known_gap": 0,
+  "spurious": 0,
+  "line_on_attribute": 0
+ },
+ "examples": [
+  "after-create.sql:35 CREATE FUNCTION pgmq.drop_queue(queue_name TEXT) (missed: sits inside a top-level DO $$ ... $$ block, which is unreadable to the grammar)",
+  "after-create.sql:150 CREATE OR REPLACE FUNCTION pgmq.drop_queue(queue_name TEXT, partitioned BOOLEAN) (missed, same block)"
+ ],
+ "rule_objections": [
+  "The rule is silent on objects created inside DO blocks and on functions created in EXECUTE strings."
+ ],
+ "findings": [
+  "The whole after-create.sql file (a DO block containing two CREATE FUNCTION statements) yields zero symbols; arguable whether objects created inside a DO block count under the rule, I counted them as expected.",
+  "Tables: 0 table statements in the three files, so the separate table scanner was not exercised; views, types, triggers, indexes, sequences, schemas and procedures are also absent from these files, so only functions were tested (9 of 11).",
+  "Functions defined inside dollar-quoted EXECUTE strings (e.g. graphql_public.graphql inside a function body) are correctly not recorded.",
+  "The three largest SQL files under 800 lines in this project are small (258, 195, 161 lines) and mostly GRANT/ALTER statements, so this is a thin test of SQL."
+ ],
+ "not_done": [
+  "Tables, columns, views, types, triggers, indexes, sequences and schemas could not be measured: none of the selected files contain them. The brief's rule picked these files; a schema-heavy project (for example pagila-schema.sql, 3035 lines) was ruled out by the under-800 line rule."
+ ]
+}
