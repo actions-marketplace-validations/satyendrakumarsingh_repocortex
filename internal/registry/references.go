@@ -165,6 +165,12 @@ type FileRefs struct {
 //
 // fn must not retain the FileRefs it is given beyond the call.
 func (r *Registry) EachFilePageWithRefs(ctx context.Context, runID int64, fn func([]FileRefs) error) error {
+	// idx_refs_bound_sites holds exactly the 'resolved' rows, keyed by the symbol
+	// they point at, so rows pointing at nothing are its first entries. Left to
+	// the planner this statement read every entry of idx_refs_name_binding to
+	// find them: 5 s of reading on a 3.8-million-reference index, on every
+	// resolve, to find none.
+	//
 	// A reference marked resolved but pointing at nothing is a broken
 	// invariant, not a resolved reference. It is picked up here as well as
 	// 'pending' so that an index already carrying the damage repairs itself on
@@ -175,7 +181,7 @@ func (r *Registry) EachFilePageWithRefs(ctx context.Context, runID int64, fn fun
 	// that most need it — the damage is invisible until someone notices an
 	// edge that should exist and does not.
 	if _, err := r.db.ExecContext(ctx, `
-		UPDATE symbol_references
+		UPDATE symbol_references INDEXED BY idx_refs_bound_sites
 		   SET resolution = 'pending'
 		 WHERE index_run_id = ?
 		   AND resolution <> 'pending'

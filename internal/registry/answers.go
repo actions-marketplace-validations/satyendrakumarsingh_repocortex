@@ -356,6 +356,21 @@ func (r *Registry) LanguageBindings(ctx context.Context, runID int64) (map[strin
 	return r.computeLanguageBindings(ctx, runID)
 }
 
+// languageRefsSQL counts a run's references by language and outcome.
+//
+// Counted per FILE first and joined to the language second, over a plain scan
+// of the table. Joined per reference, the planner walked the reference table in
+// name order (idx_refs_run_name) and fetched each row from the table at random:
+// 3.8 million random page reads on the Elasticsearch index, 65 s against 8 s
+// for the scan, with the same counts.
+const languageRefsSQL = `SELECT f.language, x.resolution, SUM(x.n)
+	                  FROM (SELECT file_id, resolution, COUNT(*) AS n
+	                          FROM symbol_references NOT INDEXED
+	                         WHERE index_run_id = ? GROUP BY file_id, resolution) x
+	                  JOIN files f ON f.id = x.file_id
+	                 GROUP BY f.language, x.resolution
+	                 ORDER BY f.language, x.resolution`
+
 // computeLanguageBindings is LanguageBindings read from the tables themselves.
 func (r *Registry) computeLanguageBindings(ctx context.Context, runID int64) (map[string]LanguageBinding, error) {
 	out := map[string]LanguageBinding{}
@@ -420,10 +435,7 @@ func (r *Registry) computeLanguageBindings(ctx context.Context, runID int64) (ma
 		}); err != nil {
 		return nil, err
 	}
-	if err := scan(`SELECT f.language, sr.resolution, COUNT(*) FROM symbol_references sr
-	                  JOIN files f ON f.id = sr.file_id
-	                 WHERE sr.index_run_id = ? GROUP BY f.language, sr.resolution
-	                 ORDER BY f.language, sr.resolution`,
+	if err := scan(languageRefsSQL,
 		func(lang, resolution string, n int64) {
 			l := get(lang)
 			l.Total += n

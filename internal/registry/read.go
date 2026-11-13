@@ -286,6 +286,32 @@ func (r *Registry) Supertypes(ctx context.Context, runID int64, types []string) 
 	return out, nil
 }
 
+// supertypeSQL is the statement supertypeChunkInto runs for n names; a function
+// so the plan test can explain the very text that runs.
+//
+// The joins are CROSS JOINs on purpose: in SQLite that keeps the written order,
+// which starts from the few symbols with these names (idx_symbols_name) and
+// follows each one's edges (the unique index on edges). Left to itself the
+// planner, which has no statistics here, starts from the edges table instead
+// and walks every edge of the run for each chunk, then throws away the ones
+// whose source name is not in the list: on a 1.5-million-edge index that was
+// a full scan per call, hundreds of calls per resolve.
+func supertypeSQL(n int) string {
+	return `
+		SELECT src_name, dst_name FROM (
+		  SELECT src_name, dst_name,
+		         ROW_NUMBER() OVER (PARTITION BY src_name ORDER BY dst_name) AS rn
+		    FROM (SELECT DISTINCT src.name AS src_name, dst.name AS dst_name
+		            FROM symbols src
+		            CROSS JOIN edges   e   ON e.src_id = src.id AND e.index_run_id = ?
+		            CROSS JOIN symbols dst ON dst.id = e.dst_id AND dst.index_run_id = ?
+		           WHERE src.index_run_id = ?
+		             AND src.name IN (` + strings.TrimSuffix(strings.Repeat("?,", n), ",") + `)
+		             AND e.kind IN (?,?)))
+		 WHERE rn <= ?
+		 ORDER BY src_name, dst_name`
+}
+
 // supertypeChunkInto reads one bounded chunk of names into out.
 //
 // DISTINCT before ROW_NUMBER, not after: the cap must count distinct supertype
@@ -304,19 +330,7 @@ func (r *Registry) supertypeChunkInto(
 	}
 	args = append(args, string(model.EdgeExtends), string(model.EdgeImplements), maxSupertypesPerName)
 
-	rows, err := r.db.QueryContext(ctx, `
-		SELECT src_name, dst_name FROM (
-		  SELECT src_name, dst_name,
-		         ROW_NUMBER() OVER (PARTITION BY src_name ORDER BY dst_name) AS rn
-		    FROM (SELECT DISTINCT src.name AS src_name, dst.name AS dst_name
-		            FROM symbols src
-		            JOIN edges   e   ON e.src_id = src.id AND e.index_run_id = ?
-		            JOIN symbols dst ON dst.id = e.dst_id AND dst.index_run_id = ?
-		           WHERE src.index_run_id = ?
-		             AND src.name IN (`+strings.TrimSuffix(strings.Repeat("?,", len(names)), ",")+`)
-		             AND e.kind IN (?,?)))
-		 WHERE rn <= ?
-		 ORDER BY src_name, dst_name`, args...)
+	rows, err := r.db.QueryContext(ctx, supertypeSQL(len(names)), args...)
 	if err != nil {
 		return fmt.Errorf("registry: load supertypes: %w", err)
 	}

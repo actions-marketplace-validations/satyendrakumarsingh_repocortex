@@ -33,9 +33,12 @@ func (r *Registry) RefreshRunStats(ctx context.Context, runID int64) error {
 	if err != nil {
 		return err
 	}
+	// A plain scan: with the index the planner chose, each of the 3.8 million
+	// rows of a large run was fetched from the table in name order, 24 s of
+	// random reads for a count that is zero unless a compiler index was imported.
 	var byCompiler int64
 	if err := r.db.QueryRowContext(ctx,
-		`SELECT COUNT(*) FROM symbol_references WHERE index_run_id = ? AND resolution_source = 'compiler'`,
+		`SELECT COUNT(*) FROM symbol_references NOT INDEXED WHERE index_run_id = ? AND resolution_source = 'compiler'`,
 		runID).Scan(&byCompiler); err != nil {
 		return fmt.Errorf("registry: run stats: %w", err)
 	}
