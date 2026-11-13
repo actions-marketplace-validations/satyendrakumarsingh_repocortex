@@ -232,6 +232,8 @@ type Importer struct {
 	runID int64
 	opts  scip.Options
 	proof *Proof
+
+	shared *SharedTables
 }
 
 // Collect makes Import record into p which files the index covers and where it
@@ -335,15 +337,41 @@ func (imp *Importer) ImportFacts(ctx context.Context, files []scip.FileFacts, si
 	})
 }
 
-func (imp *Importer) run(ctx context.Context, mode runMode) (ImportResult, error) {
-	var res ImportResult
+// tables is what an import reads about the repository's own index before it
+// touches the compiler's: every indexed path, the symbols keyed for matching
+// and the parser's call sites. None of it changes while indexes are imported
+// (an import writes edges and marks references, never symbols or the parser's
+// references), so several imports of one run can read it once.
+type tables struct {
+	known   []string
+	table   *symbolTable
+	calls   *scip.CallSiteSet
+	nameOf  map[int64]string
+	kindOf  map[int64]model.EntityKind
+	symbols int
+}
 
+// SharedTables lets the importers of one run read the repository's tables once.
+// The zero value is ready; share one between Importers with ShareTables, and do
+// not share it across runs or across a write of symbols.
+type SharedTables struct{ t *tables }
+
+// ShareTables makes this importer read, and fill, the shared tables.
+func (imp *Importer) ShareTables(s *SharedTables) *Importer {
+	imp.shared = s
+	return imp
+}
+
+func (imp *Importer) loadTables(ctx context.Context, mode runMode) (*tables, error) {
+	if imp.shared != nil && imp.shared.t != nil && (imp.shared.t.calls != nil || !mode.promote) {
+		return imp.shared.t, nil
+	}
 	files, err := imp.reg.Files(ctx, imp.runID)
 	if err != nil {
-		return res, fmt.Errorf(mode.label+": read indexed files: %w", err)
+		return nil, fmt.Errorf(mode.label+": read indexed files: %w", err)
 	}
 	if len(files) == 0 {
-		return res, fmt.Errorf(mode.label+": run %d has no indexed files; "+
+		return nil, fmt.Errorf(mode.label+": run %d has no indexed files; "+
 			"run 'repocortex index' before importing", imp.runID)
 	}
 	pathOf := make(map[int64]string, len(files))
@@ -355,38 +383,53 @@ func (imp *Importer) run(ctx context.Context, mode runMode) (ImportResult, error
 
 	syms, err := imp.reg.Symbols(ctx, imp.runID)
 	if err != nil {
-		return res, fmt.Errorf(mode.label+": read indexed symbols: %w", err)
+		return nil, fmt.Errorf(mode.label+": read indexed symbols: %w", err)
 	}
-	table := newSymbolTable(syms, pathOf)
+	tb := &tables{known: known, table: newSymbolTable(syms, pathOf), symbols: len(syms)}
 
 	// The parser's half of the CALLS join, read once for the whole import.
 	// Loaded here rather than queried per occurrence because an import touches
 	// hundreds of thousands of them; see scip.CallSiteSet.
-	var calls *scip.CallSiteSet
 	if mode.promote {
 		sites, err := imp.reg.ParsedCallSites(ctx, imp.runID)
 		if err != nil {
-			return res, fmt.Errorf(mode.label+": read parsed call sites: %w", err)
+			return nil, fmt.Errorf(mode.label+": read parsed call sites: %w", err)
 		}
-		calls = scip.NewCallSiteSet(len(sites))
+		tb.calls = scip.NewCallSiteSet(len(sites))
 		for _, cs := range sites {
-			calls.AddAt(cs.Path, cs.Line, cs.Col, cs.Name, cs.Receiver)
+			tb.calls.AddAt(cs.Path, cs.Line, cs.Col, cs.Name, cs.Receiver)
 		}
-		res.ParsedCallSites = calls.Len()
 	}
 
 	// RepoCortex's own name for every indexed symbol, so the promotion can check
 	// that the compiler's target on a call line is named as the call the parser
 	// recorded. Built from syms, which is already in memory.
-	nameOf := make(map[int64]string, len(syms))
-	kindOf := make(map[int64]model.EntityKind, len(syms))
+	tb.nameOf = make(map[int64]string, len(syms))
+	tb.kindOf = make(map[int64]model.EntityKind, len(syms))
 	for i := range syms {
-		nameOf[syms[i].ID] = syms[i].Name
-		kindOf[syms[i].ID] = syms[i].Kind
+		tb.nameOf[syms[i].ID] = syms[i].Name
+		tb.kindOf[syms[i].ID] = syms[i].Kind
+	}
+	if imp.shared != nil {
+		imp.shared.t = tb
+	}
+	return tb, nil
+}
+
+func (imp *Importer) run(ctx context.Context, mode runMode) (ImportResult, error) {
+	var res ImportResult
+
+	tb, err := imp.loadTables(ctx, mode)
+	if err != nil {
+		return res, err
+	}
+	known, table, calls, nameOf, kindOf := tb.known, tb.table, tb.calls, tb.nameOf, tb.kindOf
+	if calls != nil {
+		res.ParsedCallSites = calls.Len()
 	}
 
 	// Pass 1: join compiler definitions to indexed symbols.
-	fqnToID := make(map[string]int64, len(syms))
+	fqnToID := make(map[string]int64, tb.symbols)
 	checked := map[string]bool{}
 	// Every definition the index makes, matched to the repository's symbols or
 	// not: an occurrence resolved to one is a use of repository code.

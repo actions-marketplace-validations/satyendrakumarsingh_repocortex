@@ -271,6 +271,7 @@ func RunCompilerIndexers(ctx context.Context, reg *registry.Registry, runID int6
 	}
 
 	proof := scipimport.NewProof()
+	shared := &scipimport.SharedTables{}
 	for _, own := range ownPackages(opts.Root, files) {
 		proof.AddOwn(own[0], own[1])
 	}
@@ -286,7 +287,7 @@ func RunCompilerIndexers(ctx context.Context, reg *registry.Registry, runID int6
 		start := time.Now()
 		imp := scipimport.NewImporter(reg, runID, scip.Options{
 			RepoRoot: opts.Root, MaxBytes: scip.DefaultMaxBytes,
-		}).Collect(proof)
+		}).Collect(proof).ShareTables(shared)
 		res, err := imp.Import(ctx, filepath.Join(opts.Root, filepath.FromSlash(cs.Output)))
 		cs.ImportTime = time.Since(start)
 		cs.Import = res
