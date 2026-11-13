@@ -220,34 +220,115 @@ func TestPromoteCallsLeavesNonCallReferencesAlone(t *testing.T) {
 	}
 }
 
-// TestPromoteCallsDeclinesAmbiguousCallLines covers the restriction the whole
-// construction rests on.
+// TestPromoteCallsPromotesTheCallOnAMixedLine covers the line the old rule
+// could not decide.
 //
-// Line 12 IS a parsed call site, but the compiler resolved two distinct symbols
-// there — `Service` and `updateStatus`. Promoting both would stamp a type name
-// as a call; promoting one would be a coin toss dressed up as exact. Neither is
-// acceptable, so both stay REFERENCES and the decline is counted.
-func TestPromoteCallsDeclinesAmbiguousCallLines(t *testing.T) {
+// Line 12 IS a parsed call site and the compiler resolved two distinct symbols
+// there: `Service` (a type) and `updateStatus`. The parser recorded one call,
+// written as `updateStatus`. The join is per (line, name), so the call is
+// promoted on its own and the type name, which no parsed call is written as,
+// stays a REFERENCE. Promoting the type would stamp an annotation as a call.
+func TestPromoteCallsPromotesTheCallOnAMixedLine(t *testing.T) {
 	edges := callFixtureEdges(t)
 
 	calls := NewCallSiteSet(1)
-	calls.Add(callerPath, 12, "updateStatus", "")
+	calls.AddAt(callerPath, 12, 4, "updateStatus", "")
 
 	st, err := PromoteCalls(callerPath, edges, callFixtureNames, calls)
 	if err != nil {
 		t.Fatalf("promote: %v", err)
 	}
-	if st.Promoted != 0 {
-		t.Errorf("promoted %d edge(s) on an ambiguous line, want 0", st.Promoted)
+	if st.Promoted != 1 || st.NameMismatch != 1 || st.Ambiguous != 0 {
+		t.Errorf("want 1 promoted, 1 name mismatch, 0 ambiguous; got %+v", st)
 	}
-	if st.CallLines != 1 || st.Ambiguous != 1 {
-		t.Errorf("counted %d call line(s), %d ambiguous; want 1 and 1 — a decline that is not "+
-			"reported is indistinguishable from a join that never ran: %+v", st.CallLines, st.Ambiguous, st)
+	if got := edgeAtLine(t, edges, 12, callFixtureIDs[symTargetFn]); got.Kind != model.EdgeCalls {
+		t.Errorf("the call on line 12 is %s, want CALLS", got.Kind)
 	}
-	for _, dst := range []int64{callFixtureIDs[symTypeName], callFixtureIDs[symTargetFn]} {
-		if got := edgeAtLine(t, edges, 12, dst); got.Kind != model.EdgeReferences {
-			t.Errorf("line 12 -> %d is %s, want REFERENCES", dst, got.Kind)
+	if got := edgeAtLine(t, edges, 12, callFixtureIDs[symTypeName]); got.Kind != model.EdgeReferences {
+		t.Errorf("the type on line 12 is %s, want REFERENCES", got.Kind)
+	}
+}
+
+// refEdge builds one compiler REFERENCES edge for the join tests below.
+func refEdge(dst int64, line, col int) model.Edge {
+	return model.Edge{
+		SrcID: 1, DstID: dst, Kind: model.EdgeReferences,
+		Confidence: model.ConfidenceExact,
+		Evidence: model.Evidence{
+			Source: model.SourceCompiler, FilePath: callerPath,
+			Range: model.Range{Start: model.Position{Line: line, Col: col}},
+		},
+	}
+}
+
+// TestPromoteCallsPromotesTwoCallsOnOneLine is the 6,439-line case:
+// `ruleModel().Validate()` is two calls and two compiler targets on one line,
+// and each is promoted on its own because each name has one parsed call and one
+// occurrence.
+func TestPromoteCallsPromotesTwoCallsOnOneLine(t *testing.T) {
+	names := map[int64]string{10: "ruleModel", 11: "Validate"}
+	edges := []model.Edge{refEdge(10, 338, 11), refEdge(11, 338, 22)}
+
+	calls := NewCallSiteSet(2)
+	// The parser starts BOTH calls at the beginning of the callee expression.
+	calls.AddAt(callerPath, 338, 11, "ruleModel", "")
+	calls.AddAt(callerPath, 338, 11, "Validate", "?")
+
+	st, err := PromoteCalls(callerPath, edges, names, calls)
+	if err != nil {
+		t.Fatalf("promote: %v", err)
+	}
+	if st.Promoted != 2 || st.Ambiguous != 0 {
+		t.Fatalf("want both calls promoted; got %+v", st)
+	}
+	for i := range edges {
+		if edges[i].Kind != model.EdgeCalls {
+			t.Errorf("edge %d is %s, want CALLS", i, edges[i].Kind)
 		}
+	}
+}
+
+// TestPromoteCallsDeclinesAMethodValueBesideACall is the restriction the join
+// still rests on: the compiler resolved `Foo` twice on the line and the parser
+// saw it called once, so one occurrence is a method value and which one cannot
+// be told. Neither is promoted, and the decline is counted.
+func TestPromoteCallsDeclinesAMethodValueBesideACall(t *testing.T) {
+	names := map[int64]string{20: "Foo"}
+	edges := []model.Edge{refEdge(20, 5, 2), refEdge(20, 5, 12)}
+
+	calls := NewCallSiteSet(1)
+	calls.AddAt(callerPath, 5, 0, "Foo", "")
+
+	st, err := PromoteCalls(callerPath, edges, names, calls)
+	if err != nil {
+		t.Fatalf("promote: %v", err)
+	}
+	if st.Promoted != 0 || st.Ambiguous != 1 {
+		t.Errorf("want nothing promoted and 1 ambiguous; got %+v", st)
+	}
+	for i := range edges {
+		if edges[i].Kind != model.EdgeReferences {
+			t.Errorf("edge %d is %s, want REFERENCES", i, edges[i].Kind)
+		}
+	}
+}
+
+// TestPromoteCallsPairsTheSameNameCalledTwice: `a.Foo(b.Foo())` is two calls
+// of one name with two targets; they pair by position and both are promoted.
+func TestPromoteCallsPairsTheSameNameCalledTwice(t *testing.T) {
+	names := map[int64]string{20: "Foo", 21: "Foo"}
+	edges := []model.Edge{refEdge(20, 5, 2), refEdge(21, 5, 10)}
+
+	calls := NewCallSiteSet(2)
+	calls.AddAt(callerPath, 5, 0, "Foo", "a")
+	calls.AddAt(callerPath, 5, 8, "Foo", "b")
+
+	st, err := PromoteCalls(callerPath, edges, names, calls)
+	if err != nil {
+		t.Fatalf("promote: %v", err)
+	}
+	if st.Promoted != 2 {
+		t.Errorf("want both calls promoted; got %+v", st)
 	}
 }
 

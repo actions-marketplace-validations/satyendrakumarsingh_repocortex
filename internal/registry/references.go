@@ -890,6 +890,11 @@ func (w *Writer) AddConfigUsage(ctx context.Context, fileID int64, u ConfigUsage
 type ParsedCallSite struct {
 	Path string
 	Line int
+	// Col is the 0-based column where the call expression starts, which is the
+	// start of its callee EXPRESSION (`ruleModel` for `ruleModel().Validate()`
+	// on both of its calls), not of the called name. Two calls on one line are
+	// told apart by it.
+	Col  int
 	Name string
 	// Receiver is what the call was written against — `svc` in
 	// `svc.delete_line(...)` — or empty for a bare call. It is recorded
@@ -922,11 +927,11 @@ type ParsedCallSite struct {
 // either extreme.
 func (r *Registry) ParsedCallSites(ctx context.Context, runID int64) ([]ParsedCallSite, error) {
 	rows, err := r.db.QueryContext(ctx, `
-		SELECT DISTINCT f.path, sr.start_line, sr.name, sr.receiver
+		SELECT DISTINCT f.path, sr.start_line, sr.start_col, sr.name, sr.receiver
 		  FROM symbol_references sr
 		  JOIN files f ON f.id = sr.file_id
 		 WHERE sr.index_run_id = ? AND sr.kind LIKE '%call%' AND sr.start_line > 0
-		 ORDER BY f.path, sr.start_line, sr.name, sr.receiver`, runID)
+		 ORDER BY f.path, sr.start_line, sr.start_col, sr.name, sr.receiver`, runID)
 	if err != nil {
 		return nil, fmt.Errorf("registry: parsed call sites for run %d: %w", runID, err)
 	}
@@ -935,7 +940,7 @@ func (r *Registry) ParsedCallSites(ctx context.Context, runID int64) ([]ParsedCa
 	var out []ParsedCallSite
 	for rows.Next() {
 		var cs ParsedCallSite
-		if err := rows.Scan(&cs.Path, &cs.Line, &cs.Name, &cs.Receiver); err != nil {
+		if err := rows.Scan(&cs.Path, &cs.Line, &cs.Col, &cs.Name, &cs.Receiver); err != nil {
 			return nil, fmt.Errorf("registry: parsed call sites for run %d: scan: %w", runID, err)
 		}
 		out = append(out, cs)
