@@ -10,6 +10,40 @@ It synthesizes findings from:
 
 ---
 
+## Update, 14 November 2026
+
+Measured after this document was written. The gaps stand; four figures moved.
+
+- **Round 2 of the agent benchmark has been run, and found no advantage**
+  ([BENCHMARKING.md](BENCHMARKING.md#5-agent-benchmark)). On callers of a method
+  that four to seven types define, and on tests one call away, an agent with
+  search alone was right on 92 of 92 answers; agents that also had RepoCortex
+  were right on 91, with 3.7% more tokens and 13% more time. The tool had bound
+  5 of 14, 8 of 11 and 19 of 37 of the true callers, said its answer was
+  incomplete, and each agent then did the whole search. Gap 1 is therefore not
+  "unproven" on those cases; it is measured, and it is Gap 2 that causes it.
+- **Elasticsearch resolve**: CPU time is a third of what it was (2,991 s to
+  1,003 s, identical output); about 17 minutes of wall time on a loaded
+  machine, where the 35 minutes quoted below was measured on a quiet one. It
+  is still single-threaded.
+- **Linux kernel**: 25.6 minutes to index and 4.7 to resolve on the build of
+  13 November, not about two hours. Kernel-style C is read better (on a
+  4,650-file subset, files with syntax errors 2,092 to 1,151); the whole tree
+  has not been re-measured.
+- **`IDisposable` on VS Code**: 638 of 651 references are bound, and the
+  subtypes question, which did not finish in 30 minutes, answers in about a
+  second.
+
+**What follows for priorities.** The first item of the roadmap in section 4 is
+done and its answer changes the order of the rest. An incomplete answer is
+worth nothing to an agent that can search, so the work that matters is the
+work that makes an answer complete enough to act on without checking: receiver
+types (item 2), and for Go a type-checked graph built in, which also gives
+interface implementations (item 5). Scale work on repositories the size of the
+Linux kernel, and further grammars, do not move this result.
+
+---
+
 ## 1. Executive Summary
 
 While RepoCortex has built an impressive foundation—206 tree-sitter grammars bundled, 91 with definitions extracted, zero-network/zero-CGO execution, honest confidence tiers, and multi-protocol parity (MCP, REST OpenAPI, CLI)—**it does not yet outperform or match market leaders in real-world agent efficacy, deep type resolution, or predictive impact analysis.**
@@ -48,8 +82,8 @@ Market leaders justify their integration into coding agents by publishing clear 
 * **Explicit prohibition on marketing token savings:**
   The repository's benchmarking documentation explicitly notes:
   > *"Do not quote a token saving for RepoCortex. There is no measurement that supports one."*
-* **Round 2 (Hard cases) remains unrun:**
-  The real value proposition of a graph—ambiguous method names, interface dispatch, deep transitive impacts, and test association in large monorepos—remains unproven against LLMs.
+* **Round 2 (hard cases) was run on 14 November and showed no advantage either:**
+  Ambiguous method names and tests one call away, in a thousand-file Go repository: search alone 92 of 92, with RepoCortex 91 of 92, 3.7% more tokens. Interface dispatch, deeper transitive impact and large monorepos remain untested. See the update at the top.
 
 ---
 

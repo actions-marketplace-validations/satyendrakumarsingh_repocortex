@@ -382,13 +382,88 @@ size of the indexed files the answers named, labelled as an upper bound on
 reading those files whole, which an agent with search would not necessarily
 have done.
 
-### Round 2, not yet run
+### Round 2: methods several types define, and tests one call away (2026-11-14)
 
-The next round needs a ground truth that search cannot produce, which means a
-type-checked one: build the truth from a compiler index (SCIP) on public
-repositories, then ask for callers of ambiguous method names, the transitive
-reach of a change, and the tests that reach a symbol. Report correctness first,
-then tool calls and tokens.
+Round 1 asked a question a search answers exactly. This round asks the
+questions it was said a search could not: who calls a method whose name several
+types share, and which tests reach it through one function in between. The
+result is the same, and it is reported as measured.
+
+**Setup.** This repository at commit `5121219` (1,068 files indexed, 13,628
+symbols), a clean clone indexed and resolved by the build of that commit. Four
+questions, each asked of two agents, eight runs, one at a time, the same model
+for all (Claude Sonnet), each agent starting cold. One arm had file search and
+reading only. The other also had `repocortex tool call` (`find_callers`,
+`find_tests` and the rest), was told the index was current, and was free to
+search as well.
+
+**Ground truth** came from the Go type checker, not from RepoCortex:
+`scripts/bench/agenttruth` loads every package with `go/packages` and lists the
+functions whose bodies contain a call the checker resolves to the target
+method. The targets are methods on a name that at least four types define and
+no interface in the repository declares.
+
+| Question (true answers) | Arm | Correct | Wrong | Tokens | Tool calls | Seconds |
+|---|---|---|---|---|---|---|
+| Callers of `Edge.Validate`, 7 types define `Validate` (14) | search only | 14 | 0 | 65,855 | 7 | 42.3 |
+| | with RepoCortex | 13 | 1 | 66,679 | 9 | 40.8 |
+| Callers of `Model.Validate` (11) | search only | 11 | 0 | 62,411 | 5 | 20.7 |
+| | with RepoCortex | 11 | 0 | 64,514 | 5 | 24.6 |
+| Callers of `Confidence.Valid`, 4 types define `Valid` (37) | search only | 37 | 0 | 74,949 | 7 | 43.4 |
+| | with RepoCortex | 37 | 0 | 70,882 | 8 | 47.8 |
+| Tests that call `Edge.Validate` or a function that calls it (30) | search only | 30 | 0 | 71,682 | 7 | 41.8 |
+| | with RepoCortex | 30 | 0 | 83,046 | 8 | 53.9 |
+| **Total** | search only | 92 / 92 | 0 | 274,897 | 26 | 148.2 |
+| | with RepoCortex | 91 / 92 | 1 | 285,121 | 30 | 167.1 |
+
+**Result: no advantage, again.** The agent with search alone was right on all
+92 answers. The agents with RepoCortex used 3.7% more tokens, four more tool
+calls and 13% more time, and made the round's one mistake.
+
+**Why, from what the agents did.**
+
+- **The tool's own answer was incomplete on every question, and said so.** Of
+  the true callers it had bound 5 of 14, 8 of 11 and 19 of 37 (and 2 of 8 for a
+  fourth method, `IndexRun.Complete`, that was not put to the agents): a call
+  written `e.Validate()` on a local variable is ambiguous to a resolver that
+  does not know the variable's type, and four to seven types define the name.
+  Each agent read `INCOMPLETE`, did the whole search anyway, and so paid for
+  the tool call on top of the search.
+- **A search with reading is exact at this size.** An agent finds every
+  `.Validate(` in one command and settles each receiver's type by reading a few
+  lines. In a thousand-file repository that takes five to seven steps.
+- **The one wrong answer came from the tool's output.** `find_callers` prints a
+  calling method by its bare name (`AddEdge`) without the type that owns it.
+  The agent supplied the type and guessed `Registry.AddEdge`; it is
+  `Writer.AddEdge`.
+- **`find_tests` answered a different question.** It returned 97 tests, the
+  closure at any depth, with no depth on a row, where 30 were one call away.
+  The agent called it "noisy" and did not use it.
+- Its first line says "N caller(s)" for N call sites: 56 for a method called
+  from 18 functions.
+
+**What this does and does not show.**
+
+- Two rounds, nine questions, one repository of a thousand files, one model.
+  It does not test a repository where a common name returns thousands of
+  matches, a question several calls deep, or a language where reading does not
+  settle a receiver's type.
+- It does show that an answer the tool marks incomplete is worth nothing to an
+  agent that can search: the agent must do the search to complete it, and then
+  has no use for the part it was given. A code graph earns its place with an
+  agent only where its answer is complete enough to act on without checking.
+  For Go that means type-checked edges, which today require importing a
+  compiler index by hand.
+
+**Do not quote a token saving for RepoCortex.** Two rounds have now looked for
+one and found none.
+
+**Reproducing round 2.** Build the truth program (`cd scripts/bench/agenttruth
+&& go build -o agenttruth .`; it is its own module so that the tool does not
+depend on `golang.org/x/tools`), then `agenttruth -dir <clone> list` for
+candidate names, `callers Type.Method` and `tests Type.Method` for the truth.
+Ask each agent the question in the form of round 1, naming the type and the
+file and line of the method, and score the final `CALLERS:` or `TESTS:` line.
 
 ### Reproducing round 1
 
