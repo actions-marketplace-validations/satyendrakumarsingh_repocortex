@@ -14,11 +14,13 @@ import (
 //
 // What went wrong, so the assertions below read as more than magic strings.
 // `resolve` took 35 minutes on a Java repository of 770,000 symbols and
-// 1.5 million edges, and:
+// 1.5 million edges:
 //
 //   - the supertype lookup (run once per chunk of types, hundreds of times)
 //     started from the edges table and walked every edge of the run, because
-//     the planner has no statistics and preferred it to the symbol-name index.
+//     the planner has no statistics and preferred it to the symbol-name index;
+//   - the per-language reference counts walked the reference table in name
+//     order and fetched every row from the table at random.
 
 // explain returns EXPLAIN QUERY PLAN for query, one step per line.
 func explain(t *testing.T, query string, args ...any) string {
@@ -65,5 +67,18 @@ func TestSupertypeLookupStartsFromTheNamedSymbols(t *testing.T) {
 		if strings.HasPrefix(line, "SEARCH e ") && !strings.Contains(line, "src_id=?") {
 			t.Errorf("edges are searched without the source id, so every edge of the run is read: %q", line)
 		}
+	}
+}
+
+// TestLanguageReferenceCountScansTheTableOnce: the reference counts must read
+// the table in order, not walk an index and fetch each row at random.
+func TestLanguageReferenceCountScansTheTableOnce(t *testing.T) {
+	plan := explain(t, languageRefsSQL, 1)
+
+	if !strings.Contains(plan, "SCAN symbol_references") {
+		t.Errorf("the reference table is not scanned in order:\n%s", plan)
+	}
+	if strings.Contains(plan, "idx_refs_") {
+		t.Errorf("the reference counts walk an index and fetch rows at random:\n%s", plan)
 	}
 }
