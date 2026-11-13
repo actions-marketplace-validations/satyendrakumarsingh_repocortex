@@ -29,7 +29,7 @@ from the counts in those files.
 
 | Claim or earlier figure | Measured here |
 |---|---|
-| `high` is 95.1% to 100% precise, by hand, on nine projects (`docs/accuracy.md`, 12 November) | On 14 projects the work was not tuned on, round 1 (build `53246ac`) measured `high` at 396/420 (94%) pooled, from 73% (cpp, 22/30) to 100%. Round 2 (build `8748b29`, fresh samples) measured 405/420 (96%) pooled, from 73% (cpp, 22/30) to 100%. `high` stays above 95% on 8 of 14 projects in round 1 and 11 of 14 in round 2 |
+| `high` is 95.1% to 100% precise, by hand, on nine projects (`docs/accuracy.md`, 12 November) | On 14 projects the work was not tuned on, round 1 (build `53246ac`) measured `high` at 396/420 (94%) pooled, from 73% (cpp, 22/30) to 100%. Round 2 (build `8748b29`, fresh samples) measured 405/420 (96%) pooled, from 73% (cpp, 22/30) to 100%. `high` is at least 95% on 8 of 14 projects in round 1 and 11 of 14 in round 2 |
 | `medium` is at least 60% precise (`docs/accuracy.md`) | Round 1: 207/272 (76%) pooled over the 10 projects that have a `medium` edge. Round 2: 249/259 (96%) pooled over 9. Kotlin moved from 5/30 (17%) to 26/30 (87%) because most of its overload cases moved down to `low`; the two rounds are not like for like |
 | `low` is a hint that a name exists | Round 2: 184/280 (66%) pooled. python 8/30; kotlin 9/30; c_sharp 14/30; java 18/30 correct (same-arity overloads and calls on values of unknown type) |
 | Call recall on the files sampled was 0% to 87% (12 November) | Round 1: 393/529 (74%) overall, 35% (c_sharp) to 100% (tsx) by project. Round 2: 450/529 (85%) overall, 55% (javascript) to 100% (tsx) |
@@ -601,7 +601,7 @@ commit and the edge comparison above, and no independent check has re-read it.
 | TypeScript | `#private` members and namespaces not symbols; `this.#x()` unrecorded | `7fc00ef` | Verified: definitions 291 of 291, recall 25 of 32 (was 19) |
 | TypeScript, TSX | Round 2 found the fix for renamed imports (`7fc00ef`, `3a48430`) bound an alias of an external package to a same-named repository symbol, often the enclosing function: 7 wrong `high` edges in TSX, 13 in TypeScript | `7f66c15` | Fixed since; the 7 TSX edges and the 13 TypeScript alias edges round 2 listed are absent in the edge comparison |
 | TypeScript | A platform `Response` or `Request` method bound to a repository `ClientResponse` method | `3ecf7fd` | Fixed since for the cases the edge comparison shows |
-| Answers | A zero or a low risk stated when callers could not be known; a function passed by name not noticed | `6cab1f1` | Verified for the examples round 1 gave |
+| Answers | A function reached only because it is passed by name (koa's `respond`) reported with certainty high and no test reaching it; "0 direct" stated on the first line while low-confidence callers existed (C++ `IsZero`); a risk of `low` over an analysis cut at its depth (Go) | `6cab1f1` | Verified for the examples round 1 gave |
 | Answers | A warning that a function may be passed as a value, fired by documentation, import lists, generic constraints and the function's own prototype | `9786de1`, `de731ca` | Fixed since; not re-read |
 | Answers | A function listed as a subtype because of an anonymous class inside it | `f7a96bb` | Fixed since; not re-read |
 | Answers | A correct, complete answer told not to be presented, because the language-wide rate was low | `e18ba91` | Fixed since; not re-read |
