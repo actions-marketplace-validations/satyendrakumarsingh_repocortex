@@ -62,10 +62,7 @@ func (w *Writer) AddReference(ctx context.Context, fileID int64, r Reference) er
 	if err := w.ensureTx(ctx); err != nil {
 		return err
 	}
-	if _, err := w.tx.ExecContext(ctx, `
-		INSERT INTO symbol_references
-			(index_run_id, file_id, name, kind, receiver, receiver_kind, start_line, start_col, arg_count, resolution)
-		VALUES (?,?,?,?,?,?,?,?,?, 'pending')`,
+	if _, err := w.st.ref.ExecContext(ctx,
 		w.runID, fileID, r.Name, r.Kind, r.Receiver, r.ReceiverKind, r.Line, r.Col, int(r.ArgCount),
 	); err != nil {
 		return w.fail(fmt.Errorf("registry: add reference %q: %w", r.Name, err))
@@ -134,9 +131,7 @@ func (w *Writer) AddImport(ctx context.Context, fileID int64, imp Import) error 
 	}
 	// A file may legitimately repeat an import across overlapping tag patterns;
 	// the unique constraint makes that harmless rather than fatal.
-	if _, err := w.tx.ExecContext(ctx, `
-		INSERT OR IGNORE INTO file_imports (index_run_id, file_id, path, alias, start_line)
-		VALUES (?,?,?,?,?)`,
+	if _, err := w.st.imp.ExecContext(ctx,
 		w.runID, fileID, imp.Path, imp.Alias, imp.Line,
 	); err != nil {
 		return w.fail(fmt.Errorf("registry: add import %q: %w", imp.Path, err))

@@ -167,7 +167,10 @@ func TestIndexDoesNotDependOnMachineLoad(t *testing.T) {
 		"F pkg/clean.go | go | ok | ",
 		"F pkg/doc.go | go | ok | ",
 		"F pkg/broken.go | go | partial | syntax_errors: ",
-		"F src/bitops.c | c | partial | syntax_errors: ",
+		// A #define between the braces of an initialiser: the grammar reads it
+		// as errors, the C mask overwrites it and the table parses, so the
+		// file is read clean. It was partial before the mask learned the shape.
+		"F src/bitops.c | c | ok | ",
 		"F scripts/report.pl | perl | skipped | text_only: ",
 		"F lib/Main.hs | haskell | skipped | text_only: ",
 		"F notes.unknownext |  | skipped | no grammar",

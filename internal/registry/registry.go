@@ -367,6 +367,11 @@ func (r *Registry) AbortRun(ctx context.Context, runID int64) error {
 	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("registry: abort run %d: commit: %w", runID, err)
 	}
+	// The run's rows are gone, so putting back what its bulk load set aside
+	// costs nothing now. See RestoreDeferred.
+	if _, err := r.RestoreDeferred(ctx); err != nil {
+		return fmt.Errorf("registry: abort run %d: %w", runID, err)
+	}
 	return nil
 }
 
@@ -414,6 +419,11 @@ func (r *Registry) ReclaimAbandoned(ctx context.Context) ([]int64, error) {
 	}
 	if err := tx.Commit(); err != nil {
 		return nil, fmt.Errorf("registry: reclaim: commit: %w", err)
+	}
+	// A run that died during a bulk load left schema objects set aside
+	// (RestoreDeferred). Its rows are gone now, so they come back for free.
+	if _, err := r.RestoreDeferred(ctx); err != nil {
+		return nil, fmt.Errorf("registry: reclaim: %w", err)
 	}
 	return ids, nil
 }

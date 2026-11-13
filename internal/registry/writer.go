@@ -65,6 +65,8 @@ type writerStmts struct {
 	edge   *sql.Stmt
 	fts    *sql.Stmt
 	ftsMap *sql.Stmt
+	ref    *sql.Stmt
+	imp    *sql.Stmt
 }
 
 // NewWriter opens a Writer against a staging run.
@@ -435,6 +437,19 @@ func prepareWriterStmts(ctx context.Context, tx *sql.Tx) (*writerStmts, error) {
 		return nil, err
 	}
 	if err := prep(&st.ftsMap, `INSERT INTO files_fts_map (fts_rowid, file_id) VALUES (?,?)`); err != nil {
+		return nil, err
+	}
+	// References and imports are by far the most numerous rows, and parsing the
+	// same INSERT for each of them was a measurable share of the sink.
+	if err := prep(&st.ref, `
+		INSERT INTO symbol_references
+			(index_run_id, file_id, name, kind, receiver, receiver_kind, start_line, start_col, arg_count, resolution)
+		VALUES (?,?,?,?,?,?,?,?,?, 'pending')`); err != nil {
+		return nil, err
+	}
+	if err := prep(&st.imp, `
+		INSERT OR IGNORE INTO file_imports (index_run_id, file_id, path, alias, start_line)
+		VALUES (?,?,?,?,?)`); err != nil {
 		return nil, err
 	}
 	return &st, nil
