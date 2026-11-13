@@ -2,8 +2,8 @@
 
 One entry per command: the question it answers, its flags, one example that was
 actually run, and the exit code where it is load-bearing. This is a lookup table.
-For "which of these do I need", start at [GUIDE.md](GUIDE.md); for the reasoning
-and the longer worked examples, [user-manual.md](user-manual.md).
+For "which of these do I need", start at [GUIDE.md](../GUIDE.md); for the reasoning
+and the longer worked examples, [user-manual.md](../user-manual.md).
 
 Where a command's own `--help` argues its design, that argument is not repeated
 here. Run `repocortex <command> --help` — the help text in this tool is written to
@@ -72,6 +72,7 @@ Most commands are 0 on success and 1 on error. Four gate:
 | [`arch --fail-on`](#arch) | 1 when a violation at or above that severity exists |
 | [`bench --fail-on-regression`](#bench) | 1 when any case fails |
 | [`docs --check`](#docs) | 1 when the committed documents have drifted |
+| [`vulns --fail-on`](#vulns) | 1 when a finding at that reachability or stronger exists, when its version could not be compared, or when an advisory file could not be read |
 | [`rename`](#rename-old-new) | 0 would apply, or applied with `verify` passing or advisory; 1 error, `verify` `fail`, or an incomplete rollback; 2 refused (nothing written); 3 applied but not verified complete |
 | [`move`](#move-symbol-from-file-to-file) | 0 would apply, or applied and the package built; 1 error or an incomplete rollback; 2 refused (nothing written, or everything restored); 3 applied but no build checked it |
 
@@ -637,7 +638,7 @@ duration: 2.218s
 
 Paths are the usual failure. If the matched-document count is zero, pass
 `--path-prefix`. `0 upgraded from heuristic` is expected, not a failure — see
-[FAQ.md](FAQ.md#why-does-scip-import-say-0-upgraded-from-heuristic).
+[FAQ.md](../FAQ.md#why-does-scip-import-say-0-upgraded-from-heuristic).
 
 ---
 
@@ -861,6 +862,178 @@ DECLARED BUT NOT IMPORTED (1)
 2 dependency(ies) declared. Pass --all for the full list.
 ```
 
+`deps` itself carries no advisory data. [`sbom`](#sbom) writes the same
+declarations for a scanner, and [`vulns`](#vulns) checks them against advisories
+you supply.
+
+### `sbom`
+
+**Answers:** what does this project declare it depends on, in a form another
+tool reads? Writes a CycloneDX 1.5 JSON document, and nothing else, on stdout.
+
+| Flag | Effect |
+|---|---|
+| `--timestamp <RFC 3339>` | write this time as `metadata.timestamp` (default: none) |
+| `--name <name>` | name of the project described (default: the root manifest's own module or package name) |
+
+```
+$ repocortex sbom > sbom.cdx.json
+$ repocortex sbom -q | head -5
+{
+  "$schema": "http://cyclonedx.org/schema/bom-1.5.schema.json",
+  "bomFormat": "CycloneDX",
+  "specVersion": "1.5",
+  "version": 1,
+```
+
+Each component has a package URL for its ecosystem and the version exactly as
+the manifest or a lockfile states it. The property `repocortex:versionState`
+says how much is known:
+
+| State | Meaning | `version` | `purl` |
+|---|---|---|---|
+| `pinned` | the manifest states one exact version | that version | with version |
+| `locked` | the manifest gives a range; a lockfile beside it states the version | the lockfile's version | with version |
+| `range` | declared as a range, and no lockfile pins it | the range as written | no version |
+| `unpinned` | no constraint, or one managed elsewhere (a parent POM, a BOM) | as written, or absent | no version |
+| `unresolved` | a property placeholder, a Git or path source, a local `replace` | as written | no version |
+
+A range is never written into a package URL: `pkg:npm/lodash@^4.17.20` names a
+release that does not exist. The other properties are `repocortex:declaredVersion`,
+`repocortex:versionSource` (the manifest line or the lockfile), `repocortex:declaredIn`,
+`repocortex:ecosystem`, `repocortex:scope`, `repocortex:indirect`,
+`repocortex:declaredName` (under a Go `replace` or a Cargo rename) and
+`repocortex:note`.
+
+| Ecosystem | Manifest | Lockfile read for the version | Package URL |
+|---|---|---|---|
+| Go | `go.mod` (with `replace`) | none needed | `pkg:golang/<module>@<version>` |
+| npm | `package.json` | `package-lock.json`, `npm-shrinkwrap.json`, `yarn.lock` | `pkg:npm/<name>@<version>` |
+| PyPI | `requirements.txt`, `requirements-dev.txt`, `pyproject.toml` (`[project] dependencies`) | `poetry.lock`, `uv.lock` | `pkg:pypi/<name>@<version>` |
+| Cargo | `Cargo.toml` | `Cargo.lock` | `pkg:cargo/<name>@<version>` |
+| Maven | `pom.xml` (properties of the same POM resolved) | none | `pkg:maven/<group>/<artifact>@<version>` |
+| Gradle | `build.gradle`, `build.gradle.kts` | `gradle.lockfile` | `pkg:maven/<group>/<artifact>@<version>` |
+
+The output is deterministic — sorted, no serial number, no timestamp unless
+`--timestamp` sets one, no tool version — so the file can be committed and its
+diff is a diff of the dependencies.
+
+**Declared dependencies only.** A package that appears only in a lockfile (the
+transitive closure) is not listed, and the document says so itself
+(`compositions: incomplete`). `pnpm-lock.yaml`, `Pipfile.lock` and Poetry's
+`[tool.poetry.dependencies]` table are not read. Lockfiles are read from the
+working tree; the declarations come from the index. A summary, and a warning
+when components have no single version, go to the log on stderr.
+
+### `vulns`
+
+**Answers:** given advisories I supply, which declared dependencies are in an
+affected range, and does the indexed code use them?
+
+| Flag | Effect |
+|---|---|
+| `--advisories <path>` | OSV JSON file, or directory of them (repeatable) |
+| `--fail-on <level>` | exit 1 when a finding at this reachability or stronger exists: `referenced`, `imported`, `affected` |
+| `--ignore <id>` | leave out an advisory by id or alias (repeatable); the report lists what was ignored |
+| `--all` | list the not-affected comparisons and every importing file |
+| `-n`, `--limit <n>` | importing files and symbol references shown per finding (default 5) |
+
+**No network, no built-in advisories.** The command never downloads a
+vulnerability database and ships none. Advisories are
+[OSV](https://ossf.github.io/osv-schema/) records in local files: one record, a
+JSON array of records, an OSV API response, or `osv-scanner`'s JSON report.
+Without `--advisories` it checks nothing, says where advisories come from, and
+exits 0.
+
+```
+$ repocortex vulns --advisories used-cobra.json --advisories unused-gin.json
+2 advisory record(s) from 2 file(s) checked against 75 declared dependency(ies)
+
+AFFECTED (1)
+  github.com/spf13/cobra v1.10.2  [go]  go.mod:13  HAND-2026-0001 (CVE-0000-0001)
+    Hand-written test advisory: cobra argument validation (not a real vulnerability)
+    version: v1.10.2 is in a range affected from the first release and before the fix 1.11.0
+    fixed in: 1.11.0
+    use: REFERENCED — 16 qualified reference(s) to a symbol the advisory names; 1 named method(s) were not checked (Command.ExecuteContext)
+      internal/cli/apidb.go:241  cobra.ExactArgs in a file that imports github.com/spf13/cobra
+      internal/cli/bench.go:49  cobra.ExactArgs in a file that imports github.com/spf13/cobra
+      internal/cli/events.go:78  cobra.ExactArgs in a file that imports github.com/spf13/cobra
+      internal/cli/planchange.go:33  cobra.ExactArgs in a file that imports github.com/spf13/cobra
+      internal/cli/prune.go:26  cobra.ExactArgs in a file that imports github.com/spf13/cobra
+      ... and 11 more (--all, or --json)
+    imported by 52 file(s):
+      internal/cli/accuracy.go:10  github.com/spf13/cobra
+      internal/cli/accuracy_test.go:12  github.com/spf13/cobra
+      internal/cli/agentsetup.go:14  github.com/spf13/cobra
+      internal/cli/agentsetup_test.go:19  github.com/spf13/cobra
+      internal/cli/apidb.go:15  github.com/spf13/cobra
+      ... and 47 more (--all, or --json)
+
+1 of 2 advisory record(s) name no DECLARED dependency. That is not the same as not present: a lockfile-only package is not examined.
+
+What this report covers
+  go: 75 declared, 75 with a concrete version; ordering: semver 2.0.0
+    "not imported" is claimed: yes: a Go file must import a package to use it, and the import path names the module
+    symbols: package-level functions called as pkg.Func, where the advisory lists symbols (the Go vulnerability database does); methods are not bound
+    go: 698 file(s), imports recorded, 0 not fully parsed
+
+Advisories: 2 record(s) used; skipped 0 withdrawn, 0 duplicate, 0 JSON file(s) with no OSV record
+```
+
+The report closes with three standing caveats, omitted above: only declared
+dependencies were checked; imports and references are those of first-party
+indexed code; and "imported, symbol use unknown" is not a finding that the
+vulnerable code is unused.
+
+**Version status.** `affected`: compared, and inside an affected range.
+`could_not_compare`: the comparison could not be made, and this is never
+reported as unaffected — a range with no lockfile, a placeholder, a Git commit
+range, a version the ecosystem's ordering cannot read. `not_affected`: every
+range was compared and the version is outside all of them (counted; `--all` and
+`--json` list each comparison).
+
+| Ecosystem | Ordering |
+|---|---|
+| npm, Go, Cargo | semver 2.0.0 |
+| PyPI | PEP 440 |
+| Maven, Gradle | Maven `ComparableVersion`; a dotted qualifier against a hyphenated one on the same release (`1.0.0.RC1` vs `1.0.0-RC2`) is refused, because Maven 3.9 reversed it |
+
+**Reachability**, for each affected or uncompared dependency:
+
+| State | Meaning |
+|---|---|
+| `referenced` | a file that imports the package references a symbol the advisory names |
+| `imported_symbol_use_unknown` | imported; the advisory names no symbol, or the index could not bind one. Not a clearance |
+| `not_imported` | no indexed file imports it |
+| `import_use_unknown` | no import matched, where that shows nothing: an ecosystem whose package names do not determine import paths, or an index holding no source file in a language that could import the package |
+
+`not_imported` is said only where a package name determines its import path:
+
+| Ecosystem | Import evidence | `not_imported` claimed | Symbols bound |
+|---|---|---|---|
+| Go | import statements; an import belongs to the longest declared module path | yes | `pkg.Func` calls, from `ecosystem_specific.imports` or `affected_functions`; an advisory narrowed to packages is checked per package. Methods are not bound |
+| npm | static `import` / `export … from`, and `require("x")` read from the indexed line. Dynamic `import()` is not recorded | yes | none |
+| PyPI | import statements, by module name | only for about 50 well-known distributions whose module names are built in (`PyYAML` → `yaml`) | module-level functions from `affected_functions`. Methods are not bound |
+| Cargo | `use` declarations | no: a crate can be used by path without `use` | a `use` of the affected function itself |
+| Maven, Gradle | imports under the `groupId`, plus a few known package prefixes | no: a coordinate does not name its Java packages | none |
+
+Every report ends with its coverage: per ecosystem, the languages whose imports
+the index records, the source files that were not fully parsed, and the
+standing limits. **Only declared dependencies are checked** — a vulnerable
+package that appears only in a lockfile is not examined, and Go standard-library
+advisories are counted and not evaluated (`govulncheck` covers both for Go;
+`osv-scanner` reads lockfiles). One exception is reported rather than dropped:
+a Go or npm package an advisory names that no manifest declares but the indexed
+code imports anyway (a transitive dependency used directly). It has no declared
+version, so it is always `could_not_compare`, shown as `NOT DECLARED in any
+manifest`.
+
+**`--fail-on`** follows [`blindspots --fail-on`](#missed). A dependency whose
+version could not be compared fails the gate exactly as an affected one does,
+`import_use_unknown` counts as imported, and an advisory file that could not be
+read fails every level. `--fail-on` without `--advisories` is an error: a gate
+with nothing to check must not pass.
+
 ### `arch`
 
 **Answers:** does the code match the architecture you declared? Compares the
@@ -972,6 +1145,11 @@ MCP equivalent: `list_blindspots`.
 **Answers:** what is the ordered, checkable sequence of steps to change this
 symbol safely? Output carries the target, direct callers, risk, covering tests
 and pre/post-conditions per step.
+
+The callers are the ones the index bound. When references spelled like the
+symbol were left unbound, or its language yields no references, the risk level
+is `UNKNOWN` with the counts and no score, in place of `LOW`. `MODERATE` and
+`HIGH` are printed as "or higher", because a floor survives missing callers.
 
 | Flag | Effect |
 |---|---|
@@ -1673,7 +1851,7 @@ _…and 18 more._
 
 Neither subcommand sets a failing exit code for findings; gating stays with
 `arch --fail-on` and `missed --fail-on`, so a workflow can publish first and
-enforce afterwards. See the [CI guide](USER_GUIDE.md#7-cicd-integration-github-actions-change-safety-gate).
+enforce afterwards. See the [CI guide](../USER_GUIDE.md#7-cicd-integration-github-actions-change-safety-gate).
 
 ### `export`
 
@@ -1823,11 +2001,372 @@ $ repocortex licenses --check
 THIRD_PARTY.md is current (147 modules)
 ```
 
+## Commands added with the full tool profile
+
+Each prints a table for a person. The same answer as an agent sees it is
+`repocortex tool call <tool>`; see [protocols](../guides/protocols.md).
+
+### `dead-code`
+
+Lists definitions nothing in the index calls, graded `likely` or `possible`.
+
+```bash
+repocortex dead-code
+repocortex dead-code --path internal/billing/ --all
+repocortex dead-code --include-test-only
+```
+
+| Flag | Meaning |
+|---|---|
+| `--path PREFIX` | Only files under this prefix |
+| `--all` | Also list candidates graded `possible` |
+| `--include-exported` | Also list exported definitions (implies `--all`) |
+| `--include-test-only` | Also list, in a separate section, definitions whose every caller is in a test file |
+| `-n`, `--limit N` | Most candidates to list (default 50) |
+
+A row is `likely` only when it is known to be unexported, its file parsed
+cleanly, no unbound reference is spelled like it, and its name appears nowhere
+in the code outside its own definition. Never delete on this evidence alone.
+Agent tool: `list_dead_code`.
+
+The index knows whether a definition is exported for Go only. In every other
+language a candidate is graded `possible` at best, with the reason "export
+status unknown", and nothing is left out for being exported. A language with
+definitions and no reference in the index is not judged at all: every
+definition in it would look unused.
+
+A function a framework calls is never `likely`. The handler a route was bound
+to has the route pointing at it, so it is not listed at all. A definition
+spelled like a handler some route names and could not bind (`route handler`),
+and a definition that consumes an event topic (`event consumer`), are graded
+`possible` with that reason, and the count of them is printed.
+
+`--include-test-only` adds a second list under its own heading, `REACHED ONLY
+FROM TESTS`: definitions that do have callers, every one of them in a test
+file. It does not change the first list or its counts.
+
+| What | How it is reported |
+|---|---|
+| Certainty | Always `possible`, reason `only reached from tests`. Never `likely`: code only its tests keep alive may be finished work that lost its last caller or a helper written for the tests, and an index cannot tell which |
+| Order | Rows confirmed against the source text first, largest first; then rows whose name also appears in code that is not a test, marked `name appears elsewhere` (a production use the graph has no edge for, such as a function passed as a value, or an unrelated identifier spelled the same) |
+| `TEST REFS` | How many references point at the definition, all from test files |
+| Left out | Exported definitions unless `--include-exported`, definitions named like an entry point, languages the index does not bind references for, and route handlers and event consumers |
+
+Its limits are printed with it. Callers are direct callers only, so a helper
+called by a test-only function is not listed. A use the index could not bind is
+not counted. Tests written in the same file as the code they test, as in Rust,
+are not seen as tests. It is a second pass over the index, bounded by its own
+scan budget, and says so if it stops short.
+
+### `hotspots`
+
+Ranks files by commits times size over recent history, with the files usually
+committed alongside each.
+
+```bash
+repocortex hotspots
+repocortex hotspots --path internal/ --commits 1000
+```
+
+| Flag | Meaning |
+|---|---|
+| `--path PREFIX` | Only files under this prefix |
+| `--commits N` | How many recent commits to read (default 500) |
+| `--include-tests` | Also rank test files |
+| `--all-files` | Also rank files with no definitions (assets, generated text) |
+| `-n`, `--limit N` | Most files to list (default 20) |
+
+Needs a git repository. Agent tool: `list_hotspots`.
+
+On a shallow clone (`git clone --depth N`, which is what most CI checkouts are)
+the ranking is drawn from the commits the clone holds and says so: "Shallow
+clone: N commit(s) available". The oldest of those commits counts as read but
+contributes no files, because its parent was never fetched and what it changed
+cannot be computed. "The repository's whole history fits inside the window" is
+printed only for a full clone. `bus-factor` and `owners` state the same thing in
+the same words, and `impact --base` with a revision older than the clone depth
+fails with the reason and the fix (`git fetch --unshallow`).
+
+### `bus-factor`
+
+Lists the directories whose recent commits come from the fewest people, most
+concentrated first.
+
+```bash
+repocortex bus-factor
+repocortex bus-factor --path internal/ --commits 2000
+repocortex bus-factor --depth 1
+repocortex bus-factor --files --path internal/billing/
+```
+
+| Flag | Meaning |
+|---|---|
+| `--path PREFIX` | Only files under this prefix |
+| `--commits N` | How many recent commits to read (default 500) |
+| `--min-commits N` | Fewest commits a directory needs to be measured (default 5) |
+| `--depth N` | Group by the first N path segments instead of each file's own directory |
+| `--files` | Measure each file instead of each directory |
+| `-n`, `--limit N` | Most directories to list (default 20) |
+
+```
+$ repocortex bus-factor
+Knowledge distribution from the last 38 commit(s) (2025-06-16 to 2025-07-23) by 6 author name(s).
+4 directory(ies) measured, 3 with a bus factor of 1. Most concentrated first.
+
+BUS FACTOR  DIRECTORY  COMMITS  PEOPLE  TOP CONTRIBUTOR  SHARE  THEIR LAST CHANGE  IDLE
+1           auth       6        2       kit              83%    2025-07-15         8d
+1           billing    11       2       Robin Vega       82%    2025-06-24         29d
+1           search     6        2       ash              50%    2025-07-10         13d
+2           api        8        3       Ash Berg         38%    2025-07-02         21d
+```
+
+| Column | Meaning |
+|---|---|
+| `BUS FACTOR` | The smallest number of people whose commits make up at least half of the commits that touched the directory |
+| `PEOPLE` | Distinct author names among those commits |
+| `SHARE` | The part of those commits made by the largest contributor |
+| `IDLE` | Days between that person's last change there and the newest commit read. Measured against the history, not today |
+
+The order is the lowest bus factor, then the largest share, then the most
+commits. A commit counts once for each directory it touches. Below the table
+the command gives the same figure for every commit read taken together, then
+what it could not see, then what the figure cannot establish.
+
+What to keep in mind when reading it:
+
+- It counts who changed the code in the commits read, not who understands it.
+  Review, pairing and co-authors named only in a commit message are not counted.
+- People are the author names git recorded, exactly as spelled. Names are never
+  merged, so one person under two spellings counts as two and a bus factor can
+  read higher than it is. When two names committed from one address the output
+  says which names, and still leaves them apart. Email addresses are never
+  printed; a name that was itself recorded as an address is cut at the at sign.
+- The output says how many commits were read and the dates they span. A shallow
+  clone and a squash-merge workflow both distort the figures: the first has no
+  history before its depth, the second records a whole branch as one commit
+  under one name. On a shallow clone the command reads the commits the clone
+  holds, says "Shallow clone: N commit(s) available", and never describes them
+  as every commit reachable from HEAD.
+- Directories with fewer than `--min-commits` commits are not measured and are
+  counted in the output. They are unmeasured, not low risk. So are directories
+  the index does not hold: never indexed, or deleted or renamed since. Renames
+  are not followed.
+
+A directory that is not a git repository gets an explanation, not an error.
+Agent tool: `list_knowledge_risks`.
+
+### `communities`
+
+Groups files into communities: sets of files whose calls and references run
+between each other more than they run outwards.
+
+```bash
+repocortex communities
+repocortex communities --path internal/ --limit 10
+repocortex communities --members 20 --min-confidence high
+```
+
+| Flag | Meaning |
+|---|---|
+| `--path PREFIX` | Only group files under this prefix; relationships leaving it are counted, not followed |
+| `-n`, `--limit N` | Most communities to list, largest first (default 20) |
+| `--members N` | Most files to list for each community (default 8; 0 lists none) |
+| `--min-confidence TIER` | Weakest relationship that links two files: `exact`, `high`, `medium` or `low` (default `medium`) |
+
+One community from `repocortex communities --members 3` on this repository:
+
+```text
+3. internal/web  (35 files)
+   NAMED FOR  the directory every member is under
+   ID         internal/web/accuracy.go
+   MOSTLY IN  internal/web (35)
+   INSIDE     467 relationship(s) between members
+   CROSSING   279 relationship(s) with a file outside
+   MEMBERS, most referenced by the others first
+     internal/web/web.go         220
+     internal/web/confidence.go  85
+     internal/web/omission.go    65
+     ... and 32 more; raise --members to list them
+```
+
+A community is named for the directory all its members share, or for its
+most-referenced file when they share none; `NAMED FOR` says which. `ID` is its
+first member in path order: a real file, and the same on every run over the same
+index. The number beside a member is how many relationships from the other
+members end in it.
+
+A community describes how the indexed code refers to itself. It is not a
+declared architecture, and it is computed only from relationships the index
+bound: a reference it could not bind is a missing link, so files that work
+together can be listed apart or in no community. Every answer prints how many
+references are unbound, how many low-confidence relationships were left out, and
+how many files are in no community. A graph of more than 250,000 file-to-file
+links is not partitioned; narrow it with `--path`. Agent tool:
+`list_communities`.
+
+### `path <from> <to>`
+
+Shows the shortest routes from one symbol to another, each hop with its file,
+line and confidence.
+
+```bash
+repocortex path handleCallback saveTransaction --max-depth 8
+```
+
+Flags: `--from-path`, `--to-path` (disambiguate by file), `--max-depth` (default
+6), `--max-paths` (default 3). "No route found" is not proof of independence.
+Agent tool: `trace_call_path`.
+
+### `implementations <name>`
+
+Shows what implements or extends a type, directly or through other types, and
+what it implements or extends. Direct subtypes come first; a deeper one shows its
+depth and the type it names. Flags: `--path`, `--limit`, `--min-confidence`,
+`--direct-only`. Only declared relationships are visible without a compiler
+index. The first line is the one the agent tool `find_implementations` leads
+with, including how many subtypes the index saw and could not list. A table row
+is always a type: an anonymous class or a class declared inside a function is
+counted on the first line and is not a row.
+
+### `tests <symbol>`
+
+Lists the tests that reach a symbol and how each was found. Flag:
+`--min-confidence`. Agent tool: `find_tests`.
+
+### `query [sql]`
+
+Runs one read-only SELECT against the index.
+
+```bash
+repocortex query --schema
+repocortex query "SELECT kind, COUNT(*) AS n FROM symbols WHERE index_run_id = :run GROUP BY kind"
+```
+
+`:run` is the committed run's id. Flags: `-n`, `--limit` (default 100, at most
+5,000), `--schema`. Only a single SELECT or WITH statement is accepted and the
+index is opened read-only. The tables are storage, not a stable interface.
+
+### `tool list`, `tool describe`, `tool call`
+
+Runs any agent tool from the shell by its MCP name and arguments.
+
+```bash
+repocortex tool list --profile standard
+repocortex tool describe trace_call_path
+repocortex tool call find_callers name=ParseConfig min_confidence=high
+```
+
+`call` exits 1 when the tool reports a failure and 0 otherwise. A name shared
+by several definitions is not a failure: the answer lists them with the `path`
+and `line` that select each, and the exit status is 0. Flags: `--profile`
+(default `full`), `--args JSON`, `--args-file FILE`, `--audit-log FILE`. Full
+description: [protocols](../guides/protocols.md#command-line). What the first line
+of an answer means: [reading an answer](mcp-tools.md#reading-an-answer).
+
+### `stats`
+
+**Answers:** what the agent tools were used for, from an [audit
+log](../guides/protocols.md#audit-log): calls, answer sizes, time and failures per
+tool, per transport and per day, and the slowest calls.
+
+```bash
+repocortex stats .repocortex/audit.jsonl
+repocortex stats --since 2026-11-01 --slowest 20
+tail -n 500 audit.jsonl | repocortex stats -
+```
+
+| Flag | Effect |
+|---|---|
+| `--since DATE` | count only calls at or after this date or RFC 3339 time |
+| `--until DATE` | count only calls before this date or RFC 3339 time |
+| `--slowest N` | how many of the slowest calls to list (default 10, at most 100) |
+
+With no file it reads the one named by `REPOCORTEX_AUDIT_LOG`; `-` reads
+standard input. It needs no index.
+
+```
+$ repocortex stats audit.jsonl --slowest 3
+Audit log: audit.jsonl
+14 call(s) from 2026-11-12T09:35:35Z to 2026-11-12T09:39:18Z, 3 failed (21.4%).
+Answers: 64,283 bytes of text, an estimated 16,076 tokens. Time answering: 955 ms.
+
+BY TOOL
+TOOL                  CALLS  FAILED  FAIL RATE  ANSWER BYTES  EST. TOKENS  TOTAL MS  SLOWEST MS
+find_callers          6      2       33.3%      11,940        2,986        184       99
+get_task_context      2      0       0.0%       45,434        11,360       627       519
+search_code           2      0       0.0%       999           251          35        34
+get_project_overview  1      0       0.0%       958           240          12        12
+get_session_stats     1      0       0.0%       2,318         580          10        10
+list_hotspots         1      0       0.0%       2,634         659          87        87
+no_such_tool          1      1       100.0%     0             0            0         0
+
+BY TRANSPORT
+TRANSPORT  CALLS  FAILED  FAIL RATE  ANSWER BYTES  EST. TOKENS  TOTAL MS  SLOWEST MS
+mcp        8      2       25.0%      34,921        8,733        144       108
+cli        6      1       16.7%      29,362        7,343        811       519
+
+BY DAY (UTC)
+DAY         CALLS  FAILED  FAIL RATE  ANSWER BYTES  EST. TOKENS  TOTAL MS  SLOWEST MS
+2026-11-12  14     3       21.4%      64,283        16,076       955       519
+
+SLOWEST CALLS
+TIME (UTC)            TOOL              TRANSPORT  MS   ANSWER BYTES  OUTCOME
+2026-11-12T09:39:17Z  get_task_context  cli        519  22,457        ok
+2026-11-12T09:35:35Z  get_task_context  mcp        108  22,977        ok
+2026-11-12T09:39:16Z  find_callers      cli        99   1,824         ok
+
+FILES THE ANSWERS NAMED
+TRANSPORT  FILES  BYTES WHEN INDEXED  EST. TOKENS  A FILE IS COUNTED
+mcp        16     283,106             70,777       once per session
+cli        49     909,193             227,299      once per call: each 'tool call' is its own session
+This is the size of the indexed files the answers pointed at: an upper bound on what
+reading those files whole would have cost. It is not a saving. An agent with search
+would not necessarily have read them, and could have read parts.
+
+Token figures are estimates: bytes / 4, rounded up; no tokenizer is run and the true
+count depends on the model. Times are the whole milliseconds the log records, so a call
+faster than 1 ms counts as 0. This is usage; no saving is reported because none has been
+measured.
+```
+
+How to read it:
+
+- **It reports usage, not a saving.** No "tokens saved" figure is printed,
+  because there is no measurement that supports one; see
+  [benchmarking](../BENCHMARKING.md#5-agent-benchmark).
+- **EST. TOKENS is an estimate**: each answer's bytes divided by four, rounded
+  up. No tokenizer is run, and the true count depends on the model.
+- **FAILED** counts answers the tool flagged as failures and calls that never
+  reached a tool, such as an unknown tool name.
+- **Times are whole milliseconds**, as the log records them, so a call faster
+  than 1 ms counts as 0.
+- **FILES THE ANSWERS NAMED** is the size of the indexed files the answers
+  pointed at, and is printed only when the log carries it. It is an upper
+  bound on reading those files whole, not a saving. It has one row per
+  transport because the counting differs: an MCP session counts a file once
+  however many answers name it, while each `repocortex tool call` is a session
+  of its own and counts it again.
+- **Only numbers, tool names and transports are printed.** The arguments in
+  the log say what someone was working on, and are never read into the summary.
+- A line that is not an audit event is skipped and counted, not fatal.
+
+`--json` prints the same totals as `{file, calls, failures, failure_rate, tools,
+transports, days, slowest, cited_files, ...}` with `token_basis: "estimated"`.
+`cited_files` carries a `meaning` string that says what the figure is, so the
+number does not travel without its label.
+Agent tool: `get_session_stats`, which gives the same accounting for one live
+session; see [MCP tools](mcp-tools.md#get_session_stats).
+
 ## Serving
 
 ### `serve`
 
-**Answers:** runs an MCP server on stdio, exposing the index to a coding agent.
+With `--http`, the same listener also serves the tools as plain HTTP at
+`/api/v1` with an OpenAPI document, and `--audit-log FILE` records every call.
+See [protocols](../guides/protocols.md).
+
+**Answers:** runs an MCP server on stdio, or on Streamable HTTP with `--http`,
+exposing the index to a coding agent.
 
 **On a project with no index.** What happens depends on who started it:
 
@@ -1845,10 +2384,21 @@ log; that is why the stdio case differs.
 | Flag | Effect |
 |---|---|
 | `--list-tools` | print the exposed tools and exit |
+| `--http host:port` | serve MCP over Streamable HTTP at `/mcp` instead of stdio, for clients that only accept a remote server |
+| `--allow-remote` | with `--http`, allow a non-loopback listen address |
+| `--allowed-host name` | with `--http`, also accept this `Host`/`Origin` hostname, such as a tunnel's (repeatable) |
+| `--tokens-file FILE` | with `--http`, accept the named, scoped tokens in this file instead of one token; see [`serve create-token`](#serve-create-token) |
+| `--audit-log FILE` | append one JSON line per tool call (default: `$REPOCORTEX_AUDIT_LOG`); records the call, never the answer |
 
 ```bash
 claude mcp add repocortex -- repocortex --project /path/to/repo serve
+repocortex --project /path/to/repo serve --http 127.0.0.1:7788
 ```
+
+Over HTTP every request needs the token from `REPOCORTEX_MCP_TOKEN`, or the one
+generated for the run and written to `.repocortex/mcp-token` (mode 0600), as `Authorization: Bearer <token>` or as the last path
+segment (`/mcp/<token>`). See the
+[coding agents guide](../guides/coding-agents.md#remote-mcp-over-http).
 
 The tool set is governed by `mcp.profile` in `.repocortex.yml` — `minimal`
 (default), `standard`, `full`. The default is deliberately small: every tool's
@@ -1871,7 +2421,51 @@ Responses are bounded and never contain whole files. Repository content is
 labelled as untrusted evidence, because indexed source may have been written by
 someone other than you.
 
+### `serve create-token`
+
+**Answers:** makes one named token for a server shared by a team, prints it
+once, and stores only its SHA-256 hash.
+
+| Flag | Effect |
+|---|---|
+| `--name NAME` | required. Who or what the token is for; the audit log records it. Lower-case letters, digits, `.`, `_`, `-` |
+| `--profile P` | the tools the token may use: `minimal` (default), `standard` or `full` |
+| `--tool NAME` | narrow the profile to this tool (repeatable). Default: the whole profile |
+| `--expires WHEN` | `2027-01-31` (works through that day, UTC) or an RFC 3339 time. Default: no expiry |
+| `--tokens-file FILE` | append the hashed entry to this file, created with mode 0600. Without it the entry is printed for you to add |
+
+```bash
+repocortex serve create-token --name ci --profile minimal --tokens-file team-tokens.jsonl
+repocortex serve --http 127.0.0.1:7788 --tokens-file team-tokens.jsonl --audit-log audit.jsonl
+```
+
+```
+$ repocortex serve create-token --name ci --profile minimal --tokens-file team-tokens.jsonl
+Token "ci" (profile minimal, no expiry):
+
+    rcx_<64 hexadecimal characters>
+
+This is the only time it is shown. RepoCortex keeps its SHA-256 hash, not the token.
+Appended the entry to team-tokens.jsonl. A running server reads the file at start: restart it to load this token.
+```
+
+`--json` prints `{name, token, entry, tokens_file, appended}`. The command needs
+no index. It refuses what the server would refuse (a duplicate name, a tool the
+profile does not expose, a tokens file that is already malformed) and an expiry
+that has already passed.
+
+With `--tokens-file`, `serve` takes a token only as `Authorization: Bearer`, a
+tool outside a token's scope does not exist for it, `REPOCORTEX_MCP_TOKEN` is
+ignored, and the file is read once at start: restart to add or revoke a token.
+A malformed file stops the server. Running it behind a reverse proxy, and what
+shared mode does not do (no SSO, no per-repository permissions, no user
+directory): [sharing one index with a team](../guides/protocols.md#sharing-one-index-with-a-team).
+
 ### `ui`
+
+`repocortex ui --next` serves the redesigned portal instead: one page per symbol,
+built on the tool endpoint agents use. Loopback only. See the
+[portal UX plan](../design/PORTAL_UX_PLAN.md).
 
 **Answers:** a local, read-only web portal over the index — twenty screens
 grouped by what you want to know. Index health stands alone above the
@@ -1928,26 +2522,30 @@ http://127.0.0.1:7777/
 
 ### `install`
 
-**Answers:** register RepoCortex's MCP server with every agent client detected on
-this machine, preserving everything else in each client's config file.
+**Answers:** register RepoCortex's MCP server with every coding agent detected on
+this machine, in the format each agent expects, preserving everything else in
+each config file.
 
 | Flag | Effect |
 |---|---|
 | `--dry-run` | report what would be written without writing it |
+| `--list` | list every supported agent, whether it is detected, its config file, and the manual step for agents set up by hand |
+| `--create` | also write configs for agents that are not detected |
+| `--rules` | add guidance to `AGENTS.md` (created if missing) and to agent instruction files that already exist; `CONVENTIONS.md` for Aider |
 
-Covers Claude Code, Claude Desktop, Cursor and Windsurf. A client whose config
-file does not exist is skipped rather than created, since creating one would
-guess at a layout the client may not accept. For Zed, which uses a different
-config key, use `agent` and place the output yourself.
+Covers 30 agents automatically, including Claude Code, Codex CLI, Copilot CLI,
+Gemini CLI, Cursor, VS Code, Windsurf, Antigravity, Zed, Goose and Kiro. A file
+that cannot be merged safely, such as JSON with comments, is left untouched and
+reported as `manual`. The full list is in the
+[coding agents guide](../guides/coding-agents.md).
 
 ```
 $ repocortex install --dry-run
-would write Claude Code      ~/.claude.json
-would write Claude Desktop   ~/Library/Application Support/Claude/claude_desktop_config.json
-skip  Cursor           (no config at ~/.cursor/mcp.json)
-skip  Windsurf         (no config at ~/.codeium/windsurf/mcp_config.json)
+would update  Claude Code                  ~/.claude.json
+would update  Codex CLI                    ~/.codex/config.toml
+would create  Cursor                       ~/.cursor/mcp.json
 
-Restart your agent, then ask it to use RepoCortex.
+Nothing was written. Run without --dry-run to apply.
 ```
 
 ### `agent`
