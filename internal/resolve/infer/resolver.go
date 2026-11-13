@@ -611,6 +611,9 @@ func (r *Resolver) ResolveFile(
 				return
 			}
 			cands = kept
+			// The marker has said what it had to; what follows reads the
+			// qualifier as a path.
+			ref.Receiver = strings.TrimPrefix(ref.Receiver, rootedQualifier)
 		}
 
 		// A call through a local value — a parameter, a loop variable — names no

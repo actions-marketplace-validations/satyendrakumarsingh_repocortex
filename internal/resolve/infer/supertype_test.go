@@ -63,3 +63,28 @@ func TestAQualifiedSupertypeIsNotItsUnqualifiedNamesake(t *testing.T) {
 		t.Errorf("somewhere.else.OutputStream was bound: %+v", got[10])
 	}
 }
+
+// TestARootedPHPSupertypeIsNotAClassOfTheFilesNamespace is monolog's
+// `extends \DateTimeImmutable` beside Monolog\DateTimeImmutable in the same
+// directory, which the "same directory" rule bound at `medium`.
+func TestARootedPHPSupertypeIsNotAClassOfTheFilesNamespace(t *testing.T) {
+	own := def(1, "class", "src/Monolog/DateTimeImmutable.php", "DateTimeImmutable", 11)
+	idx := index(own)
+	r := New(idx, Options{Layout: NewLayout([]string{"src/Monolog/Json.php", own.FilePath}, nil)})
+	fr := registry.FileRefs{
+		FileID: 10, Path: "src/Monolog/Json.php", Language: "php",
+		Symbols: within(90, "src/Monolog/Json.php", "Json"),
+		Refs: []registry.Reference{
+			superRef(1, "DateTimeImmutable", `\`, 5), // \DateTimeImmutable: the global class
+			superRef(2, "DateTimeImmutable", "", 6),  // DateTimeImmutable: this namespace's
+		},
+	}
+	edges, outs, _ := resolveOne(t, r, fr)
+	got := edgesByLine(edges)
+	if _, bound := got[5]; bound || !outs[1].External {
+		t.Errorf(`extends \DateTimeImmutable: bound=%v external=%v, want external and unbound`, got[5], outs[1].External)
+	}
+	if got[6].dst != 1 {
+		t.Errorf("extends DateTimeImmutable bound as %+v, want the namespace's own class (1)", got[6])
+	}
+}
