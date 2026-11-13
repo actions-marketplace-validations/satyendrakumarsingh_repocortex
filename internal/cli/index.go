@@ -247,6 +247,7 @@ func runIndex(cmd *cobra.Command, g *Global, workers int, showDigest bool, accur
 	cfg := g.Config()
 	log := g.Log()
 	start := time.Now()
+	defer startProfiling()()
 
 	dbPath := g.DBPath()
 	if _, err := os.Stat(dbPath); errors.Is(err, os.ErrNotExist) {
@@ -315,6 +316,21 @@ func runIndex(cmd *cobra.Command, g *Global, workers int, showDigest bool, accur
 		}
 	}()
 
+	// The first index of a project writes into tables nothing else reads, so
+	// its secondary indexes and statistics triggers are built after the load
+	// instead of being maintained row by row (see registry.DeferBulkObjects).
+	// A run that replaces an index somebody may be querying keeps them.
+	bulk := false
+	if ok, err := reg.BulkLoadEligible(ctx); err != nil {
+		return err
+	} else if ok {
+		if n, err := reg.DeferBulkObjects(ctx); err != nil {
+			return err
+		} else {
+			bulk = n > 0
+		}
+	}
+
 	walker, err := fs.NewWalker(cfg.RepoRoot, cfg)
 	if err != nil {
 		return fmt.Errorf("prepare discovery: %w", err)
@@ -358,6 +374,15 @@ func runIndex(cmd *cobra.Command, g *Global, workers int, showDigest bool, accur
 	}
 	if err := writer.Close(); err != nil {
 		return fmt.Errorf("close writer: %w", err)
+	}
+
+	if bulk {
+		// Before publishing, so a revision a reader can see always has every
+		// index its queries rely on. A failure here aborts the run, and the
+		// abort puts back whatever is still set aside.
+		if _, err := reg.RestoreDeferred(ctx); err != nil {
+			return fmt.Errorf("build the indexes: %w", err)
+		}
 	}
 
 	if err := reg.CommitRun(ctx, run.ID); err != nil {

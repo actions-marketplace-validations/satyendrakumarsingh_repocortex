@@ -170,6 +170,17 @@ All figures are read from the registry. Nothing is estimated.`,
 				return err
 			}
 
+			// An interrupted first index can leave schema objects set aside.
+			// Say so before anything else: every figure below was read
+			// without them.
+			if deferred, err := registry.New(db).DeferredObjects(ctx); err != nil {
+				return err
+			} else if len(deferred) > 0 {
+				for _, o := range deferred {
+					st.DeferredSchema = append(st.DeferredSchema, o.Name)
+				}
+			}
+
 			// Counts come from the committed run only. An in-flight indexing
 			// run must never leak partial numbers into status.
 			var runID int64
@@ -178,7 +189,7 @@ All figures are read from the registry. Nothing is estimated.`,
 			switch {
 			case err != nil && strings.Contains(err.Error(), "no rows"):
 				st.IndexStatus = "empty"
-				return renderStatus(cmd, g, st, "Schema is ready but nothing is indexed yet. Run 'repocortex index'.")
+				return renderStatus(cmd, g, st, "Schema is ready but nothing is indexed yet. Run 'repocortex index'."+deferredHint(st))
 			case err != nil:
 				return err
 			}
@@ -222,9 +233,19 @@ All figures are read from the registry. Nothing is estimated.`,
 			if finished > 0 {
 				st.LastIndexed = time.Unix(finished, 0).Format(time.RFC3339)
 			}
-			return renderStatus(cmd, g, st, "")
+			return renderStatus(cmd, g, st, strings.TrimPrefix(deferredHint(st), "\n"))
 		},
 	}
+}
+
+// deferredHint explains a status report's DeferredSchema, or returns "".
+func deferredHint(st statusReport) string {
+	if len(st.DeferredSchema) == 0 {
+		return ""
+	}
+	return fmt.Sprintf("\nA previous index was interrupted while loading and %d schema objects (%s) were not put back. "+
+		"Answers can be slow until they are. Run 'repocortex index' to restore them.",
+		len(st.DeferredSchema), strings.Join(st.DeferredSchema, ", "))
 }
 
 type statusReport struct {
@@ -258,8 +279,13 @@ type statusReport struct {
 	// Such a file is parsed with the extension's default grammar, so when it
 	// yields no symbols the likeliest cause is the wrong grammar, and the fix
 	// is an index.language_overrides entry rather than a bug report.
-	AmbiguousLanguages int64    `json:"ambiguous_languages"`
-	LastIndexed        string   `json:"last_indexed,omitempty"`
+	AmbiguousLanguages int64 `json:"ambiguous_languages"`
+	// DeferredSchema names indexes and triggers a first index set aside for
+	// its bulk load and never put back, because the run was interrupted. While
+	// any are listed, queries may run slowly or report stale coverage figures;
+	// 'repocortex index' restores them.
+	DeferredSchema []string `json:"deferred_schema,omitempty"`
+	LastIndexed    string   `json:"last_indexed,omitempty"`
 	IndexSizeBytes     int64    `json:"index_size_bytes"`
 	AccuracyMode       string   `json:"accuracy_mode"`
 	MCPProfile         string   `json:"mcp_profile"`
@@ -411,6 +437,7 @@ see docs/accuracy.md for what the numbers do and do not mean.`,
 				checks = append(checks, check{Name: "index", Status: "warn", Detail: "absent — run 'repocortex init'"})
 			} else {
 				checks = append(checks, check{Name: "index", Status: "ok", Detail: dbPath})
+				checks = append(checks, deferredSchemaChecks(cmd, dbPath)...)
 				checks = append(checks, parseChecks(cmd, dbPath)...)
 				if verifyIndex {
 					checks = append(checks, verifyGraph(cmd, dbPath)...)
@@ -430,6 +457,35 @@ see docs/accuracy.md for what the numbers do and do not mean.`,
 	cmd.Flags().BoolVar(&precision, "resolution-precision", false,
 		"measure the heuristic resolver against imported compiler facts")
 	return cmd
+}
+
+// deferredSchemaChecks reports indexes and triggers that an interrupted first
+// index set aside and did not put back. Nothing is reported when none are.
+func deferredSchemaChecks(cmd *cobra.Command, dbPath string) []check {
+	ctx := cmd.Context()
+	db, err := store.Open(ctx, store.Options{Path: dbPath, ReadOnly: true})
+	if err != nil {
+		return nil
+	}
+	defer func() { _ = db.Close() }()
+	deferred, err := registry.New(db).DeferredObjects(ctx)
+	if err != nil {
+		return []check{{Name: "schema objects", Status: "warn", Detail: err.Error()}}
+	}
+	if len(deferred) == 0 {
+		return nil
+	}
+	names := make([]string, 0, len(deferred))
+	for _, o := range deferred {
+		names = append(names, o.Name)
+	}
+	return []check{{
+		Name: "schema objects", Status: "warn",
+		Detail: fmt.Sprintf("%d missing: %s", len(names), strings.Join(names, ", ")),
+		Impact: "an interrupted first index set these aside to load faster; until they are back, " +
+			"queries can be slow and stored coverage figures can be stale",
+		Remedy: "run 'repocortex index'; it restores them before doing anything else",
+	}}
 }
 
 // parseChecks reports, as doctor checks, the files the index does not fully
