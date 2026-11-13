@@ -267,8 +267,8 @@ func (l *loader) discover(files []string) {
 		}
 	} else {
 		_ = filepath.WalkDir(l.root, func(p string, d os.DirEntry, err error) error {
-			if err != nil { //nolint:nilerr // an unreadable entry is not part of the walk; the rest is
-				return nil
+			if err != nil {
+				return nil //nolint:nilerr // an unreadable entry is not part of the walk; the rest is
 			}
 			rel, _ := filepath.Rel(l.root, p)
 			rel = filepath.ToSlash(rel)
@@ -728,8 +728,8 @@ func (i *importer) ImportFrom(p, _ string, _ types.ImportMode) (*types.Package, 
 	if p == "unsafe" {
 		return types.Unsafe, nil
 	}
-	if err := l.ctx.Err(); err != nil { //nolint:nilerr // a stopped run degrades to stubs, it does not fail the check
-		return i.stub(p), nil
+	if err := l.ctx.Err(); err != nil {
+		return i.stub(p), nil //nolint:nilerr // a stopped run degrades to stubs, it does not fail the check
 	}
 	if !i.std {
 		if u := i.repoUnit(p); u != nil {
