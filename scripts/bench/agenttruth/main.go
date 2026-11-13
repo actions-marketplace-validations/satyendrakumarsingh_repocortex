@@ -5,6 +5,8 @@
 //	truth -dir <repo> list                 candidates: method names defined on several types
 //	truth -dir <repo> callers Recv.Name    functions whose body calls exactly that method
 //	truth -dir <repo> tests Recv.Name      Test functions that call it directly or through one function
+//	truth -dir <repo> pairs                every callee<TAB>caller<TAB>kind of the module (see pairs.go)
+//	truth -dir <repo> impls                every type<TAB>interface the module declares (see pairs.go)
 package main
 
 import (
@@ -30,6 +32,9 @@ type fn struct {
 func main() {
 	dir := flag.String("dir", ".", "repository root")
 	flag.Parse()
+	if a := flag.Arg(0); a == "pairs" || a == "impls" {
+		os.Exit(runPairs(strings.TrimSuffix(*dir, "/"), a))
+	}
 	cfg := &packages.Config{
 		Mode:  packages.NeedName | packages.NeedFiles | packages.NeedSyntax | packages.NeedTypes | packages.NeedTypesInfo | packages.NeedImports | packages.NeedDeps | packages.NeedModule,
 		Dir:   *dir,
