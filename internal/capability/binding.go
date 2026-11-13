@@ -77,9 +77,10 @@ type TargetBinding struct {
 	Unresolved int64 `json:"unresolved"`
 	Pending    int64 `json:"pending"`
 
-	// ProvenOther were left unbound by the resolver in Go files the type
-	// checker read, which proved them uses of something else. They are not
-	// counted in Ambiguous, Unresolved or Pending.
+	// ProvenOther were left unbound by the resolver in files a compiler read
+	// (the Go type check, or a compiler indexer), which proved them uses of
+	// something else. They are not counted in Ambiguous, Unresolved or Pending.
+	// The key keeps the name it had when the Go type check was the only source.
 	ProvenOther int64 `json:"ruled_out_by_type_check,omitempty"`
 
 	// Definitions is how many definitions are spelled like the target in files
