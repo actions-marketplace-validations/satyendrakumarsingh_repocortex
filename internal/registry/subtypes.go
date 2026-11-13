@@ -117,31 +117,7 @@ func (r *Registry) SubtypeClosure(ctx context.Context, runID, root int64, filter
 	args = append(args, floorArgs...)
 	args = append(args, maxSubtypeDepth, maxSubtypeRows+1)
 
-	with := `
-		WITH RECURSIVE sub(id, depth, crank, eid) AS (
-			SELECT e.src_id, 1, ` + rank + `, e.id
-			  FROM edges e
-			 WHERE e.index_run_id = ? AND e.dst_id = ? AND e.kind IN (` + ph + `)` + floor + `
-			UNION
-			SELECT e.src_id, sub.depth + 1, MIN(sub.crank, ` + rank + `), e.id
-			  FROM edges e JOIN sub ON e.dst_id = sub.id
-			 WHERE e.index_run_id = ? AND e.kind IN (` + ph + `)` + floor + ` AND sub.depth < ?
-			LIMIT ?
-		), ranked AS (
-			SELECT id, depth, crank, eid FROM (
-				SELECT id, depth, crank, eid,
-				       ROW_NUMBER() OVER (PARTITION BY id ORDER BY depth, crank DESC, eid) AS rn
-				  FROM sub
-			) WHERE rn = 1
-		), best AS (
-			SELECT r.id, r.depth, r.crank, r.eid
-			  FROM ranked r JOIN symbols t ON t.id = r.id
-			 WHERE t.kind NOT IN ` + nonTypeKinds + `
-		), local AS (
-			SELECT r.id, r.depth, r.crank, r.eid
-			  FROM ranked r JOIN symbols t ON t.id = r.id
-			 WHERE t.kind IN ` + nonTypeKinds + `
-		)`
+	with := subtypeWalkSQL(ph, rank, floor)
 
 	var out Subtypes
 	if err := r.db.QueryRowContext(ctx, with+`
@@ -246,4 +222,44 @@ func confidenceOfRank(n int) model.Confidence {
 		return model.ConfidenceLow
 	}
 	return ""
+}
+
+// subtypeWalkSQL is the WITH clause every query of SubtypeClosure starts from:
+// the walk below a root, each type once at its shortest depth, split into the
+// types (best) and the functions that hold a local type (local). ph is the
+// placeholder list for the edge kinds, rank the confidence rank expression and
+// floor an optional predicate on it.
+//
+// The recursive step is written "sub CROSS JOIN edges" on purpose. CROSS
+// JOIN fixes the join order in SQLite, so each type taken off the queue
+// looks its subtypes up through idx_edges_dst. Written as "edges JOIN sub"
+// the planner read every edge of the run once per queued type: on VS Code
+// (450,986 edges, 5,819 types below IDisposable) one answer was still
+// running after 30 minutes, and takes 0.1 s this way.
+func subtypeWalkSQL(ph, rank, floor string) string {
+	return `
+		WITH RECURSIVE sub(id, depth, crank, eid) AS (
+			SELECT e.src_id, 1, ` + rank + `, e.id
+			  FROM edges e
+			 WHERE e.index_run_id = ? AND e.dst_id = ? AND e.kind IN (` + ph + `)` + floor + `
+			UNION
+			SELECT e.src_id, sub.depth + 1, MIN(sub.crank, ` + rank + `), e.id
+			  FROM sub CROSS JOIN edges e ON e.dst_id = sub.id
+			 WHERE e.index_run_id = ? AND e.kind IN (` + ph + `)` + floor + ` AND sub.depth < ?
+			LIMIT ?
+		), ranked AS (
+			SELECT id, depth, crank, eid FROM (
+				SELECT id, depth, crank, eid,
+				       ROW_NUMBER() OVER (PARTITION BY id ORDER BY depth, crank DESC, eid) AS rn
+				  FROM sub
+			) WHERE rn = 1
+		), best AS (
+			SELECT r.id, r.depth, r.crank, r.eid
+			  FROM ranked r JOIN symbols t ON t.id = r.id
+			 WHERE t.kind NOT IN ` + nonTypeKinds + `
+		), local AS (
+			SELECT r.id, r.depth, r.crank, r.eid
+			  FROM ranked r JOIN symbols t ON t.id = r.id
+			 WHERE t.kind IN ` + nonTypeKinds + `
+		)`
 }
