@@ -55,6 +55,43 @@ them are lost. A declaration that is only `Foo bar;`, with no storage class or
 built-in type, is not recorded as a variable for the same reason: it cannot be
 told from the broken form above.
 
+## Macros the grammar does not know
+
+Unknown macros are read as types or storage classes. Most positions survive
+(`NS_DESIGNATED_INITIALIZER`, `NS_UNAVAILABLE`, `NS_SWIFT_NAME(...)`,
+`API_AVAILABLE(...)`, `DEPRECATED_ATTRIBUTE`, `__attribute__((...))` after a
+method, and nullability words inside types are all read correctly: see
+`Session.h`). One position is not: a macro alone on its line in front of
+`@interface`, `@protocol` or `@implementation`, which is how every
+`NS_ASSUME_NONNULL_BEGIN` header starts. The grammar reads the macro as a type
+and the `@` after it as an error and loses the whole declaration, without an
+error node touching the macro:
+
+```
+(declaration (type_identifier) (ERROR "@") (identifier) (MISSING ";"))
+(labeled_statement (statement_identifier) ...)   ; ": NSObject" of the superclass
+```
+
+The macro mask (`cmacro.go`) now reads such a macro as a candidate that must be
+followed by a definition at the name after `@interface`, so a plain parse that
+lost the class is retried with the macro blanked. The mask's guard is
+unchanged: the masked reading is kept only when it has no more errors and no
+fewer definitions, and keeps every definition the plain parse had. A header
+that is wrapped whole in `#if !TARGET_OS_WATCH ... #endif` and also uses
+`NS_ENUM` (AFNetworking's `AFNetworkReachabilityManager.h`) still yields
+nothing: the plain parse has 10 error nodes and 11 missing tokens, the
+macro-masked text 3 and 1 and 16 definitions, and the result is the plain one. Why it is not taken was not
+investigated.
+
+## `extern` declarations are not definitions
+
+`FOUNDATION_EXPORT NSString * const Key;` and `UIKIT_EXTERN const double V;`
+declare a name defined elsewhere. A storage class spelled as a macro in capitals
+is treated as `extern`, and a declaration that starts with anything but a
+storage class, a qualifier or a built-in type (a macro read as its type) is not
+a variable. Neither is recorded, so notification-name and key constants in
+public headers cannot be looked up by name.
+
 ## Not extracted
 
 Function prototypes (`double ShapeArea(Shape *shape);`), `extern` variable

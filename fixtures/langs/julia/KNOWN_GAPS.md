@@ -29,3 +29,24 @@
   interpolated and not extracted.
 - **Extensionless Julia scripts** with a `#!` line are not detected as Julia
   (language detection, outside this fixture).
+- **A file the grammar gives up on.** When one construct cannot be read, the
+  root of the tree is an `ERROR` and the file's items are its children. The
+  long-form `function` and `const` that could still be read are found as ever;
+  the short-form methods (`f(x) = ...`) and a header whose body was lost
+  (`function name(args)` as a `function` keyword and a `signature` with no
+  `function_definition` around them) are found only as direct children of that
+  root `ERROR` (or of an `ERROR` directly in the source file), not in an
+  `ERROR` deeper down, where a short form is as likely a local closure:
+
+  ```
+  (ERROR (line_comment) ... (assignment (call_expression ...) (operator) ...)
+         (function_definition ...) (ERROR "function" (signature ...) ...))
+  ```
+
+  The construct that does it in StatsBase's `signalcorr.jl` is a ternary whose
+  else-branch is a parenthesised `\` expression that is then indexed,
+  `r[i,j] = l == 0 ? 1 : (a \ (b))[end]` (without the index the error stays
+  local). Everything after the break is read as the rows of a matrix
+  (`matrix_row`), so a short-form method after it is lost; the long forms,
+  structs and consts after it are still found. A definition inside the broken
+  function's body is not extracted.

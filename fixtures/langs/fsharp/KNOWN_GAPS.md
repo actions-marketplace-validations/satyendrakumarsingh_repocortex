@@ -37,6 +37,40 @@ header entirely (`module Bson =` after `module Json =` in `Combinators.fs`),
 and a `let` in it can come out as a bare `value_declaration_left` with no
 `function_or_value_defn`, which is not extracted.
 
+## A member constraint call stops the parse (`budget_exceeded`)
+
+A statically-resolved member call, the form F# inline builders use to call
+`GetAwaiter` on a type chosen at the call site, sends the grammar's parser into
+a loop that consumes no token:
+
+```fsharp
+let f task =
+    let a = (^T: (member GetAwaiter: unit -> ^A) (task))
+    a
+```
+
+The parse ends there and the file is recorded as `budget_exceeded` ("iteration
+limit") with everything after it missing. It is not the iteration budget
+running out. The limit is 30 iterations per byte (10,000 at least); this
+five-line file stops after 156 of 10,000, and FsToolkit.ErrorHandling's
+`TaskOptionCE.fs` (690 lines, limit 825,480) after 3,218 at byte 18,683, the
+`let mutable awaiter = (^TaskLike: (member GetAwaiter: ...) (task))` line.
+Raising the limit to 50,000,000 stops at the same iteration and byte (measured),
+so a per-grammar factor recovers nothing and none was added. The library's
+no-token-progress guard (128 consecutive dispatches without consuming a token)
+ends the loop and reports it with the iteration-limit reason. The tree up to the
+stop is also incomplete, so the namespace and type headers above the stop are
+lost with the rest (they come back once the parse reaches the end).
+
+Not extracted, therefore: any definition after the first such call in a file.
+Where the call is blanked with same-length text before parsing (a mask in the
+spirit of `cmacro.go`, which this change was not allowed to add), the three
+FsToolkit files parse to the end and yield 61, 61 and 64 symbols, which is
+the number the independent check expected (24, 24 and 23 without it). The
+construct is deliberately not in the fixture: a fixture file that stops the
+parser would hide everything after it. `TestFSharpMemberConstraintCallStallsTheParser`
+pins the behaviour and fails when a library upgrade fixes it.
+
 ## Indented namespaces
 
 When the body of `namespace A.B` is indented, the grammar drops the namespace

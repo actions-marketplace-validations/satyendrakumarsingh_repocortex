@@ -274,7 +274,7 @@ func findMacroCandidates(src []byte, language string) []macroCandidate {
 		}
 		out = append(out, c)
 	}
-	s := &candScan{src: src, toks: toks, cpp: language != "c"}
+	s := &candScan{src: src, toks: toks, cpp: language != "c", objc: language == "objc"}
 	for i := range toks {
 		t := toks[i]
 		if t.kind != ctIdent {
@@ -310,6 +310,7 @@ type candScan struct {
 	src  []byte
 	toks []ctok
 	cpp  bool
+	objc bool
 }
 
 func (s *candScan) word(i int) string {
@@ -425,6 +426,10 @@ func (s *candScan) atDeclStart(i int) bool {
 		return true
 	}
 	p := s.toks[i-1]
+	if s.objc && s.word(i-1) == "end" && s.punct(i-2, '@') {
+		// `@end` closes an Objective-C container and a declaration may follow.
+		return true
+	}
 	switch p.kind {
 	case ctDir:
 		return true
@@ -479,6 +484,11 @@ func (s *candScan) declMacros(i int) []macroCandidate {
 		// The run ended on a macro alone on its line, in front of a directive,
 		// an Objective-C `@` declaration or a closing brace.
 		if s.aloneOnLine(lastFrom, j) {
+			if name := s.objcDeclName(j); name >= 0 {
+				for i := range found {
+					found[i].expect = name
+				}
+			}
 			return found
 		}
 		return nil
@@ -661,10 +671,55 @@ func (s *candScan) definesBody(i int) bool {
 	return false
 }
 
+// objcDeclName returns the byte offset of the name an Objective-C container
+// declaration at token i defines, or -1 when token i does not start one or it
+// defines no name that a symbol would be recorded under.
+//
+//	@interface Name : Super      @protocol Name <Base>      @implementation Name
+//	@interface Name (Category)   defines Category
+//
+// It lets a macro that stands alone on its line in front of such a declaration
+// (NS_ASSUME_NONNULL_BEGIN) say what the plain parse should have found: the
+// grammar reads the macro as a type and the "@" after it as an error, and
+// recovers by losing the whole declaration without an error node touching the
+// macro itself. A plain parse that has no definition at that offset is in
+// trouble, and the guard decides whether the masked one is better.
+func (s *candScan) objcDeclName(i int) int {
+	if !s.objc || !s.punct(i, '@') {
+		return -1
+	}
+	switch s.word(i + 1) {
+	case "interface", "implementation", "protocol":
+	default:
+		return -1
+	}
+	name := i + 2
+	if s.word(name) == "" {
+		return -1
+	}
+	switch {
+	case s.punct(name+1, '('):
+		// A category is recorded under its own name; an extension, `()`, has none.
+		if s.word(name+2) != "" {
+			return s.toks[name+2].start
+		}
+		return -1
+	case s.punct(name+1, ';'):
+		// `@protocol Name;` is a forward declaration.
+		return -1
+	}
+	return s.toks[name].start
+}
+
 // aloneOnLine reports whether the macro occupying tokens [from, to) has
 // nothing in front of it and nothing behind it on its lines, and the token
-// after it is a directive, `@` or `}`.
+// after it is a directive, `@` or `}`; in Objective-C the end of the file
+// counts too.
 func (s *candScan) aloneOnLine(from, to int) bool {
+	if s.objc && to == len(s.toks) && to > from {
+		// NS_ASSUME_NONNULL_END as the last thing in an Objective-C header.
+		return from == 0 || bytes.IndexByte(s.src[s.toks[from-1].end:s.toks[from].start], '\n') >= 0
+	}
 	if to >= len(s.toks) || to <= from {
 		return false
 	}

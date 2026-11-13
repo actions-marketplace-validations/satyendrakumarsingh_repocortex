@@ -134,3 +134,37 @@ Network.swift	113	type_alias	Callback
 Network.swift	115	constant	maxX
 Network.swift	115	constant	minX
 Network.swift	117	function	stringify
+Publisher.swift	3	class	Publisher2
+Publisher.swift	4	type_alias	Output
+Publisher.swift	5	type_alias	Failure
+Publisher.swift	7	type_alias	Handler
+Publisher.swift	9	field	request
+Publisher.swift	10	field	responseHandler
+Publisher.swift	12	method	init
+Publisher.swift	17	method	receive
+Publisher.swift	23	class	Inner
+Publisher.swift	25	type_alias	Failure
+Publisher.swift	27	field	downstream
+Publisher.swift	28	field	request
+Publisher.swift	29	field	responseHandler
+Publisher.swift	31	method	init
+Publisher.swift	37	method	request
+Publisher.swift	41	method	cancel
+Publisher.swift	47	class	[Publisher2<Int>]
+Publisher.swift	48	method	firstValue
+Publisher.swift	51	class	[String: Int]
+Publisher.swift	52	method	total
+Publisher.swift	55	class	Dictionary
+Publisher.swift	56	method	keysSorted
+Publisher.swift	59	class	(Int, Int)
+Publisher.swift	60	method	sum
+Fetcher.swift	5	class	Fetcher
+Fetcher.swift	6	class	Options
+Fetcher.swift	7	field	rawValue
+Fetcher.swift	9	method	init
+Fetcher.swift	14	field	defaultDestination
+Fetcher.swift	18	field	state
+Fetcher.swift	20	field	resumeData
+Fetcher.swift	22	method	reset
+Fetcher.swift	27	method	didFinish
+Fetcher.swift	33	method	cancel

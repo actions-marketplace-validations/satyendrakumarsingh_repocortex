@@ -1,6 +1,9 @@
 package parse
 
-import "strings"
+import (
+	"regexp"
+	"strings"
+)
 
 // OCaml. What the index holds, see fixtures/langs/ocaml/expected.tsv.
 //
@@ -12,7 +15,7 @@ import "strings"
 // replaced.
 //
 // A definition is an item of the file or of a module or signature written in
-// the file, to a depth of four modules:
+// the file, however deep, with no expression above it (see ocamlNotLocal):
 //
 //   - let and let rec (and every `and` binding) is a function when it has
 //     parameters or its body is `fun` or `function`, and a variable otherwise.
@@ -35,9 +38,10 @@ func init() {
 	registerDefinitions("ocaml", ocamlDefinitions(), true)
 }
 
-// ocamlItems are the patterns for one declaration inside a container: the
-// compilation unit, a structure or a signature. They are written against
-// whatever the container is and wrapped by ocamlContainers.
+// ocamlItems are the patterns for one declaration. Each is one pattern, not an
+// alternation of them: when several siblings match (the bindings joined by
+// `and`, the methods of one class) an alternation reports only the first.
+// ocamlDefinitions adds the condition on what may be above it.
 func ocamlItems() []string {
 	opName := `[(value_name) @name (parenthesized_operator (_) @name)]`
 	// A let binding with no parameter, whose body is not `fun` or `function`.
@@ -69,7 +73,11 @@ func ocamlItems() []string {
 		// types
 		`(type_definition (type_binding name: (type_constructor) @name body: [(variant_declaration) (record_declaration)]) @definition.class)`,
 		`(type_definition (type_binding name: (type_constructor) @name .) @definition.class)`,
-		`(type_definition (type_binding name: (type_constructor) @name body: [
+		// abstract, with attributes: type t [@@deriving sexp_of]
+		`(type_definition (type_binding name: (type_constructor) @name . (item_attribute)) @definition.class)`,
+		// the "=" is there to leave out a destructive substitution, type t := u,
+		// which removes a type from a signature and declares none
+		`(type_definition (type_binding name: (type_constructor) @name "=" body: [
   (type_constructor_path) (constructed_type) (function_type) (tuple_type)
   (parenthesized_type) (aliased_type) (polymorphic_variant_type) (object_type)
   (hash_type) (package_type) (type_variable) (local_open_type) (any_type)]) @definition.type_alias)`,
@@ -90,42 +98,46 @@ func ocamlItems() []string {
 	}
 }
 
-// ocamlContainers are the places an item can sit and still be a definition of
-// the file: the file itself, and the structure or signature of a module that
-// is itself declared at the file level or inside such a module. `let module`
-// is an expression and so is not among them. HOLE stands for what the
-// container holds.
-var ocamlContainers = []string{
-	`(module_definition (module_binding body: (structure HOLE)))`,
-	`(module_definition (module_binding module_type: (signature HOLE)))`,
-	`(module_type_definition body: (signature HOLE))`,
-}
+// An item is a definition of the file when nothing between it and the file is
+// an expression. The old query spelled that out: the file, or the structure or
+// signature of a module reached from it through at most three modules. That
+// stopped at the module level and missed what OCaml libraries do all the time:
+//
+//	include struct ... end        include sig ... end
+//	include module type of struct ... end        open struct ... end
+//	module M : sig ... end with type t := u      module F (X : sig ... end) : sig ... end
+//
+// Each is another node between the module and its items, and spelling them out
+// per level multiplies the query: the old one was 22 items by 40 nestings, 920
+// lines and 272,159 bytes, and every new container would have multiplied the
+// nestings again.
+//
+// The question is asked the other way round instead: an item is a definition
+// unless one of its ancestors is something that holds expressions. Every way
+// into a local item passes through a let binding (a `let module ... in` or a
+// first-class module inside a function body), a top-level expression, a class
+// body, an extension node, an ERROR (where nothing can be told), or the
+// argument of a functor application. A module-level item has none of them as an
+// ancestor, at any depth of modules, includes or signatures.
+//
+// There is no longer a limit of four modules. The parts of a functor
+// application written inline are still not definitions (the application is on
+// the list of ancestors that exclude), as before, and a destructive
+// substitution (type t := u) is not one either.
+const ocamlNotLocal = `let_binding expression_item let_module_expression class_binding module_application parenthesized_module_expression packed_module item_extension extension ERROR`
 
 func ocamlDefinitions() string {
-	// One pattern per item and container, not one alternation of items: when
-	// several siblings of a pattern's root match (the bindings joined by `and`,
-	// the methods of one class) an alternation reports only the first.
-	items := ocamlItems()
-
-	// Containers nested up to four deep: file > module > module > module > item.
-	wrappers := []string{"HOLE"}
-	level := []string{"HOLE"}
-	for depth := 0; depth < 3; depth++ {
-		var next []string
-		for _, inner := range level {
-			for _, c := range ocamlContainers {
-				next = append(next, strings.Replace(inner, "HOLE", c, 1))
-			}
-		}
-		wrappers = append(wrappers, next...)
-		level = next
-	}
-
 	var out []string
-	for _, w := range wrappers {
-		for _, item := range items {
-			out = append(out, "(compilation_unit "+strings.Replace(w, "HOLE", item, 1)+")")
+	for _, item := range ocamlItems() {
+		kind := ocamlKindCapture.FindString(item)
+		ancestors := ocamlNotLocal
+		if strings.HasPrefix(item, "(class_definition") || strings.HasPrefix(item, "(class_type_definition") {
+			// The members of a class sit inside its class_binding.
+			ancestors = strings.Replace(ancestors, "class_binding ", "", 1)
 		}
+		out = append(out, item+"\n  (#not-has-ancestor? "+kind+" "+ancestors+")")
 	}
 	return strings.Join(out, "\n")
 }
+
+var ocamlKindCapture = regexp.MustCompile(`@definition\.[a-z_]+`)

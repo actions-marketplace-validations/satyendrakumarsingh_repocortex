@@ -35,6 +35,48 @@ swallows the declarations around it; nothing can be captured from inside an
 Declarations after such a region in the same file are usually lost too. The
 fix belongs in the grammar, not in a query.
 
+## A class the grammar gives up on
+
+Two methods in a row, one taking `@escaping @Sendable (_ data: Data?) -> Void`
+and the next a parameter typed `(@Sendable (_ data: Data?) -> Void)?`, make the
+parser give up on the whole file (Alamofire's `DownloadRequest.swift`, reduced
+in `Fetcher.swift`). The root is an `ERROR` and the class is no longer a
+`class_declaration`: its modifiers, `class`, name and supertypes are loose
+tokens, with the members the parser could still read as sibling nodes and the
+rest as tokens:
+
+```
+(source_file (ERROR (import_declaration) (modifiers) "class" (simple_identifier)
+  ":" (inheritance_specifier) "," (attribute) (inheritance_specifier) "{"
+  (class_declaration ...) (property_declaration ...) (function_declaration ...)
+  (modifiers) "func" (simple_identifier) "(" (simple_identifier) ... (ERROR "_ data: Data?) -> Void) -> Self {...")))
+```
+
+Under an `ERROR` that holds a type keyword the query takes: the type
+(`"class"` then its name), `function_declaration`, `property_declaration` and
+`typealias_declaration` nodes, `"func"` followed by a name, a lone `ERROR`
+child that is only modifiers, `func` and a name ("private func cancel": the
+name is the last word of its text), `typealias` followed by a name, and a
+generic argument list that swallowed the declarations after it
+(`Protected<Downstream?>`, whose `let request:` comes out as `let` and the
+label `request:`). A property is taken only with an access level or `static`,
+because a local `let x = 1` of a function body that was lost looks the same.
+
+Not recovered, and not recoverable from the tree: a method whose `func` and
+name are both inside the text of a deeper `ERROR` (`validate`, `_response<...>`
+and the generic `response` and `responseDecodable` overloads of
+`DownloadRequest.swift`), because the name is not a node and the nesting says
+nothing about the type it belongs to; and a property without an access level or
+`static`. A nested local function that sits loose in an `ERROR` of a function
+body (`func sendData()` in a test method) is recorded as a method.
+
+## `extension` of a type that is not a name
+
+`extension [Foo]`, `extension [K: V]` and `extension (A, B)` are recorded under
+the type as written (`[Foo]`, `[K: V]`, `(A, B)`, with white space collapsed);
+`extension Array<Foo>` is `Array`. Two extensions of the same array type are
+two symbols with the same name.
+
 ## Not extracted by design
 
 Accessors (`get`, `set`, `willSet`, `didSet`), the members of an enum case's
