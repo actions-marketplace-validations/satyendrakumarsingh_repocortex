@@ -25,11 +25,13 @@ func startResolveProfile(dir string) func() {
 	if dir == "" {
 		return func() {}
 	}
-	if err := os.MkdirAll(dir, 0o755); err != nil {
+	//nolint:gosec // the directory is named by the person running the diagnostic
+	if err := os.MkdirAll(dir, 0o750); err != nil {
 		fmt.Fprintf(os.Stderr, "profile: %v\n", err)
 		return func() {}
 	}
 	var cpu *os.File
+	//nolint:gosec // the directory is named by the person running the diagnostic
 	if f, err := os.Create(filepath.Join(dir, "resolve-cpu.pprof")); err == nil {
 		if err := pprof.StartCPUProfile(f); err == nil {
 			cpu = f
@@ -45,6 +47,7 @@ func startResolveProfile(dir string) func() {
 			_ = cpu.Close()
 		}
 		for _, name := range []string{"block", "mutex"} {
+			//nolint:gosec // the directory is named by the person running the diagnostic
 			f, err := os.Create(filepath.Join(dir, "resolve-"+name+".pprof"))
 			if err != nil {
 				continue
