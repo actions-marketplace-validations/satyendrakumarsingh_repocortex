@@ -3,7 +3,6 @@ package registry
 import (
 	"context"
 	"fmt"
-	"regexp"
 	"sort"
 	"strings"
 )
@@ -77,23 +76,10 @@ const (
 // to another definition are not uses of this one. What is left is text the
 // extractor produced no reference for at all.
 func (r *Registry) UnrecordedMentions(ctx context.Context, runID int64, name string, defs []DefSpan) (UnrecordedMentions, error) {
-	return r.unrecordedMentions(ctx, runID, name, defs, nil)
+	return r.unrecordedMentions(ctx, runID, name, defs)
 }
 
-// UnrecordedDeclarations is UnrecordedMentions restricted to lines that read as
-// the declaration of a type: the line names it and says class, struct, trait,
-// impl, extends, implements or the like. It is the text-side check for a
-// subtype the extractor missed, which leaves no reference at all.
-//
-// Crude on purpose, as the other text checks are, and a doubt and never a
-// finding: a line that matches may declare something that does not extend the
-// name, and the count says "may".
-func (r *Registry) UnrecordedDeclarations(ctx context.Context, runID int64, name string, defs []DefSpan) (UnrecordedMentions, error) {
-	return r.unrecordedMentions(ctx, runID, name, defs, declaresType)
-}
-
-func (r *Registry) unrecordedMentions(ctx context.Context, runID int64, name string, defs []DefSpan,
-	keep func(line string) bool) (UnrecordedMentions, error) {
+func (r *Registry) unrecordedMentions(ctx context.Context, runID int64, name string, defs []DefSpan) (UnrecordedMentions, error) {
 	langs, err := r.definitionLanguages(ctx, runID, name)
 	if err != nil {
 		return UnrecordedMentions{}, err
@@ -145,9 +131,6 @@ func (r *Registry) unrecordedMentions(ctx context.Context, runID int64, name str
 			p := Place{Path: f.path, Line: line.n}
 			if recorded[p] || insideAny(p, defs) || imports[line.n] || !identifierInCode(line.text, name) ||
 				declaresFunction(line.text, name, f.lang, paired) {
-				continue
-			}
-			if keep != nil && !keep(line.text) {
 				continue
 			}
 			places = append(places, p)
@@ -208,13 +191,6 @@ func identifierInCode(line, name string) bool {
 	}
 	return false
 }
-
-// declaresType reports whether a line has the words with which languages
-// declare a type or say what it extends.
-var declaresType = func() func(string) bool {
-	re := regexp.MustCompile(`\b(class|struct|interface|trait|impl|extends|implements|inherits)\b`)
-	return re.MatchString
-}()
 
 type mentionFile struct {
 	path    string

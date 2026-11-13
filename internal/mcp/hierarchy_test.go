@@ -149,7 +149,7 @@ func TestADeclarationTheExtractorMissedIsCounted(t *testing.T) {
 	text := mustAnswer(t, fs, "find_implementations", map[string]any{"name": "ParamType"})
 	first := firstLine(text)
 	if !strings.HasPrefix(first, leadIncomplete+" — ") ||
-		!strings.Contains(first, "1 other line(s) read as a type declaration naming it and are not recorded as a subtype") {
+		!strings.Contains(first, "1 other line(s) declare a named type whose supertype list names it and are not recorded as a subtype") {
 		t.Errorf("a class declaration the index did not record is not counted: %q", first)
 	}
 	if strings.Contains(text, "verdict: strong") {

@@ -137,3 +137,29 @@ func p95Of(n int, fn func()) time.Duration {
 	}
 	return p95(samples)
 }
+
+// TestTheSubtypeDeclarationCheckCostsAFixedAmount: find_implementations reads
+// the text of a bounded number of files for the target's name. The bound is
+// larger than the one for the value-use check, because a base class that many
+// files mention has its subclasses and anonymous instances spread among them.
+// The cost has no term for the size of the repository, and it is held to the
+// same fixed term as the other text checks.
+func TestTheSubtypeDeclarationCheckCostsAFixedAmount(t *testing.T) {
+	f := loadWithText(t)
+	ctx := context.Background()
+
+	var got registry.UnrecordedSubtypes
+	samples := make([]time.Duration, 0, 5)
+	for range 5 {
+		m := measure(func() {
+			var err error
+			if got, err = f.reg.UnrecordedSubtypeDeclarations(ctx, f.runID, "x", nil); err != nil {
+				t.Fatalf("subtype declarations: %v", err)
+			}
+		})
+		samples = append(samples, m.elapsed)
+	}
+	t.Logf("subtype declaration check on a name every file holds: %s (known=%v complete=%v)", p95(samples).Round(time.Millisecond), got.Known, got.Complete)
+	requireWithin(t, "subtype declaration check", measurement{elapsed: p95(samples)},
+		budget{fixed: 1500 * time.Millisecond}, f.info.Symbols)
+}

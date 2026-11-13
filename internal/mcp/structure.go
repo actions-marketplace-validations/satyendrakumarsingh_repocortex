@@ -358,7 +358,7 @@ func subtypeItem(e registry.SubtypeHit, target string) Item {
 // read as a declaration naming the target and are recorded as nothing.
 type subtypeGap struct {
 	refs registry.SupertypeRefs
-	text registry.UnrecordedMentions
+	text registry.UnrecordedSubtypes
 }
 
 func (s *Server) subtypeGap(ctx context.Context, runID int64, t registry.SymbolCandidate) (subtypeGap, error) {
@@ -375,7 +375,7 @@ func (s *Server) subtypeGap(ctx context.Context, runID int64, t registry.SymbolC
 	for _, h := range defs {
 		spans = append(spans, registry.DefSpan{Path: h.FilePath, From: h.StartLine, To: max(h.EndLine, h.StartLine)})
 	}
-	g.text, err = s.deps.Registry.UnrecordedDeclarations(ctx, runID, t.Name, spans)
+	g.text, err = s.deps.Registry.UnrecordedSubtypeDeclarations(ctx, runID, t.Name, spans)
 	return g, err
 }
 
@@ -399,15 +399,32 @@ func (g subtypeGap) parts(name string) []string {
 		out = append(out, fmt.Sprintf("%d of the %d supertype reference(s) spelled %q did not become a subtype below (%s)",
 			n, g.refs.References, name, strings.Join(why, ", ")))
 	}
-	if g.text.Known && g.text.Total > 0 {
-		floor := ""
-		if !g.text.Complete {
-			floor = "at least "
-		}
-		out = append(out, fmt.Sprintf("%s%d other line(s) read as a type declaration naming it and are not recorded as a "+
-			"subtype", floor, g.text.Total))
+	if g.text.Known && g.text.Named > 0 {
+		out = append(out, fmt.Sprintf("%s%d other line(s) declare a named type whose supertype list names it and are not "+
+			"recorded as a subtype", capFloor(!g.text.Complete), g.text.Named))
+	}
+	if g.text.Known && g.text.Anonymous > 0 {
+		out = append(out, fmt.Sprintf("%s%d anonymous class or object expression(s) name it as a supertype and are not "+
+			"listed (an anonymous type has no name to list)", capFloor(!g.text.Complete), g.text.Anonymous))
 	}
 	return out
+}
+
+func capFloor(capped bool) string {
+	if capped {
+		return "at least "
+	}
+	return ""
+}
+
+func placeList(groups ...[]registry.Place) string {
+	var sites []string
+	for _, g := range groups {
+		for _, p := range g {
+			sites = append(sites, fmt.Sprintf("%s:%d", p.Path, p.Line))
+		}
+	}
+	return strings.Join(sites, ", ")
 }
 
 // lead is the clause for the first line. Empty when nothing is outstanding.
@@ -427,12 +444,8 @@ func (g subtypeGap) detail(name string) string {
 	}
 	out := strings.Join(parts, ". Also, ") + ". Each of them may be a type that extends or implements " + name +
 		" and is missing from the list, so the count above is a floor"
-	if len(g.text.Sample) > 0 {
-		sites := make([]string, 0, len(g.text.Sample))
-		for _, p := range g.text.Sample {
-			sites = append(sites, fmt.Sprintf("%s:%d", p.Path, p.Line))
-		}
-		out += " (declaration-like lines: " + strings.Join(sites, ", ") + ")"
+	if sites := placeList(g.text.Sample, g.text.AnonymousSample); sites != "" {
+		out += " (lines: " + sites + ")"
 	}
 	return out + ". Search for the name before concluding which types extend it."
 }
