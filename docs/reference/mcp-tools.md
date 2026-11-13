@@ -499,7 +499,9 @@ Coverage is judged for the language of the symbol asked about, not for the whole
 
 A function handed to something by name (`.then(handleResponse)`, `register("x", handler)`, a table of callbacks) is used, and the use is not a call, so no edge records it. The graph cannot see it. The text can, because the name is still there.
 
-`analyze_impact`, `find_callers`, `find_tests` and `plan_change` read the stored text for the target, and for `analyze_impact`, `find_tests` and `plan_change` also for up to four symbols on the reported path that have two or fewer recorded callers. They count the places where the name occurs as an identifier that are not a definition of it, not inside a definition of it, not an import, not inside a string, not a comment-only line and not the line of any reference the index recorded. Only functions and methods are checked, and a constructor never is: its name is its type's.
+`analyze_impact`, `find_callers`, `find_tests` and `plan_change` read the stored text for the target, and for `analyze_impact`, `find_tests` and `plan_change` also for up to four symbols on the reported path that have two or fewer recorded callers. They count the places where the name occurs as an identifier in a SOURCE file of a language that can reference it, and that are none of these: a definition of it, inside a definition of it, an `import`, `use`, `require` or `#include` statement (every line of one that spans several, and a CommonJS `const x = require(...)`), a declaration or prototype of the function itself (`def`, `fn`, `func`, `function`, and `void f(int);` in C, C++ and Java, including a header that pairs with the file defining it), inside a string, a comment-only line, or the line of any reference the index recorded. Only functions and methods are checked, and a constructor never is: its name is its type's.
+
+"A language that can reference it" is the resolver's rule for which languages can call which: the language of the file that defines the name, and the members of its family (JavaScript, TypeScript, TSX, JSX and Vue; C, C++ and Objective-C; Java, Kotlin, Scala and Groovy; and the others in `languageFamilies` in `internal/resolve/infer/calltraits.go`, which `internal/registry/languages.go` mirrors). A Go function is looked for in Go files and nowhere else. Markdown, reStructuredText, YAML, JSON, TOML and every other prose, text-only, configuration or data format is never read, so a CHANGELOG, a README or a workflow file that says the name is not a use of it. Without this, cobra's `CompErrorln` (one caller, correct) opened `INCOMPLETE` because a documentation page contains it.
 
 When there are such places the first line leads `INCOMPLETE` and says so:
 
@@ -509,7 +511,7 @@ INCOMPLETE — respond: its name appears in at least 9 other place(s) that are n
 
 Three things follow. The verdict cannot be `strong`. Certainty is never `high`. And no tool says "no test reaches this" as a fact: `find_tests` says whether one does is `NOT KNOWN`, and `analyze_impact` adds no points for missing tests.
 
-This is a doubt and never a finding. The same name may belong to an unrelated symbol, or to a property (`ctx.respond`). A place counted is not a place proven to pass the function. The check reads the text of at most a dozen files per name, so a name found in more files than that is reported "at least". A name with more recorded references than 5,000 is not checked.
+This is a doubt and never a finding. The same name may belong to an unrelated symbol, or to a property (`ctx.respond`). A place counted is not a place proven to pass the function. The check reads the text of at most a dozen source files per name, so a name found in more files than that is reported "at least". A name with more recorded references than 5,000 is not checked.
 
 ### Callers the confidence floor left out
 

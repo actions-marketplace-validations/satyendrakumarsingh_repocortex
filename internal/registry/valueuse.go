@@ -64,6 +64,13 @@ const (
 // outside comment-only lines and import statements, that are not inside any of
 // defs and not on the line of any reference the index recorded with that name.
 //
+// Only SOURCE files of a language that can reference the name are read: the
+// languages of the files that define it and their families (ReferencingLanguages).
+// A Markdown page, a workflow file or a manifest that says the name is not a
+// use of it. Import, use, require and include statements (several lines long
+// included) and the function's own declarations and prototypes are not uses
+// either; see importLineSet and declaresFunction.
+//
 // Reference lines are subtracted whatever became of the reference (bound here,
 // bound elsewhere, ambiguous, unresolved), because each of those is a use the
 // index DID see: the unbound ones are counted by NameBinding, and the ones bound
@@ -87,12 +94,20 @@ func (r *Registry) UnrecordedDeclarations(ctx context.Context, runID int64, name
 
 func (r *Registry) unrecordedMentions(ctx context.Context, runID int64, name string, defs []DefSpan,
 	keep func(line string) bool) (UnrecordedMentions, error) {
-	files, capped, err := r.mentionFiles(ctx, runID, name)
+	langs, err := r.definitionLanguages(ctx, runID, name)
+	if err != nil {
+		return UnrecordedMentions{}, err
+	}
+	files, capped, err := r.mentionFiles(ctx, runID, name, ReferencingLanguages(langs), mentionFileCap)
 	if err != nil {
 		return UnrecordedMentions{}, err
 	}
 	if files == nil {
 		return UnrecordedMentions{}, nil
+	}
+	defStems := map[string]bool{}
+	for _, d := range defs {
+		defStems[pathStem(d.Path)] = true
 	}
 
 	rows, err := r.db.QueryContext(ctx, `
@@ -124,9 +139,12 @@ func (r *Registry) unrecordedMentions(ctx context.Context, runID int64, name str
 
 	var places []Place
 	for _, f := range files {
+		imports := importLineSet(f.content)
+		paired := isHeader(f.path) && defStems[pathStem(f.path)]
 		for _, line := range identifierLinesText(f.content, name) {
 			p := Place{Path: f.path, Line: line.n}
-			if recorded[p] || insideAny(p, defs) || importLine(line.text) || !identifierInCode(line.text, name) {
+			if recorded[p] || insideAny(p, defs) || imports[line.n] || !identifierInCode(line.text, name) ||
+				declaresFunction(line.text, name, f.lang, paired) {
 				continue
 			}
 			if keep != nil && !keep(line.text) {
@@ -154,21 +172,6 @@ func (r *Registry) unrecordedMentions(ctx context.Context, runID int64, name str
 func insideAny(p Place, defs []DefSpan) bool {
 	for _, d := range defs {
 		if d.Path == p.Path && p.Line >= d.From && p.Line <= d.To {
-			return true
-		}
-	}
-	return false
-}
-
-// importPrefixes open a line that brings a name into scope without using it.
-// Crude on purpose and one-sided, like commentOnly: an import is read as no use,
-// and a line of code is never mistaken for one.
-var importPrefixes = []string{"import ", "from ", "use ", "using ", "#include", "#import", "require_relative", "require "}
-
-func importLine(text string) bool {
-	t := strings.TrimLeft(text, " \t")
-	for _, p := range importPrefixes {
-		if strings.HasPrefix(t, p) {
 			return true
 		}
 	}
@@ -215,25 +218,36 @@ var declaresType = func() func(string) bool {
 
 type mentionFile struct {
 	path    string
+	lang    string
 	content string
 }
 
 // mentionFiles reads the indexed text of the files that may hold name, at most
 // mentionFileCap of them. capped says the cap was reached, so files that were
 // not read may hold the name too. nil files means the name cannot be searched.
-func (r *Registry) mentionFiles(ctx context.Context, runID int64, name string) (files []mentionFile, capped bool, err error) {
+//
+// Only files whose language is one of langs are read, so the cap is spent on
+// code and a page of prose cannot use up a slot.
+func (r *Registry) mentionFiles(ctx context.Context, runID int64, name string, langs []string, limit int) (files []mentionFile, capped bool, err error) {
 	phrase := ftsPhrase(name)
 	if phrase == "" {
 		return nil, false, nil
 	}
+	ph := strings.TrimSuffix(strings.Repeat("?,", len(langs)), ",")
+	args := []any{"content : " + phrase, runID}
+	for _, l := range langs {
+		args = append(args, l)
+	}
+	args = append(args, limit)
 	rows, err := r.db.QueryContext(ctx, `
-		SELECT f.path, files_fts.content
+		SELECT f.path, f.language, files_fts.content
 		  FROM files_fts
 		  JOIN files_fts_map m ON m.fts_rowid = files_fts.rowid
 		  JOIN files f         ON f.id = m.file_id
 		 WHERE files_fts MATCH ?
 		   AND f.index_run_id = ?
-		 LIMIT ?`, "content : "+phrase, runID, mentionFileCap)
+		   AND f.language IN (`+ph+`)
+		 LIMIT ?`, args...)
 	if err != nil {
 		return nil, false, fmt.Errorf("registry: mentions of %q: %w", name, err)
 	}
@@ -241,7 +255,7 @@ func (r *Registry) mentionFiles(ctx context.Context, runID int64, name string) (
 	files = []mentionFile{}
 	for rows.Next() {
 		var f mentionFile
-		if err := rows.Scan(&f.path, &f.content); err != nil {
+		if err := rows.Scan(&f.path, &f.lang, &f.content); err != nil {
 			return nil, false, fmt.Errorf("registry: scan mention: %w", err)
 		}
 		files = append(files, f)
@@ -249,7 +263,7 @@ func (r *Registry) mentionFiles(ctx context.Context, runID int64, name string) (
 	if err := rows.Err(); err != nil {
 		return nil, false, err
 	}
-	return files, len(files) >= mentionFileCap, nil
+	return files, len(files) >= limit, nil
 }
 
 // IncomingEdgeCounts returns, for each id, how many recorded relationships of
