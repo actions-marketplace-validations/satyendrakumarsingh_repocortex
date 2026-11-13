@@ -22,10 +22,10 @@ func startProfiling() func() {
 	if dir == "" {
 		return func() {}
 	}
-	if err := os.MkdirAll(dir, 0o755); err != nil {
+	if err := os.MkdirAll(dir, 0o750); err != nil { //nolint:gosec // diagnostic output path chosen by the person running the command
 		return func() {}
 	}
-	cpu, err := os.Create(filepath.Join(dir, "cpu.prof"))
+	cpu, err := os.Create(filepath.Join(dir, "cpu.prof")) //nolint:gosec // diagnostic output path chosen by the person running the command
 	if err == nil {
 		if err := pprof.StartCPUProfile(cpu); err != nil {
 			_ = cpu.Close()
@@ -40,7 +40,7 @@ func startProfiling() func() {
 			_ = cpu.Close()
 		}
 		for _, name := range []string{"block", "mutex"} {
-			f, err := os.Create(filepath.Join(dir, name+".prof"))
+			f, err := os.Create(filepath.Join(dir, name+".prof")) //nolint:gosec // diagnostic output path chosen by the person running the command
 			if err != nil {
 				continue
 			}
