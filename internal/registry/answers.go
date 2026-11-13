@@ -458,6 +458,31 @@ func (r *Registry) computeLanguageBindings(ctx context.Context, runID int64) (ma
 	return out, nil
 }
 
+// IncomingSourceCount is how many distinct symbols have an edge to symbolID
+// under the filter: the number of callers, where EdgePage's total is the
+// number of call sites. One function that calls three times is one caller.
+func (r *Registry) IncomingSourceCount(ctx context.Context, runID, symbolID int64, filter EdgeFilter) (int, error) {
+	where := "e.index_run_id = ? AND e.dst_id = ?"
+	args := []any{runID, symbolID}
+	if len(filter.Kinds) > 0 {
+		placeholders := make([]string, len(filter.Kinds))
+		for i, k := range filter.Kinds {
+			placeholders[i] = "?"
+			args = append(args, k)
+		}
+		where += ` AND e.kind IN (` + strings.Join(placeholders, ",") + `)`
+	}
+	if rank := filter.MinConfidence.Rank(); rank > 0 {
+		where += ` AND ` + fmt.Sprintf(confidenceRankCase, "e.confidence") + ` >= ?`
+		args = append(args, rank)
+	}
+	var n int
+	if err := r.db.QueryRowContext(ctx, `SELECT COUNT(DISTINCT e.src_id) FROM edges e WHERE `+where, args...).Scan(&n); err != nil {
+		return 0, fmt.Errorf("registry: count sources for symbol %d: %w", symbolID, err)
+	}
+	return n, nil
+}
+
 // EdgePage returns one page of the relationships at a symbol, and how many
 // pass the filter in total.
 //
@@ -501,7 +526,7 @@ func (r *Registry) EdgePage(ctx context.Context, runID, symbolID int64, incoming
 	}
 
 	rows, err := r.db.QueryContext(ctx, `
-		SELECT e.src_id, src.name, srcf.path, e.dst_id, dst.name,
+		SELECT e.src_id, src.name, COALESCE(src.fqn,''), srcf.path, e.dst_id, dst.name,
 		       e.kind, e.confidence, e.source, COALESCE(e.detail,''),
 		       e.evidence_file, e.evidence_line, e.evidence_col
 		  FROM edges e
@@ -520,11 +545,13 @@ func (r *Registry) EdgePage(ctx context.Context, runID, symbolID int64, incoming
 	out := make([]EdgeHit, 0, min(limit, total-offset))
 	for rows.Next() {
 		var e EdgeHit
-		if err := rows.Scan(&e.SrcID, &e.SrcName, &e.SrcPath, &e.DstID, &e.DstName,
+		var fqn string
+		if err := rows.Scan(&e.SrcID, &e.SrcName, &fqn, &e.SrcPath, &e.DstID, &e.DstName,
 			&e.Kind, &e.Confidence, &e.Source, &e.Detail,
 			&e.EvidenceFile, &e.EvidenceLine, &e.EvidenceCol); err != nil {
 			return nil, 0, fmt.Errorf("registry: edges for symbol %d: scan: %w", symbolID, err)
 		}
+		e.SrcQualified = qualifiedName(e.SrcName, fqn, e.SrcPath)
 		out = append(out, e)
 	}
 	return out, total, rows.Err()

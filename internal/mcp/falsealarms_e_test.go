@@ -49,8 +49,10 @@ func TestTheCrossReferenceToFindCallersQuotesNoWrongNumber(t *testing.T) {
 	fs := serverFor(t, recursiveWithTwoCallSites)
 	impact := mustAnswer(t, fs, "analyze_impact", map[string]any{"symbol": "build_query"})
 	callers := mustAnswer(t, fs, "find_callers", map[string]any{"name": "build_query"})
-	if !strings.Contains(firstLine(callers), "3 caller(s)") {
-		t.Fatalf("fixture: find_callers should list the two sites and the recursive call:\n%s", callers)
+	// Two functions call it (env_for twice, and itself once): the first line
+	// counts the functions and says how many call sites they make.
+	if !strings.Contains(firstLine(callers), "2 caller(s) of build_query (lib/q.rb:1) are recorded, at 3 call sites.") {
+		t.Fatalf("fixture: find_callers should count two callers at three call sites:\n%s", callers)
 	}
 	if strings.Contains(impact, "which is what find_callers lists") {
 		t.Errorf("analyze_impact says its site count is what find_callers lists, which lists 3:\n%s", impact)

@@ -71,8 +71,15 @@ func (r *Registry) FindSymbolsByName(ctx context.Context, runID int64, name, kin
 
 // EdgeHit is a relationship with both endpoints named.
 type EdgeHit struct {
-	SrcID        int64
-	SrcName      string
+	SrcID   int64
+	SrcName string
+	// SrcQualified is the source as a person names it: Owner.member for a
+	// method or a nested definition (Writer.AddEdge), the bare name for a
+	// top-level one. It is read from the symbol's qualified name, which the
+	// index already holds. An answer that printed the bare name left the
+	// reader to guess the owner, and one agent in the benchmark guessed
+	// Registry.AddEdge for Writer.AddEdge.
+	SrcQualified string
 	SrcPath      string
 	DstID        int64
 	DstName      string
@@ -166,7 +173,7 @@ func (r *Registry) edgesFor(ctx context.Context, runID, symbolID int64, limit in
 	args := []any{runID, symbolID}
 
 	q := `
-		SELECT e.src_id, src.name, srcf.path, e.dst_id, dst.name,
+		SELECT e.src_id, src.name, COALESCE(src.fqn,''), srcf.path, e.dst_id, dst.name,
 		       e.kind, e.confidence, e.source, COALESCE(e.detail,''),
 		       e.evidence_file, e.evidence_line, e.evidence_col
 		  FROM edges e
@@ -203,11 +210,13 @@ func (r *Registry) edgesFor(ctx context.Context, runID, symbolID int64, limit in
 	var out []EdgeHit
 	for rows.Next() {
 		var e EdgeHit
-		if err := rows.Scan(&e.SrcID, &e.SrcName, &e.SrcPath, &e.DstID, &e.DstName,
+		var fqn string
+		if err := rows.Scan(&e.SrcID, &e.SrcName, &fqn, &e.SrcPath, &e.DstID, &e.DstName,
 			&e.Kind, &e.Confidence, &e.Source, &e.Detail,
 			&e.EvidenceFile, &e.EvidenceLine, &e.EvidenceCol); err != nil {
 			return nil, err
 		}
+		e.SrcQualified = qualifiedName(e.SrcName, fqn, e.SrcPath)
 		out = append(out, e)
 	}
 	return out, rows.Err()
@@ -312,4 +321,17 @@ func (r *Registry) FileExcerpt(ctx context.Context, runID int64, path string, st
 		end = len(all)
 	}
 	return strings.Join(all[start:end], "\n"), nil
+}
+
+// qualifiedName is a symbol's name with its owner, taken from its stored
+// qualified name, which is the file's path, a colon, and the name as the
+// language qualifies it (internal/registry/writer.go:Writer.AddEdge). The path
+// is stripped as a prefix and not searched for, because a C++ name has colons
+// of its own. Anything that is not in that form gives the bare name back.
+func qualifiedName(name, fqn, path string) string {
+	rest, ok := strings.CutPrefix(fqn, path+":")
+	if !ok || rest == "" || path == "" {
+		return name
+	}
+	return rest
 }

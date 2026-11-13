@@ -605,6 +605,9 @@ because "nothing found" and "nothing resolvable" are different facts.`,
 			fmt.Fprintln(tw, "KIND\tSYMBOL\tEVIDENCE\tCONFIDENCE")
 			for _, e := range edges {
 				other, otherPath := e.SrcName, e.SrcPath
+				if e.SrcQualified != "" {
+					other = e.SrcQualified
+				}
 				if !spec.incoming {
 					other, otherPath = e.DstName, ""
 				}

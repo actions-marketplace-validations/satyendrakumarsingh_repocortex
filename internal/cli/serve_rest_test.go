@@ -204,7 +204,7 @@ func TestCLIToolCallMatchesREST(t *testing.T) {
 	}
 	// The fixture is rebuilt per test, so compare the parts that do not depend
 	// on which temporary directory it was built in: the answer lines.
-	for _, want := range []string{"2 caller(s) of Save", "- calls Settle", "- calls Refund"} {
+	for _, want := range []string{"2 caller(s) of Save", "- calls PaymentService.Settle", "- calls PaymentService.Refund"} {
 		if !strings.Contains(viaCLI, want) {
 			t.Errorf("CLI answer is missing %q:\n%s", want, viaCLI)
 		}

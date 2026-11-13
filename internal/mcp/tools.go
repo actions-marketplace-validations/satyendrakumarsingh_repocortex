@@ -998,6 +998,16 @@ func (s *Server) relationshipQuery(ctx context.Context, req *sdk.CallToolRequest
 	// page of them. Which rows are shown is said by the lead and by Page.
 	resp.Summary = fmt.Sprintf("%d %s(s) of %s (%s:%d) are recorded.",
 		page.Total, label, target.Name, target.FilePath, target.StartLine)
+	if callersOnly {
+		// page.Total counts call sites. "How many callers" is a count of
+		// functions, and a function that calls three times is one of them: the
+		// line said "56 caller(s)" of a method that 18 functions call.
+		filter := registry.EdgeFilter{MinConfidence: minConf, Kinds: kinds}
+		if callers, cerr := s.deps.Registry.IncomingSourceCount(ctx, runID, target.ID, filter); cerr == nil && callers < page.Total {
+			resp.Summary = fmt.Sprintf("%d %s(s) of %s (%s:%d) are recorded, at %d call sites.",
+				callers, label, target.Name, target.FilePath, target.StartLine, page.Total)
+		}
+	}
 
 	// notCalls is informational only — how many further relationships point at
 	// this symbol without being calls — so it is a COUNT(*), not a row fetch:

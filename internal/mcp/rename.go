@@ -204,7 +204,7 @@ func (s *Server) referencesFor(
 	for _, e := range incoming {
 		resp.Items = append(resp.Items, Item{
 			Kind:       strings.ToLower(e.Kind),
-			Name:       e.SrcName,
+			Name:       sourceName(e),
 			Path:       e.EvidenceFile,
 			Line:       e.EvidenceLine,
 			Confidence: e.Confidence,
@@ -607,4 +607,14 @@ func (s *Server) planRename(ctx context.Context, req *sdk.CallToolRequest, args 
 	resp.Notes = append(resp.Notes, plan.Warning)
 	resp.RenamePlan = &plan
 	return s.reply(ctx, req, resp)
+}
+
+// sourceName is the name a row gives the symbol a relationship comes from:
+// with its owner when the index knows one (Writer.AddEdge), so that the reader
+// is not left to work out which AddEdge.
+func sourceName(e registry.EdgeHit) string {
+	if e.SrcQualified != "" {
+		return e.SrcQualified
+	}
+	return e.SrcName
 }
