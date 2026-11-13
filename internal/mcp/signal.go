@@ -297,12 +297,36 @@ func (c coverage) scope() string {
 	return c.Language
 }
 
+// nameAccounted is true when the index accounts for every reference to this
+// symbol's NAME: at least one exists, and each is bound (to this definition or
+// to another of the same name), none ambiguous, unresolved or pending, none
+// bound from outside an extracted function, and the text check found no place
+// the name occurs that no reference explains.
+//
+// It is the narrowest of the three widths and, where it holds, the one that
+// decides. koa's isStream has five callers, exactly right, and every reference
+// spelled `isStream` is bound to it; the answer opened "UNRELIABLE - only 59%
+// of the JavaScript references that name something this index defines are
+// bound" because the REST of the language resolves badly, and told the reader
+// not to present five correct callers as an answer. A symbol whose own
+// references are all accounted for is determined however badly its neighbours
+// resolved (TargetBinding.Undetermined says the same).
+func (c coverage) nameAccounted() bool {
+	return c.Binding.Known && c.Binding.References > 0 && c.Binding.Unlisted() == 0 && !c.Elsewhere.Any()
+}
+
+// rateIsOverridden is true when the language-wide rate is below the floor and
+// the name-level accounting is what the grade rests on instead.
+func (c coverage) rateIsOverridden() bool {
+	return c.Extracts && c.Known && !c.NoHierarchy && !c.Reliable && c.nameAccounted()
+}
+
 // level is the one judgement every surface reads.
 func (c coverage) level() ReliabilityLevel {
 	switch {
 	case !c.Extracts, !c.Known, c.NoHierarchy:
 		return ReliabilityNone
-	case !c.Reliable:
+	case !c.Reliable && !c.nameAccounted():
 		return ReliabilityLow
 	case c.Misbound != "":
 		return ReliabilityUnverified
@@ -414,6 +438,20 @@ func structuralLead(language string) string {
 // reason to carry a display name.
 func bindingName(b capability.TargetBinding) string { return b.Name }
 
+// rateNote states the language-wide binding rate when it was set aside because
+// every reference to this symbol's name is accounted for. It is a note and
+// never a lead: it describes the language, and the answer does not rest on it.
+//
+// It avoids the two phrases a doubtful answer is held to (see
+// TestNoAnswerSaysBothDoNotUseAndActOnThese): this answer does not doubt itself.
+func (c coverage) rateNote() string {
+	return fmt.Sprintf("Language-wide, %.0f%% of the %d %s that name something this index defines are bound "+
+		"(%d ambiguous; a further %d matched no definition here at all, out of %d in total). That rate does not "+
+		"apply to this answer: all %d reference(s) spelled %q are bound, none ambiguous or unresolved. It is what to "+
+		"expect of a symbol whose own references are not accounted for.",
+		100*c.Rate, c.Bindable, c.refWord(), c.Ambiguous, c.Unresolved, c.Total, c.Binding.References, bindingName(c.Binding))
+}
+
 // caveat is what a doubtful answer must carry, ahead of its own results.
 //
 // Empty when coverage is good — silence is the reward for a well-resolved
@@ -424,6 +462,9 @@ func (c coverage) caveat(subject string) []string {
 
 	switch c.level() {
 	case ReliabilityGood:
+		if c.rateIsOverridden() {
+			return []string{c.rateNote()}
+		}
 		return nil
 
 	case ReliabilityIncomplete, ReliabilityUnverified:
@@ -448,6 +489,9 @@ func (c coverage) caveat(subject string) []string {
 		}
 		if c.Elsewhere.Any() {
 			out = append(out, "INCOMPLETE FOR THIS SYMBOL — "+c.Elsewhere.Detail())
+		}
+		if c.rateIsOverridden() {
+			out = append(out, c.rateNote())
 		}
 		return out
 
