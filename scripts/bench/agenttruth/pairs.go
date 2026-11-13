@@ -22,6 +22,7 @@ import (
 	"go/token"
 	"go/types"
 	"os"
+	"path/filepath"
 	"sort"
 	"strings"
 
@@ -35,7 +36,7 @@ func runPairs(dir, mode string) int {
 		Dir:   dir,
 		Tests: true,
 	}
-	pkgs, err := packages.Load(cfg, "./...")
+	pkgs, err := packages.Load(cfg, append([]string{"./..."}, workspacePatterns(dir)...)...)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		return 1
@@ -182,6 +183,24 @@ func runPairs(dir, mode string) int {
 	sort.Strings(lines)
 	fmt.Println(strings.Join(lines, "\n"))
 	return 0
+}
+
+// workspacePatterns returns one pattern per member module a go.work names
+// besides the root: "./..." does not cross into another module, even inside a
+// workspace, so without them the truth would silently cover only the first.
+func workspacePatterns(dir string) []string {
+	data, err := os.ReadFile(filepath.Join(dir, "go.work"))
+	if err != nil {
+		return nil
+	}
+	var out []string
+	for _, f := range strings.Fields(string(data)) {
+		f = strings.Trim(f, "\"`")
+		if strings.HasPrefix(f, "./") && f != "./" {
+			out = append(out, strings.TrimSuffix(f, "/")+"/...")
+		}
+	}
+	return out
 }
 
 func calleeOf(e ast.Expr) *ast.Ident {
