@@ -600,6 +600,15 @@ A zero there would be a statement about a constructor, read as one about the typ
 HandlerInterface (src/Monolog/Handler/HandlerInterface.php:21): 69 implementing or extending it (4 directly, 65 through other types; direct_only=true lists the direct ones alone), 0 it implements or extends.
 ```
 
+A row is always a type. An anonymous class expression, or a class declared inside a function body, is attributed by the extractor to the function that contains it, so its extends edge starts at a function (hono's `buildInitParams` holds a class that extends `RegExpRouter`). Such an edge is not a subtype row. It is counted on the first line, in one clause, and the enclosing functions are named in a note:
+
+```text
+Router (src/router.ts:29): 6 implementing or extending it, all directly; 1 anonymous or local type(s) inside functions also extend it (not rows: they are not types), 0 it implements or extends.
+note: 1 anonymous or local type(s) declared inside functions extend or implement Router: inside buildInitParams (src/router/reg-exp-router/prepared-router.ts:98). They are subtypes with no name of their own, so they are counted here and are not rows of the list.
+```
+
+This does not lead `INCOMPLETE` by itself: the edges are recorded and counted. The anonymous expressions the index recorded no edge for are the text check below.
+
 Supertypes are the target's direct ones. The index holds supertype references that did not become subtypes, and when it does the first line leads `INCOMPLETE` with their count, so the verdict cannot be `strong`:
 
 | What the first line counts | Why the type is missing |

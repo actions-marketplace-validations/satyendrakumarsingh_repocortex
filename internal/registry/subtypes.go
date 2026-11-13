@@ -43,7 +43,24 @@ type Subtypes struct {
 
 	// Capped is true when the walk stopped at its row bound, so All is a floor.
 	Capped bool
+
+	// Local counts the extends or implements edges whose SOURCE is a function,
+	// a method or a test and not a type: an anonymous class expression or a
+	// class declared inside a function body, which the extractor attributes to
+	// the function that contains it. They are subtypes of the root and they are
+	// not types, so no row carries them; LocalHits are the first few, with the
+	// enclosing function as SrcName. Local is a floor when Capped.
+	Local     int
+	LocalHits []SubtypeHit
 }
+
+// nonTypeKinds are the kinds of symbol that can hold a class body but are not
+// themselves a type. A hierarchy edge whose source is one of them belongs to a
+// local or anonymous type.
+const nonTypeKinds = `('function','method','test')`
+
+// maxLocalHits is how many such edges are returned as examples.
+const maxLocalHits = 5
 
 const (
 	// maxSubtypeDepth bounds how far below the root the walk goes. A hierarchy
@@ -110,12 +127,20 @@ func (r *Registry) SubtypeClosure(ctx context.Context, runID, root int64, filter
 			  FROM edges e JOIN sub ON e.dst_id = sub.id
 			 WHERE e.index_run_id = ? AND e.kind IN (` + ph + `)` + floor + ` AND sub.depth < ?
 			LIMIT ?
-		), best AS (
+		), ranked AS (
 			SELECT id, depth, crank, eid FROM (
 				SELECT id, depth, crank, eid,
 				       ROW_NUMBER() OVER (PARTITION BY id ORDER BY depth, crank DESC, eid) AS rn
 				  FROM sub
 			) WHERE rn = 1
+		), best AS (
+			SELECT r.id, r.depth, r.crank, r.eid
+			  FROM ranked r JOIN symbols t ON t.id = r.id
+			 WHERE t.kind NOT IN ` + nonTypeKinds + `
+		), local AS (
+			SELECT r.id, r.depth, r.crank, r.eid
+			  FROM ranked r JOIN symbols t ON t.id = r.id
+			 WHERE t.kind IN ` + nonTypeKinds + `
 		)`
 
 	var out Subtypes
@@ -124,7 +149,47 @@ func (r *Registry) SubtypeClosure(ctx context.Context, runID, root int64, filter
 		append(append([]any{}, args...), root)...).Scan(&out.All, &out.Direct); err != nil {
 		return Subtypes{}, fmt.Errorf("registry: subtypes of symbol %d: %w", root, err)
 	}
-	out.Capped = out.All >= maxSubtypeRows
+	if err := r.db.QueryRowContext(ctx, with+`
+		SELECT COUNT(*) FROM local WHERE id <> ?`,
+		append(append([]any{}, args...), root)...).Scan(&out.Local); err != nil {
+		return Subtypes{}, fmt.Errorf("registry: local subtypes of symbol %d: %w", root, err)
+	}
+	if out.Local > 0 {
+		lq, err := r.db.QueryContext(ctx, with+`
+			SELECT e.src_id, src.name, srcf.path, e.dst_id, dst.name,
+			       e.kind, e.confidence, e.source, COALESCE(e.detail,''),
+			       e.evidence_file, e.evidence_line, e.evidence_col, local.depth, local.crank
+			  FROM local
+			  JOIN edges e      ON e.id = local.eid
+			  JOIN symbols src  ON src.id = e.src_id
+			  JOIN files   srcf ON srcf.id = src.file_id
+			  JOIN symbols dst  ON dst.id = e.dst_id
+			 WHERE local.id <> ?
+			 ORDER BY srcf.path, e.evidence_line, e.id
+			 LIMIT ?`,
+			append(append([]any{}, args...), root, maxLocalHits)...)
+		if err != nil {
+			return Subtypes{}, fmt.Errorf("registry: local subtypes of symbol %d: %w", root, err)
+		}
+		for lq.Next() {
+			var h SubtypeHit
+			var crank int
+			if err := lq.Scan(&h.SrcID, &h.SrcName, &h.SrcPath, &h.DstID, &h.DstName,
+				&h.Kind, &h.Confidence, &h.Source, &h.Detail,
+				&h.EvidenceFile, &h.EvidenceLine, &h.EvidenceCol, &h.Depth, &crank); err != nil {
+				_ = lq.Close()
+				return Subtypes{}, fmt.Errorf("registry: local subtypes of symbol %d: scan: %w", root, err)
+			}
+			h.PathConfidence = confidenceOfRank(crank)
+			out.LocalHits = append(out.LocalHits, h)
+		}
+		err = lq.Err()
+		_ = lq.Close()
+		if err != nil {
+			return Subtypes{}, err
+		}
+	}
+	out.Capped = out.All+out.Local >= maxSubtypeRows
 	out.Total = out.All
 	if directOnly {
 		out.Total = out.Direct
