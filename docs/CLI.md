@@ -250,7 +250,7 @@ which does not exist until every file has been parsed.
 |---|---|
 | `--min-confidence high\|medium\|low` | drop bindings weaker than this instead of recording them |
 | `--no-scip` | do not import an `index.scip` found in the project root or `.repocortex/` |
-| `--accuracy fast\|auto\|exact` | override the configured accuracy mode for this run; `fast` skips the Go type check below |
+| `--accuracy fast\|auto\|exact` | override the configured accuracy mode for this run; `fast` skips the Go type check and the compiler indexers below |
 
 Resolution itself never produces `exact`; that is reserved for compiler-backed
 data and is enforced in Go, in a SQL `CHECK`, and again at commit time.
@@ -273,6 +273,53 @@ host platform's view of build constraints is checked: files another platform
 would build keep their heuristic edges. The block is printed as `Go types:`;
 `status` reports whether the Go graph is type-checked. A per-run cost is the
 type check itself: a few seconds for a repository of this size.
+
+**Other languages use the compiler indexer you already have.** In `auto` and
+`exact` mode, after the Go type check, `resolve` builds the plan that
+[`indexers list`](#indexers) shows and runs the compiler indexer of each project
+whose indexer is already installed: `scip-typescript` for TypeScript and
+JavaScript, `scip-python` for Python, `scip-java` for Java where the plan allows
+it. The trust rules are the planner's, unchanged. Which indexers may run comes
+from your user configuration and never from the repository; `resolve` installs
+and downloads nothing, so an indexer that is not installed is reported as not
+run; a step the plan marks blocked (Java without an allowed build) does not run;
+Go is left to the type check, which is why a `scip-go` index is never produced
+here, and if you put one in `index.scip` and the type check disagrees about a
+call, the type check's answer is kept and the other edge is withdrawn. A Python
+project nested in another is read by the run of the one above it. Each tool's
+output is kept under `.repocortex/scip/` (one `.scip` file per project) and every
+file there is imported through the same importer `scip import` uses. A step that
+fails or runs past its limit (the smaller of `accuracy.indexers.timeout` and five
+minutes) is reported on one line with the tool's own first lines and does not
+fail `resolve`.
+
+An index is reused, and the tool not run again, while nothing it reads has
+changed. The key beside each file (`.repocortex/scip/<project>.key`) is a digest of
+the indexer's name, version and runner; the content hash of every indexed source
+file of its languages under the project; the content of the project's
+configuration and lock files (`package.json`, `tsconfig*.json`, `pyproject.toml`,
+`requirements*.txt`, `pom.xml`, the lock files); and the modification time of
+`node_modules`, `.venv` and `venv`, which the indexers read dependencies from. A
+dependency changed in place, without touching the directory, is the one change
+the key does not see. A reused index is still imported into the current index
+run, which is what makes `index` followed by `resolve` correct after a change:
+the files whose hash moved re-run their project's indexer, and the rest are
+re-imported from disk.
+
+What an import proves is written beside the edges. The files the indexer read
+are recorded (`compiler_coverage`; a file the indexer skipped is not in it), and
+an unbound reference is marked as ruled out when the indexer resolved an
+occurrence spelled the same, on the same line, to a symbol outside this
+repository, and there are at least as many such occurrences as references. A
+position the indexer resolved to nothing (a receiver of unknown type) is never
+ruled out. Answers such as `find_callers` stop counting a ruled-out reference as
+a possible caller of a definition in a file the indexer read, and say how many
+they set aside ("shown by the compiler to be uses of something else"). Heuristic
+call edges the indexer resolved the same way are withdrawn. One block per
+indexer is printed as `Compiler:`: whether it ran or was reused, the files it
+covered, the calls it proved, the edges it raised to `exact` and added, and the
+time; `status` prints one line per language saying whether its graph is
+compiler-checked and by what.
 
 If
 an `index.scip` sits in the project root or `.repocortex/`, `resolve` imports it
@@ -424,6 +471,13 @@ Accuracy mode:  auto
 MCP profile:    minimal
 Capabilities:   code
 ```
+
+Below `Relationships`, one `<Language> graph:` line per language with
+definitions says whether a compiler stands behind it: `Go graph:` for the
+built-in type check, `Typescript graph:` or `Python graph:` when `resolve` ran
+the compiler indexer (`compiler-checked (scip-typescript): 998 exact edge(s)
+across 517 of 541 file(s)`), and `heuristic only` otherwise, with what would
+change that. `--json` carries the same under `compiler_checked`.
 
 *This output was captured before YAML, JSON, HTML and Markdown gained definition queries. On a current build those languages are parsed and yield symbols, so a `Text only` row lists fewer of them (for example Dockerfile, `go.mod` and diffs).*
 
