@@ -947,6 +947,7 @@ type spanMask struct {
 // replaces the plain one only if maskGuard accepts it. A language with a
 // spanMask has no macro or conditional mask, so this is its only retry.
 var spanMasks = map[string]spanMask{
+	"fsharp": {find: findFSharpConstraintCalls},
 }
 
 // applyMaskSpans returns a copy of src with the spans overwritten.
