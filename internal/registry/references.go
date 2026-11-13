@@ -1005,8 +1005,13 @@ func (r *Registry) MarkCompilerResolutions(ctx context.Context, runID int64) (Co
 	// repository that is ~94k compiler edges against ~514k references, and the
 	// lesson from accuracy.go's 160s query is that the two-orders-of-magnitude
 	// smaller relation belongs on the outside of the join.
+	//
+	// The bound set is MATERIALISED once into a temporary table. It used to be a
+	// CTE referenced by a correlated subquery in the UPDATE, which SQLite
+	// re-evaluates for every row it updates: invisible at a few thousand compiler
+	// edges and 20 of the 32 seconds of a resolve at a hundred thousand.
 	const candidates = `
-		WITH cand AS (
+		SELECT rid, MIN(dst) AS dst FROM (
 		    SELECT r.id AS rid, e.dst_id AS dst
 		      FROM edges e
 		      JOIN symbols s ON s.id = e.dst_id
@@ -1020,12 +1025,9 @@ func (r *Registry) MarkCompilerResolutions(ctx context.Context, runID int64) (Co
 		     WHERE e.index_run_id = ?
 		       AND e.source = 'compiler'
 		       AND e.evidence_line > 0
-		       AND r.resolution <> 'resolved'),
-		bound AS (
-		    SELECT rid, MIN(dst) AS dst
-		      FROM cand
-		     GROUP BY rid
-		    HAVING COUNT(DISTINCT dst) = 1)`
+		       AND r.resolution <> 'resolved')
+		 GROUP BY rid
+		HAVING COUNT(DISTINCT dst) = 1`
 
 	tx, err := r.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -1036,11 +1038,21 @@ func (r *Registry) MarkCompilerResolutions(ctx context.Context, runID int64) (Co
 	// Counted BEFORE the update, and grouped by the resolver's verdict, because
 	// afterwards every one of these rows reads 'resolved' and the split that
 	// makes the number mean something is gone.
-	rows, err := tx.QueryContext(ctx, candidates+`
+	if _, err := tx.ExecContext(ctx, `DROP TABLE IF EXISTS temp.compiler_bound`); err != nil {
+		return st, fmt.Errorf("registry: mark compiler resolutions: %w", err)
+	}
+	if _, err := tx.ExecContext(ctx, `
+		CREATE TEMP TABLE compiler_bound (rid INTEGER PRIMARY KEY, dst INTEGER NOT NULL) WITHOUT ROWID`); err != nil {
+		return st, fmt.Errorf("registry: mark compiler resolutions: %w", err)
+	}
+	if _, err := tx.ExecContext(ctx, `INSERT INTO temp.compiler_bound `+candidates, runID); err != nil {
+		return st, fmt.Errorf("registry: mark compiler resolutions: bind: %w", err)
+	}
+	rows, err := tx.QueryContext(ctx, `
 		SELECT r.resolution, COUNT(*)
-		  FROM bound b JOIN symbol_references r ON r.id = b.rid
+		  FROM temp.compiler_bound b JOIN symbol_references r ON r.id = b.rid
 		 GROUP BY r.resolution
-		 ORDER BY r.resolution`, runID)
+		 ORDER BY r.resolution`)
 	if err != nil {
 		return st, fmt.Errorf("registry: mark compiler resolutions: count: %w", err)
 	}
@@ -1066,20 +1078,26 @@ func (r *Registry) MarkCompilerResolutions(ctx context.Context, runID int64) (Co
 		return st, fmt.Errorf("registry: mark compiler resolutions: %w", err)
 	}
 	if st.Bound == 0 {
+		if _, err := tx.ExecContext(ctx, `DROP TABLE IF EXISTS temp.compiler_bound`); err != nil {
+			return st, fmt.Errorf("registry: mark compiler resolutions: %w", err)
+		}
 		return st, tx.Commit()
 	}
 
-	if _, err := tx.ExecContext(ctx, candidates+`
+	if _, err := tx.ExecContext(ctx, `
 		UPDATE symbol_references
 		   SET prior_resolution   = CASE WHEN prior_resolution = '' THEN resolution
 		                                 ELSE prior_resolution END,
 		       resolution_source  = 'compiler',
 		       resolution         = 'resolved',
-		       resolved_symbol_id = (SELECT dst FROM bound WHERE rid = symbol_references.id)
-		 WHERE id IN (SELECT rid FROM bound)`, runID); err != nil {
+		       resolved_symbol_id = (SELECT dst FROM temp.compiler_bound WHERE rid = symbol_references.id)
+		 WHERE id IN (SELECT rid FROM temp.compiler_bound)`); err != nil {
 		return st, fmt.Errorf("registry: mark compiler resolutions: update: %w", err)
 	}
 
+	if _, err := tx.ExecContext(ctx, `DROP TABLE IF EXISTS temp.compiler_bound`); err != nil {
+		return st, fmt.Errorf("registry: mark compiler resolutions: %w", err)
+	}
 	if err := tx.Commit(); err != nil {
 		return st, fmt.Errorf("registry: mark compiler resolutions: commit: %w", err)
 	}
