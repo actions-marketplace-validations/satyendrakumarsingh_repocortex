@@ -286,10 +286,10 @@ type statusReport struct {
 	// 'repocortex index' restores them.
 	DeferredSchema []string `json:"deferred_schema,omitempty"`
 	LastIndexed    string   `json:"last_indexed,omitempty"`
-	IndexSizeBytes     int64    `json:"index_size_bytes"`
-	AccuracyMode       string   `json:"accuracy_mode"`
-	MCPProfile         string   `json:"mcp_profile"`
-	Capabilities       []string `json:"capabilities"`
+	IndexSizeBytes int64    `json:"index_size_bytes"`
+	AccuracyMode   string   `json:"accuracy_mode"`
+	MCPProfile     string   `json:"mcp_profile"`
+	Capabilities   []string `json:"capabilities"`
 }
 
 func renderStatus(cmd *cobra.Command, g *Global, st statusReport, hint string) error {
