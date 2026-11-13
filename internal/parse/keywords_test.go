@@ -15,6 +15,7 @@ func TestKeywordNamesAreNeverDefinitions(t *testing.T) {
 		"python":  {"if", "elif", "lambda", "return"},
 		"kotlin":  {"if", "when", "fun"},
 		"scala":   {"if", "match", "def"},
+		"make":    {"if", "else", "endif", "ifeq", "ifneq", "ifdef", "ifndef", "include", "define", "endef", "export", "unexport", "override", "vpath"},
 	}
 	for lang, words := range refused {
 		for _, w := range words {
