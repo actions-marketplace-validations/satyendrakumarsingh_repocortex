@@ -235,6 +235,15 @@ All figures are read from the registry. Nothing is estimated.`,
 			if goFiles > 0 {
 				st.GoTypes = &goTypesStatus{GoFiles: goFiles, FilesWithProof: checked, ExactEdges: edges}
 			}
+			langs, err := registry.New(db).CompilerCoverage(ctx, runID, gotypes.Detail)
+			if err != nil {
+				return err
+			}
+			for _, l := range langs {
+				if l.Language != "go" && !documentLanguage[l.Language] {
+					st.Compiler = append(st.Compiler, l)
+				}
+			}
 			// The same number the run row and the portal carry: files whose
 			// indexing was abandoned. A gate that reads this field and wants
 			// zero is asking the right question.
@@ -301,9 +310,13 @@ type statusReport struct {
 	AccuracyMode   string   `json:"accuracy_mode"`
 	// GoTypes says whether the Go graph has been type-checked. Nil when the
 	// index holds no Go.
-	GoTypes      *goTypesStatus `json:"go_types,omitempty"`
-	MCPProfile   string         `json:"mcp_profile"`
-	Capabilities []string       `json:"capabilities"`
+	GoTypes *goTypesStatus `json:"go_types,omitempty"`
+	// Compiler says, per language that has definitions, how many files a
+	// compiler read: Go through the built-in type check, the others through
+	// the compiler indexer `resolve` ran. Absent languages are heuristic only.
+	Compiler     []registry.CheckedLanguage `json:"compiler_checked,omitempty"`
+	MCPProfile   string                     `json:"mcp_profile"`
+	Capabilities []string                   `json:"capabilities"`
 }
 
 // goTypesStatus is the built-in Go type check's footprint in an index.
@@ -346,6 +359,15 @@ func renderStatus(cmd *cobra.Command, g *Global, st statusReport, hint string) e
 				_, _ = fmt.Fprintf(w, "Go graph:\theuristic only (%d Go file(s), no type check on record): run 'repocortex resolve'\n", g.GoFiles)
 			}
 		}
+		for _, l := range st.Compiler {
+			if l.Checked > 0 {
+				_, _ = fmt.Fprintf(w, "%s graph:\tcompiler-checked (%s): %d exact edge(s) across %d of %d file(s)\n",
+					titleCase(l.Language), l.Tool, l.ExactEdges, l.Checked, l.Files)
+			} else {
+				_, _ = fmt.Fprintf(w, "%s graph:\theuristic only (%d file(s), no compiler index on record)%s\n",
+					titleCase(l.Language), l.Files, compilerHint(l.Language))
+			}
+		}
 		if st.AmbiguousLanguages > 0 {
 			_, _ = fmt.Fprintf(w, "Ambiguous languages:\t%d  (language guessed from the extension; see index.language_overrides)\n",
 				st.AmbiguousLanguages)
@@ -369,6 +391,31 @@ func renderStatus(cmd *cobra.Command, g *Global, st statusReport, hint string) e
 		fmt.Fprintf(cmd.OutOrStdout(), "\n%s\n", hint)
 	}
 	return nil
+}
+
+// documentLanguage are languages whose "definitions" are headings and keys, so
+// that a line about whether a compiler checked them would only be noise.
+var documentLanguage = map[string]bool{
+	"markdown": true, "json": true, "yaml": true, "toml": true, "html": true, "css": true,
+	"ini": true, "xml": true, "text": true, "editorconfig": true, "dockerfile": true,
+	"hcl": true, "terraform": true, "sql": true, "bash": true, "shell": true,
+}
+
+// compilerHint says what would put a compiler behind a language, when
+// something could.
+func compilerHint(lang string) string {
+	switch lang {
+	case "typescript", "tsx", "javascript", "jsx", "python", "java", "kotlin", "scala":
+		return ": run 'repocortex resolve' with the language's indexer installed (see 'repocortex indexers list')"
+	}
+	return ": no compiler indexer is wired for it"
+}
+
+func titleCase(s string) string {
+	if s == "" {
+		return s
+	}
+	return strings.ToUpper(s[:1]) + s[1:]
 }
 
 func humanBytes(n int64) string {

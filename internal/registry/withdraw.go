@@ -17,9 +17,12 @@ type HeuristicCall struct {
 	Language string
 }
 
-// HeuristicCalls lists the CALLS and INSTANTIATES edges that no compiler
-// vouched for, whose evidence is in a file of the given language, in a
-// deterministic order.
+// HeuristicCalls lists the CALLS and INSTANTIATES edges that the built-in
+// checks and indexers may judge, whose evidence is in a file of the given
+// language, in a deterministic order: the ones no compiler vouched for, and
+// those written from an imported scip-go index. The second kind is there so
+// that when the Go type check and a scip-go index disagree about a call the
+// type check, which runs later and judges every call of the file, wins.
 func (r *Registry) HeuristicCalls(ctx context.Context, runID int64, language string) ([]HeuristicCall, error) {
 	rows, err := r.db.QueryContext(ctx, `
 		SELECT e.id, e.dst_id, df.path, d.name, e.evidence_file, e.evidence_line
@@ -27,7 +30,8 @@ func (r *Registry) HeuristicCalls(ctx context.Context, runID int64, language str
 		  JOIN files ef ON ef.index_run_id = e.index_run_id AND ef.path = e.evidence_file
 		  JOIN symbols d ON d.id = e.dst_id
 		  JOIN files df ON df.id = d.file_id
-		 WHERE e.index_run_id = ? AND e.source <> 'compiler'
+		 WHERE e.index_run_id = ?
+		   AND (e.source <> 'compiler' OR e.detail LIKE 'scip: scip-go%')
 		   AND e.kind IN ('CALLS','INSTANTIATES') AND ef.language = ?
 		 ORDER BY e.id`, runID, language)
 	if err != nil {

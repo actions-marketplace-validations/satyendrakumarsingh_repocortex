@@ -189,14 +189,17 @@ type NameBinding struct {
 	Unresolved int64
 	Pending    int64
 
-	// ProvenOther were left unbound by the resolver but sit in Go files the
-	// type checker read, while the definition asked about is in a Go file it
-	// read too. Had one of them been a use of this definition the checker
-	// would have proven it and written an exact edge (measured: every call
-	// pair of three repositories, none missed in a checked file); it did not,
-	// so each is a use of something else, json.Valid beside a Valid method.
-	// They are taken out of Ambiguous, Unresolved and Pending, so an answer
-	// does not tell an agent to search for callers the compiler has ruled out.
+	// ProvenOther were left unbound by the resolver but a compiler has shown
+	// each to be a use of something else, while the definition asked about is
+	// in a file that compiler read. For Go, the type check read the reference's
+	// file: had it been a use of this definition the checker would have proven
+	// it and written an exact edge (measured: every call pair of three
+	// repositories, none missed in a checked file). For a language with a
+	// compiler indexer, the indexer resolved that very position to a symbol
+	// outside this repository (see scipimport.Proof): json.Valid beside a Valid
+	// method. They are taken out of Ambiguous, Unresolved and Pending, so an
+	// answer does not tell an agent to search for callers the compiler has ruled
+	// out.
 	ProvenOther int64
 
 	// Definitions is how many definitions are spelled like the name in files a
@@ -286,8 +289,14 @@ func (r *Registry) NameBinding(ctx context.Context, runID, symbolID int64, name 
 	if err := rows.Err(); err != nil {
 		return b, fmt.Errorf("registry: binding of references named %q: %w", name, err)
 	}
-	if b.Language == "go" && b.Ambiguous+b.Unresolved+b.Pending > 0 {
-		if err := r.settleByGoTypes(ctx, runID, symbolID, name, &b); err != nil {
+	if b.Ambiguous+b.Unresolved+b.Pending > 0 {
+		var err error
+		if b.Language == "go" {
+			err = r.settleByGoTypes(ctx, runID, symbolID, name, &b)
+		} else {
+			err = r.settleByCompilerIndex(ctx, runID, symbolID, name, &b)
+		}
+		if err != nil {
 			return b, err
 		}
 	}
@@ -672,6 +681,63 @@ func (r *Registry) settleByGoTypes(ctx context.Context, runID, symbolID int64, n
 		var n int64
 		if err := rows.Scan(&resolution, &n); err != nil {
 			return fmt.Errorf("registry: references to %q the type check ruled out: scan: %w", name, err)
+		}
+		switch Resolution(resolution) {
+		case ResolutionAmbiguous:
+			n = min(n, b.Ambiguous)
+			b.Ambiguous -= n
+		case ResolutionUnresolved:
+			n = min(n, b.Unresolved)
+			b.Unresolved -= n
+		case ResolutionPending:
+			n = min(n, b.Pending)
+			b.Pending -= n
+		default:
+			continue
+		}
+		b.ProvenOther += n
+	}
+	return rows.Err()
+}
+
+// settleByCompilerIndex moves into ProvenOther the unbound references of a name
+// that a compiler indexer resolved, at their own position, to something outside
+// this repository (they carry resolution_source = ResolutionSourceRuledOut).
+//
+// It does nothing unless the file defining the symbol is one the indexer read:
+// a definition outside its program (excluded by the project's configuration,
+// or one the indexer could not load) could be what a reference means while the
+// indexer, never having seen it, resolved the position to something else. A
+// file counts as read only if it was a document of an index imported from an
+// indexer this tool ran (compiler_coverage), never because it was merely
+// indexed, and never when the indexer skipped it.
+func (r *Registry) settleByCompilerIndex(ctx context.Context, runID, symbolID int64, name string, b *NameBinding) error {
+	var covered bool
+	if err := r.db.QueryRowContext(ctx, `
+		SELECT EXISTS (SELECT 1 FROM symbols t
+		                JOIN compiler_coverage c ON c.file_id = t.file_id AND c.index_run_id = ?
+		               WHERE t.id = ?)`, runID, symbolID).Scan(&covered); err != nil {
+		return fmt.Errorf("registry: was the file of symbol %d read by a compiler indexer: %w", symbolID, err)
+	}
+	if !covered {
+		return nil
+	}
+	rows, err := r.db.QueryContext(ctx, `
+		SELECT sr.resolution, COUNT(*)
+		  FROM symbol_references sr INDEXED BY idx_refs_name_binding
+		 WHERE sr.index_run_id = ? AND sr.name = ?
+		   AND sr.resolution IN ('ambiguous','unresolved','pending')
+		   AND sr.resolution_source = ?
+		 GROUP BY 1`, runID, name, ResolutionSourceRuledOut)
+	if err != nil {
+		return fmt.Errorf("registry: references to %q a compiler indexer ruled out: %w", name, err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var resolution string
+		var n int64
+		if err := rows.Scan(&resolution, &n); err != nil {
+			return fmt.Errorf("registry: references to %q a compiler indexer ruled out: scan: %w", name, err)
 		}
 		switch Resolution(resolution) {
 		case ResolutionAmbiguous:

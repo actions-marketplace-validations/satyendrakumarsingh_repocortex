@@ -48,7 +48,15 @@ for Go, the standard library's own type checker, which resolve runs by default
 (accuracy auto or exact) after the heuristic pass, with no tool to install. It
 checks the host platform's view of the code, raises the heuristic edges it
 confirms to exact, adds the ones the heuristic could not bind, and withdraws
-heuristic call edges it proves false. --accuracy fast skips it.`,
+heuristic call edges it proves false.
+
+For the other languages (accuracy auto or exact), resolve runs the compiler
+indexer already installed for each project, as 'repocortex indexers list'
+shows it: scip-typescript, scip-python, and scip-java where the plan allows
+it. It installs nothing and runs nothing the plan marks blocked. Each index is
+written under .repocortex/scip/ and imported; one whose inputs have not changed
+since it was written is imported again without being re-run. --accuracy fast
+skips all of it.`,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			ctx := cmd.Context()
 			cfg := g.Config()
@@ -145,8 +153,17 @@ heuristic call edges it proves false. --accuracy fast skips it.`,
 				mode = config.AccuracyMode(accuracy)
 			}
 			var goOut pipeline.GoTypesOutcome
+			var ciOut pipeline.CompilerIndexOutcome
 			if mode != config.AccuracyFast {
 				goOut = pipeline.CheckGoTypes(ctx, reg, run.ID, pipeline.GoTypesOptions{Root: cfg.RepoRoot})
+				// The same for every other language that has a compiler
+				// indexer installed: run it, or reuse its last index when
+				// nothing it reads has changed, and import what it left.
+				ciCfg := cfg
+				ciCfg.Accuracy = mode
+				ciOut = pipeline.RunCompilerIndexers(ctx, reg, run.ID, pipeline.CompilerIndexOptions{
+					Root: cfg.RepoRoot, Config: ciCfg, Logger: g.Log(),
+				})
 			}
 
 			// Counted from the table, after every pass above has written to
@@ -210,9 +227,10 @@ heuristic call edges it proves false. --accuracy fast skips it.`,
 						"endpoints": infra.Endpoints, "bound": infra.Bound,
 						"ambiguous": infra.Ambiguous, "edges": infra.Edges,
 					},
-					"scip":        scipOut.json(),
-					"go_types":    goTypesJSON(mode, goOut),
-					"duration_ms": time.Since(start).Milliseconds(),
+					"scip":              scipOut.json(),
+					"go_types":          goTypesJSON(mode, goOut),
+					"compiler_indexers": compilerIndexersJSON(mode, ciOut),
+					"duration_ms":       time.Since(start).Milliseconds(),
 				})
 			}
 			out := cmd.OutOrStdout()
@@ -354,6 +372,7 @@ heuristic call edges it proves false. --accuracy fast skips it.`,
 			}
 			scipOut.render(out)
 			renderGoTypes(out, mode, goOut)
+			renderCompilerIndexers(out, mode, ciOut)
 			fmt.Fprintf(out, "  Duration:    %dms\n", time.Since(start).Milliseconds())
 			return nil
 		},

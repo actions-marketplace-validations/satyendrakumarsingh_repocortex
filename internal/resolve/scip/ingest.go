@@ -79,6 +79,11 @@ type Options struct {
 	// match" into a diagnosable report, but keeping all of them on a
 	// wholly-mismatched index would be its own memory problem.
 	MaxUnmatchedSamples int
+
+	// KeepSites makes every FileFacts carry its reference occurrences (Sites)
+	// and the packages its definitions belong to. Off by default: an import
+	// that only writes edges has no use for them and they cost memory.
+	KeepSites bool
 }
 
 // Stats is the report of one ingest.
@@ -310,6 +315,8 @@ type ingestRun struct {
 	sawMetadata bool
 	sawDocument bool
 	emitting    bool
+
+	infoCache map[string]symbolInfo
 }
 
 func (run *ingestRun) visitMetadata(_ context.Context, m *scippb.Metadata) error {
@@ -361,6 +368,51 @@ func (run *ingestRun) visitDocument(ctx context.Context, d *scippb.Document) err
 	err := run.emit(ctx, facts)
 	run.emitting = false
 	return err
+}
+
+// symbolInfo is what a symbol string says about its spelling and its package.
+type symbolInfo struct {
+	name string
+	pkg  string
+}
+
+// maxSymbolInfoCache bounds the per-run memo of parsed symbol strings. The
+// same few thousand symbols are referenced hundreds of thousands of times, so
+// a memo turns a parse per occurrence into a map read; the bound keeps a
+// hostile index of distinct symbols from growing it without limit.
+const maxSymbolInfoCache = 1 << 18
+
+// symbolInfo parses sym once and remembers the answer. A symbol that does not
+// parse has no name and no package, which a caller reads as "unknown".
+func (run *ingestRun) symbolInfo(sym string) symbolInfo {
+	if info, ok := run.infoCache[sym]; ok {
+		return info
+	}
+	var info symbolInfo
+	if !scippb.IsLocalSymbol(sym) {
+		if parsed, err := scippb.ParseSymbol(sym); err == nil {
+			if p := parsed.GetPackage(); p != nil {
+				info.pkg = p.GetManager() + " " + p.GetName()
+			}
+			if ds := parsed.GetDescriptors(); len(ds) > 0 {
+				info.name = ds[len(ds)-1].GetName()
+			}
+		}
+	}
+	if run.infoCache == nil || len(run.infoCache) >= maxSymbolInfoCache {
+		run.infoCache = make(map[string]symbolInfo, 1024)
+	}
+	run.infoCache[sym] = info
+	return info
+}
+
+func hasString(xs []string, s string) bool {
+	for _, x := range xs {
+		if x == s {
+			return true
+		}
+	}
+	return false
 }
 
 // definition is a symbol defined in the document being converted.
@@ -449,6 +501,11 @@ func (run *ingestRun) convert(d *scippb.Document, repoPath string) *FileFacts {
 		}
 		defs[sym] = def
 		next--
+		if run.opts.KeepSites {
+			if info := run.symbolInfo(sym); info.pkg != "" && !hasString(facts.Packages, info.pkg) {
+				facts.Packages = append(facts.Packages, info.pkg)
+			}
+		}
 
 		facts.Symbols = append(facts.Symbols, symbolFor(sym, fqn, def.placeholder, rng, symtab[sym]))
 		run.st.Symbols++
@@ -477,6 +534,14 @@ func (run *ingestRun) convert(d *scippb.Document, repoPath string) *FileFacts {
 		if src == "" {
 			src = repoPath
 			run.st.FileAnchored++
+		}
+		if run.opts.KeepSites {
+			info := run.symbolInfo(sym)
+			facts.Sites = append(facts.Sites, Site{
+				Line: int(rng.Start.Line) + 1, Name: info.name,
+				DstFQN: qualifyFQN(repoPath, sym), Package: info.pkg,
+				Local: scippb.IsLocalSymbol(sym),
+			})
 		}
 		facts.Relations = append(facts.Relations, Relation{
 			SrcFQN: src,

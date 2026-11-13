@@ -132,6 +132,31 @@ type FileFacts struct {
 	// a symbol in Symbols; their DstFQN may live anywhere in the repository, or
 	// outside it entirely (a dependency's symbol).
 	Relations []Relation
+
+	// Sites are the document's reference occurrences, one per occurrence, with
+	// the name the symbol is spelled as and the package it belongs to. Filled
+	// only when Options.KeepSites is set: they are what lets a caller say that
+	// the compiler resolved a position to something outside the repository.
+	Sites []Site
+
+	// Packages are the packages ("manager name") that own a definition in this
+	// document, only when Options.KeepSites is set.
+	Packages []string
+}
+
+// Site is one reference occurrence the indexer resolved to a symbol.
+type Site struct {
+	// Line is 1-indexed, as model.Range is.
+	Line int
+	// Name is the last descriptor of the symbol: `get` for a method
+	// `Context#get().`. Empty for a local symbol, which is named by a number.
+	Name string
+	// DstFQN is the symbol as Relation.DstFQN spells it.
+	DstFQN string
+	// Package is "manager name" of the symbol's package, empty for a local.
+	Package string
+	// Local is true for a document-scoped symbol (a variable, a parameter).
+	Local bool
 }
 
 // LocalIDs maps the FQN of every symbol defined in this file to its current id,

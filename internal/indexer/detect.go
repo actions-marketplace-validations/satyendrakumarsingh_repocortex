@@ -311,3 +311,7 @@ func slugFor(p Project) string {
 	}
 	return s
 }
+
+// OutputSlug is the file name stem under which an indexer's .scip output for p
+// is written, so a caller that keeps the output can find it again.
+func OutputSlug(p Project) string { return slugFor(p) }

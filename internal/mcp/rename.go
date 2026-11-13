@@ -310,7 +310,7 @@ func bindingNote(b capability.TargetBinding, listed int) string {
 			parts = append(parts, fmt.Sprintf("%d bound to other definitions of the name", b.BoundElsewhere))
 		}
 		if b.ProvenOther > 0 {
-			parts = append(parts, fmt.Sprintf("%d shown by the Go type check to be uses of something else", b.ProvenOther))
+			parts = append(parts, fmt.Sprintf("%d shown by the compiler to be uses of something else", b.ProvenOther))
 		}
 		if b.Ambiguous > 0 {
 			parts = append(parts, fmt.Sprintf("%d ambiguous", b.Ambiguous))
