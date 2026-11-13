@@ -93,6 +93,10 @@ type CompilerIndexOutcome struct {
 	Proof scipimport.ProofStats
 	// Withdrawn is the heuristic call edges the compilers proved false.
 	Withdrawn int
+
+	// Rebound is the references moved from a withdrawn edge's target to the
+	// one definition the compiler proved on that line.
+	Rebound int
 	// Folded is how many nested Python projects were not run on their own: the
 	// index of the project above them already reads every file beneath it.
 	Folded int
@@ -300,6 +304,11 @@ func RunCompilerIndexers(ctx context.Context, reg *registry.Registry, runID int6
 		out.Proof, out.Withdrawn = st, withdrawn
 		if err != nil {
 			out.Err = err
+		} else if w, rb, cerr := reg.WithdrawContradictedCalls(ctx, runID); cerr != nil {
+			out.Err = cerr
+		} else {
+			out.Withdrawn += w
+			out.Rebound = rb
 		}
 	}
 	return out
