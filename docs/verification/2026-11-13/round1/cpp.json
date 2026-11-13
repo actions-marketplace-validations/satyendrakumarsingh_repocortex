@@ -1,0 +1,155 @@
+{
+  "language": "cpp",
+  "project": "google/benchmark",
+  "project_commit": "cf4d7fedd59473f99042806fcba407ea767c5327",
+  "repocortex_commit": "53246ac",
+  "files_checked": [
+    "src/benchmark.cc (1002 lines)",
+    "src/sysinfo.cc (910)",
+    "src/benchmark_runner.cc (592)",
+    "src/benchmark_register.cc (559)",
+    "src/json_reporter.cc (377)"
+  ],
+  "index": {
+    "files": 224,
+    "indexed_files": 207,
+    "cpp_files": 119,
+    "cpp_files_partial": 35,
+    "symbols": 1966,
+    "cpp_symbols": 989,
+    "edges_by_kind_and_tier": {
+      "all_callers": {"high": 603, "medium": 203, "low": 254},
+      "cpp_callers_only": {"CALLS/high": 447, "CALLS/medium": 203, "CALLS/low": 239, "INSTANTIATES/high": 9, "INSTANTIATES/low": 2, "EXTENDS/high": 3, "EXTENDS/low": 12, "IMPLEMENTS": 0}
+    },
+    "parse_summary": {
+      "Parsed": "207 (172 clean, 32 with syntax errors, 3 incomplete)",
+      "Syntax errors": 32,
+      "Incomplete": "3 (src/benchmark.cc stopped at line 959 on its iteration limit; src/re.h stopped at line 111 on its iteration limit; test/benchmark_test.cc stopped at line 319 on the 1m0s wall-clock ceiling)",
+      "Failed": 0,
+      "Too large": 0,
+      "Text only": 1,
+      "Skipped": "16 (no_grammar 12, binary 4)"
+    },
+    "macro_tokens_masked_files": 10,
+    "macro_tokens_masked_detail": "include/benchmark/counter.h (2), include/benchmark/benchmark_api.h (27), include/benchmark/utils.h (17), src/check.h (3), src/string_util.h (5), src/thread_manager.h (1), src/string_util.cc (1), test/output_test_helper.cc (2), test/perf_counters_gtest.cc (1), src/sysinfo.cc (6); all ten are still status 'partial' after masking. Index health shown as DEGRADED.",
+    "index_seconds": 60.94,
+    "resolve_seconds": 0.22,
+    "resolve_summary": "References 4757; resolved 1546 (86.9% of the 1780 that name something indexed); ambiguous 234; unresolved 2977; 25 resolved calls are INSTANTIATES; edges 1060"
+  },
+  "definitions": {
+    "expected": 167,
+    "correct": 135,
+    "missed": 32,
+    "spurious": 1,
+    "line_on_attribute": 0,
+    "per_file": {
+      "benchmark.cc": {"expected": 44, "correct": 34, "missed": 10, "spurious": 1},
+      "sysinfo.cc": {"expected": 39, "correct": 20, "missed": 19, "spurious": 0},
+      "benchmark_runner.cc": {"expected": 20, "correct": 20, "missed": 0, "spurious": 0},
+      "benchmark_register.cc": {"expected": 51, "correct": 48, "missed": 3, "spurious": 0},
+      "json_reporter.cc": {"expected": 13, "correct": 13, "missed": 0, "spurious": 0}
+    },
+    "examples": {
+      "missed": [
+        "src/benchmark.cc:174 BENCHMARK_EXPORT std::map<...>*& GetGlobalContext() and :184 UseCharPointer: both functions in namespace internal are missing; also :241 State::PauseTimingImpl, :512 CreateReporter, :537 GetOutputOptions, :691 AddCustomContext",
+        "src/benchmark.cc:941 PrintDefaultHelp, :966 Initialize, :992 Shutdown, :994 ReportUnrecognizedArguments: lost after the parser stopped at line 959 (iteration limit, status partial/budget_exceeded); 4 definitions after the stop line are missing as announced",
+        "src/sysinfo.cc:277-908: after CountSetBitsInCPUMap (:258) only GetSystemName (:457) and GetASLR (:510) are extracted; GetCacheSizesFromKVFS (:278, behind a BENCHMARK_MAYBE_UNUSED line), GetCacheSizes* (:323,:350,:405,:442), GetNumCPUsImpl (:521), GetNumCPUs (:567), class ThreadAffinityGuard (:577) with ctor/dtor/SetAffinity, GetCPUCyclesPerSecond (:663), GetLoadAvg (:871), CPUInfo::Get/CPUInfo (:895,:900), SystemInfo::Get/SystemInfo (:906,:910) are all missing - definitions after #if/#elif blocks that cut through functions",
+        "src/benchmark_register.cc:106 BenchmarkFamilies::AddBenchmark, :120 BenchmarkFamilies::FindBenchmarks (the core search function), :200 RegisterBenchmarkInternal",
+        "src/sysinfo.cc:116 union DataT and :137 explicit operator bool in ValueUnion"
+      ],
+      "spurious": [
+        "src/benchmark.cc:514 class PtrType: a function-local typedef recorded as a class (CreateReporter itself is missed)"
+      ],
+      "notes": [
+        "Rule from fixtures/langs/cpp/expected.tsv: classes/structs with a body, enums, functions, out-of-line members as methods owned by their class; forward declarations, declarations without a body, out-of-line destructors and using aliases are not listed. I treated ~Benchmark (out-of-line destructor) as not expected; I counted in-class constructors/destructors/operators and code inside #ifdef blocks as expected.",
+        "Out-of-line methods are handled correctly: Benchmark::Name -> method Name owned by Benchmark, State::SkipWithError -> State.SkipWithError, BenchmarkRunner::DoOneRepetition -> method owned by BenchmarkRunner. In src/sysinfo.cc `SystemInfo::ASLR GetASLR()` is recorded as kind 'method' with an unqualified fqn.",
+        "Forward declarations (`class BenchmarkReporter;`, `class ThreadTimer;` in types.h/state.h) are correctly NOT recorded as definitions.",
+        "Repo-wide header check (include/ and src/*.h, outside the five measured files): 14 of about 52 class/struct definitions are missing, including `class BENCHMARK_EXPORT Counter` (counter.h:31), `class BENCHMARK_EXPORT BenchmarkReporter` (reporter.h:56), `ConsoleReporter` (:161), `JSONReporter` (:186), `struct BENCHMARK_EXPORT BenchmarkName` and `Run`, `class CAPABILITY(\"mutex\") Mutex` and `class SCOPED_CAPABILITY MutexLock` (mutex.h:90,102), `Barrier`, `PerfCounterValues`, `PerfCounters`, `PerfCountersMeasurement` (perf_counters.h), `ThreadManager` (thread_manager.h:14), `State::StateIterator`. The same export macro works in other headers (Benchmark, FunctionBenchmark, CPUInfo, State are found), so loss follows files with syntax errors."
+      ]
+    }
+  },
+  "call_precision": {
+    "high": {"right": 22, "wrong": 5, "unclear": 3, "judged": 30, "examples": [
+      "src/json_reporter.cc:105 FormatKV(key, static_cast<int64_t>(value)) -> json_reporter.cc:81 FormatKV(string,string): the int64_t overload at :96 is the callee (also :178 FormatKV(\"level\", int64_t) and :317 FormatKV(\"time_unit\", const char*) bound to :81)",
+      "src/colorprint.cc:127 ColorPrintf(out, color, fmt, args) -> colorprint.cc:124 itself (variadic): the va_list overload at :131 is the callee",
+      "src/complexity.cc:211 MinimalLeastSq(n, real_time, *InitialBigO) -> complexity.cc:90 (BigOFunc* overload): the const BigO overload at :136 is the callee",
+      "test/commandlineflags_gtest.cc:45, :137, :109 setenv/unsetenv(...) -> test/commandlineflags_gtest.cc:12/:23: the local definitions exist only under #if defined(BENCHMARK_OS_WINDOWS), elsewhere libc is called (counted unclear x3)"
+    ]},
+    "medium": {"right": 30, "wrong": 0, "unclear": 0, "judged": 30, "examples": []},
+    "low": {"right": 28, "wrong": 2, "unclear": 0, "judged": 30, "examples": [
+      "test/skip_with_error_test.cc:220 EB->CheckRun(run) -> test/register_benchmark_test.cc:34 TestCase.CheckRun: skip_with_error_test.cc defines its own TestCase::CheckRun at :39",
+      "src/benchmark.cc:328 profiler_manager_->BeforeTeardownStopWithState(*this) -> test/profiler_manager_state_test.cc:21 StateProfilerManager override: library code bound to a test subclass instead of ProfilerManager in managers.h"
+    ]}
+  },
+  "call_recall": {
+    "sites": 40,
+    "right": 23,
+    "wrong": 1,
+    "none": 16,
+    "none_breakdown": {
+      "reference extracted and resolved but no edge (caller definition missed)": 3,
+      "reference extracted, ambiguous": 3,
+      "reference extracted, unresolved": 4,
+      "not extracted (declaration-style construction `MutexLock l(mutex_);`, `BenchmarkInstance instance(...)`, `ValueUnion buff(n);`)": 6
+    },
+    "examples": [
+      "benchmark_runner.cc:94-113 BenchmarkInstance accessors (name, family_index, per_family_instance_index, time_unit, threads, use_manual_time x2, complexity): 8/8 right; json_reporter.cc:82-92 StrFormat/StrEscape: 8/8 right",
+      "benchmark_register.cc:108-180 (all inside AddBenchmark/ClearBenchmarks/FindBenchmarks): 0/8: MutexLock l(...) x3 and BenchmarkInstance instance(...) not extracted; family->ArgsCnt() and ->Args({}) resolved but no edge because FindBenchmarks is not a symbol; re.Init unresolved; instance.name() ambiguous",
+      "benchmark.cc:223 perf_counters_measurement_->names() unresolved; :243 timer_->StopTimer() resolved but no edge because State::PauseTimingImpl is missed; :246/:262 perf_counters_measurement_->Stop()/Start() ambiguous",
+      "sysinfo.cc:106 PrintImp(std::cerr, std::forward<Args>(args)...) -> PrintImp(std::ostream&) at :96 (zero-argument overload) instead of the variadic template at :99 (counted wrong); :101 the recursive pack call bound to :96 counted right as the terminal case; :167 `ValueUnion buff(sizeof(int))` not extracted, :175 buff.data() unresolved"
+    ]
+  },
+  "hierarchy": {
+    "edges_total": 15,
+    "by_kind_tier": {"EXTENDS/high": 3, "EXTENDS/low": 12, "IMPLEMENTS": 0},
+    "judged": 15,
+    "right": 15,
+    "wrong": 0,
+    "unclear": 0,
+    "relationships_in_checked_files_with_repo_target": 1,
+    "relationships_with_correct_edge": 1,
+    "examples": [
+      "Only 15 hierarchy edges exist so all were judged; all point at the declared base. `class BENCHMARK_EXPORT FunctionBenchmark : public benchmark::Benchmark` is handled.",
+      "Repo-wide misses: ConsoleReporter and JSONReporter (reporter.h:161, :186) extend BenchmarkReporter but have no edge because both classes (and BenchmarkReporter itself) are not extracted; about 15 test classes deriving from BenchmarkReporter/ConsoleReporter (e.g. test/filter_test.cc:18, test/skip_with_error_test.cc:15) have no edge",
+      "In the five measured files the only relationship with a repository target is ThreadRunnerDefault : ThreadRunnerBase (benchmark_runner.cc:205), recorded at low confidence"
+    ]
+  },
+  "answers": [
+    {
+      "command": "repocortex --project . tool call find_callers name=FormatKV",
+      "first_lines": "=== SYSTEM METADATA ===\nAMBIGUOUS — \"FormatKV\" names 6 definitions and find_callers answered for none of them. Pass the path and line of one row below.\nindex_revision: 1  status: degraded\noutcome: ambiguous_name\nnote: Each row is one definition. Repeat the call with the row's path and line, for example: find_callers name=FormatKV path=src/json_reporter.cc line=81\nnote: A qualified name does not select one: it is the file and the identifier, so overloads and same-named methods in one file share it. The path and line always do.",
+      "true_of_the_code": true,
+      "comment": "There are 6 FormatKV overloads in json_reporter.cc. Refusing to merge them is honest, but the answer gives no caller count; the edges themselves bind most overloaded calls to the first overload (see precision findings)."
+    },
+    {
+      "command": "repocortex --project . tool call analyze_impact symbol=IsZero",
+      "first_lines": "=== SYSTEM METADATA ===\nIsZero (src/benchmark.cc:533): 0 direct, 0 indirect. Risk low (score 20).\nindex_revision: 1  status: degraded\nnote: Risk = score = sum(factors), clamped to 0..100; ...\nnote:   public_api (+0): Whether the target is exported is UNKNOWN. The index does not read the visibility rules of C++ ...\nnote:   direct_callers (+0): 0 symbol(s) reference the target directly (depth 1). ...",
+      "true_of_the_code": false,
+      "comment": "IsZero has 5 call sites (benchmark_runner.cc:181, benchmark_register.cc:394 and :395 inside BM_CHECK, benchmark_api_internal.cc:53 and :57); find_callers on the same symbol lists 3 callers. The first line says 0 direct. The disclosure comes only after the sixth line: 3 symbols are excluded as below the confidence floor, certainty is low, and the result is a lower bound."
+    },
+    {
+      "command": "repocortex --project . tool call find_implementations name=BenchmarkReporter",
+      "first_lines": "=== SYSTEM METADATA ===\nBenchmarkReporter (src/reporter.cc:33): 0 implementing or extending it, 0 it implements or extends.\nindex_revision: 1  status: degraded\nnote: A type relationship is recorded only where the source states it (extends, implements, an embedded type) or a compiler index proved it. Structural typing ... Treat an empty list as 'none declared', not 'none exist'.\nprovenance: This compares commits only. ...",
+      "true_of_the_code": false,
+      "comment": "The answer resolved the name to the method BenchmarkReporter::BenchmarkReporter in src/reporter.cc:33 because the class (reporter.h:56) is not indexed. ConsoleReporter, JSONReporter and about 15 test classes derive from it in the source. The answer says 0 and does not warn that the class definition is missing."
+    }
+  ],
+  "findings": [
+    "Indexing took 60.9 s on a 224-file repository; src/benchmark.cc (35 KB) hit its iteration limit at line 959 and test/benchmark_test.cc hit the 1-minute wall-clock ceiling at line 319. The status line says the result can differ between runs and the index health is DEGRADED. src/re.h (4 KB) was also stopped at line 111.",
+    "Definitions are lost silently across #if/#ifdef blocks that cut through functions: in src/sysinfo.cc 19 of 39 definitions are missing (every definition from line 277 to 908 except two, including class ThreadAffinityGuard, GetNumCPUs and CPUInfo::Get). Only a generic 'partial' flag marks the file.",
+    "Core classes behind export/attribute macros are missing from headers: BenchmarkReporter, ConsoleReporter, JSONReporter, Counter, BenchmarkName, Run, Mutex, MutexLock, PerfCounters, PerfCountersMeasurement, ThreadManager (14 of about 52 class definitions in headers). The export-macro mask applies and headers are 'partial'; other export-macro classes in healthy files are found.",
+    "find_implementations for BenchmarkReporter returns '0 implementing' without warning; the real code has ConsoleReporter, JSONReporter, CSVReporter and about 15 test subclasses. analyze_impact for IsZero says '0 direct' on its first line while the index holds 3 low-confidence callers and the source has 5 call sites.",
+    "Overloads are not told apart: FormatKV (6 overloads) calls bind to the string overload at json_reporter.cc:81 (3 of 30 high edges), ColorPrintf and MinimalLeastSq calls bind to the wrong overload (2 more); PrintImp variadic calls bind to the zero-argument overload.",
+    "Test and registration macros are recorded as functions: 99 symbols (TEST x86, TEST_F x11, TEST_P x2) and used as callers of the code they exercise; no symbol named BENCHMARK exists.",
+    "Object construction by declaration (`MutexLock l(mutex_);`, `BenchmarkInstance instance(...)`, `ValueUnion buff(n);`) is not extracted as a reference, so no edge to the class is made (6 of 40 recall sites).",
+    "Calls on members whose receiver type is a pointer field are often unresolved or ambiguous (perf_counters_measurement_->names(), ->Stop(), ->Start(), manager_->GetBenchmarkMutex(), instance.name()).",
+    "Library or per-platform names are bound to repository definitions: test/skip_with_error_test.cc's own TestCase::CheckRun bound to another test file's TestCase; setenv/unsetenv bound to Windows-only wrappers; a library call to profiler_manager_->BeforeTeardownStopWithState bound to a test subclass.",
+    "Function-local typedefs are recorded as classes (benchmark.cc PtrType, complexity.cc Run) and in-function typedefs/enums appear with class kind.",
+    "State.h/state.h parsed cleanly and out-of-line members are handled right (Benchmark::X, State::X, BenchmarkRunner::X are methods owned by their class); forward declarations are not recorded as definitions; benchmark_runner.cc (ok parse) was fully extracted 20/20 and its 8 recall sites were all right; hierarchy edges (15) were all right; medium-tier precision 30/30."
+  ],
+  "not_done": [
+    "Only 15 hierarchy edges exist in C++ so 20 could not be drawn; all 15 were judged.",
+    "Call recall counted only calls and declaration-style constructions whose target is defined in the repository; macro invocations such as BM_CHECK were not counted as sites.",
+    "The test directory was not measured for definitions; the TEST/TEST_F counts are repository-wide counts from the symbols table."
+  ]
+}

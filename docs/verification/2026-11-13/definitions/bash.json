@@ -1,0 +1,68 @@
+{
+ "language": "bash",
+ "project": "Bash-it/bash-it (completion/available/docker-compose.completion.bash, themes/base.theme.bash, plugins/available/pack.plugin.bash)",
+ "project_commit": "72ea9e2",
+ "repocortex_commit": "f783fa5",
+ "files": [
+  {
+   "path": "completion/available/docker-compose.completion.bash",
+   "lines": 670,
+   "assigned_language": "bash",
+   "parse_status": "ok",
+   "parse_error": "",
+   "expected": 38,
+   "correct": 38,
+   "missed": 0,
+   "missed_known_gap": 0,
+   "spurious": 0,
+   "line_on_attribute": 0
+  },
+  {
+   "path": "themes/base.theme.bash",
+   "lines": 660,
+   "assigned_language": "bash",
+   "parse_status": "ok",
+   "parse_error": "",
+   "expected": 101,
+   "correct": 101,
+   "spurious": 1,
+   "missed": 0,
+   "missed_known_gap": 0,
+   "line_on_attribute": 0
+  },
+  {
+   "path": "plugins/available/pack.plugin.bash",
+   "lines": 611,
+   "assigned_language": "bash",
+   "parse_status": "ok",
+   "parse_error": "",
+   "expected": 22,
+   "correct": 22,
+   "missed": 0,
+   "missed_known_gap": 0,
+   "spurious": 0,
+   "line_on_attribute": 0
+  }
+ ],
+ "totals": {
+  "expected": 161,
+  "correct": 161,
+  "missed": 0,
+  "missed_known_gap": 0,
+  "spurious": 1,
+  "line_on_attribute": 0
+ },
+ "examples": [
+  "base.theme.bash:119 _bash_it_library_finalize_hook+=('_bash_it_appearance_scm_init') (spurious: an append to an array, not one of the stated assignment forms)"
+ ],
+ "rule_objections": [
+  "Top-level NAME+=value is not addressed by the rule; the tool records it as a variable, which duplicates the definition made elsewhere."
+ ],
+ "findings": [
+  "161 of 161 expected definitions extracted with correct kind and line; one spurious variable for a top-level array append (NAME+=(...)), which the stated rule does not list.",
+  "All three .bash files were assigned the bash grammar by extension."
+ ],
+ "not_done": [
+  "Expected set derived by a script that tracks function bodies by column-0 closing braces and lists column-0 assignments, function spellings and aliases; I did not read every line (the files contain no aliases or multi-assignment lines per grep)."
+ ]
+}

@@ -1,0 +1,75 @@
+{
+ "language": "css",
+ "project": "pure-css/pure",
+ "project_commit": "24084b968af9632693e6cf2b4f8c4eb0138c3b0d",
+ "repocortex_commit": "f783fa5",
+ "files": [
+  {
+   "path": "site/static/css/main.css",
+   "lines": 631,
+   "assigned_language": "css",
+   "parse_status": "partial",
+   "parse_error": "syntax_errors: 2 error nodes and 0 missing tokens, first at line 15; definitions",
+   "expected": 21,
+   "correct": 21,
+   "missed": 0,
+   "missed_known_gap": 0,
+   "spurious": 0,
+   "line_on_attribute": 0,
+   "total_symbols": 21
+  },
+  {
+   "path": "src/forms/css/forms.css",
+   "lines": 340,
+   "assigned_language": "css",
+   "parse_status": "ok",
+   "parse_error": "",
+   "expected": 2,
+   "correct": 2,
+   "missed": 0,
+   "missed_known_gap": 0,
+   "spurious": 0,
+   "line_on_attribute": 0,
+   "total_symbols": 2
+  },
+  {
+   "path": "site/src/pages/styles.css",
+   "lines": 296,
+   "assigned_language": "css",
+   "parse_status": "ok",
+   "parse_error": "",
+   "expected": 27,
+   "correct": 27,
+   "missed": 0,
+   "missed_known_gap": 0,
+   "spurious": 0,
+   "line_on_attribute": 0,
+   "total_symbols": 27
+  }
+ ],
+ "totals": {
+  "expected": 50,
+  "correct": 50,
+  "missed": 0,
+  "missed_known_gap": 0,
+  "spurious": 0,
+  "line_on_attribute": 0
+ },
+ "examples": {
+  "missed": [],
+  "spurious": []
+ },
+ "rule_objections": [
+  "Rule is very narrow: forms.css (340 lines, the heart of Pure's form styling) yields only 2 symbols because every other selector is compound, listed or pseudo (.pure-form input[type=...], .pure-form fieldset ...). A developer greping for `.pure-form` styling gets nothing from the symbol table. Bare .class rule sets that appear only inside @media are also invisible.",
+  "Expected counts were derived with my own brace-depth scanner (top-level rule sets whose whole selector is one bare .class/#id, custom properties, at-rule names), cross-checked file+line+name against the symbol table: identical sets."
+ ],
+ "findings": [
+  "No misses and no spurious symbols against the stated rule: 50 expected, 50 extracted, same file, line and name; ids are named without '#'.",
+  "main.css is flagged parse_status=partial (2 error nodes, first at line 15, caused by the attribute selector `[class *= \"pure-u\"]` with spaces) but lost no definition.",
+  "No flood: total symbols per file equal the definitions (21 / 2 / 27).",
+  "Text search still works: `search pixel` finds main.css; `search Helvetica` finds main.css and styles.css."
+ ],
+ "not_done": [
+  "No custom properties, @keyframes, @property, @layer or @font-face occur in these three files, so those forms were not exercised."
+ ]
+}

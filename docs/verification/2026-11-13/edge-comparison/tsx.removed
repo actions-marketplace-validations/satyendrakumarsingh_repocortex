@@ -1,0 +1,7 @@
+CALLS|high|src/components/AreaChart/AreaChart.tsx|653|src/components/AreaChart/AreaChart.tsx:AreaChart
+CALLS|high|src/components/AreaChart/AreaChart.tsx|796|src/components/AreaChart/AreaChart.tsx:Legend
+CALLS|high|src/components/BarChart/BarChart.tsx|657|src/components/BarChart/BarChart.tsx:BarChart
+CALLS|high|src/components/BarChart/BarChart.tsx|834|src/components/BarChart/BarChart.tsx:Legend
+CALLS|high|src/components/ComboChart/ComboChart.tsx|984|src/components/ComboChart/ComboChart.tsx:Legend
+CALLS|high|src/components/LineChart/LineChart.tsx|608|src/components/LineChart/LineChart.tsx:LineChart
+CALLS|high|src/components/LineChart/LineChart.tsx|748|src/components/LineChart/LineChart.tsx:Legend

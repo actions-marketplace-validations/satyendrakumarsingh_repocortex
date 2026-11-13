@@ -1,0 +1,151 @@
+{
+  "language": "kotlin",
+  "project": "square/moshi",
+  "project_commit": "889013ec2edb8d8034902662a1dc8c4f3b3f8111",
+  "repocortex_commit": "53246ac",
+  "files_checked": [
+    "moshi/src/main/java/com/squareup/moshi/-JsonUtf8Reader.kt (1271 lines)",
+    "moshi-kotlin-codegen/src/main/java/com/squareup/moshi/kotlin/codegen/api/AdapterGenerator.kt (885)",
+    "moshi/src/main/java/com/squareup/moshi/internal/LinkedHashTreeMap.kt (772)",
+    "moshi/src/main/java/com/squareup/moshi/internal/Util.kt (717)",
+    "moshi/src/main/java/com/squareup/moshi/JsonReader.kt (647)"
+  ],
+  "index": {
+    "files": 183,
+    "kotlin_files": 99,
+    "kotlin_symbols": 1245,
+    "symbols_all_languages": 2783,
+    "edges_by_kind_and_tier": {
+      "CALLS/high": 3377, "CALLS/medium": 452, "CALLS/low": 1136,
+      "INSTANTIATES/high": 614, "INSTANTIATES/medium": 38, "INSTANTIATES/low": 37,
+      "EXTENDS/high": 45, "EXTENDS/low": 9, "IMPLEMENTS/high": 24, "IMPLEMENTS/low": 4,
+      "note": "all languages (Java+Kotlin). Edges whose caller is in a .kt file: CALLS high 598 medium 413 low 159; INSTANTIATES high 187 low 37; EXTENDS high 36 low 7; IMPLEMENTS high 17"
+    },
+    "parse_summary": {"Parsed": "168 (165 clean, 3 with syntax errors)", "Syntax errors": 3, "Incomplete": 0, "Failed": 0, "Too large": 0, "Text only": 9, "Skipped": "6 (no_grammar 5, binary 1)"},
+    "index_seconds": 1.72,
+    "resolve_seconds": 0.58,
+    "resolve_summary": "References 14921; resolved 5829 (84.2% of the 6923 that name something indexed); ambiguous 1094 (249 over the candidate cap); unresolved 7998; 699 resolved calls are INSTANTIATES; edges 5736"
+  },
+  "definitions": {
+    "expected": 210,
+    "correct": 201,
+    "missed": 9,
+    "spurious": 3,
+    "line_on_attribute": 15,
+    "per_file": {
+      "-JsonUtf8Reader.kt": {"expected": 41, "correct": 41, "missed": 0, "spurious": 0, "line_on_attribute": 1},
+      "AdapterGenerator.kt": {"expected": 25, "correct": 22, "missed": 3, "spurious": 1, "line_on_attribute": 2},
+      "LinkedHashTreeMap.kt": {"expected": 51, "correct": 50, "missed": 1, "spurious": 2, "line_on_attribute": 0},
+      "Util.kt": {"expected": 51, "correct": 46, "missed": 5, "spurious": 0, "line_on_attribute": 6},
+      "JsonReader.kt": {"expected": 42, "correct": 42, "missed": 0, "spurious": 0, "line_on_attribute": 6}
+    },
+    "examples": {
+      "missed": [
+        "AdapterGenerator.kt:49 const val MOSHI_UTIL_PACKAGE (also :50 TO_STRING_PREFIX, :51 TO_STRING_SIZE_BASE) - top-level constants not extracted",
+        "LinkedHashTreeMap.kt:8 private val NATURAL_ORDER - top-level val not extracted",
+        "Util.kt:45 NO_ANNOTATIONS, :47 EMPTY_TYPE_ARRAY, :50 METADATA, :60 DEFAULT_CONSTRUCTOR_MARKER, :68 PRIMITIVE_TO_WRAPPER_TYPE - top-level vals not extracted"
+      ],
+      "spurious": [
+        "AdapterGenerator.kt:263 generateType.<locals>.renderTypeVariable - method of an anonymous object literal inside a function",
+        "LinkedHashTreeMap.kt:506 EntrySet.iterator.<locals>.next - method of an anonymous object",
+        "LinkedHashTreeMap.kt:541 KeySet.iterator.<locals>.next - method of an anonymous object"
+      ],
+      "notes": [
+        "Counting rule: fields/properties are not expected (fixtures/langs/kotlin/expected.tsv lists classes, interfaces, enums, aliases, objects, functions and methods; enum entries as functions). I counted enum entries (10 in JsonReader.Token) as expected, and top-level const/val declarations with initialisers as expected (9 in total: 3+1+5); companion-object consts in -JsonUtf8Reader (about 34) and computed top-level extension properties (7 in Util.kt) were NOT counted either way.",
+        "In -JsonUtf8Reader.kt the class is named with backticks (`-JsonUtf8Reader`); its 40 methods are all extracted but their fqn has no class qualifier (e.g. '-JsonUtf8Reader.kt:beginArray' rather than '...:`-JsonUtf8Reader`.beginArray'), so they are not owned by their class in the fqn.",
+        "Overloads in Moshi.kt (8 adapter overloads) are 8 separate symbols with param_count 0 for all of them."
+      ]
+    }
+  },
+  "call_precision": {
+    "high": {"right": 29, "wrong": 1, "unclear": 0, "judged": 30, "examples": [
+      "ksp/KspUtil.kt:33 (KSClassDeclaration.asType() = asType(emptyList())) -> KspUtil.kt:33 itself: the call is the KSP library member asType(List), bound to the repo's own zero-arg extension (self-recursion)"
+    ]},
+    "medium": {"right": 5, "wrong": 25, "unclear": 0, "judged": 30, "examples": [
+      "internal/ClassJsonAdapter.kt:144 require(...) -> -JsonValueReader.kt:345 JsonValueReader.require: stdlib require() bound to a private member of an unrelated class",
+      "internal/Util.kt:418 require(...) -> -JsonValueReader.kt:345: same, stdlib require bound to JsonValueReader.require",
+      "api/AdapterGenerator.kt:798 builder.build() -> Moshi.kt:250 Moshi.Builder.build: builder is a KotlinPoet FunSpec.Builder",
+      "GeneratedAdaptersTest.kt:1065 jsonAdapter.fromJson(\"\"\"[3,4]\"\"\") -> JsonAdapter.kt:44 fromJson(JsonReader): wrong overload, call passes a String (fromJson(String) is at line 64)",
+      "KotlinJsonAdapterTest.kt:535 jsonAdapter.toJson(encoded) -> JsonAdapter.kt:74 toJson(JsonWriter,T): wrong overload, one-arg toJson(value) is at line 84; moshi.adapter<T>() calls (7 of 30) bound to Moshi.adapter(type: Type) at line 55 instead of the reified adapter<T>() at line 90"
+    ], "wrong_breakdown": "3 library/unrelated-class bindings (require x2, FunSpec.Builder.build) and 22 calls bound to the wrong overload of the right same-named method (toJson x8, fromJson x6, Moshi.adapter x8)"},
+    "low": {"right": 22, "wrong": 8, "unclear": 0, "judged": 30, "examples": [
+      "ksp/shadedUtil.kt:133 Pair(method.returnType, result) -> moshi/src/test/java/android/util/Pair.java:18: Kotlin stdlib Pair bound to a Java test class (also :101, same)",
+      "internal/LinkedHashTreeMap.kt:23 Node() -> moshi/src/test/java/com/squareup/moshi/CircularAdaptersTest.java CircularAdaptersTest.Node.Node:87: should be the nested LinkedHashTreeMap.Node in the same file",
+      "Moshi.kt:235 addLast(newAdapterFactory(..)) inside addLast(type, adapter) -> Moshi.kt:233 itself: one-arg overload at 238 is the callee",
+      "Moshi.kt:71 adapter(type, annotationTypes[0]) -> Moshi.kt:55 adapter(Type): two-arg overload at 61 is the callee",
+      "JsonAdapter.kt:87 toJson(buffer, value) -> JsonAdapter.kt:74 toJson(JsonWriter,T): sink overload at 77 is the callee; also DualKotlinTest.kt:37 Moshi.Builder() chain -> Builder.addLast:233 (2-arg) wrong overload"
+    ]}
+  },
+  "call_recall": {
+    "sites": 40,
+    "right": 27,
+    "wrong": 1,
+    "none": 12,
+    "none_breakdown": {
+      "reference extracted and resolved but no edge (caller is a top-level property initialiser, which has no symbol)": 8,
+      "reference extracted, unresolved": 4,
+      "not extracted": 0
+    },
+    "examples": [
+      "JsonReader.kt:246,262,267,269,451,452,453,455: 8/8 right (JsonDataException/JsonEncodingException constructors, beginArray, hasNext, readJsonValue, endArray)",
+      "AdapterGenerator.kt:107,110,116,117,168,173,176,183: 8/8 right (rawType, toTypeVariableResolver, stripTypeVarVariance, findRawType, allocateNames, generateType, createProguardRule)",
+      "LinkedHashTreeMap.kt:23 Node() -> WRONG: bound (low) to Java test class CircularAdaptersTest.Node; :31 KeySet() none (unresolved), :41 EntrySet() none (unresolved) although both are nested classes in the same file; :34,43,45,65,81 right",
+      "Util.kt:70-77 eight knownNotNull(...) calls inside the initialiser of top-level val PRIMITIVE_TO_WRAPPER_TYPE: references resolved to knownNotNull (symbol 1632) but no edge because the caller is not a symbol",
+      "-JsonUtf8Reader.kt:62 and :83 pushScope(...) none (unresolved: protected method inherited from JsonReader in another file); :81,87,87,92,98,98 right"
+    ]
+  },
+  "hierarchy": {
+    "edges_total": 60,
+    "by_kind_tier": {"EXTENDS/high": 36, "EXTENDS/low": 7, "IMPLEMENTS/high": 17},
+    "judged": 20,
+    "right": 20,
+    "wrong": 0,
+    "unclear": 0,
+    "relationships_in_checked_files_with_repo_target": 8,
+    "relationships_with_correct_edge": 8,
+    "examples": [
+      "-JsonUtf8Reader.kt:31 class `-JsonUtf8Reader` : JsonReader (a class extending a class) is recorded as IMPLEMENTS, not EXTENDS; target is correct",
+      "AdapterGenerator.kt:870/875/882: FromJsonComponent (EXTENDS) and ParameterComponent/PropertyComponent (IMPLEMENTS) all correct",
+      "Supertypes outside the repository (Closeable, AbstractMutableMap, Serializable, ParameterizedType, ...) correctly have no edge"
+    ]
+  },
+  "answers": [
+    {
+      "command": "repocortex --project . tool call find_callers name=readJsonValue",
+      "first_lines": "=== SYSTEM METADATA ===\nINCOMPLETE — 1 of the 10 references spelled \"readJsonValue\" are not among the rows below. 9 caller(s) of readJsonValue (moshi/src/main/java/com/squareup/moshi/JsonReader.kt:446) are recorded.\nindex_revision: 1  status: ready\nnote: INCOMPLETE FOR THIS SYMBOL — 1 of the 10 reference(s) spelled like this name are not listed as its callers: 1 unresolved. Any of them may be a use of this definition. Run search_code for the name before concluding anything from what is absent.\nnote: References spelled \"readJsonValue\" in this index: 10. 9 bound to this definition, 1 unresolved.\nnote: How the calls bound to this definition were made: readJsonValue ×2, JsonReader.readJsonValue ×6, a call on an expression ×1. 1 of them were made on a value or an expression whose type the source does not state. Those were bound on the member NAME alone...",
+      "true_of_the_code": true,
+      "comment": "Text search finds 10 call sites (2 in JsonReader.kt, 6 in JsonReaderTest.java, 1 in -JsonValueReader.kt:310, 1 in -JsonValueWriter.kt:215), matching the 10 references stated. It admits the unresolved one and that some were bound by name alone."
+    },
+    {
+      "command": "repocortex --project . tool call analyze_impact symbol=readJsonValue",
+      "first_lines": "=== SYSTEM METADATA ===\nINCOMPLETE — 1 of the 10 references spelled \"readJsonValue\" are not among the rows below. readJsonValue (moshi/src/main/java/com/squareup/moshi/JsonReader.kt:446): 6 direct, 0 indirect. Risk unknown: 1 of the 10 reference(s) spelled like this name are not listed as its callers: 1 unresolved.\nindex_revision: 1  status: ready\nnote: INCOMPLETE FOR THIS SYMBOL ...\nnote: Risk = score = sum(factors), clamped to 0..100; ...\nnote:   public_api (+0): Whether the target is exported is UNKNOWN. The index does not read the visibility rules of Kotlin, so it cannot say whether callers outside this repository exist.",
+      "true_of_the_code": false,
+      "comment": "Says '6 direct' while find_callers lists 9 callers for the same symbol (the code has 9 distinct calling functions/methods incl. 6 Java tests); the two commands disagree without explanation (possibly tests excluded, not stated in the first lines). It honestly says it cannot read Kotlin visibility."
+    },
+    {
+      "command": "repocortex --project . tool call find_implementations name=JsonAdapter",
+      "first_lines": "=== SYSTEM METADATA ===\nJsonAdapter (moshi/src/main/java/com/squareup/moshi/JsonAdapter.kt:37): 26 implementing or extending it, 0 it implements or extends.\nindex_revision: 1  status: ready\nnote: A type relationship is recorded only where the source states it ... Treat an empty list as 'none declared', not 'none exist'.\nnote: Note: 8 result(s) are medium or low confidence (heuristic inference with higher error rates). Pass min_confidence='high' to restrict ...\nprovenance: This compares commits only. ...",
+      "true_of_the_code": true,
+      "comment": "26 = 19 Kotlin + 7 Java named subclasses. A text search finds roughly 36 declaration lines, but that includes anonymous `object : JsonAdapter<..>()` and test fixtures, which a named-class list would not hold; plausible, not exactly verified. States its limits."
+    }
+  ],
+  "findings": [
+    "Medium-tier precision is poor: 25 of 30 sampled medium CALLS edges are wrong. 22 are the right method name bound to the wrong overload (jsonAdapter.fromJson(String) -> fromJson(JsonReader); jsonAdapter.toJson(value) -> toJson(JsonWriter, value); moshi.adapter<T>() -> adapter(Type) instead of the reified overload), 3 are library calls bound to repo symbols (stdlib require() -> JsonValueReader.require x2; KotlinPoet FunSpec.Builder.build() -> Moshi.Builder.build).",
+    "All overloads of a Kotlin method have param_count 0, so overloads are indistinguishable; the same wrong-overload pattern appears in the low tier (Moshi.adapter, JsonAdapter.toJson, Builder.addLast self-bound).",
+    "Kotlin stdlib/own-class names bound to Java test classes: Pair(...) in ksp/shadedUtil.kt bound to moshi/src/test/java/android/util/Pair.java (low, x2 in the sample), and Node() in LinkedHashTreeMap.kt bound to the Java test class CircularAdaptersTest.Node instead of the nested LinkedHashTreeMap.Node in the same file.",
+    "Nested class constructor calls in the same file are not resolved: KeySet() and EntrySet() in LinkedHashTreeMap.kt are unresolved although both are declared in that file.",
+    "Calls inside initialisers of top-level properties produce no edges: references resolve (to knownNotNull) but the caller is not a symbol; 8 of 40 recall sites in Util.kt were lost this way.",
+    "Top-level val/const declarations are not extracted (9 in the five files; roughly 34 companion consts in -JsonUtf8Reader.kt, not counted).",
+    "Protected methods inherited from a superclass in another file (pushScope) are unresolved in the subclass (-JsonUtf8Reader.kt:62, :83).",
+    "Methods of a class named with backticks (`-JsonUtf8Reader`) get an fqn with no class qualifier, so 40 methods look like top-level functions.",
+    "Methods of anonymous object literals are extracted as functions named <locals>.next / renderTypeVariable (3 spurious in the sample).",
+    "A class extending another class via secondary constructors (`class -JsonUtf8Reader : JsonReader`) is recorded as IMPLEMENTS rather than EXTENDS.",
+    "Two real Kotlin sources parse with syntax errors: PropertyGenerator.kt (4 error nodes, first at line 25) and KspUtil.kt (line 141); both are only flagged partial.",
+    "Positive: definitions for the five largest files were 201 of 210 with no missed functions or classes; high-tier call precision was 29/30; hierarchy edges were 20/20 right and 8/8 relationships in the checked files; find_callers admits its unresolved reference."
+  ],
+  "not_done": [
+    "Java files in the repository were not measured (out of scope).",
+    "Call recall counted constructor calls and method calls to repo definitions only; the Java target of super(copyFrom) was not counted as a site.",
+    "find_implementations count (26) was not reconciled exactly against a full manual enumeration of subclasses."
+  ]
+}

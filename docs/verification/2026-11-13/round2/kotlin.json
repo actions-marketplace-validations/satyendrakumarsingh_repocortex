@@ -1,0 +1,294 @@
+{
+ "language": "kotlin",
+ "project": "square/moshi",
+ "project_commit": "889013ec2edb8d8034902662a1dc8c4f3b3f8111",
+ "repocortex_commit": "8748b29",
+ "files_checked": [
+  "moshi/src/main/java/com/squareup/moshi/-JsonUtf8Reader.kt (1271 lines)",
+  "moshi-kotlin-codegen/src/main/java/com/squareup/moshi/kotlin/codegen/api/AdapterGenerator.kt (885)",
+  "moshi/src/main/java/com/squareup/moshi/internal/LinkedHashTreeMap.kt (772)",
+  "moshi/src/main/java/com/squareup/moshi/internal/Util.kt (717)",
+  "moshi/src/main/java/com/squareup/moshi/JsonReader.kt (647)"
+ ],
+ "index": {
+  "files": 183,
+  "kotlin_files": 99,
+  "kotlin_symbols": 1188,
+  "symbols_all_languages": 2740,
+  "edges_by_kind_and_tier": {
+   "all_languages": "CALLS high 3545 medium 82 low 1276; INSTANTIATES high 765 medium 38 low 26; EXTENDS high 45 low 9; IMPLEMENTS high 28",
+   "caller_in_kt_file": "CALLS high 636 medium 63 low 419; INSTANTIATES high 338 low 26; EXTENDS high 36 low 7; IMPLEMENTS high 17",
+   "round1_caller_in_kt_file": "CALLS high 598 medium 413 low 159; INSTANTIATES high 187 low 37; EXTENDS high 36 low 7; IMPLEMENTS high 17"
+  },
+  "parse_summary": {
+   "Parsed": "168 (165 clean, 3 with syntax errors)",
+   "Syntax errors": 3,
+   "Incomplete": 0,
+   "Failed": 0,
+   "Too large": 0,
+   "Text only": 9,
+   "Skipped": "6 (no_grammar 5, binary 1)"
+  },
+  "files_with_macro_masked_or_branches_blanked_in_parse_error": 0,
+  "index_seconds": 2.43,
+  "resolve_seconds": 0.79,
+  "status": "READY, schema v18",
+  "resolve_summary": "edges 5814 (high 4383, medium 120, low 1311); references 14923, resolved 5900 (84.3% of 7001 that name something indexed), ambiguous 1101"
+ },
+ "definitions": {
+  "expected": 218,
+  "correct": 218,
+  "missed": 0,
+  "spurious": 0,
+  "line_on_attribute": 25,
+  "per_file": {
+   "-JsonUtf8Reader.kt": {
+    "expected": 41,
+    "correct": 41,
+    "missed": 0,
+    "spurious": 0,
+    "line_on_attribute": 7
+   },
+   "AdapterGenerator.kt": {
+    "expected": 25,
+    "correct": 25,
+    "missed": 0,
+    "spurious": 0,
+    "line_on_attribute": 2
+   },
+   "LinkedHashTreeMap.kt": {
+    "expected": 52,
+    "correct": 52,
+    "missed": 0,
+    "spurious": 0,
+    "line_on_attribute": 1
+   },
+   "Util.kt": {
+    "expected": 58,
+    "correct": 58,
+    "missed": 0,
+    "spurious": 0,
+    "line_on_attribute": 8
+   },
+   "JsonReader.kt": {
+    "expected": 42,
+    "correct": 42,
+    "missed": 0,
+    "spurious": 0,
+    "line_on_attribute": 7
+   }
+  },
+  "examples": {
+   "missed": [],
+   "spurious": [],
+   "round1_missed_now": [
+    "AdapterGenerator.kt:49-51 const val MOSHI_UTIL_PACKAGE / TO_STRING_PREFIX / TO_STRING_SIZE_BASE: FIXED (kind 'constant')",
+    "LinkedHashTreeMap.kt:8 private val NATURAL_ORDER: FIXED (line 7, the @Suppress line)",
+    "Util.kt NO_ANNOTATIONS, EMPTY_TYPE_ARRAY, METADATA, DEFAULT_CONSTRUCTOR_MARKER, PRIMITIVE_TO_WRAPPER_TYPE: FIXED (METADATA and DEFAULT_CONSTRUCTOR_MARKER carry the annotation line, 49/59 instead of 50/60)"
+   ],
+   "round1_spurious_now": [
+    "AdapterGenerator.kt generateType.<locals>.renderTypeVariable: FIXED (gone)",
+    "LinkedHashTreeMap.kt EntrySet.iterator.<locals>.next and KeySet.iterator.<locals>.next: FIXED (gone)"
+   ],
+   "notes": [
+    "Counting differs from round one in one place: Util.kt now has 7 more top-level val symbols (computed extension properties jsonAnnotations x2, hasNullable, isPlatformType, hashCodeOrZero, isKotlin, plus kotlinMetadataClassName). Round one did not count them as expected; under the tool's stated rule (a top-level val / const val is a constant) they are expected, so Util.kt expected is 58 not 51. If round one's narrower rule is applied, Util.kt would be 51 expected, 51 correct and 7 extra symbols that round one did not expect. LinkedHashTreeMap.kt expected is 52 by my recount (round one said 51, but it also listed 1 missed + 2 spurious against 52 extracted symbols, so its 51 looks like an arithmetic slip).",
+    "Companion-object vals (about 34 in -JsonUtf8Reader.kt) and class properties are not symbols and are not expected (stated rule). Backtick class `-JsonUtf8Reader`: methods now carry the class in the fqn (-JsonUtf8Reader.beginArray), FIXED.",
+    "One <locals> symbol remains in the whole index: KotlinJsonAdapterTest.localClassesNotSupported.<locals>.LocalClass (a named local class in a test, not an anonymous object); none in the five files.",
+    "line_on_attribute counted by comparing each symbol's line with the line that contains its name."
+   ]
+  }
+ },
+ "call_precision": {
+  "high": {
+   "right": 26,
+   "wrong": 4,
+   "unclear": 0,
+   "judged": 30,
+   "examples": [
+    "KotlinJsonAdapterTest.kt:1230 KotlinJsonAdapterFactory() -> moshi-kotlin/.../com/squareup/moshi/KotlinJsonAdapterFactory.kt:20 (the deprecated shim in package com.squareup.moshi) instead of kotlin/reflect/KotlinJsonAdapterFactory.kt:214; the test is in package ...kotlin.reflect, so the same-package class is the callee. Detail says 'single match in an imported package'. Same at KotlinJsonAdapterTest.kt:176 and DualKotlinTest.kt:747 (that file imports kotlin.reflect.KotlinJsonAdapterFactory explicitly)",
+    "internal/Util.kt:233 componentType.resolve(context, contextRawType, visitedTypeVariables) -> Util.kt:205 public resolve(context, contextRawType) (2 args); the 3-argument private overload at 209 is the callee"
+   ]
+  },
+  "medium": {
+   "right": 26,
+   "wrong": 4,
+   "unclear": 0,
+   "judged": 30,
+   "examples": [
+    "api/typeAliasUnwrapping.kt:52 deepCopy(transform = ...) inside the `is TypeVariableName` branch -> kotlintypes.kt:193 ParameterizedTypeName.deepCopy; callee is TypeVariableName.deepCopy at 201 (same at :56, WildcardTypeName branch, callee at 209)",
+    "api/TypeRenderer.kt:80 builder.build() -> Moshi.kt:250 Moshi.Builder.build: builder is a KotlinPoet CodeBlock.Builder",
+    "ksp/KspUtil.kt:61 return builder.build() -> Moshi.Builder.build: builder is a KotlinPoet AnnotationSpec.Builder"
+   ]
+  },
+  "low": {
+   "right": 9,
+   "wrong": 21,
+   "unclear": 0,
+   "judged": 30,
+   "examples": [
+    "moshi.adapter<T>() with reified type argument (10 of 30 sampled, e.g. GeneratedAdaptersTest.kt:1158, DualKotlinTest.kt:595) -> Moshi.kt:65 (the vararg adapter(type, vararg annotationTypes) overload); the callee is the inline reified adapter<T>(annotations = emptySet(), fieldName = null) at Moshi.kt:92",
+    "jsonAdapter.fromJson(\"...\") with a String argument (5 of 30, e.g. GeneratedAdaptersTest.kt:1116, DualKotlinTest.kt:790, KotlinJsonAdapterTest.kt:212) -> JsonAdapter.kt:44 fromJson(JsonReader); callee is fromJson(String) at 64",
+    "moshi.adapter(Data::class.java) / adapter(List::class.java) / adapter(expression.javaClass) (3 of 30: KotlinJsonAdapterTest.kt:29, :690, StandardJsonAdapters.kt:248) -> Moshi.kt:55 adapter(Type); callee is adapter(Class<T>) at 58",
+    "KotlinJsonAdapterFactory.kt:199 unexpectedNull(binding.property.name, binding.jsonName, reader) -> api/AdapterGenerator.kt:702 private member AdapterGenerator.unexpectedNull; callee is the public top-level unexpectedNull in internal/Util.kt:560",
+    "JsonClassSymbolProcessorTest.kt:767 compilation.compile() -> the test's own private compile(vararg SourceFile) at 925; the call is a library KotlinCompilation.compile()",
+    "Correct low edges (9): JsonAdapter.kt:107 toJson(writer, value), JsonAdapter.toJson(value) x3 (lines 83/84), Util.kt:702 Types.equals, Moshi.kt:213 add(typeOf<T>(), adapter), ClassJsonAdapter.kt:126 throwIfIsCollectionClass, JsonUtf8Reader.kt:1174 asChar, KotlinReflectTypesTest.kt:112 isSymmetricEqualTo"
+   ],
+   "wrong_breakdown": "high: 3 deprecated-shim binding + 1 wrong overload; medium: 2 wrong deepCopy overload + 2 library Builder.build() bound to Moshi.Builder.build; low: 10 reified adapter<T>() + 5 fromJson(String) + 3 adapter(Class) + 1 three-argument adapter<Any?>(type, annotations, fieldName) bound to the vararg overload + 1 unexpectedNull + 1 library compile()",
+   "note_on_low": "Every low edge in the sample that is wrong was bound to a definition that the edge detail text itself says is only 'the first' of several overloads that allow the argument count, i.e. the tool tells the reader it guessed. Still counted wrong as the edge names one definition."
+  }
+ },
+ "round1_wrong_examples": [
+  {
+   "site": "ksp/KspUtil.kt:33 asType(emptyList()) inside KSClassDeclaration.asType()",
+   "round1_tier": "high",
+   "now": "still_wrong",
+   "note": "still a high edge from asType to itself ('defined in the same file'); the call is the KSP library member asType(List)"
+  },
+  {
+   "site": "internal/ClassJsonAdapter.kt:144 require(...)",
+   "round1_tier": "medium",
+   "now": "gone",
+   "note": "no edge from that line"
+  },
+  {
+   "site": "internal/Util.kt:418 require(...)",
+   "round1_tier": "medium",
+   "now": "gone",
+   "note": "no edge from that line"
+  },
+  {
+   "site": "api/AdapterGenerator.kt:798 builder.build()",
+   "round1_tier": "medium",
+   "now": "still_wrong",
+   "note": "still bound to Moshi.Builder.build at medium (receiver is a KotlinPoet FunSpec.Builder); two more of the same kind in the new sample (TypeRenderer.kt:80, KspUtil.kt:61)"
+  },
+  {
+   "site": "GeneratedAdaptersTest.kt:1065 jsonAdapter.fromJson(\"\"\"[3,4]\"\"\")",
+   "round1_tier": "medium",
+   "now": "lower_tier",
+   "note": "now low, still bound to fromJson(JsonReader) at line 44 instead of fromJson(String) at 64; detail says overloaded and the first was taken"
+  },
+  {
+   "site": "KotlinJsonAdapterTest.kt:535 jsonAdapter.toJson(encoded)",
+   "round1_tier": "medium",
+   "now": "right_target",
+   "note": "now low edge to JsonAdapter.kt:83 (annotation line of toJson(value) at 84): the one-argument overload, correct"
+  },
+  {
+   "site": "moshi.adapter<T>() calls (7 in the first sample)",
+   "round1_tier": "medium",
+   "now": "lower_tier",
+   "note": "now low, bound to the vararg overload at Moshi.kt:65 instead of the reified adapter<T>() at 92; 10 of the 30 new low samples are this pattern, all wrong"
+  },
+  {
+   "site": "ksp/shadedUtil.kt Pair(method.returnType, result) (round one cited :133 and :101; the file has these calls at :81 and :91)",
+   "round1_tier": "low",
+   "now": "gone",
+   "note": "no edge from any Pair(...) call to android/util/Pair.java; zero edges target that file"
+  },
+  {
+   "site": "internal/LinkedHashTreeMap.kt:23 Node()",
+   "round1_tier": "low",
+   "now": "right_target",
+   "note": "INSTANTIATES high to LinkedHashTreeMap.Node (line 67)"
+  },
+  {
+   "site": "Moshi.kt:235 addLast(newAdapterFactory(..)) bound to itself",
+   "round1_tier": "low",
+   "now": "right_target",
+   "note": "self edge gone; now low edge to addLast(factory) at Moshi.kt:245 (correct overload) and high edge to newAdapterFactory"
+  },
+  {
+   "site": "Moshi.kt:71 adapter(type, annotationTypes[0])",
+   "round1_tier": "low",
+   "now": "right_target",
+   "note": "now low edge to Moshi.kt:61 (the attribute line of adapter(type, annotationType) at 62), the correct overload"
+  },
+  {
+   "site": "JsonAdapter.kt:87 toJson(buffer, value)",
+   "round1_tier": "low",
+   "now": "still_wrong",
+   "note": "still low, bound to toJson(JsonWriter, T) at 74; callee is toJson(BufferedSink, T) at 77"
+  },
+  {
+   "site": "DualKotlinTest.kt:37 Moshi.Builder() chain -> Builder.addLast",
+   "round1_tier": "low",
+   "now": "still_wrong",
+   "note": "still low, bound to the two-argument addLast at Moshi.kt:233 (evidence line 37); the call at line 40 passes one argument and is addLast(factory)"
+  }
+ ],
+ "call_recall": {
+  "sites": 40,
+  "right": 40,
+  "wrong": 0,
+  "none": 0,
+  "none_breakdown": {},
+  "examples": [
+   "Same 40 sites as round one. JsonReader.kt 8/8 (246,262,267,269,451,452,453,455), AdapterGenerator.kt 8/8 (107,110,116,117,168,173,176,183; line 183 createProguardRule is a low edge to the correct target), LinkedHashTreeMap.kt 8/8 (23 Node, 31 KeySet, 34, 41 EntrySet, 43, 45, 65, 81), Util.kt 8/8 (the eight knownNotNull calls at 70-77 now have an edge because the top-level val PRIMITIVE_TO_WRAPPER_TYPE is a symbol), -JsonUtf8Reader.kt 8/8 (62 and 83 pushScope now resolve to JsonReader.pushScope; 81, 87, 87, 92, 98, 98).",
+   "Round one: 27 right, 1 wrong, 12 none."
+  ]
+ },
+ "hierarchy": {
+  "edges_total": 60,
+  "by_kind_tier": {
+   "EXTENDS/high": 36,
+   "EXTENDS/low": 7,
+   "IMPLEMENTS/high": 17
+  },
+  "judged": 20,
+  "right": 20,
+  "wrong": 0,
+  "unclear": 0,
+  "relationships_in_checked_files_with_repo_target": 8,
+  "relationships_with_correct_edge": 8,
+  "examples": [
+   "All 20 sampled targets are the declared supertype (e.g. NestedPersonResponse -> NestedResponse, MapJsonAdapter -> JsonAdapter, JsonStringJsonAdapterFactory -> JsonAdapter.Factory, SubtypeConstructorParameters -> SupertypeConstructorParameters).",
+   "Kind still wrong for a class extending a class when the supertype has no constructor call: `-JsonUtf8Reader : JsonReader` and `-JsonValueReader : JsonReader` are IMPLEMENTS, not EXTENDS (2 of the 20 sampled; target correct). Unchanged from round one.",
+   "Checked-file relationships (8): `-JsonUtf8Reader`->JsonReader, ParameterOnly->FromJsonComponent and ParameterComponent, PropertyOnly->FromJsonComponent and PropertyComponent, ParameterProperty->FromJsonComponent, ParameterComponent, PropertyComponent: 8/8 have an edge."
+  ]
+ },
+ "answers": [
+  {
+   "command": "repocortex --project . tool call find_callers name=readJsonValue",
+   "first_lines": "=== SYSTEM METADATA ===\n10 caller(s) of readJsonValue (moshi/src/main/java/com/squareup/moshi/JsonReader.kt:446) are recorded.\nindex_revision: 1  status: ready\nnote: References spelled \"readJsonValue\" in this index: 10. 10 bound to this definition.\nnote: How the calls bound to this definition were made: readJsonValue x3, JsonReader.readJsonValue x6, a call on an expression x1. 1 of them were made on a value or an expression whose type the source does not state. Those were bound on the member NAME alone ...\nnote: Note: 1 result(s) are medium or low confidence ...",
+   "true_of_the_code": true,
+   "comment": "Text search finds exactly 10 call sites (JsonReader.kt 453 and 464, JsonReaderTest.java x6, -JsonValueReader.kt:310, -JsonValueWriter.kt:215). Round one found 10 references with 1 unresolved; now all 10 are bound (the -JsonValueWriter.kt:215 one at low, JsonReader.of(buffer).readJsonValue(), correct). First line does not itself mention the low-confidence row; the notes and verdict do."
+  },
+  {
+   "command": "repocortex --project . tool call analyze_impact symbol=readJsonValue",
+   "first_lines": "=== SYSTEM METADATA ===\nreadJsonValue (moshi/src/main/java/com/squareup/moshi/JsonReader.kt:446): 7 direct, 0 indirect; 1 more symbol(s) at low confidence are excluded; pass min_confidence=low. Risk low (score 15).\nindex_revision: 1  status: ready\nnote: Risk = score = ... \nnote:   public_api (+0): Whether the target is exported is UNKNOWN. The index does not read the visibility rules of Kotlin ...\nnote:   direct_callers (+25): 7 symbol(s) reference the target directly (depth 1) ...",
+   "true_of_the_code": true,
+   "comment": "7 direct = -JsonValueReader.nextSource + 6 test methods (the self-recursive readJsonValue is not counted) and the 1 excluded is -JsonValueWriter.valueSink (low). The first line now states the confidence-floor exclusion, which fixes the round-one disagreement with find_callers (6 vs 9). 'Risk low' rests on an unresolved-reference note further down (9023 references never bound); the first line does not say that."
+  },
+  {
+   "command": "repocortex --project . tool call find_implementations name=JsonAdapter",
+   "first_lines": "=== SYSTEM METADATA ===\nINCOMPLETE - at least 14 other line(s) read as a type declaration naming it and are not recorded as a subtype, so subtypes exist that this list does not carry. JsonAdapter (moshi/src/main/java/com/squareup/moshi/JsonAdapter.kt:37): 26 implementing or extending it, all directly, 0 it implements or extends.\nindex_revision: 1  status: ready\nnote: INCOMPLETE FOR THIS TYPE - at least 14 other line(s) ... (declaration-like lines: README.md:16, README.md:48, README.md:400, README.md:979, README.md:998)",
+   "true_of_the_code": true,
+   "comment": "26 listed: I found 26 named subclasses by text search (all direct), so the list is complete for named types. The INCOMPLETE flag is driven by README.md snippets and anonymous objects, so 'subtypes exist that this list does not carry' is true only of anonymous `object : JsonAdapter<..>` expressions, not named classes; a mild over-warning. 8 of the 26 are low confidence (e.g. moshi-adapters Rfc3339DateJsonAdapter: correct)."
+  }
+ ],
+ "regressions": [
+  "New wrong high edges: KotlinJsonAdapterFactory() constructor calls in tests (3 of 30 sampled high edges) bind to the deprecated com.squareup.moshi.KotlinJsonAdapterFactory shim instead of the same-package or explicitly imported kotlin.reflect.KotlinJsonAdapterFactory (cause not examined; round one did not report this pattern, so it may pre-date the fixes).",
+  "Resolution of overloaded calls lost accuracy at the low tier: the sample of 30 low edges is now 9 right (round one 22 of 30) because the many overload cases moved from medium to low and the pick among overloads (first allowed by count) is wrong for reified adapter<T>() (all 10 wrong), String fromJson (5) and Class-typed adapter() (3). The tier is honest about it but the bound target is mostly wrong.",
+  "Medium tier got smaller (63 kt edges vs 413) so its 26/30 is not like-for-like with round one's 5/30.",
+  "The self-edge KspUtil.kt:33 asType -> asType is still a high edge (not new)."
+ ],
+ "findings": [
+  "Low-tier overload binding is mostly wrong: 21 of 30 sampled low CALLS edges point at the wrong overload (reified moshi.adapter<T>() -> the vararg adapter x10, String fromJson -> fromJson(JsonReader) x5, adapter(Class) -> adapter(Type) x3) even though the edge says 'overloaded ... the first was taken'. The argument count alone cannot pick among them; types/generics are not used.",
+  "High tier has a repeatable wrong binding: KotlinJsonAdapterFactory() in test code goes to the deprecated shim class in package com.squareup.moshi rather than the kotlin.reflect class in the test's own package or import (3 of 30 sampled high edges; 'single match in an imported package'). Also a 3-argument call binds to the 2-argument public resolve overload (Util.kt:233).",
+  "Library builder calls are still bound to repo symbols: builder.build() on KotlinPoet builders binds to Moshi.Builder.build at medium (2 of 30 medium samples, plus the round-one example still present). Extension overloads of deepCopy are picked by name only (2 of 30 medium wrong).",
+  "A call to a library member that has the same name as the enclosing extension (KSClassDeclaration.asType() = asType(emptyList())) is still a high self-edge.",
+  "Definitions in the five files are now complete: 218 of 218 expected, 0 missed, 0 spurious (round one 201/210 with 9 missed and 3 spurious). Top-level val/const are symbols, anonymous object methods are gone, backtick class methods are qualified by class.",
+  "Recall on the same 40 sites went from 27 right / 1 wrong / 12 none to 40 right: top-level initialiser callers, nested same-file classes (KeySet, EntrySet, Node) and the inherited protected pushScope now resolve.",
+  "Production code no longer binds to Java test classes by name (Pair, Node gone; zero kt-production-to-test edges in the whole index).",
+  "Class extending a class without a constructor call (`: JsonReader`) is still recorded as IMPLEMENTS (kind wrong, target right).",
+  "Answers: the three first lines are now true and each states its limit (callers excluded by the floor, incomplete subtype list). The find_implementations INCOMPLETE flag is partly triggered by README lines and over-warns.",
+  "Index 2.43 s, resolve 0.79 s, status READY; no file has 'macro tokens masked' or 'conditional branches blanked' in its parse_error (0 of 183)."
+ ],
+ "not_done": [
+  "Java files were not measured (out of scope).",
+  "The 30 sampled low and medium edges are dominated by test-file callers because the project is mostly test code in Kotlin; no separate production-only sample.",
+  "The cause of the KotlinJsonAdapterFactory shim binding was not investigated beyond reading the detail text.",
+  "Round one's exact seven reified adapter<T>() sites were not enumerated, so the fate is stated for the pattern, not site by site."
+ ]
+}

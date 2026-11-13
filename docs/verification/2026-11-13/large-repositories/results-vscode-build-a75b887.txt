@@ -1,0 +1,83 @@
+== index
+  Files:         18757 indexed, 1691 skipped (20448 discovered)
+  Symbols:       443519
+  References:    1885744 (bound by `repocortex resolve`)
+  Imports:       458404
+  Parsed:         18757 (18638 clean, 119 with syntax errors)
+  Syntax errors:  119 files read to the end with errors the parser recovered from; definitions inside the unreadable regions may be missing
+  Text only:      131 files searchable by text, no definitions (no definition query for the language): diff 82, xml 34, desktop 2, dockerfile 2, perl 2, pug 2, +7 more
+  Too large:      7 files over the size limit, not parsed and not searchable (raise index.max_file_bytes in .repocortex.yml to include them)
+                    src/vs/sessions/services/chatBackground/browser/media/koi-dark.webp (9.3 MiB)
+                    src/vs/sessions/services/chatBackground/browser/media/koi-light.webp (9.2 MiB)
+                    src/vs/base/test/node/uri.perf.data.txt (8.5 MiB)
+                    extensions/vscode-colorize-perf-tests/test/colorize-fixtures/test-checker.ts (8.0 MiB)
+                    extensions/copilot/src/platform/tokenizer/node/o200k_base.tiktoken (3.4 MiB)
+                    extensions/copilot/src/extension/inlineEdits/test/node/recordings/EditSourceTracker.test1.recording.w.json (2.7 MiB)
+                    src/vs/platform/agentHost/test/node/agentService.test.ts (2.4 MiB)
+  Skipped:        1553 files not indexed: no_grammar 1208, binary 326, empty 18, symlink 1
+  Duration:      341980ms
+      342.24 real       652.12 user       147.29 sys
+          1543868416  maximum resident set size
+          1658763744  peak memory footprint
+== resolve
+      high:    806510
+      medium:  40731
+      low:     12112
+  Ambiguous:   598513
+    426853 had more candidates than the cap allows and were left unbound
+  Unresolved:  427878  (no definition of that name is indexed: code outside this
+               repository, or code in it that the index did not extract)
+    285976 shown to leave this repository (a standard-library or dependency call)
+  Constructs:  44759 of the resolved calls create a type (INSTANTIATES, not CALLS)
+  Edges:       445753  (one per caller and definition; references between the same pair share one)
+    high:    417659
+    medium:  19291
+    low:     8803
+  Data access: 1027 statement(s), 816 bound to a declared table, 633 edges
+    211 access(es) name tables no migration here declares (e.g. archive, checkpoints, copied, directories, hidden, ids)
+  Config:      392 read(s), 7 bound to a declared key, 6 edges
+    385 read(s) name keys no configuration file here declares — see 'repocortex config'
+  Deployment:  4 unit(s), 0 naming a build context, 0 edges
+  Duration:    172040ms
+      172.14 real       178.90 user        22.29 sys
+           601698304  maximum resident set size
+           591776816  peak memory footprint
+== status
+Project:        vscode
+Index:          READY
+Schema:         v15
+Revision:       5c8590bb41d7c1c59e1cceab4f464b3d82440acb
+Files:          20448
+Symbols:        443519
+Relationships:  446394
+Parsed:         18757 (18638 clean, 119 with syntax errors)
+Index size:     1.1 GiB
+== questions
+-- find_callers name=createDecorator
+AMBIGUOUS — "createDecorator" names 3 definitions and find_callers answered for none of them. Pass the path and line of one row below.
+real 0.10
+-- analyze_impact symbol=createDecorator
+AMBIGUOUS — "createDecorator" names 3 definitions and analyze_impact answered for none of them. Pass the path and line of one row below.
+real 0.10
+-- find_implementations name=IDisposable
+AMBIGUOUS — "IDisposable" names 11 definitions and find_implementations answered for none of them. Pass the path and line of one row below.
+real 0.11
+-- find_implementations name=IDisposable
+AMBIGUOUS — "IDisposable" names 11 definitions and find_implementations answered for none of them. Pass the path and line of one row below.
+real 0.11
+-- list_dead_code
+UNRELIABLE — only 59% of the references that name something this index defines are bound. 73692 definition(s) have no caller in the index: 0 likely unused, 73692 possibly. Showing 0. 2304 definition(s) in bash, css, fish, powers
+real 11.05
+-- find_callers name=dispose
+AMBIGUOUS — "dispose" names 2722 definitions and find_callers answered for none of them. Pass the path and line of one row below.
+real 0.18
+ 3:17  up 7 days, 13:48, 1 user, load averages: 8.40 9.12 9.63
+
+[exited with code 0]
+
+path-qualified questions (CLI, one process each, load ~8):
+find_implementations IDisposable (lifecycle.ts): 7.9 s, "0 implementing" (all 651 references named IDisposable are ambiguous: 11 definitions, over the candidate cap)
+find_callers createDecorator (instantiation.ts): 9.1 s, 750 callers
+analyze_impact createDecorator: 12.2 s; find_tests: 12.6 s; find_callers toDisposable: 9.6 s (2318 callers)
+get_task_context: 17.3 s; search_code: 0.10 s; list_dead_code: 11.1 s
+resolve: 426,853 references had more candidates than the cap allows and were left unbound; ambiguous 598,513; supertype refs ambiguous 7,853 vs resolved 13,635

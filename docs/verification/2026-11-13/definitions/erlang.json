@@ -1,0 +1,72 @@
+{
+ "language": "erlang",
+ "project": "ninenines/cowboy (src/cowboy_websocket.erl, src/cowboy_router.erl, src/cowboy_static.erl)",
+ "project_commit": "29c1f22",
+ "repocortex_commit": "f783fa5",
+ "files": [
+  {
+   "path": "src/cowboy_websocket.erl",
+   "lines": 778,
+   "assigned_language": "erlang",
+   "parse_status": "ok",
+   "parse_error": "",
+   "expected": 51,
+   "correct": 39,
+   "missed": 9,
+   "spurious": 3,
+   "missed_known_gap": 0,
+   "line_on_attribute": 0
+  },
+  {
+   "path": "src/cowboy_router.erl",
+   "lines": 603,
+   "assigned_language": "erlang",
+   "parse_status": "ok",
+   "parse_error": "",
+   "expected": 37,
+   "correct": 26,
+   "missed": 11,
+   "missed_known_gap": 0,
+   "spurious": 0,
+   "line_on_attribute": 0
+  },
+  {
+   "path": "src/cowboy_static.erl",
+   "lines": 345,
+   "assigned_language": "erlang",
+   "parse_status": "ok",
+   "parse_error": "",
+   "expected": 33,
+   "correct": 26,
+   "missed": 7,
+   "missed_known_gap": 0,
+   "spurious": 0,
+   "line_on_attribute": 0
+  }
+ ],
+ "totals": {
+  "expected": 121,
+  "correct": 91,
+  "missed": 27,
+  "missed_known_gap": 0,
+  "spurious": 3,
+  "line_on_attribute": 0
+ },
+ "examples": [
+  "cowboy_router.erl:25 -module(cowboy_router). (missed; no module symbol in any of the 3 files)",
+  "cowboy_router.erl:31 -type bindings() :: #{atom() => any()}. (missed; 22 -type/-opaque declarations across the files, none recorded)",
+  "cowboy_websocket.erl:84 -define(MAX_FRAME_SIZE_DEFAULT, 1000000). (missed constant; also 92)",
+  "cowboy_websocket.erl:94 -record(state, {...}). (spurious by kind: recorded as function 'state'; also 289 ps_header, 293 ps_payload)"
+ ],
+ "rule_objections": [
+  "No stated rule exists for Erlang; I applied: functions, modules, types/records, top-level constants. Including -type and -module as expected is a judgement; a developer looking up a record or type by name would expect it."
+ ],
+ "findings": [
+  "Only functions are extracted: 91 of 91 function names (clause groups folded per name/arity) are right, with no spurious functions. Nothing else is: no -module, no 22 -type/-opaque, no -define constants, and the three -record declarations come out as kind function.",
+  "The 5 -callback declarations in cowboy_websocket.erl are also not recorded; I did not count them as expected because the default rule is silent on behaviours.",
+  "Erlang has no fixtures directory (judged good earlier); on types, modules and records it is not good."
+ ],
+ "not_done": [
+  "Function expectations were checked by clause grouping with a script whose arity counter is inexact on binary patterns; I reconciled the six differences by reading the clauses."
+ ]
+}

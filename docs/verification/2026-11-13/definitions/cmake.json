@@ -1,0 +1,72 @@
+{
+ "language": "cmake",
+ "project": "opencv/opencv (cmake/ directory, sparse checkout)",
+ "project_commit": "d45a6e48e2de78ee3c1bd5e4ef7e25c4d27bbf50",
+ "repocortex_commit": "f783fa5",
+ "files": [
+  {
+   "path": "cmake/OpenCVCompilerOptions.cmake",
+   "lines": 576,
+   "assigned_language": "cmake",
+   "parse_status": "ok",
+   "parse_error": "",
+   "expected": 4,
+   "correct": 4,
+   "missed": 0,
+   "missed_known_gap": 0,
+   "spurious": 0,
+   "line_on_attribute": 0,
+   "total_symbols": 4
+  },
+  {
+   "path": "cmake/OpenCVDetectCUDAUtils.cmake",
+   "lines": 455,
+   "assigned_language": "cmake",
+   "parse_status": "ok",
+   "parse_error": "",
+   "expected": 14,
+   "correct": 14,
+   "missed": 0,
+   "missed_known_gap": 0,
+   "spurious": 0,
+   "line_on_attribute": 0,
+   "total_symbols": 14
+  },
+  {
+   "path": "cmake/OpenCVFindLibsGrfmt.cmake",
+   "lines": 446,
+   "assigned_language": "cmake",
+   "parse_status": "ok",
+   "parse_error": "",
+   "expected": 1,
+   "correct": 1,
+   "missed": 0,
+   "missed_known_gap": 0,
+   "spurious": 0,
+   "line_on_attribute": 0,
+   "total_symbols": 1
+  }
+ ],
+ "totals": {
+  "expected": 19,
+  "correct": 19,
+  "missed": 0,
+  "missed_known_gap": 0,
+  "spurious": 0,
+  "line_on_attribute": 0
+ },
+ "examples": {
+  "missed": [],
+  "spurious": []
+ },
+ "rule_objections": [
+  "No fixtures/langs/cmake exists, so there is no stated rule; counted functions and macros (all recorded as kind function) plus add_library/add_executable/add_custom_target targets if extracted (none occur in these files). Variables set with set()/option() and cache variables are not counted - a developer greping for OPENCV_COMPILER_IS_CCACHE style variables would arguably want them, but this was not the brief's rule."
+ ],
+ "findings": [
+  "19 function/macro definitions expected, 19 found with the right name, kind (function for both macro and function) and line; 0 missed, 0 spurious. Macros nested in `if()` blocks (e.g. ocv_cuda_SEARCH_NVCUVID_HEADER at CUDAUtils:2) are also found. Parse ok for all three.",
+  "Sample is narrow: no add_library/add_executable targets, no CMakeLists.txt were among the three largest cmake/ files (the repo was fetched sparsely: cmake/ only)."
+ ],
+ "not_done": [
+  "Targets (add_library etc.), `set()` variables and cmake_policy/option() forms were not exercised; the tool's behaviour on them is unknown to me."
+ ]
+}

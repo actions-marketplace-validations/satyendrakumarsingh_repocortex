@@ -1,0 +1,69 @@
+{
+ "language": "nim",
+ "project": "dom96/jester",
+ "project_commit": "8a491a8e28965ee9291f058963ff65571a315e84",
+ "repocortex_commit": "f783fa5",
+ "files": [
+  {
+   "path": "jester/request.nim",
+   "lines": 198,
+   "assigned_language": "nim",
+   "parse_status": "ok",
+   "parse_error": "",
+   "expected": 24,
+   "correct": 24,
+   "missed": 0,
+   "missed_known_gap": 0,
+   "spurious": 0,
+   "line_on_attribute": 0
+  },
+  {
+   "path": "jester/private/utils.nim",
+   "lines": 196,
+   "assigned_language": "nim",
+   "parse_status": "ok",
+   "parse_error": "",
+   "expected": 15,
+   "correct": 15,
+   "missed": 0,
+   "missed_known_gap": 0,
+   "spurious": 0,
+   "line_on_attribute": 0
+  },
+  {
+   "path": "jester/patterns.nim",
+   "lines": 141,
+   "assigned_language": "nim",
+   "parse_status": "ok",
+   "parse_error": "",
+   "expected": 12,
+   "correct": 12,
+   "missed": 0,
+   "missed_known_gap": 0,
+   "spurious": 0,
+   "line_on_attribute": 0
+  }
+ ],
+ "totals": {
+  "expected": 51,
+  "correct": 51,
+  "missed": 0,
+  "missed_known_gap": 0,
+  "spurious": 0,
+  "line_on_attribute": 0
+ },
+ "examples": {
+  "missed": [],
+  "spurious": []
+ },
+ "rule_objections": [
+  "Rule is clear and I agree with it. Counting procs nested in a proc (template addNode) and variables in `when isMainModule` (f, f2, f3, r) as definitions is arguable; they are test-fixture locals in practice."
+ ],
+ "findings": [
+  "All 51 expected definitions found with correct kind family and lines, 0 missed, 0 spurious. Forward declaration (parseUrlQuery), backquoted operator `{}`, templates in `when` branches, both NativeRequest aliases in the two `when` branches, and enums/objects all handled.",
+  "Sample is small: jester has only three .nim files under 800 lines (198/196/141 lines); the largest file jester.nim (1458 lines) is excluded by the rule, so heavy macro/DSL code was not exercised."
+ ],
+ "not_done": [
+  "Did not test a bigger Nim project (stdlib, nimble)."
+ ]
+}

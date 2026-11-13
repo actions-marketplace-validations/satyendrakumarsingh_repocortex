@@ -1,0 +1,215 @@
+{
+ "language": "java",
+ "project": "square/javapoet",
+ "project_commit": "b9017a9503b76e11b4ad4c1a9f050e2d29112cb0",
+ "repocortex_commit": "8748b29",
+ "round": 2,
+ "files_checked": [
+  "src/main/java/com/squareup/javapoet/TypeSpec.java",
+  "src/main/java/com/squareup/javapoet/CodeWriter.java",
+  "src/main/java/com/squareup/javapoet/MethodSpec.java",
+  "src/main/java/com/squareup/javapoet/CodeBlock.java",
+  "src/main/java/com/squareup/javapoet/TypeName.java"
+ ],
+ "index": {
+  "files": 50,
+  "symbols": 1251,
+  "edges_by_kind_and_tier": {
+   "CALLS": {
+    "high": 1478,
+    "low": 1244
+   },
+   "INSTANTIATES": {
+    "high": 124
+   },
+   "EXTENDS": {
+    "high": 8
+   },
+   "IMPLEMENTS": {
+    "high": 1
+   }
+  },
+  "parse_summary": {
+   "Parsed": "45 (45 clean)",
+   "Syntax errors": 0,
+   "Incomplete": 0,
+   "Failed": 0,
+   "Too large": 0,
+   "Text only": "3 (xml)",
+   "Skipped": "2 (no_grammar 2)"
+  },
+  "index_seconds": 1.47,
+  "resolve_seconds": 0.36
+ },
+ "definitions": {
+  "expected": 340,
+  "correct": 340,
+  "missed": 0,
+  "spurious": 0,
+  "line_on_attribute": 0,
+  "examples": {
+   "missed": [],
+   "spurious": [],
+   "note": "Unchanged from round one: rows per file TypeSpec 100, CodeWriter 58, MethodSpec 78, CodeBlock 48, TypeName 56. A regex scan of member declaration shapes against the symbols table found nothing missing, and every row's name appears at its line; this is a regex check, not a parse."
+  }
+ },
+ "call_precision": {
+  "high": {
+   "right": 30,
+   "wrong": 0,
+   "unclear": 0,
+   "judged": 30,
+   "examples": [],
+   "note": "Includes ClassName.get(String,String,...) -> :218 and annotatedEquivalence(TypeName) -> the right private overload."
+  },
+  "low": {
+   "right": 18,
+   "wrong": 12,
+   "unclear": 0,
+   "judged": 30,
+   "examples": [
+    "TypeSpecTest.java:1609 AnnotationSpec.builder(SuppressWarnings.class) -> builder(ClassName) :156; real target builder(Class<?>) :161",
+    "ClassNameTest.java:128 ClassName.get(preventGetKind(inner)) -> get(Class<?>) :162; argument is a TypeElement, real target get(TypeElement) :227",
+    "TypeSpecTest.java:929 .returns(int.class) -> returns(TypeName) :381; real target returns(Type)",
+    "TypeNameTest.java:151 TypeVariableName.get(\"T\", Comparator.class, Serializable.class) -> get(String,TypeName...) :93; real target get(String,Type...) :98",
+    "LineWrapper.java:117 out.append('\n') -> RecordingAppendable.append(CharSequence) :153; real target append(char) :166"
+   ],
+   "note": "All 12 wrong are the correct method name and class bound to the wrong overload, with the reason text now saying 'overloaded: N declarations of X ... the first was taken'. Other wrong: TypeSpecTest:1938 WildcardTypeName.supertypeOf(String.class) -> supertypeOf(TypeName); TypeName.java:351 ParameterizedTypeName.get((ParameterizedType) type, map) -> get(ClassName,TypeName...); MethodSpec.java:231 TypeVariableName.get(TypeVariable) -> get(String); TypeSpecTest:2353 addField(String.class,...) -> addField(FieldSpec); JavaFileTest:64 addStaticImport(ClassName,String) -> addStaticImport(Enum); TypeSpecTest:1515 addParameter(int.class,\"p\") -> addParameter(TypeName,...); TypeSpecTest:874 addCode(CodeBlock) -> addCode(String,Object...). In every wrong case the chosen overload is the first declared that allows the argument count. 'the only member of this name' now appears only on names that really have one declaration (checked on the 3 sampled edges that carry it)."
+  },
+  "note": "Fresh sample rule (id*40503)%65521; caller files .java, tests included. Tiers present: high and low. Low is 1244 of 2722 CALLS edges. Overloads are chosen by argument count only, not by argument type."
+ },
+ "call_recall": {
+  "sites": 40,
+  "right": 35,
+  "wrong": 1,
+  "none": 4,
+  "none_breakdown": {
+   "extracted_unresolved": 4,
+   "not_extracted": 0,
+   "extracted_ambiguous": 0,
+   "resolved_but_no_edge": 0
+  },
+  "examples": [
+   "TypeSpec.java:72 and :80, MethodSpec.java:59 and :66 builder.X.build() with receiver CodeBlock.Builder: extracted, unresolved, no edge (unchanged)",
+   "CodeWriter.java:74 this(out, ...) -> CodeWriter(Appendable,String,Set,Set) :77 and :78 this(out, indent, ...) -> 5-arg constructor :81: now extracted, high, correct (were not extracted)",
+   "CodeBlock.java:97 new CodeWriter(out).emit(this) -> emit(String) :220 instead of emit(CodeBlock) :228: still wrong (low)"
+  ],
+  "note": "Same sites as round one. Per file right/sites: TypeSpec 6/8, CodeWriter 8/8 (was 6/8), MethodSpec 6/8, CodeBlock 7/8 (1 wrong), TypeName 8/8."
+ },
+ "hierarchy": {
+  "extends_implements_edges": 9,
+  "judged": 9,
+  "right": 9,
+  "wrong": 0,
+  "declared_in_five_files": 0,
+  "right_edges_for_declared": 0,
+  "note": "Same 9 edges as round one (8 EXTENDS, 1 IMPLEMENTS); all targets are the declared type. A grep of every class/interface declaration in the project finds exactly these 9 repo-internal relationships; the rest are external (Comparable, TestRule, Cloneable, Appendable, SimpleJavaFileObject, etc.). The five files declare no repo-internal supertype."
+ },
+ "answers": [
+  {
+   "command": "repocortex --project . tool call find_callers name=immutableList",
+   "first_lines": "=== SYSTEM METADATA ===\n20 caller(s) of immutableList (src/main/java/com/squareup/javapoet/Util.java:65) are recorded.\nindex_revision: 1  status: ready\nnote: References spelled \"immutableList\" in this index: 20. 20 bound to this definition.\nnote: How the calls bound to this definition were made: immutableList x1, Util.immutableList x19. ...\nprovenance: ...\nverdict: strong (high=20)",
+   "true_of_the_code": true,
+   "comment": "20 text call sites match 20 recorded."
+  },
+  {
+   "command": "repocortex --project . tool call analyze_impact symbol=checkNotNull",
+   "first_lines": "=== SYSTEM METADATA ===\nINCOMPLETE \u2014 3 symbols on the path to it (get, initializer, setName) are named in 33 other place(s) not recorded as calls (they may be passed as values), so what reaches them is not listed; rows 1-50 of 204 are shown. checkNotNull (src/main/java/com/squareup/javapoet/Util.java:56): 38 direct, 166 indirect; at least 118 more symbol(s) at low confidence are excluded; pass min_confidence=low. Risk moderate or higher (score 45; the analysis was cut at depth 3; the name occurs where no call is recorded, so a function passed as a value may reach the target).\nindex_revision: 1  status: ready\ntruncated: showing rows 1-50 of 204 impacted symbol(s) ...; depth limit 3 reached, and 72 node(s) at the limit were not expanded",
+   "true_of_the_code": true,
+   "comment": "46 text call sites by 38 distinct callers: '38 direct' is right and a note explains that. The first line now states the depth cut, low-confidence callers excluded (118 more) and the pass-as-value caveat. The pass-as-value warning is driven by names like get/initializer/setName appearing in README/CHANGELOG prose, so it is largely noise here, but it is an admission of a limit rather than a false claim."
+  },
+  {
+   "command": "repocortex --project . tool call find_implementations name=TypeName",
+   "first_lines": "=== SYSTEM METADATA ===\nINCOMPLETE \u2014 at least 1 other line(s) read as a type declaration naming it and are not recorded as a subtype, so subtypes exist that this list does not carry. TypeName (src/main/java/com/squareup/javapoet/TypeName.java:68): 5 implementing or extending it, all directly, 0 it implements or extends.\nindex_revision: 1  status: ready\nnote: INCOMPLETE FOR THIS TYPE \u2014 ... (declaration-like lines: src/main/java/com/squareup/javapoet/MethodSpec.java:421).",
+   "true_of_the_code": true,
+   "comment": "5 direct subclasses is correct and complete. The INCOMPLETE headline is a false alarm: MethodSpec.java:421 is 'public Builder addExceptions(Iterable<? extends TypeName> exceptions)', a method signature, not a type declaration. The verdict is downgraded from strong to incomplete because of it. Discloses the 4 same-named definitions as before."
+  }
+ ],
+ "round1_wrong_examples": [
+  {
+   "site": "JavaFileTest.java:997 ClassName.get(\"com.foo\",\"Entry\")",
+   "round1_tier": "low",
+   "now": "right_target",
+   "note": "now high -> ClassName.get(String,String,String...) :218"
+  },
+  {
+   "site": "JavaFileTest.java:353 ClassName.get(String,String)",
+   "round1_tier": "low",
+   "now": "right_target",
+   "note": "now high -> :218"
+  },
+  {
+   "site": "ClassNameTest.java:96 ClassName.get(String,String,String)",
+   "round1_tier": "low",
+   "now": "right_target",
+   "note": "now high -> :218"
+  },
+  {
+   "site": "TypeSpecTest.java:555 ClassName.get(tacosPackage,\"Location\")",
+   "round1_tier": "low",
+   "now": "right_target",
+   "note": "now high -> :218"
+  },
+  {
+   "site": "TypeSpecTest.java:232 ClassName.get(tacosPackage,\"FooBar\")",
+   "round1_tier": "low",
+   "now": "right_target",
+   "note": "now high -> :218"
+  },
+  {
+   "site": "AnnotatedTypeNameTest.java:64 TypeName.get(String.class)",
+   "round1_tier": "low",
+   "now": "still_wrong",
+   "note": "still low -> get(TypeMirror) :251; real target get(Type) :331. Reason text now says overloaded and that the first declaration allowing the argument count was taken"
+  },
+  {
+   "site": "TypeNameTest.java:83 TypeName.get(Method.getGenericReturnType())",
+   "round1_tier": "low",
+   "now": "still_wrong",
+   "note": "still low -> get(TypeMirror) :251; reason now honest about overloading"
+  },
+  {
+   "site": "TypeSpecTest.java:972 .returns(int.class)",
+   "round1_tier": "low",
+   "now": "still_wrong",
+   "note": "still low -> returns(TypeName) :381; real target returns(Type)"
+  },
+  {
+   "site": "JavaFileTest.java:93 .addStaticImport(Runtime.class,\"*\")",
+   "round1_tier": "low",
+   "now": "still_wrong",
+   "note": "still low -> addStaticImport(Enum<?>) :295; real target :299"
+  },
+  {
+   "site": "FileWritingTest.java:136 .writeTo(filer)",
+   "round1_tier": "low",
+   "now": "still_wrong",
+   "note": "still low -> writeTo(Appendable) :87; real target writeTo(Filer)"
+  },
+  {
+   "site": "CodeBlock.java:97 new CodeWriter(out).emit(this)",
+   "round1_tier": "low",
+   "now": "still_wrong",
+   "note": "still low -> emit(String) :220; real target emit(CodeBlock) :228. Reason text now says 'overloaded: 4 declarations of emit, 3 allow the argument count'"
+  }
+ ],
+ "regressions": [
+  "find_implementations TypeName now headlines INCOMPLETE and verdict incomplete because of a method signature line misread as a type declaration (MethodSpec.java:421); round one's answer was complete and 'strong'.",
+  "Low-tier wrong rate in the fresh sample is 12 of 30 (round one 10 of 30), though the 30 are different edges; low tier shrank from 1554 to 1244 edges and high grew from 1379 to 1478 CALLS."
+ ],
+ "findings": [
+  "Wrong-overload binding is reduced but not solved: ClassName.get(String,String,...) calls (the commonest round-one error, 5 of 10) are now bound correctly at high, but the other 6 round-one examples are still wrong at low, and 12 of 30 fresh low samples are the correct method name bound to the wrong overload. The binder picks the first declared overload that accepts the argument count, ignoring argument types (e.g. int.class -> returns(TypeName), AnnotationSpec.builder(Foo.class) -> builder(ClassName), append('\n') -> append(CharSequence)).",
+  "The false explanation is fixed: wrong low edges now say 'overloaded: N declarations of X ... the first was taken' instead of 'the only member of this name'. Edges that say 'the only member' were checked and the name really has one declaration.",
+  "this(...) constructor delegation is extracted and correct (CodeWriter.java:74 -> :77, :78 -> :81, TypeName.java:98 and :108 also resolved): CodeWriter recall 8 of 8 (was 6 of 8).",
+  "Calls on a receiver whose type is recorded (builder.javadoc.build() with receiver CodeBlock.Builder) are still left unresolved: 4 of 40 recall sites (TypeSpec.java:72,80; MethodSpec.java:59,66).",
+  "find_implementations TypeName: false INCOMPLETE warning from a method signature containing '? extends TypeName'; the actual answer (5 direct subclasses) is right. analyze_impact checkNotNull has a long, mostly noise pass-as-value caveat (names matched in README prose) but its counts (38 direct) are right.",
+  "find_implementations lists subtypes transitively as designed, but TypeName has only direct ones here so the new transitive path was not exercised on this project.",
+  "Definitions (340 of 340) and hierarchy (9 of 9) unchanged; high tier 30 of 30. No crash; index 1.47 s, resolve 0.36 s."
+ ],
+ "not_done": [
+  "Transitive find_implementations could not be exercised: javapoet has no multi-level repo hierarchy.",
+  "Definition completeness is a regex check, not a parser.",
+  "No medium or exact tier exists.",
+  "Indirect-impact counts not verified by hand."
+ ]
+}

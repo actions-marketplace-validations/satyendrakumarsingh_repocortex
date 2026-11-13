@@ -180,7 +180,7 @@ in the [implementation plan](IMPLEMENTATION_PLAN.md).
 | 11 | Community detection | Graphify, GitNexus, code-review-graph, axon | **Shipped**: `list_communities`, `repocortex communities` |
 | 12 | Ad-hoc query language | codebase-memory-mcp, GitNexus, axon, Joern, CodeQL | **Shipped**: `repocortex query`, guarded read-only SQL |
 | 13 | Symbol-level edits applied by the tool | Serena, GitNexus, code-review-graph | Partly **shipped**: `repocortex rename --apply`, and `repocortex move` for a Go declaration within a package; extract is not built |
-| 14 | Built-in type resolution with no indexer step | Serena, codebase-memory-mcp, code-graph-rag | Partly **shipped**: Go, Java, Python and TypeScript are typed (Python since this change set); C#, Kotlin and Rust are **planned** (phase 3) |
+| 14 | Built-in type resolution with no indexer step | Serena, codebase-memory-mcp, code-graph-rag | Partly **shipped**: Go, Java, Python, TypeScript, C#, C++, Kotlin and Scala are typed (`repocortex languages` prints the list; Python by scope analysis, the others by an arity query); Rust is **planned** (phase 3) |
 | 15 | API contract checks across repositories | GitNexus, Repowise, jCodeMunch | **Shipped**: `repocortex system contracts` |
 | 16 | Dependency reachability and SBOM | Endor Labs, Semgrep, narsil, Repowise | **Shipped**: `repocortex sbom` (CycloneDX) and `repocortex vulns --advisories`, against advisories you supply; no advisory database is built in |
 | 17 | Distribution breadth, signed releases | codebase-memory-mcp (8 channels, SLSA 3) | Partly **shipped**: v1.0.1 is the first tagged release. Signing, provenance, SBOMs, a container image, Scoop, winget, an MCP bundle and a registry entry are built and publish with the release after it; winget waits on a review |
@@ -196,7 +196,7 @@ in the [implementation plan](IMPLEMENTATION_PLAN.md).
 
 | Strength | Field |
 |---|---|
-| 206 grammars bundled, 86 with definitions extracted | 163 (codebase-memory-mcp), 79+ (jCodeMunch), about 40 (Graphify), 15–18 (GitNexus) |
+| 206 grammars bundled, 92 with definitions extracted | 163 (codebase-memory-mcp), 79+ (jCodeMunch), about 40 (Graphify), 15–18 (GitNexus) |
 | Compiler-proven `exact` edges from SCIP, across repositories | Only jCodeMunch imports SCIP, capped and single-repository |
 | A measured precision figure per confidence tier | Others label edges without publishing how often a label is right |
 | CI gate with pull-request comment and SARIF, free | Paid in Graphify (`gate`) and GitNexus (review) |
@@ -217,7 +217,7 @@ explain. None is independently reproduced.
 | Incremental update | about 2.5 s for 2 files in 3k (code-review-graph) | django, two changed files: 3.25 to 3.39 s before the update path was fixed and 0.83 to 1.06 s after, on a loaded machine ([performance](performance.md)) |
 | Agent efficiency | 88% fewer tool calls, 62% fewer tokens (codegraph); 10× fewer tokens at 83% vs 92% answer quality (codebase-memory-mcp) | One round run: on direct-caller lookups of uniquely named functions, agents with search alone matched it (51 of 51 correct in both arms, tokens within 1%). The harder cases are not measured. See [benchmarking](BENCHMARKING.md#5-agent-benchmark) |
 | Impact-analysis accuracy | F1 0.693, precision 0.546 (code-review-graph, the only one) | F1 0.000 to 0.156 over five repositories and four languages, against a truth that understates both precision and recall ([benchmarking](BENCHMARKING.md#impact-analysis-accuracy)) |
-| Call resolution per language | TypeScript 95.8%, Go 96.6% (codegraph) | `high` precision 95.1–100% in a hand check of nine projects and recall 7–89% of call sites, from the syntax tree ([accuracy](accuracy.md)); `exact` with SCIP |
+| Call resolution per language | TypeScript 95.8%, Go 96.6% (codegraph) | `high` precision 405 of 420 sampled edges (96%, 73–100% by project) in a hand check of 14 projects and recall 55–100% of the call sites sampled, from the syntax tree ([accuracy](accuracy.md), [verification](verification/2026-11-13/README.md)); `exact` with SCIP |
 | Tool-schema overhead | 90 tools about 12,000 tokens (narsil); 25 tools about 4,000 (CKB) | Now printed by `repocortex tool list`; see [protocols](guides/protocols.md) |
 | Repository scale | 400k–500k files (Augment); 500k-file cap (GitLab Orbit) | Synthetic scale suite runs to 1M symbols and 5M edges; see [scale testing](operations/scale-testing.md) |
 

@@ -1,0 +1,66 @@
+{
+ "language": "matlab",
+ "project": "altmany/export_fig (xkcdify.m, print2eps.m, print2array.m)",
+ "project_commit": "c6c48b0",
+ "repocortex_commit": "f783fa5",
+ "files": [
+  {
+   "path": "xkcdify.m",
+   "lines": 753,
+   "assigned_language": "matlab",
+   "parse_status": "ok",
+   "parse_error": "",
+   "expected": 21,
+   "correct": 21,
+   "missed": 0,
+   "missed_known_gap": 0,
+   "spurious": 0,
+   "line_on_attribute": 0
+  },
+  {
+   "path": "print2eps.m",
+   "lines": 743,
+   "assigned_language": "matlab",
+   "parse_status": "ok",
+   "parse_error": "",
+   "expected": 2,
+   "correct": 2,
+   "missed": 0,
+   "missed_known_gap": 0,
+   "spurious": 0,
+   "line_on_attribute": 0
+  },
+  {
+   "path": "print2array.m",
+   "lines": 391,
+   "assigned_language": "matlab",
+   "parse_status": "ok",
+   "parse_error": "",
+   "expected": 4,
+   "correct": 4,
+   "missed": 0,
+   "missed_known_gap": 0,
+   "spurious": 0,
+   "line_on_attribute": 0
+  }
+ ],
+ "totals": {
+  "expected": 27,
+  "correct": 27,
+  "missed": 0,
+  "missed_known_gap": 0,
+  "spurious": 0,
+  "line_on_attribute": 0
+ },
+ "examples": [],
+ "rule_objections": [
+  "No stated rule (no fixture directory). Applied: functions, classdef classes and methods; top-level script variables not counted."
+ ],
+ "findings": [
+  "27 of 27 function definitions (including nested functions) extracted with correct names and lines; no spurious symbols. .m files were assigned matlab by content (not objc, not misrouted).",
+  "The chosen files are plain function files: no classdef, properties or methods blocks, so classes were not exercised. Files are a small sample (three function files, 27 definitions)."
+ ],
+ "not_done": [
+  "classdef/properties/methods forms not tested (absent in the chosen files)."
+ ]
+}

@@ -1,0 +1,81 @@
+{
+ "language": "json",
+ "project": "SchemaStore/schemastore (src/schemas/json)",
+ "project_commit": "cbba8f7bb8db0aa3aee78d0e9aa8395c1b83913c",
+ "repocortex_commit": "f783fa5",
+ "files": [
+  {
+   "path": "src/schemas/json/utam-page-object-2.2.0.json",
+   "lines": 794,
+   "assigned_language": "json",
+   "parse_status": "ok",
+   "parse_error": "",
+   "expected": 23,
+   "correct": 23,
+   "missed": 0,
+   "missed_known_gap": 0,
+   "spurious": 0,
+   "line_on_attribute": 0,
+   "total_symbols": 395,
+   "type_alias": 23,
+   "configuration": 372
+  },
+  {
+   "path": "src/schemas/json/utam-page-object-2.0.3.json",
+   "lines": 794,
+   "assigned_language": "json",
+   "parse_status": "ok",
+   "parse_error": "",
+   "expected": 23,
+   "correct": 23,
+   "missed": 0,
+   "missed_known_gap": 0,
+   "spurious": 0,
+   "line_on_attribute": 0,
+   "total_symbols": 395,
+   "type_alias": 23,
+   "configuration": 372
+  },
+  {
+   "path": "src/schemas/json/haijun-code-marketplace.json",
+   "lines": 788,
+   "assigned_language": "json",
+   "parse_status": "ok",
+   "parse_error": "",
+   "expected": 0,
+   "correct": 0,
+   "missed": 0,
+   "missed_known_gap": 0,
+   "spurious": 0,
+   "line_on_attribute": 0,
+   "total_symbols": 357,
+   "type_alias": 0,
+   "configuration": 357
+  }
+ ],
+ "totals": {
+  "expected": 46,
+  "correct": 46,
+  "missed": 0,
+  "missed_known_gap": 0,
+  "spurious": 0,
+  "line_on_attribute": 0
+ },
+ "examples": {
+  "missed": [],
+  "spurious": []
+ },
+ "rule_objections": [
+  "Rule is narrow but fine for JSON Schema; however the third file (haijun-code-marketplace.json) is a draft-07 schema that names nothing under root $defs/definitions (all structure is inline `properties`), so the rule yields nothing for it - a developer looking up its sub-schemas gets only `configuration` keys. Rule does not cover `properties` names at all, so a schema with no definitions is invisible except through generic key symbols.",
+  "Two of the three largest files are the same schema in two versions (2.0.3, 2.2.0), so effective sample is two schemas."
+ ],
+ "findings": [
+  "Grammar-rule symbols exactly right: 46 expected (23 + 23 `definitions` entries), 46 found as type_alias, same names and lines (verified by script against the JSON key lines); 0 spurious, 0 missed; haijun correctly yields 0.",
+  "Separate analyser (not counted against the rule): 372 + 372 + 357 `configuration` symbols for these three files (one per key), i.e. 1101 config symbols vs 46 schema definitions; every file's total symbol count is 395 / 395 / 357.",
+  "Text search works: `search marketplace` finds haijun-code-marketplace.json; `search pageObjectInterface` finds both utam files.",
+  "parse_status ok for all three."
+ ],
+ "not_done": [
+  "Not tested: OpenAPI components.schemas, $defs (Draft 2019+), escaped schema names."
+ ]
+}

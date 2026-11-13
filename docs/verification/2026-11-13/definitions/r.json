@@ -1,0 +1,65 @@
+{
+ "language": "r",
+ "project": "tidyverse/dplyr (R/rows.R, R/slice.R, R/case-when.R)",
+ "project_commit": "819c99f",
+ "repocortex_commit": "f783fa5",
+ "files": [
+  {
+   "path": "R/rows.R",
+   "lines": 679,
+   "assigned_language": "r",
+   "parse_status": "ok",
+   "parse_error": "",
+   "expected": 24,
+   "correct": 24,
+   "missed": 0,
+   "missed_known_gap": 0,
+   "spurious": 0,
+   "line_on_attribute": 0
+  },
+  {
+   "path": "R/slice.R",
+   "lines": 674,
+   "assigned_language": "r",
+   "parse_status": "ok",
+   "parse_error": "",
+   "expected": 24,
+   "correct": 24,
+   "missed": 0,
+   "missed_known_gap": 0,
+   "spurious": 0,
+   "line_on_attribute": 0
+  },
+  {
+   "path": "R/case-when.R",
+   "lines": 639,
+   "assigned_language": "r",
+   "parse_status": "ok",
+   "parse_error": "",
+   "expected": 7,
+   "correct": 7,
+   "missed": 0,
+   "missed_known_gap": 0,
+   "spurious": 0,
+   "line_on_attribute": 0
+  }
+ ],
+ "totals": {
+  "expected": 55,
+  "correct": 55,
+  "missed": 0,
+  "missed_known_gap": 0,
+  "spurious": 0,
+  "line_on_attribute": 0
+ },
+ "examples": [],
+ "rule_objections": [
+  "Plain top-level constants/variables are not recorded by design; none occurred in these files."
+ ],
+ "findings": [
+  "55 of 55 file-level 'name <- function' definitions extracted with correct names and lines; no spurious symbols. The three files contain no S4/R5/R6 definitions, no plain assignments at top level, and no other definition forms, so the class/method paths of the rule were not exercised."
+ ],
+ "not_done": [
+  "setClass/setGeneric/setMethod/R6Class forms were not tested (absent from the chosen files)."
+ ]
+}

@@ -188,6 +188,8 @@ $ repocortex index --full --digest
   Duration:      10895ms
 ```
 
+*This output was captured before YAML, JSON, HTML and Markdown gained definition queries. On a current build those languages are parsed and yield symbols, so a `Text only` row lists fewer of them (for example Dockerfile, `go.mod` and diffs).*
+
 The rows after `Imports` say what happened to every file, and they are read from
 the index, so `status` and `doctor` print the same ones. A row that would say
 zero is left out.
@@ -401,6 +403,8 @@ MCP profile:    minimal
 Capabilities:   code
 ```
 
+*This output was captured before YAML, JSON, HTML and Markdown gained definition queries. On a current build those languages are parsed and yield symbols, so a `Text only` row lists fewer of them (for example Dockerfile, `go.mod` and diffs).*
+
 The rows from `Parsed` to `Skipped` are the ones [`index`](#index) prints, read
 live from the `files` table. `--json` carries them under `parse`, with
 `largest_too_large`, `incomplete_files` and `failed_files` as lists of paths
@@ -496,34 +500,36 @@ depth? No flags beyond `--verbose`, which lists the parsed-tier grammars too.
 The tiers are computed from what the parser can do at run time, not read from a
 list, so this output cannot disagree with what the binary does. A language is
 `typed` when it has definition, import and receiver queries and something that
-tells candidates of one name apart — an arity query (Go, Java, TypeScript) or a
-scope analysis that states the receiver's class (Python); `resolved` when it has
+tells candidates of one name apart — an arity query (Go, Java, TypeScript, C#, C++,
+Kotlin, Scala) or a scope analysis that states the receiver's class (Python); `resolved` when it has
 definitions and imports; `parsed` when it has a definition query and nothing more. A grammar that is
 bundled without a definition query is not in a tier at all: it is listed as
 `text only`: files in that language are indexed for full-text search and yield
 no symbols. How much each language
 actually yields was checked by hand; see
-[verification](verification/2026-11-12/README.md).
+[verification](verification/2026-11-13/README.md) (and the [first record](verification/2026-11-12/README.md)).
 
 ```
 $ repocortex languages
 TIER              COUNT  WHAT YOU GET
-typed             4      definitions, imports, receiver discrimination by arity or class — references can reach 'high'
-resolved          10     definitions and imports — references bind across files
-parsed            72     definitions and search only — no cross-file references claimed
-with definitions  86     
-text only         120    no definition query: full-text search only, no symbols
+typed             8      definitions, imports, receiver discrimination by arity or class — references can reach 'high'
+resolved          6      definitions and imports — references bind across files
+parsed            78     definitions and search only — no cross-file references claimed
+with definitions  92
+text only         114    no definition query: full-text search only, no symbols
 total             206    
 
-typed:    [go java python typescript]
-resolved: [c c_sharp cpp javascript kotlin php ruby rust scala tsx]
+typed:    [c_sharp cpp go java kotlin python scala typescript]
+resolved: [c javascript php ruby rust tsx]
+
+(78 parsed-tier and 114 text-only languages not listed; pass --verbose)
 ```
 
 Read the tiers as a coverage statement before trusting an empty relationship
 result: a `parsed`-tier language will never produce a caller, and the absence is
 a property of the tier, not of the code.
 
-A file in a `text only` language (Perl, Haskell, YAML, Markdown, Makefiles and
+A file in a `text only` language (Perl, Haskell, Pascal, COBOL, Nix, Assembly and
 the rest) is found by `search` and never by `symbol`; the index records it as
 skipped with reason `text_only`. `--verbose` and `--json` (`text_only`) list
 those languages.

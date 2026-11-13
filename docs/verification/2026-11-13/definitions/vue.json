@@ -1,0 +1,87 @@
+{
+ "language": "vue",
+ "project": "vuejs/vuetify (script setup, 3 files) + PanJiaChen/vue-element-admin (options API, 1 supplementary file)",
+ "project_commit": "vuetify 4932ba8b29428b218023c5c654ecf8b60e1ebda1 ; vue-element-admin 6858a9ad67483025f6a9432a926beb9327037be3",
+ "repocortex_commit": "f783fa5",
+ "files": [
+  {
+   "path": "vuetify packages/docs/src/components/app/Markup.vue",
+   "lines": 345,
+   "assigned_language": "vue",
+   "parse_status": "ok",
+   "parse_error": "",
+   "expected": 15,
+   "correct": 15,
+   "missed": 0,
+   "missed_known_gap": 0,
+   "spurious": 0,
+   "line_on_attribute": 0
+  },
+  {
+   "path": "vuetify packages/docs/src/components/home/Gallery/Settings.vue",
+   "lines": 313,
+   "assigned_language": "vue",
+   "parse_status": "ok",
+   "parse_error": "",
+   "expected": 10,
+   "correct": 10,
+   "missed": 0,
+   "missed_known_gap": 0,
+   "spurious": 0,
+   "line_on_attribute": 0
+  },
+  {
+   "path": "vuetify packages/docs/src/components/doc/Releases.vue",
+   "lines": 313,
+   "assigned_language": "vue",
+   "parse_status": "ok",
+   "parse_error": "",
+   "expected": 19,
+   "correct": 19,
+   "missed": 0,
+   "missed_known_gap": 0,
+   "spurious": 1,
+   "line_on_attribute": 0
+  },
+  {
+   "path": "vue-element-admin src/views/table/complex-table.vue (supplementary, options API)",
+   "lines": 379,
+   "assigned_language": "vue",
+   "parse_status": "ok",
+   "parse_error": "",
+   "expected": 22,
+   "correct": 22,
+   "missed": 0,
+   "missed_known_gap": 0,
+   "spurious": 0,
+   "line_on_attribute": 0
+  }
+ ],
+ "totals": {
+  "expected": 66,
+  "correct": 66,
+  "missed": 0,
+  "missed_known_gap": 0,
+  "spurious": 1,
+  "line_on_attribute": 0
+ },
+ "examples": {
+  "missed": [],
+  "spurious": [
+   "Releases.vue:203 `async onClick ()` inside an object literal returned from a computed callback (method)"
+  ]
+ },
+ "rule_objections": [
+  "Rule is reasonable. `const props = defineProps(...)` is recorded as constant (rule: top-level const), not field; the field kind only applies to destructured props, which seems inconsistent for the common non-destructured form but is as stated.",
+  "Every top-level `const x = ref()/computed()` becomes a constant, so a script-setup component floods with local-state names (user, theme, clicked ...); that is the stated rule, arguable for lookup noise."
+ ],
+ "findings": [
+  "0 missed in all four files; names, kinds and lines on the declaration were all right, including the second plain <script> block next to <script setup> in Markup.vue and options-API data/created/filters/methods one object down.",
+  "1 spurious: a method-valued property (`async onClick ()`) in an object literal inside a computed() arrow function in Releases.vue line 203 is recorded as a method, although it is inside a function body and not the options object (contradicts the 'anything inside a function body is not a definition' rule).",
+  "Destructured composable bindings (`const { t } = useI18n()`, `const { smAndUp } = useDisplay()`) correctly not extracted."
+ ],
+ "not_done": [
+  "No project found that mixes both styles within the three largest files: the three vuetify files are all <script setup>; I added one options-API file from a second project as a supplementary 4th file (largest options-API .vue in vue-element-admin) and counted it in the totals.",
+  "vuetify was fetched with a sparse checkout (packages/docs/src, packages/vuetify/src). Selection rule: largest .vue under 800 lines excluding docs examples/ demos and tests. Did not check totals-per-file flood for Vue beyond the symbol lists above."
+ ]
+}

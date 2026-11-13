@@ -1,0 +1,89 @@
+{
+ "language": "html",
+ "project": "mozilla/pdf.js",
+ "project_commit": "bf3e12f16591c5c923b362dee8c412c994fb2668",
+ "repocortex_commit": "f783fa5",
+ "files": [
+  {
+   "path": "extensions/chromium/options/options.html",
+   "lines": 185,
+   "assigned_language": "html",
+   "parse_status": "ok",
+   "parse_error": "",
+   "expected": 12,
+   "correct": 12,
+   "missed": 0,
+   "missed_known_gap": 0,
+   "spurious": 0,
+   "line_on_attribute": 0,
+   "total_symbols": 12
+  },
+  {
+   "path": "web/viewer-geckoview.html",
+   "lines": 141,
+   "assigned_language": "html",
+   "parse_status": "ok",
+   "parse_error": "",
+   "expected": 13,
+   "correct": 13,
+   "missed": 0,
+   "missed_known_gap": 0,
+   "spurious": 0,
+   "line_on_attribute": 0,
+   "total_symbols": 13
+  },
+  {
+   "path": "web/internal/debugger.html",
+   "lines": 137,
+   "assigned_language": "html",
+   "parse_status": "ok",
+   "parse_error": "",
+   "expected": 42,
+   "correct": 42,
+   "missed": 0,
+   "missed_known_gap": 0,
+   "spurious": 0,
+   "line_on_attribute": 0,
+   "total_symbols": 42
+  },
+  {
+   "path": "SUPPLEMENTARY web/viewer.html (1354 lines, over the 800 limit)",
+   "lines": 1354,
+   "assigned_language": "html",
+   "parse_status": "ok",
+   "parse_error": "",
+   "expected": 308,
+   "correct": 308,
+   "missed": 0,
+   "missed_known_gap": 0,
+   "spurious": 0,
+   "line_on_attribute": 0,
+   "total_symbols": 308
+  }
+ ],
+ "totals": {
+  "expected": 375,
+  "correct": 375,
+  "missed": 0,
+  "missed_known_gap": 0,
+  "spurious": 0,
+  "line_on_attribute": 0
+ },
+ "examples": {
+  "missed": [],
+  "spurious": []
+ },
+ "rule_objections": [
+  "Rule is narrow but defensible. In an app like pdf.js the ids are the only handles the JavaScript uses (getElementById), so id-as-variable is useful; custom elements and data-l10n-id attributes (the real localisable names) are not indexed, by rule.",
+  "Every id becomes a symbol named just by its value, so viewer.html gives 308 symbols (the element identity is lost: no tag, no parent); ids like `viewer`, `toolbar`, `sidebar` collide with identifiers in other languages in a mixed repo."
+ ],
+ "findings": [
+  "Against the stated rule: 375 expected, 375 found (right names, lines, kind variable); 0 missed, 0 spurious. My expected list came from a regex scan that blanks comments, <script> and <style>, drops empty/space/template ids, and matched the table exactly for all four files. No ids from comments or scripts leaked.",
+  "Symbols per file equal the id count (12 / 13 / 42 / 308): no flood beyond the ids themselves.",
+  "The three largest html files under 800 lines in pdf.js are small (185/141/137), so I added the 1354-line viewer.html as a supplementary 4th file and counted it in totals.",
+  "Text search works (`search Sidebar` returns the html files)."
+ ],
+ "not_done": [
+  "Not exercised: server-side template syntax in attributes, duplicate ids, ids in tags with syntax errors."
+ ]
+}

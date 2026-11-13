@@ -1,0 +1,75 @@
+{
+ "language": "groovy",
+ "project": "grails/grails-core (grails-datamapping-validation DefaultConstrainedProperty.groovy, grails-datamapping-rx RxEntity.groovy, grails-data-simple SimpleMapQuery.groovy)",
+ "project_commit": "57f8d989",
+ "repocortex_commit": "f783fa5",
+ "files": [
+  {
+   "path": "DefaultConstrainedProperty.groovy",
+   "lines": 794,
+   "assigned_language": "groovy",
+   "parse_status": "partial",
+   "parse_error": "syntax_errors: 7 error nodes and 2 missing tokens, first at line 53",
+   "expected": 50,
+   "correct": 0,
+   "missed": 50,
+   "missed_known_gap": 0,
+   "spurious": 0,
+   "line_on_attribute": 0
+  },
+  {
+   "path": "RxEntity.groovy",
+   "lines": 789,
+   "assigned_language": "groovy",
+   "parse_status": "partial",
+   "parse_error": "syntax_errors: 18 error nodes and 37 missing tokens, first at line 53",
+   "expected": 59,
+   "correct": 56,
+   "missed": 3,
+   "line_on_attribute": 56,
+   "missed_known_gap": 0,
+   "spurious": 0
+  },
+  {
+   "path": "SimpleMapQuery.groovy",
+   "lines": 798,
+   "assigned_language": "groovy",
+   "parse_status": "partial",
+   "parse_error": "syntax_errors: 139 error nodes and 65 missing tokens, first at line 54",
+   "expected": 18,
+   "correct": 16,
+   "missed": 2,
+   "missed_known_gap": 0,
+   "spurious": 0,
+   "line_on_attribute": 0
+  }
+ ],
+ "totals": {
+  "expected": 127,
+  "correct": 72,
+  "missed": 55,
+  "missed_known_gap": 0,
+  "spurious": 0,
+  "line_on_attribute": 56
+ },
+ "examples": [
+  "DefaultConstrainedProperty.groovy:54 class DefaultConstrainedProperty implements ConstrainedProperty { (missed with all 49 methods and the constructor: the file yields no symbol at all)",
+  "RxEntity.groovy:56 trait RxEntity<D> implements RxGormOperations<D>, ... { (missed, though 56 of its methods are found)",
+  "RxEntity.groovy:336 static D create() { (missed)",
+  "RxEntity.groovy:743 static <T> T withConnection(String connectionName, @DelegatesTo(...) Closure<T> callable) { (missed)",
+  "SimpleMapQuery.groovy:657 protected resolveIfEmbedded(propertyName, obj) { (missed; also 783 populateQueryResult: modifier plus untyped name)"
+ ],
+ "rule_objections": [
+  "Fields and properties are not recorded; for Groovy domain classes and Gradle/Grails code, properties (def x, String name) are a common lookup."
+ ],
+ "findings": [
+  "DefaultConstrainedProperty.groovy (794 lines, class with an annotation stack and implements): zero symbols, 50 of 50 missed. The class has @CompileStatic @Slf4j @ToString(includes=[...]) above it and 'implements'; KNOWN_GAPS names enum/trait with implements, not this.",
+  "All three files are reported partial, with 7, 18 and 139 error nodes.",
+  "RxEntity.groovy: trait RxEntity itself is not recorded (trait with generics and implements), nor a static method returning a bare type variable (create) or one with a generic method prefix (<T> T withConnection).",
+  "SimpleMapQuery.groovy: 9 of the 16 symbols are kind function although they are methods of the class SimpleMapQuery (lines 635-789: the class appears to be closed early); the other 7 are method. I counted them as correct for name and line only. Two methods without a return type ('protected name(args)') are missed (657, 783); KNOWN_GAPS lists this only for two-parameter constructors and methods with two typed params.",
+  "Methods carrying @Override or @Generated are recorded at the annotation line (56 in RxEntity), known gap, counted in line_on_attribute."
+ ],
+ "not_done": [
+  "Closure-valued fields and Gradle tasks were not seen in these files. Expected methods were found by a method-header regex at indent 4 plus a looser grep; a method with a non-matching header shape could be uncounted in all three files."
+ ]
+}

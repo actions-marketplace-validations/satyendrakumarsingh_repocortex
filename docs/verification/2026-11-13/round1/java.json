@@ -1,0 +1,143 @@
+{
+  "language": "java",
+  "project": "square/javapoet",
+  "project_commit": "b9017a9503b76e11b4ad4c1a9f050e2d29112cb0",
+  "repocortex_commit": "53246ac",
+  "files_checked": [
+    "src/main/java/com/squareup/javapoet/TypeSpec.java",
+    "src/main/java/com/squareup/javapoet/CodeWriter.java",
+    "src/main/java/com/squareup/javapoet/MethodSpec.java",
+    "src/main/java/com/squareup/javapoet/CodeBlock.java",
+    "src/main/java/com/squareup/javapoet/TypeName.java"
+  ],
+  "index": {
+    "files": 50,
+    "symbols": 1251,
+    "edges_by_kind_and_tier": {
+      "CALLS": {
+        "high": 1379,
+        "low": 1554
+      },
+      "INSTANTIATES": {
+        "high": 124
+      },
+      "EXTENDS": {
+        "high": 8
+      },
+      "IMPLEMENTS": {
+        "high": 1
+      }
+    },
+    "parse_summary": {
+      "Parsed": "45 (45 clean)",
+      "Syntax errors": 0,
+      "Incomplete": 0,
+      "Failed": 0,
+      "Too large": 0,
+      "Text only": "3 (xml)",
+      "Skipped": "2 (no_grammar 2)"
+    },
+    "index_seconds": 0.95,
+    "resolve_seconds": 0.31
+  },
+  "definitions": {
+    "expected": 340,
+    "correct": 340,
+    "missed": 0,
+    "spurious": 0,
+    "line_on_attribute": 0,
+    "examples": {
+      "missed": [],
+      "spurious": [],
+      "note": "Tool rows per file: TypeSpec 100, CodeWriter 58, MethodSpec 78, CodeBlock 48, TypeName 56 = 340 (11 classes, 112 fields, 217 methods incl. constructors). Documented Java rule (fixtures/langs/java/expected.tsv): classes, interfaces, enums, records, annotation types, methods, constructors and fields; enum constants not extracted; anonymous-class methods are definitions. I checked that every row's line is a real declaration, and scanned every 2-space-indented source line plus nested-class member lines for declarations without a row; none found. The anonymous visitor methods in TypeName.java:258-324 are present. No standalone annotation lines precede any declaration in these files, so line_on_attribute is 0. Caveat: the missed check was a regex scan of declaration shapes, not a full parse."
+    }
+  },
+  "call_precision": {
+    "high": {
+      "right": 30,
+      "wrong": 0,
+      "unclear": 0,
+      "judged": 30,
+      "examples": []
+    },
+    "low": {
+      "right": 20,
+      "wrong": 10,
+      "unclear": 0,
+      "judged": 30,
+      "examples": [
+        "JavaFileTest.java:997 -> ClassName.java:162: ClassName.get(\"com.foo\",\"Entry\") bound to get(Class<?>); the (String,String,String...) overload at ClassName.java:218 is the real target (same wrong binding at JavaFileTest.java:353, ClassNameTest.java:96, TypeSpecTest.java:555 and :232)",
+        "AnnotatedTypeNameTest.java:64 -> TypeName.java:251: TypeName.get(String.class) bound to get(TypeMirror); the real target is get(Type) at TypeName.java:331 (same at TypeNameTest.java:83)",
+        "TypeSpecTest.java:972 -> MethodSpec.java:381: .returns(int.class) bound to returns(TypeName); real target is the returns(Type) overload",
+        "JavaFileTest.java:93 -> JavaFile.java:295: .addStaticImport(Runtime.class, \"*\") bound to addStaticImport(Enum<?>); real target is addStaticImport(Class<?>, String...) at JavaFile.java:299",
+        "FileWritingTest.java:136 -> JavaFile.java:87: .writeTo(filer) where filer is a Filer bound to writeTo(Appendable); real target is the writeTo(Filer) overload"
+      ],
+      "note": "All 10 wrong edges are the wrong overload of a correctly named method; none is a different class or a library call. The edge detail text on 3 of them (returns, addStaticImport, writeTo) says 'the only member of this name in the repository; the receiver's type is not known' although the name is overloaded."
+    },
+    "note": "Tiers present: high and low (no medium, no exact). Edges include test-file callers. For chained builder calls spanning lines, the edge's evidence line is the first line of the statement, not the line of the call (e.g. edge 2207 addCode recorded at TypeSpecTest.java:466, the call is at :470); I judged these by the call in the chain."
+  },
+  "call_recall": {
+    "sites": 40,
+    "right": 33,
+    "wrong": 1,
+    "none": 6,
+    "none_breakdown": {
+      "extracted_unresolved": 4,
+      "not_extracted": 2,
+      "extracted_ambiguous": 0,
+      "resolved_but_no_edge": 0
+    },
+    "examples": [
+      "TypeSpec.java:72 builder.javadoc.build() and :80 builder.staticBlock.build(): reference extracted with receiver type CodeBlock.Builder recorded, resolution 'unresolved', no edge (same at MethodSpec.java:59 and :66)",
+      "CodeWriter.java:74 and :78 this(out, ...) constructor delegation: no reference extracted at all",
+      "CodeBlock.java:97 new CodeWriter(out).emit(this): edge to CodeWriter.emit(String) at CodeWriter.java:220 (low) instead of emit(CodeBlock) at :228 -> wrong"
+    ],
+    "note": "Per file right/sites: TypeSpec 6/8, CodeWriter 6/8, MethodSpec 6/8, CodeBlock 7/8 (1 wrong), TypeName 8/8 (new TypeName(...) edges point at the class, accepted). Constructor-delegation this(...) calls were included as call sites."
+  },
+  "hierarchy": {
+    "extends_implements_edges": 9,
+    "judged": 9,
+    "right": 9,
+    "wrong": 0,
+    "declared_in_five_files": 0,
+    "right_edges_for_declared": 0,
+    "note": "Only 9 edges exist (8 EXTENDS, 1 IMPLEMENTS), so all were judged instead of 20: the 5 TypeName subclasses, 2 test classes extending AbstractTypesTest, Parent implements ParentInterface, ExtendsOthers extends Throws. All targets are the declared type. The five checked files declare no supertype whose target is in the repository, so there is no recall to count for them. Over the whole project, text search found the same repo-internal relationships (5 TypeName subclasses, 2 AbstractTypesTest, 1 Parent, 1 ExtendsOthers); I did not search every test file exhaustively."
+  },
+  "answers": [
+    {
+      "command": "repocortex --project . tool call find_callers name=immutableList",
+      "first_lines": "=== SYSTEM METADATA ===\n20 caller(s) of immutableList (src/main/java/com/squareup/javapoet/Util.java:65) are recorded.\nindex_revision: 1  status: ready\nnote: References spelled \"immutableList\" in this index: 20. 20 bound to this definition.\nnote: How the calls bound to this definition were made: immutableList ×1, Util.immutableList ×19. A qualified call is bound through what its qualifier names (an imported package, a module, a type, or a field of a stated type), so one definition is expected to be spelled several ways, such as a package under different import aliases; the reason on each row says which rule bound it.\nprovenance: This compares commits only. Staged, unstaged and untracked changes are invisible to the index and are NOT reflected here — a matching commit does not mean the working tree matches.",
+      "true_of_the_code": true,
+      "comment": "Text search finds 20 call sites of immutableList (excluding the definition). Count matches. It also reports how the calls were bound."
+    },
+    {
+      "command": "repocortex --project . tool call analyze_impact symbol=checkNotNull",
+      "first_lines": "=== SYSTEM METADATA ===\nINCOMPLETE — rows 1-50 of 210 are shown. checkNotNull (src/main/java/com/squareup/javapoet/Util.java:56): 38 direct, 172 indirect. Risk moderate (score 45).\nindex_revision: 1  status: ready\ntruncated: showing rows 1-50 of 210 impacted symbol(s), so 160 are not shown here. Pass offset=50 to read on (limit accepts up to 200); depth limit 3 reached, and 72 node(s) at the limit were not expanded\nnote: Risk = score = sum(factors), clamped to 0..100; level = low below 25, moderate below 60, high at or above 60; a level that would be low is reported as unknown when the callers could not be determined\nnote:   public_api (+0): Whether the target is exported is UNKNOWN. The index does not read the visibility rules of Java, so it cannot say whether callers outside this repository exist. No points are added, and none should be read as subtracted.",
+      "true_of_the_code": true,
+      "comment": "46 text call sites of checkNotNull match 46 edges from 38 distinct callers in the index, so '38 direct' is right. Indirect count (172) not verified by hand. It states truncation and says Java visibility is unknown."
+    },
+    {
+      "command": "repocortex --project . tool call find_implementations name=TypeName",
+      "first_lines": "=== SYSTEM METADATA ===\nTypeName (src/main/java/com/squareup/javapoet/TypeName.java:68): 5 implementing or extending it, 0 it implements or extends.\nindex_revision: 1  status: ready\nnote: A type relationship is recorded only where the source states it (extends, implements, an embedded type) or a compiler index proved it. Structural typing — a Go type that satisfies an interface without naming it, a TypeScript object that happens to fit — is visible only after 'repocortex scip import'. Treat an empty list as 'none declared', not 'none exist'.\nnote: 4 definitions are named \"TypeName\". This answer is for the class at src/main/java/com/squareup/javapoet/TypeName.java:68, chosen because find_implementations is about types and it is the only one that is. Pass path and line to choose another.\nprovenance: This compares commits only. Staged, unstaged and untracked changes are invisible to the index and are NOT reflected here — a matching commit does not mean the working tree matches.",
+      "true_of_the_code": true,
+      "comment": "TypeName has exactly 5 direct subclasses (ArrayTypeName, ClassName, ParameterizedTypeName, TypeVariableName, WildcardTypeName); the count and verdict 'strong (high=5)' are right. It discloses the name collision (4 definitions called TypeName)."
+    }
+  ],
+  "findings": [
+    "Wrong-overload binding is the main defect: 10 of 30 sampled low-confidence CALLS edges are the right method name bound to the wrong overload (ClassName.get x5, TypeName.get x2, returns, addStaticImport, writeTo(Filer)), and one recall site (CodeBlock.java:97 emit(this) bound to emit(String) instead of emit(CodeBlock)) is the same fault. 'low' edges are 1554 of the 2933 CALLS edges, over half.",
+    "Three of the wrong low edges carry the explanation 'the only member of this name in the repository; the receiver's type is not known' although the method name is overloaded in the repository, so the stated reason is false.",
+    "Calls on a receiver whose type the index records (builder.javadoc.build() with receiver CodeBlock.Builder) are left 'unresolved' with no edge (TypeSpec.java:72,80; MethodSpec.java:59,66): 4 of 40 recall sites.",
+    "Constructor delegation this(...) (CodeWriter.java:74,78) is not extracted as a reference at all, so constructor-to-constructor calls are invisible.",
+    "For chained calls over several lines, the edge's evidence line is the first line of the statement, not the line of the call (e.g. addCode recorded at TypeSpecTest.java:466 while the call is at :470).",
+    "INSTANTIATES edges point at the class, not at the constructor used.",
+    "Definitions: 340 of 340 correct, none missed, none spurious in the five files; hierarchy: 9 of 9 edges right; high-tier CALLS 30 of 30 right. These parts of the Java support held up on this project.",
+    "analyze_impact says the Java visibility is unknown and the result is truncated; find_implementations discloses that 4 definitions are named TypeName. No crash or error; index 0.95 s, resolve 0.31 s."
+  ],
+  "not_done": [
+    "Definition completeness was checked by regex scan of declaration shapes against the symbols table, not by a Java parser.",
+    "Hierarchy: only 9 edges exist, so 9 judged rather than 20; test files were not searched exhaustively for missed repo-internal supertypes.",
+    "Indirect-impact count (172) for checkNotNull not verified.",
+    "No medium or exact tier exists for Java here, so none sampled.",
+    "sqlite3 -readonly failed with 'unable to open database file' on this index; I used plain sqlite3 for read-only SELECTs only."
+  ]
+}

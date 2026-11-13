@@ -1,0 +1,92 @@
+{
+ "language": "graphql",
+ "project": "99designs/gqlgen (_examples) + graphql/swapi-graphql schema.graphql (supplementary)",
+ "project_commit": "gqlgen 4c4858a47825476d80ec62c23170f0da024e29d7 ; swapi-graphql 8c0bf5868f11fe84942548180751fceeb36bd606",
+ "repocortex_commit": "f783fa5",
+ "files": [
+  {
+   "path": "_examples/starwars/schema.graphql",
+   "lines": 135,
+   "assigned_language": "graphql",
+   "parse_status": "ok",
+   "parse_error": "",
+   "expected": 15,
+   "correct": 15,
+   "missed": 0,
+   "missed_known_gap": 0,
+   "spurious": 5,
+   "line_on_attribute": 0
+  },
+  {
+   "path": "_examples/batchresolver/schema.graphql",
+   "lines": 86,
+   "assigned_language": "graphql",
+   "parse_status": "ok",
+   "parse_error": "",
+   "expected": 13,
+   "correct": 13,
+   "missed": 0,
+   "missed_known_gap": 0,
+   "spurious": 0,
+   "line_on_attribute": 0
+  },
+  {
+   "path": "_examples/mini-habr-with-subscriptions/graph/schema.graphqls",
+   "lines": 76,
+   "assigned_language": "graphql",
+   "parse_status": "ok",
+   "parse_error": "",
+   "expected": 14,
+   "correct": 14,
+   "missed": 0,
+   "missed_known_gap": 0,
+   "spurious": 0,
+   "line_on_attribute": 0
+  },
+  {
+   "path": "SUPPLEMENTARY swapi-graphql schema.graphql (1166 lines, over the limit)",
+   "lines": 1166,
+   "assigned_language": "graphql",
+   "parse_status": "ok",
+   "parse_error": "",
+   "expected": 53,
+   "correct": 53,
+   "missed": 0,
+   "missed_known_gap": 0,
+   "spurious": 0,
+   "line_on_attribute": 52
+  }
+ ],
+ "totals": {
+  "expected": 95,
+  "correct": 95,
+  "missed": 0,
+  "missed_known_gap": 0,
+  "spurious": 5,
+  "line_on_attribute": 52
+ },
+ "examples": {
+  "missed": [],
+  "spurious": [
+   "starwars/schema.graphql:18 NEWHOPE (enum value, kind function)",
+   "starwars/schema.graphql:20 EMPIRE (enum value, kind function)",
+   "starwars/schema.graphql:22 JEDI (enum value, kind function)",
+   "starwars/schema.graphql:40 METER (enum value, kind function)",
+   "starwars/schema.graphql:42 FOOT (enum value, kind function)"
+  ]
+ },
+ "rule_objections": [
+  "No fixtures/langs/graphql exists: no stated rule. Counted types, interfaces, unions, enums, inputs, scalars, directives and top-level operations/fragments (none of the latter occur in these files). Enum values and fields were counted as NOT definitions; if the (unstated) intent is to index enum values, the 5 'spurious' would be correct.",
+  "Kinds: scalars (Time, UUID, Int64) and directives (goField) are recorded as kind `function`, enums/input/union as `class`, interface as `interface`. `function` for a scalar or a directive is odd; a scalar is a type.",
+  "Enum values get kind `function` but fields, arguments and input fields are not recorded: inconsistent."
+ ],
+ "findings": [
+  "Enum values are indexed (5 in starwars/schema.graphql) as `function` symbols named NEWHOPE, EMPIRE, JEDI, METER, FOOT, while field names and input fields are not. 5 spurious under my rule.",
+  "A type preceded by a `\"\"\"description\"\"\"` line gets the description line as its start_line (52 of 53 types in swapi schema.graphql, e.g. Film reported at line 5, declaration on line 6); counted as line_on_attribute. Types with `#` comments above or no description are on the declaration line.",
+  "Everything else matched: 95 expected, 95 found, names right, 0 missed. All files parse ok. `schema { query: Root }` (swapi:1) is not recorded, which I did not count as a definition.",
+  "Text search works (`search jedi` finds starwars/schema.graphql)."
+ ],
+ "not_done": [
+  "No `query`/`mutation`/`subscription` operation documents or fragments among the files, so those forms were not exercised. graphiql's and swapi's larger/other .graphql files are tests or over 800 lines. The three picked files are small (76-135 lines)."
+ ]
+}

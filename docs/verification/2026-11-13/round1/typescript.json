@@ -1,0 +1,185 @@
+{
+  "language": "typescript",
+  "project": "honojs/hono",
+  "project_commit": "f6fbaf0299c48eea9e656e03e2ffe7ac755e8823",
+  "repocortex_commit": "53246ac",
+  "files_checked": [
+    "src/jsx/intrinsic-elements.ts (854 lines; rule excluded src/types.ts at 2782 lines)",
+    "src/jsx/dom/render.ts (879)",
+    "src/context.ts (798)",
+    "src/adapter/aws-lambda/handler.ts (726)",
+    "src/hono-base.ts (564)"
+  ],
+  "index": {
+    "files": 565,
+    "symbols": 4768,
+    "edges_by_kind_and_tier": {
+      "typescript_callers_only": {
+        "CALLS": {"high": 1159, "medium": 132, "low": 4},
+        "INSTANTIATES": {"high": 104},
+        "EXTENDS": {"high": 77, "medium": 1, "low": 2},
+        "IMPLEMENTS": {"high": 8}
+      },
+      "whole_index_resolve_summary": {"high": 1885, "medium": 141, "low": 6, "exact": 0, "total": 2032}
+    },
+    "parse_summary": {
+      "Parsed": "541 (538 clean, 3 with syntax errors)",
+      "Syntax errors": "3 files read to the end with errors the parser recovered from",
+      "Incomplete": "not reported",
+      "Failed": "0",
+      "Too large": "0",
+      "Text only": "1 (editorconfig)",
+      "Skipped": "23 (no_grammar 16, binary 7)"
+    },
+    "resolution": "45664 references; 8519 resolved (73.5% of the 11591 that name something the index defines); 3072 ambiguous; 34073 unresolved",
+    "index_seconds": 4.83,
+    "resolve_seconds": 1.12
+  },
+  "definitions": {
+    "expected": 291,
+    "correct": 271,
+    "missed": 20,
+    "spurious": 0,
+    "line_on_attribute": 0,
+    "per_file": {
+      "src/jsx/intrinsic-elements.ts": {"expected": 81, "correct": 80, "missed": 1, "spurious": 0},
+      "src/jsx/dom/render.ts": {"expected": 41, "correct": 41, "missed": 0, "spurious": 0},
+      "src/context.ts": {"expected": 68, "correct": 55, "missed": 13, "spurious": 0},
+      "src/adapter/aws-lambda/handler.ts": {"expected": 61, "correct": 61, "missed": 0, "spurious": 0},
+      "src/hono-base.ts": {"expected": 40, "correct": 34, "missed": 6, "spurious": 0}
+    },
+    "basis": "Expected counts follow the repo's stated TypeScript rule (class fields, non-exported arrow consts, locals at any depth count). Interface property signatures were not expected; interface method signatures were.",
+    "examples": {
+      "missed": [
+        "src/hono-base.ts:195 private method #clone",
+        "src/hono-base.ts:405 private method #addRoute (also #handleError :418, #dispatch :425)",
+        "src/hono-base.ts:207 private field #notFoundHandler (also #path :140)",
+        "src/context.ts:609 private method #newResponse (plus 12 private # fields #rawRequest, #req, #var, #status, #executionCtx, #res, #layout, #renderer, #notFoundHandler, #preparedHeaders, #matchResult, #path)",
+        "src/jsx/intrinsic-elements.ts:14 namespace JSX (the container of every interface in the file)"
+      ],
+      "spurious": []
+    }
+  },
+  "call_precision": {
+    "high": {"right": 30, "wrong": 0, "unclear": 0, "judged": 30, "examples": [], "note": "router.add(...) in tests bound to the Router interface method counted right"},
+    "medium": {
+      "right": 24, "wrong": 4, "unclear": 2, "judged": 30,
+      "examples": [
+        "src/middleware/serve-static/index.ts:124 c.header(...) -> src/request.ts:182 HonoRequest.header: c is a Context, the call is Context.header, not the request header reader",
+        "src/middleware/cors/index.ts:161 c.header('Vary', ...) -> src/request.ts:182 HonoRequest.header: same, Context.header",
+        "src/middleware/etag/index.ts:106 res.clone() -> src/client/types.ts:147 ClientResponse.clone: res is a standard Response",
+        "src/middleware/method-override/index.ts:72 clonedRequest.clone() -> src/client/types.ts:147 ClientResponse.clone: clonedRequest is a standard Request"
+      ],
+      "unclear_examples": [
+        "adapters/deno/src/serve-static.ts:18 open(path) -> adapters/deno/src/deno.d.ts:12 (call is Deno.open destructured from the Deno global; bound to the repo's own ambient declaration of it)",
+        "src/adapter/deno/serve-static.ts:33 lstatSync(path) -> src/adapter/deno/deno.d.ts:24 (same pattern)"
+      ]
+    },
+    "low": {
+      "right": 2, "wrong": 2, "unclear": 0, "judged": 4,
+      "examples": [
+        "src/context.ts:773 this.header(...) -> src/request.ts:182 HonoRequest.header: inside Context, so Context.header",
+        "src/middleware/cache/index.test.ts:438 store.get(key)?.clone() -> src/client/types.ts:147 ClientResponse.clone: a standard Response"
+      ],
+      "note": "Only 4 CALLS/INSTANTIATES edges exist at low; all judged"
+    },
+    "exact": {"right": 0, "wrong": 0, "unclear": 0, "judged": 0, "examples": [], "note": "no exact edges exist"}
+  },
+  "call_recall": {
+    "sites": 32,
+    "right": 19,
+    "wrong": 0,
+    "none": 13,
+    "none_breakdown": {
+      "ambiguous": 4,
+      "unresolved": 3,
+      "not_extracted_private_hash_method_call": 6,
+      "resolved_but_no_edge": 0
+    },
+    "per_file": {
+      "src/jsx/intrinsic-elements.ts": "0 sites (type declarations only)",
+      "src/hono-base.ts": "8 sites, 1 right (new Hono :196), 7 none",
+      "src/context.ts": "8 sites, 5 right, 3 none",
+      "src/jsx/dom/render.ts": "8 sites, 8 right",
+      "src/adapter/aws-lambda/handler.ts": "8 sites, 5 right, 3 none"
+    },
+    "examples": [
+      "hono-base.ts:34 c.text(...) -> Context.text: reference extracted, resolution ambiguous",
+      "hono-base.ts:40 c.newResponse(...) -> Context.newResponse: extracted, unresolved",
+      "hono-base.ts:153,156,169,185 this.#addRoute(...) -> Hono.#addRoute: no reference row at all (private # method calls are not extracted, and #addRoute is not a symbol)",
+      "context.ts:449 this.html(content): extracted, unresolved",
+      "context.ts:659,686 this.#newResponse(...): not extracted",
+      "handler.ts:175,283 processor.createRequest(event): extracted, ambiguous",
+      "handler.ts:178 app.fetch(...): extracted, receiver 'Hono', unresolved"
+    ]
+  },
+  "hierarchy": {
+    "edges_total": 88,
+    "by_kind_tier": {"EXTENDS high": 77, "EXTENDS medium": 1, "EXTENDS low": 2, "IMPLEMENTS high": 8},
+    "sample_judged": 20,
+    "sample_right": 20,
+    "sample_wrong": 0,
+    "sample_note": "13 of 20 were HTMLAttributes subinterfaces in intrinsic-elements.ts, so the sample is dominated by one file",
+    "five_files_declared": 58,
+    "five_files_right": 58,
+    "five_files_note": "54 in intrinsic-elements.ts (all interface extends, including multi-parent HTMLAttributes and the line-924 IntrinsicElements) and 4 EventProcessor subclasses in handler.ts; hono-base.ts, context.ts and render.ts declare none"
+  },
+  "answers": [
+    {
+      "command": "repocortex --project . tool call find_callers name=mergePath path=src/utils/url.ts line=187 (the bare name returned an ambiguity listing of two definitions first)",
+      "first_lines": [
+        "=== SYSTEM METADATA ===",
+        "INCOMPLETE — 19 of the 31 references spelled \"mergePath\" are not among the rows below. 6 caller(s) of mergePath (src/utils/url.ts:187) are recorded.",
+        "index_revision: 1  status: ready",
+        "note: INCOMPLETE FOR THIS SYMBOL — 19 of the 31 reference(s) spelled like this name are not listed as its callers: 19 bound to it from outside any indexed function (module top level or an anonymous callback), which no caller list records. Any of them may be a use of this definition. Run search_code for the name before concluding anything from what is absent.",
+        "note: References spelled \"mergePath\" in this index: 31. 25 bound to this definition (19 of them from outside any indexed function, so bound but not listed), 6 bound to other definitions of the name.",
+        "note: 2 definitions are named \"mergePath\". This answer is for the function at src/utils/url.ts:187, chosen by path and by line. Pass path and line to choose another."
+      ],
+      "true_of_the_code": true,
+      "comment": "Honest and useful: 6 callers listed (basePath, mount, and others), 19 references unlisted. A text search finds 5 uses in hono-base.ts, 1 recursive in url.ts and about 24 in tests, so 31 references is plausible. But the stated reason, 'module top level or an anonymous callback', is not the whole cause: several unlisted uses sit inside the private methods #addRoute and #dispatch, which the index does not hold as symbols. The answer does say the list is incomplete."
+    },
+    {
+      "command": "repocortex --project . tool call analyze_impact symbol=mergePath path=src/utils/url.ts line=187",
+      "first_lines": [
+        "=== SYSTEM METADATA ===",
+        "INCOMPLETE — 19 of the 31 references spelled \"mergePath\" are not among the rows below. mergePath (src/utils/url.ts:187): 4 direct, 3 indirect. Risk unknown: 19 of the 31 reference(s) spelled like this name are not listed as its callers: 19 bound to it from outside any indexed function (module top level or an anonymous callback), which no caller list records.",
+        "index_revision: 1  status: ready",
+        "truncated: depth limit 3 reached, and 1 node(s) at the limit were not expanded",
+        "note: INCOMPLETE FOR THIS SYMBOL — 19 of the 31 reference(s) spelled like this name are not listed as its callers: 19 bound to it from outside any indexed function (module top level or an anonymous callback), which no caller list records. Any of them may be a use of this definition. Run search_code for the name before concluding anything from what is absent.",
+        "note: Risk = score = sum(factors), clamped to 0..100; level = low below 25, moderate below 60, high at or above 60; a level that would be low is reported as unknown when the callers could not be determined"
+      ],
+      "true_of_the_code": true,
+      "comment": "Declines to give a risk level and says why. The 4 direct callers is below the real count for the function, as the answer itself admits. One note says visibility of TypeScript exports is UNKNOWN although the symbol table has an exported flag; an agent loses little from this."
+    },
+    {
+      "command": "repocortex --project . tool call find_implementations name=Router",
+      "first_lines": [
+        "=== SYSTEM METADATA ===",
+        "INCOMPLETE — TypeScript types can satisfy this interface without declaring it, and those are not listed. Router (src/router.ts:29): 6 implementing or extending it, 0 it implements or extends.",
+        "index_revision: 1  status: ready",
+        "note: INCOMPLETE FOR THIS TYPE — TypeScript is structurally typed: an object or class that merely fits this interface is not listed. Only declared `implements` and `extends` clauses appear below, unless a compiler index was imported ('repocortex scip import').",
+        "note: A type relationship is recorded only where the source states it (extends, implements, an embedded type) or a compiler index proved it. Structural typing — a Go type that satisfies an interface without naming it, a TypeScript object that happens to fit — is visible only after 'repocortex scip import'. Treat an empty list as 'none declared', not 'none exist'.",
+        "provenance: This compares commits only. Staged, unstaged and untracked changes are invisible to the index and are NOT reflected here — a matching commit does not mean the working tree matches."
+      ],
+      "true_of_the_code": true,
+      "comment": "The 6 declared implementers (LinearRouter, PatternRouter and others) are real, and the answer states plainly that structural implementers are not listed. Only the first row of the list was seen in the first 12 lines; the 6 count was not verified row by row."
+    }
+  ],
+  "findings": [
+    "Private '#name' class members are not extracted as definitions: 6 missed in hono-base.ts and 13 in context.ts (#addRoute, #clone, #handleError, #dispatch, #newResponse, and 14 private fields). Calls to them (this.#addRoute, this.#newResponse) produce no reference row at all, which accounts for 6 of the 13 unbound call sites and makes the caller lists of the most central routing methods (#addRoute, #dispatch) empty.",
+    "Medium-tier precision is 24 right of 30. Four were wrong in a repeated way: c.header(...) on a Context bound to HonoRequest.header (twice), and .clone() on a standard Request or Response bound to ClientResponse.clone (twice, plus once more at low). A library method bound to a same-named repository method is the dominant error type.",
+    "Low tier has only 4 CALLS edges and 2 of the 4 are wrong (this.header in Context bound to HonoRequest.header; Response.clone bound to ClientResponse.clone).",
+    "Receiver-typed calls frequently get no edge: c.text and c.newResponse in hono-base.ts (ambiguous / unresolved), processor.createRequest and app.fetch in the Lambda handler (ambiguous / unresolved), this.html in context.ts (unresolved). 13 of 32 sampled call sites had no edge; 0 were bound to the wrong target.",
+    "Namespace declarations are not extracted: 'export namespace JSX' in src/jsx/intrinsic-elements.ts:14 is missing while all 79 types and interfaces inside it are present.",
+    "Calls to Deno-global functions destructured from 'Deno' are bound to the repo's own deno.d.ts declarations (open, lstatSync); counted unclear.",
+    "No exact-tier edges exist for TypeScript; all 1,885 high edges come from name/import resolution.",
+    "Strengths seen: high tier was 30 of 30 right, hierarchy was 20 of 20 right in the sample and 58 of 58 for declared supertypes in the five files, render.ts was 41 of 41 on definitions and 8 of 8 on call recall, and the answers admit incompleteness with specific counts.",
+    "The bare-name query for mergePath returned an ambiguity listing and answered for no definition; this is correct behaviour (two real definitions) but needs a second call."
+  ],
+  "not_done": [
+    "Precision samples include test files and benchmarks as callers (the brief restricts only by language); no separate non-test number was measured.",
+    "Interface property signatures were not treated as expected definitions; the tool does not extract them either, so no discrepancy was counted.",
+    "Hierarchy sample draws were dominated by intrinsic-elements.ts (13 of 20); a stratified sample was not taken.",
+    "src/types.ts (2782 lines) was excluded by the 1,500-line rule, so the largest type file was not read."
+  ]
+}

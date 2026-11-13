@@ -1,0 +1,339 @@
+{
+  "language": "typescript",
+  "project": "honojs/hono",
+  "project_commit": "f6fbaf0299c48eea9e656e03e2ffe7ac755e8823",
+  "repocortex_commit": "8748b29",
+  "files_checked": [
+    "src/jsx/intrinsic-elements.ts (854 lines)",
+    "src/jsx/dom/render.ts (879)",
+    "src/context.ts (798)",
+    "src/adapter/aws-lambda/handler.ts (726)",
+    "src/hono-base.ts (564)"
+  ],
+  "index": {
+    "files": 565,
+    "symbols": 4806,
+    "edges_by_kind_and_tier": {
+      "typescript_callers_only": {
+        "CALLS": {
+          "high": 1205,
+          "medium": 125,
+          "low": 7
+        },
+        "INSTANTIATES": {
+          "high": 104
+        },
+        "EXTENDS": {
+          "high": 77,
+          "low": 2
+        },
+        "IMPLEMENTS": {
+          "high": 8
+        }
+      },
+      "tsx_callers_in_this_project": {
+        "CALLS": {
+          "high": 541
+        },
+        "REFERENCES": {
+          "high": 1,
+          "medium": 8
+        }
+      },
+      "whole_index_resolve_summary": {
+        "high": 1936,
+        "medium": 133,
+        "low": 9,
+        "exact": 0,
+        "total": 2078
+      }
+    },
+    "parse_summary": {
+      "Parsed": "541 (538 clean, 3 with syntax errors)",
+      "Syntax errors": "3 files read to the end with errors the parser recovered from",
+      "Incomplete": "not reported",
+      "Failed": "0",
+      "Too large": "0",
+      "Text only": "1 (editorconfig)",
+      "Skipped": "23 (no_grammar 16, binary 7)"
+    },
+    "round1_for_comparison": {
+      "symbols": 4768,
+      "edges_total": 2032,
+      "index_seconds": 4.83,
+      "resolve_seconds": 1.12
+    },
+    "index_seconds": 7.34,
+    "resolve_seconds": 1.75,
+    "note": "Wall times measured with /usr/bin/time -p on a possibly loaded machine; index took 7.34 s against 4.83 s in round one."
+  },
+  "definitions": {
+    "expected": 291,
+    "correct": 291,
+    "missed": 0,
+    "spurious": 0,
+    "line_on_attribute": 0,
+    "per_file": {
+      "src/jsx/intrinsic-elements.ts": {
+        "expected": 81,
+        "correct": 81,
+        "missed": 0,
+        "spurious": 0
+      },
+      "src/jsx/dom/render.ts": {
+        "expected": 41,
+        "correct": 41,
+        "missed": 0,
+        "spurious": 0
+      },
+      "src/context.ts": {
+        "expected": 68,
+        "correct": 68,
+        "missed": 0,
+        "spurious": 0
+      },
+      "src/adapter/aws-lambda/handler.ts": {
+        "expected": 61,
+        "correct": 61,
+        "missed": 0,
+        "spurious": 0
+      },
+      "src/hono-base.ts": {
+        "expected": 40,
+        "correct": 40,
+        "missed": 0,
+        "spurious": 0
+      }
+    },
+    "basis": "Same rule as round one and the TypeScript expected.tsv header (fields, #private members, locals, namespace as a package). Interface property signatures not expected. Each file's symbol list was compared name by name and line by line with the source.",
+    "round1_missed_fixed": {
+      "src/hono-base.ts #clone, #addRoute, #handleError, #dispatch, #notFoundHandler, #path": "fixed (all six are methods/fields named with their #)",
+      "src/context.ts #newResponse and the 12 private # fields": "fixed",
+      "src/jsx/intrinsic-elements.ts:14 namespace JSX": "fixed (kind package, name JSX)"
+    },
+    "examples": {
+      "missed": [],
+      "spurious": []
+    },
+    "other_observations": [
+      "Members of 'export namespace JSX' have fqn 'src/jsx/intrinsic-elements.ts:CrossOrigin' etc., without a 'JSX.' prefix, so the namespace is a symbol but its members are not qualified by it (the stated rule says contents are defined as at the top level, so this is per rule).",
+      "Overload folding verified on src/jsx/hooks/index.ts useRef: three signatures at 320-322 plus the implementation at 323 are one symbol starting at 320 (ends 334)."
+    ]
+  },
+  "call_precision": {
+    "high": {
+      "right": 29,
+      "wrong": 1,
+      "unclear": 0,
+      "judged": 30,
+      "examples": [
+        "adapters/bun/src/serve-static.ts:25 baseServeStatic({...}) -> adapters/bun/src/serve-static.ts:8 serveStatic: baseServeStatic is the import alias 'serveStatic as baseServeStatic' from 'hono/serve-static'; the edge is a self-call to the enclosing serveStatic and ignores the rename"
+      ],
+      "note": "Test-file calls to router.add/match bound to the Router interface method (src/router.ts) counted right, as in round one (the declared type is a Router implementation; the target is the interface's declaration)."
+    },
+    "medium": {
+      "right": 25,
+      "wrong": 4,
+      "unclear": 1,
+      "judged": 30,
+      "examples": [
+        "src/middleware/request-id/request-id.ts:55 c.header(...) -> src/request.ts:182 HonoRequest.header: c is a Context, the call is Context.header",
+        "src/middleware/serve-static/index.ts:124 c.header('Content-Encoding', ...) -> src/request.ts:182 HonoRequest.header: same",
+        "src/helper/factory/index.test.ts:80 c.header('x-message', ...) -> src/request.ts:182 HonoRequest.header: same",
+        "src/middleware/trailing-slash/index.ts:139 c.redirect(url, 301) -> src/client/types.ts:146 redirect (ClientResponse): c is a Context, the call is Context.redirect"
+      ],
+      "unclear_examples": [
+        "src/adapter/deno/serve-static.ts:33 lstatSync(path) -> src/adapter/deno/deno.d.ts:24 (Deno global destructured; bound to the repo's own ambient declaration)"
+      ],
+      "note": "17 of the 54 edges into HonoRequest.header (src/request.ts:182) are from receivers c, ctx or this (Context.header), measured over the whole index; 35 with receiver c.req are right."
+    },
+    "low": {
+      "right": 6,
+      "wrong": 1,
+      "unclear": 0,
+      "judged": 7,
+      "examples": [
+        "src/context.ts:773 this.header(...) inside Context.redirect -> src/request.ts:182 HonoRequest.header: Context.header (a field of Context in the same class)"
+      ],
+      "note": "Only 7 CALLS/INSTANTIATES edges exist at low; all judged."
+    },
+    "exact": {
+      "right": 0,
+      "wrong": 0,
+      "unclear": 0,
+      "judged": 0,
+      "examples": [],
+      "note": "no exact edges exist"
+    },
+    "sampling_rule": "ORDER BY (id * 40503) % 65521 LIMIT 30, caller in a typescript file (421 files), including tests and benchmarks"
+  },
+  "round1_wrong_examples": [
+    {
+      "site": "src/middleware/serve-static/index.ts:124 c.header",
+      "round1_tier": "medium",
+      "now": "still_wrong",
+      "note": "same edge, still medium, still HonoRequest.header"
+    },
+    {
+      "site": "src/middleware/cors/index.ts:161 c.header('Vary')",
+      "round1_tier": "medium",
+      "now": "still_wrong",
+      "note": "same edge, still medium, still HonoRequest.header"
+    },
+    {
+      "site": "src/middleware/etag/index.ts:106 res.clone()",
+      "round1_tier": "medium",
+      "now": "gone",
+      "note": "no edge; reference is ambiguous"
+    },
+    {
+      "site": "src/middleware/method-override/index.ts:72 clonedRequest.clone()",
+      "round1_tier": "medium",
+      "now": "gone",
+      "note": "no edge; reference is ambiguous"
+    },
+    {
+      "site": "src/context.ts:773 this.header(...)",
+      "round1_tier": "low",
+      "now": "still_wrong",
+      "note": "unchanged, low, HonoRequest.header"
+    },
+    {
+      "site": "src/middleware/cache/index.test.ts:438 store.get(key)?.clone()",
+      "round1_tier": "low",
+      "now": "gone",
+      "note": "no edge at 438. BUT line 440 response.clone() (receiver text 'Response') now has a HIGH edge to ClientResponse.clone (src/client/types.ts:147): a new wrong edge at a higher tier, the only resolved 'clone' reference in the index"
+    },
+    {
+      "site": "adapters/deno/src/serve-static.ts:18 open(path) (round one: unclear)",
+      "round1_tier": "medium",
+      "now": "still_wrong",
+      "note": "unchanged and still unclear: bound to repo's deno.d.ts declaration"
+    },
+    {
+      "site": "src/adapter/deno/serve-static.ts:33 lstatSync(path) (round one: unclear)",
+      "round1_tier": "medium",
+      "now": "still_wrong",
+      "note": "unchanged and still unclear"
+    }
+  ],
+  "call_recall": {
+    "sites": 32,
+    "right": 25,
+    "wrong": 0,
+    "none": 7,
+    "none_breakdown": {
+      "ambiguous": 4,
+      "unresolved": 3,
+      "not_extracted": 0,
+      "resolved_but_no_edge": 0
+    },
+    "per_file": {
+      "src/jsx/intrinsic-elements.ts": "0 sites (type declarations only)",
+      "src/hono-base.ts": "8 sites (34, 40, 43, 153, 156, 169, 185, 196): 5 right (4 x this.#addRoute, new Hono), 3 none",
+      "src/context.ts": "8 sites (367, 404, 416, 449, 522, 653, 659, 686): 7 right, 1 none",
+      "src/jsx/dom/render.ts": "8 sites: 8 right",
+      "src/adapter/aws-lambda/handler.ts": "8 sites (158, 173, 175, 176, 178, 206, 279, 283): 5 right, 3 none"
+    },
+    "examples": [
+      "hono-base.ts:34,43 c.text(...): extracted, ambiguous",
+      "hono-base.ts:40 c.newResponse(...): extracted, unresolved",
+      "context.ts:449 this.html(content): extracted, unresolved (html is a field of Context)",
+      "handler.ts:175,283 processor.createRequest(event): extracted, ambiguous",
+      "handler.ts:178 app.fetch(...): extracted, receiver 'Hono', unresolved"
+    ],
+    "round1_comparison": "round one 19 right / 13 none (6 of them private # calls not extracted). Now all private # call sites (hono-base 153,156,169,185; context 659,686) are right; the 7 remaining none are receiver-typed calls with no type inference."
+  },
+  "hierarchy": {
+    "edges_total": 87,
+    "by_kind_tier": {
+      "EXTENDS high": 77,
+      "EXTENDS low": 2,
+      "IMPLEMENTS high": 8
+    },
+    "sample_judged": 20,
+    "sample_right": 19,
+    "sample_wrong": 1,
+    "sample_wrong_examples": [
+      "src/adapter/service-worker/types.ts:1 'interface ExtendableEvent extends Event' -> src/jsx/types.ts:29 Event (a type alias of globalThis.Event): the supertype is the DOM Event, bound at low to an unrelated repo alias. Both low EXTENDS edges in the index (this and adapters/service-worker/src/types.ts:1) are this error."
+    ],
+    "sample_note": "12 of 20 were HTMLAttributes subinterfaces in intrinsic-elements.ts.",
+    "five_files_declared": 58,
+    "five_files_right": 58,
+    "five_files_note": "54 in intrinsic-elements.ts (50 single-parent, 3 for HTMLAttributes, 1 for the line-924 IntrinsicElements extends JSX.IntrinsicElements) and 4 in handler.ts; hono-base.ts, context.ts, render.ts declare none.",
+    "other": "The anonymous class expression 'const RegExpRouterWithMatcherExport = class<T> extends RegExpRouter<T>' at src/router/reg-exp-router/prepared-router.ts:98 produces an EXTENDS edge whose source is the enclosing FUNCTION buildInitParams (95-155), so find_implementations lists a function as a subtype at depth 2."
+  },
+  "answers": [
+    {
+      "command": "repocortex --project . tool call find_callers name=mergePath path=src/utils/url.ts line=187",
+      "first_lines": [
+        "=== SYSTEM METADATA ===",
+        "INCOMPLETE — 19 of the 31 references spelled \"mergePath\" are not among the rows below. mergePath: its name appears in 3 other place(s) that are not recorded as calls: it may be passed as a value. 6 caller(s) of mergePath (src/utils/url.ts:187) are recorded.",
+        "index_revision: 1  status: ready",
+        "note: INCOMPLETE FOR THIS SYMBOL — 19 of the 31 reference(s) spelled like this name are not listed as its callers: 19 bound to it from outside any indexed function (module top level or an anonymous callback), which no caller list records. Any of them may be a use of this definition. Run search_code for the name before concluding anything from what is absent.",
+        "note: INCOMPLETE FOR THIS SYMBOL — The name of the target occurs in 3 other place(s) that are neither a definition of it nor a reference the index recorded (for example src/client/client.ts:9, src/client/utils.test.ts:10, src/utils/url.test.ts:10). ...",
+        "note: References spelled \"mergePath\" in this index: 31. 25 bound to this definition (19 of them from outside any indexed function, so bound but not listed), 6 bound to other definitions of the name."
+      ],
+      "true_of_the_code": true,
+      "comment": "Same counts as round one (31 references, 19 unlisted) and still honest. The new 'appears in 3 other places, may be passed as a value' claim is wrong in substance: the three places are names in import lists (client.ts:9 and client/utils.test.ts:10 import the DIFFERENT mergePath of src/client/utils.ts:11; url.test.ts:10 imports this one), not values passed anywhere. So the added caveat is a false lead, though harmless. Also unchanged: the unlisted callers include uses inside #addRoute and #dispatch; those are now symbols, but the 19 'from outside any indexed function' still seems high for a function whose uses (hono-base.ts 271, 401, 406, 409, 530) are inside methods; not re-investigated."
+    },
+    {
+      "command": "repocortex --project . tool call analyze_impact symbol=mergePath path=src/utils/url.ts line=187",
+      "first_lines": [
+        "=== SYSTEM METADATA ===",
+        "INCOMPLETE — 19 of the 31 references spelled \"mergePath\" are not among the rows below. mergePath: its name appears in 3 other place(s) that are not recorded as calls: it may be passed as a value; 3 symbols on the path to it (basePath, constructor, route) are named in 36 other place(s) not recorded as calls (they may be passed as values), so what reaches them is not listed. mergePath (src/utils/url.ts:187): 4 direct, 4 indirect. Risk unknown: ...",
+        "index_revision: 1  status: ready",
+        "truncated: depth limit 3 reached, and 1 node(s) at the limit were not expanded",
+        "note: INCOMPLETE FOR THIS SYMBOL — 19 of the 31 reference(s) spelled like this name are not listed ...",
+        "note: INCOMPLETE FOR THIS SYMBOL — The name of the target occurs in 3 other place(s) ..."
+      ],
+      "true_of_the_code": true,
+      "comment": "Admits its limits on the first line (INCOMPLETE, risk unknown, depth-limit truncation is on line 4 not line 1). 4 direct, 4 indirect (round one: 3 indirect). The first line is long (over 800 chars) and the depth-limit truncation is still not on the first line. Still says visibility is UNKNOWN for TypeScript."
+    },
+    {
+      "command": "repocortex --project . tool call find_implementations name=Router",
+      "first_lines": [
+        "=== SYSTEM METADATA ===",
+        "INCOMPLETE — TypeScript types can satisfy this interface without declaring it, and those are not listed. Router (src/router.ts:29): 7 implementing or extending it (6 directly, 1 through other types; direct_only=true lists the direct ones alone), 0 it implements or extends.",
+        "index_revision: 1  status: ready",
+        "note: INCOMPLETE FOR THIS TYPE — TypeScript is structurally typed: ...",
+        "note: A type relationship is recorded only where the source states it ...",
+        "provenance: ..."
+      ],
+      "true_of_the_code": false,
+      "comment": "Transitive listing works (direct first: LinearRouter, PatternRouter, PreparedRegExpRouter, RegExpRouter, SmartRouter, TrieRouter, then depth 2). But the one 'through other types' entry is 'buildInitParams', a FUNCTION (prepared-router.ts:98), because an anonymous class expression inside it extends RegExpRouter. So '7 implementing or extending' is 6 true plus 1 that is a function containing an anonymous subclass. direct_only=true correctly gives 6."
+    }
+  ],
+  "regressions": [
+    "NEW WRONG HIGH EDGES from import aliases (the same change that fixed TSX <CalendarPrimitive>): a call through 'import { X as Y }' is now bound to the original name X, but to a same-named symbol that is near (usually the enclosing function) instead of the imported one. A diff of the complete edge set (round-one binary vs this binary, same checkout) shows 13 such new wrong high edges: baseServeStatic (alias of serveStatic) -> the enclosing serveStatic in adapters/{bun,cloudflare-workers,deno}/src/serve-static.ts and src/adapter/{bun,cloudflare-workers,deno}/serve-static.ts (6 self-edges); baseToSSG (alias of toSSG) -> the enclosing toSSG in adapters/{bun,deno}/src/ssg.ts and src/adapter/{bun,deno}/ssg.ts (4 self-edges); src/jsx/components.test.tsx:14 and :25 rawResolveCallback (alias of utils/html resolveCallback) -> the local test function resolveCallback; src/jsx/dom/server.ts:68 renderToReadableStreamHono (alias of ../streaming renderToReadableStream) -> the enclosing renderToReadableStream. Three other new alias edges are right (src/jsx/dom/index.test.tsx:3241, 3253 createElementForDom and :3282 cloneElementForDom -> dom/index.ts). Net: 13 wrong to 3 right. The one wrong edge in this round's 30-edge high sample (adapters/bun/src/serve-static.ts:25) is one of them, so high-tier precision is a floor of about 13 wrong in the high population of 1,205 CALLS, not 1 in 30.",
+    "New wrong edge at HIGH: src/middleware/cache/index.test.ts:440 response.clone() (receiver text 'Response') -> src/client/types.ts:147 ClientResponse.clone. The fix removed the medium/low clone edges but this one resolved with high confidence; it is the only resolved 'clone' reference in the index and it is wrong.",
+    "New wrong-looking hierarchy fact: function buildInitParams (prepared-router.ts:95) EXTENDS RegExpRouter, from an anonymous class expression, so a function appears as a subtype in find_implementations (depth 2). Not in round one's output (its find_implementations was not transitive).",
+    "New false lead in find_callers/analyze_impact for mergePath: 'name appears in 3 other places that are not recorded as calls: it may be passed as a value'; the 3 places are names inside import lists (two for a different mergePath).",
+    "EXTENDS medium edge from round one (1) is gone; both remaining low EXTENDS edges (ExtendableEvent -> jsx Event) are wrong.",
+    "No definition or right call edge from round one disappeared in the five files: definitions 291/291, round-one right recall sites all still right.",
+    "Three correct medium edges dropped to low (helper/dev/index.ts:77 and smart-router/router.ts:36 and middleware/combine/index.ts:156: router.match/add -> Router interface method) and the round-one medium EXTENDS src/jsx/base.ts:52 'interface IntrinsicElements extends HonoJSX.IntrinsicElements' (target src/jsx/intrinsic-elements.ts IntrinsicElements) is gone (reference now unresolved/external): one plausible right edge lost.",
+    "Edge-set diff overall (hono): 32 round-one edges removed, 78 added. Of the 32 removed, 6 were wrong clone() edges (good), 1 the medium EXTENDS above, 3 re-tiered, and the rest (22) were re-attributed from the class to the private method that contains the call (e.g. Hono -> mergePath became Hono.#addRoute -> mergePath), which is correct. Of the 78 added, 13 are the wrong alias edges above, 3 right alias edges, 3 re-tiered lows, and the rest are private-method calls and re-attributions that read correct (not individually verified)."
+  ],
+  "findings": [
+    "Definitions are complete on the five files: 291 of 291, 0 missed, 0 spurious; private #members, the JSX namespace and (elsewhere) overload folding all work as stated.",
+    "The import-alias binding added since round one produces 13 new wrong high edges in this project (6 serveStatic and 4 toSSG self-edges in the adapter wrappers, 2 resolveCallback and 1 renderToReadableStream in the JSX tests/server), against 3 new right ones. The stated reason is the same fix that makes TSX <CalendarPrimitive> work; for an aliased import the resolver picks a nearby same-named symbol without checking the import path.",
+    "Private '#name' calls now bind: this.#addRoute (4 sites in hono-base.ts) and this.#newResponse (2 in context.ts) are right at high tier; recall rose from 19/32 to 25/32 and none of the remaining 7 misses is a private call.",
+    "Context.header misbinding is not fixed: c.header(...) / this.header(...) on a Context still binds to HonoRequest.header (src/request.ts:182). Across the whole index 17 of the 54 edges into that method come from receivers c, ctx or this, i.e. wrong. In the medium sample 3 of 30 (and 1 of 7 at low) were this error.",
+    "Only part of the clone fix works: etag and method-override clone() edges are gone, but response.clone() on a parameter typed Response (cache/index.test.ts:440) is bound at HIGH to ClientResponse.clone.",
+    "A renamed import used as a call is bound to the enclosing same-named function: adapters/bun/src/serve-static.ts:25 baseServeStatic (import serveStatic as baseServeStatic) -> its own serveStatic, high tier (the one wrong edge in the high sample, 1 of 30; round one had 0 of 30).",
+    "c.redirect(...) on a Context binds to ClientResponse.redirect (src/client/types.ts:146) at medium, the same class of error as c.header.",
+    "Calls to Deno-global functions still bind to the repo's own deno.d.ts declarations (open, lstatSync), counted unclear.",
+    "Receiver-typed calls still often get no edge: c.text and c.newResponse (hono-base.ts), processor.createRequest and app.fetch (handler.ts), this.html (context.ts): 7 of 32 recall sites, all ambiguous or unresolved, none wrong.",
+    "Hierarchy: 19 of 20 sampled right; both low-tier EXTENDS edges (ExtendableEvent extends Event, in src/adapter and adapters/) are bound to a repo type alias instead of the DOM Event. 58 of 58 declared repository supertypes in the five files have the right edge.",
+    "A function is reported as a subtype because of an anonymous class expression extending RegExpRouter inside it (find_implementations name=Router, depth 2).",
+    "The 'may be passed as a value' caveat on mergePath points at names in import lists (two of them import a different mergePath); the caveat is wrong although harmless.",
+    "Index wall time was 7.34 s against 4.83 s in round one (resolve 1.75 s against 1.12 s); not investigated, may be machine load."
+  ],
+  "not_done": [
+    "Precision samples include test files and benchmarks as callers; no separate non-test number was measured.",
+    "The 19 'unlisted' mergePath references were not individually checked against the source to see why they have no caller symbol.",
+    "Hierarchy sample is dominated by intrinsic-elements.ts (12 of 20).",
+    "Round one's 'file src/types.ts' exclusion (over 1,500 lines) kept; it was not read.",
+    "analyze_impact for a callback-only function was run on koa (see javascript.json), not on a TypeScript function."
+  ]
+}

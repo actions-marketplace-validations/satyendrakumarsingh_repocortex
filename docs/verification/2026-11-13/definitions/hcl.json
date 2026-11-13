@@ -1,0 +1,89 @@
+{
+ "language": "hcl",
+ "project": "terraform-aws-modules/terraform-aws-vpc",
+ "project_commit": "b3abd6df2ecf052451a361ed55b8f06f8742a795",
+ "repocortex_commit": "f783fa5",
+ "files": [
+  {
+   "path": "outputs.tf",
+   "lines": 669,
+   "assigned_language": "hcl",
+   "parse_status": "ok",
+   "parse_error": "",
+   "expected": 122,
+   "correct": 122,
+   "missed": 0,
+   "missed_known_gap": 0,
+   "spurious": 0,
+   "line_on_attribute": 0,
+   "total_symbols": 122
+  },
+  {
+   "path": "examples/block-public-access/outputs.tf",
+   "lines": 540,
+   "assigned_language": "hcl",
+   "parse_status": "ok",
+   "parse_error": "",
+   "expected": 108,
+   "correct": 108,
+   "missed": 0,
+   "missed_known_gap": 0,
+   "spurious": 0,
+   "line_on_attribute": 0,
+   "total_symbols": 108
+  },
+  {
+   "path": "examples/complete/outputs.tf",
+   "lines": 530,
+   "assigned_language": "hcl",
+   "parse_status": "ok",
+   "parse_error": "",
+   "expected": 106,
+   "correct": 106,
+   "missed": 0,
+   "missed_known_gap": 0,
+   "spurious": 0,
+   "line_on_attribute": 0,
+   "total_symbols": 106
+  },
+  {
+   "path": "SUPPLEMENTARY examples/complete/main.tf",
+   "lines": 375,
+   "assigned_language": "hcl",
+   "parse_status": "ok",
+   "parse_error": "",
+   "expected": 15,
+   "correct": 15,
+   "missed": 0,
+   "missed_known_gap": 0,
+   "spurious": 0,
+   "line_on_attribute": 0,
+   "total_symbols": 25,
+   "note": "10 more symbols of kind deployment_unit are from the infra analyser, not counted"
+  }
+ ],
+ "totals": {
+  "expected": 351,
+  "correct": 351,
+  "missed": 0,
+  "missed_known_gap": 0,
+  "spurious": 0,
+  "line_on_attribute": 0
+ },
+ "examples": {
+  "missed": [],
+  "spurious": []
+ },
+ "rule_objections": [
+  "The three largest .tf files under 800 lines are all outputs.tf, so they only test `output` blocks and one `locals`; I added examples/complete/main.tf (375 lines, provider/data/locals/module) as a supplementary 4th file and counted it. resource/variable/tfvars forms were not exercised (main.tf 1543 and variables.tf 1685 lines exceed the limit).",
+  "Rule fine. 300+ output.* constants per project means searching for an output by name works but outputs dominate the symbol table; acceptable."
+ ],
+ "findings": [
+  "Under the stated rule 351 expected, 351 found with right names (output.x, local.x, module.x, provider.aws, data.t.n), kinds and lines; 0 missed, 0 spurious. The 3 `locals` entries at lines 2-4 of the root outputs.tf are correctly picked up.",
+  "Separate analyser (not counted): main.tf also gets 10 `deployment_unit` symbols (aws, available, vpc, ...), duplicating the module/provider/data names.",
+  "Text search works (`search redshift` finds outputs.tf)."
+ ],
+ "not_done": [
+  "Not exercised: resource blocks, variable blocks, .tfvars, Terragrunt/Nomad/Packer HCL, heredocs."
+ ]
+}

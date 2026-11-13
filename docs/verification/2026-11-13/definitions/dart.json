@@ -1,0 +1,67 @@
+{
+ "language": "dart",
+ "project": "dart-lang/shelf (pkgs/shelf/lib/src/request.dart, pkgs/shelf_static/lib/src/static_handler.dart, pkgs/shelf/lib/src/response.dart)",
+ "project_commit": "b175e9f",
+ "repocortex_commit": "f783fa5",
+ "files": [
+  {
+   "path": "pkgs/shelf/lib/src/request.dart",
+   "lines": 414,
+   "assigned_language": "dart",
+   "parse_status": "partial",
+   "parse_error": "syntax_errors: 3 error nodes and 0 missing tokens, first at line 133",
+   "expected": 21,
+   "correct": 21,
+   "missed": 0,
+   "missed_known_gap": 0,
+   "spurious": 0,
+   "line_on_attribute": 0
+  },
+  {
+   "path": "pkgs/shelf_static/lib/src/static_handler.dart",
+   "lines": 375,
+   "assigned_language": "dart",
+   "parse_status": "ok",
+   "parse_error": "",
+   "expected": 10,
+   "correct": 10,
+   "missed": 0,
+   "missed_known_gap": 0,
+   "spurious": 0,
+   "line_on_attribute": 0
+  },
+  {
+   "path": "pkgs/shelf/lib/src/response.dart",
+   "lines": 344,
+   "assigned_language": "dart",
+   "parse_status": "partial",
+   "parse_error": "syntax_errors: 14 error nodes and 0 missing tokens, first at line 69",
+   "expected": 21,
+   "correct": 21,
+   "missed": 0,
+   "missed_known_gap": 0,
+   "spurious": 0,
+   "line_on_attribute": 0
+  }
+ ],
+ "totals": {
+  "expected": 52,
+  "correct": 52,
+  "missed": 0,
+  "missed_known_gap": 0,
+  "spurious": 0,
+  "line_on_attribute": 0
+ },
+ "examples": [],
+ "rule_objections": [
+  "Getters (canHijack, expires) are recorded as kind method, not field/property; stated rule."
+ ],
+ "findings": [
+  "No miss or spurious symbol in 52 expected definitions, including named constructors (Response.ok, Request._), getters as methods, and a nested function (notModifiedResponse).",
+  "Two of three files are reported partial (3 and 14 error nodes) although every definition was still extracted; the status overstates the loss for these files.",
+  "Excluded adapter_tests.dart (741 lines) as a test file; used the next three largest."
+ ],
+ "not_done": [
+  "Expected sets built from a declaration-shape scan of lines at indent 0 and 2 read by eye, not an independent parser."
+ ]
+}

@@ -1,0 +1,160 @@
+{
+ "language": "go",
+ "project": "spf13/cobra",
+ "project_commit": "adbc8813901bba65827259daa8e22ff94ec1f30e",
+ "repocortex_commit": "8748b29",
+ "round": 2,
+ "files_checked": [
+  "completions.go",
+  "bash_completions.go",
+  "bash_completionsV2.go",
+  "powershell_completions.go",
+  "zsh_completions.go"
+ ],
+ "index": {
+  "files": 66,
+  "symbols": 934,
+  "edges_by_kind_and_tier": {
+   "CALLS": {
+    "high": 2123,
+    "low": 18
+   },
+   "INSTANTIATES": {
+    "high": 5
+   }
+  },
+  "parse_summary": {
+   "Parsed": "59 (59 clean)",
+   "Syntax errors": 0,
+   "Incomplete": 0,
+   "Failed": 0,
+   "Too large": 0,
+   "Text only": "1 (gomod)",
+   "Skipped": "6 (no_grammar 5, binary 1)"
+  },
+  "index_seconds": 1.7,
+  "resolve_seconds": 0.27
+ },
+ "definitions": {
+  "expected": 90,
+  "correct": 90,
+  "missed": 0,
+  "spurious": 0,
+  "line_on_attribute": 0,
+  "examples": {
+   "missed": [],
+   "spurious": [],
+   "note": "Tool rows per file now completions 48, bash_completions 22, V2 4, powershell 7, zsh 9 = 90 (round one 103). A script scan of top-level func/type/var/const specs against the symbols table found no missing and no extra beyond the interface method SliceValue.GetSlice, which is expected. All 13 round-one function-local vars are gone."
+  }
+ },
+ "call_precision": {
+  "high": {
+   "right": 30,
+   "wrong": 0,
+   "unclear": 0,
+   "judged": 30,
+   "examples": []
+  },
+  "low": {
+   "right": 12,
+   "wrong": 6,
+   "unclear": 0,
+   "judged": 18,
+   "examples": [
+    "command.go:1840 -> command.go:1822 etc: pflag.FlagSet method bound to Command method (6 edges, unchanged)"
+   ],
+   "note": "Only 18 low CALLS edges exist (same 18 as round one); all judged, the sample cannot differ. Their detail text still says 'the only member of this name in the repository; the receiver's type is not known'."
+  },
+  "note": "Fresh sample rule (id*40503)%65521; high sample includes test-file callers. No medium or exact tier."
+ },
+ "call_recall": {
+  "sites": 37,
+  "right": 37,
+  "wrong": 0,
+  "none": 0,
+  "none_breakdown": {},
+  "examples": [
+   "Same 37 sites as round one, all with an edge to the right definition, all high."
+  ]
+ },
+ "hierarchy": {
+  "extends_implements_edges": 0,
+  "judged": 0,
+  "right": 0,
+  "declared_in_five_files": 0,
+  "right_edges_for_declared": 0,
+  "note": "Still no EXTENDS/IMPLEMENTS edge for Go."
+ },
+ "answers": [
+  {
+   "command": "repocortex --project . tool call find_callers name=CompErrorln",
+   "first_lines": "=== SYSTEM METADATA ===\nINCOMPLETE \u2014 CompErrorln: its name appears in 1 other place(s) that are not recorded as calls: it may be passed as a value. 1 caller(s) of CompErrorln (completions.go:991) are recorded.\nindex_revision: 1  status: ready\nnote: INCOMPLETE FOR THIS SYMBOL \u2014 The name of the target occurs in 1 other place(s) that are neither a definition of it nor a reference the index recorded (for example site/content/completions/_index.md:269)...",
+   "true_of_the_code": true,
+   "comment": "Caller count 1 is correct. The new INCOMPLETE headline is a false alarm here: the 'other place' is a markdown documentation line (cobra.CompErrorln(msg string)), not a function passed as a value. It admits a limit that does not exist for this symbol, and the headline degrades a fully correct answer (verdict incomplete instead of strong)."
+  },
+  {
+   "command": "repocortex --project . tool call analyze_impact symbol=getCompletions",
+   "first_lines": "=== SYSTEM METADATA ===\ngetCompletions (completions.go:316): 1 direct, 6 indirect. Risk low or higher (score 6; the analysis was cut at depth 3).\nindex_revision: 1  status: ready\ntruncated: depth limit 3 reached, and 4 node(s) at the limit were not expanded",
+   "true_of_the_code": true,
+   "comment": "1 direct caller matches text search. The first line now says the depth cut and that risk is 'low or higher', fixing round one's complaint; the risk score also adds a truncation penalty."
+  },
+  {
+   "command": "repocortex --project . tool call find_implementations name=SliceValue",
+   "first_lines": "=== SYSTEM METADATA ===\nUNKNOWN \u2014 this index records no extends or implements relationship for any Go type; nothing about its subtypes or supertypes can be concluded. SliceValue (completions.go:311): 0 implementing or extending it, all directly, 0 it implements or extends.\nindex_revision: 1  status: ready\nnote: COVERAGE UNKNOWN \u2014 type hierarchy lookup for Go cannot be judged ...",
+   "true_of_the_code": false,
+   "comment": "Still finds no implementor although customMultiString (completions_test.go) implements it; the answer says UNKNOWN and admits the limit, as in round one."
+  }
+ ],
+ "round1_wrong_examples": [
+  {
+   "site": "command.go:1807",
+   "round1_tier": "low",
+   "now": "still_wrong",
+   "note": "edge 701 still low, bound to Command.HasFlags; receiver is a pflag.FlagSet"
+  },
+  {
+   "site": "command.go:1812",
+   "round1_tier": "low",
+   "now": "still_wrong",
+   "note": "edge 703 still low, bound to Command.HasFlags; receiver is a pflag.FlagSet"
+  },
+  {
+   "site": "command.go:1817",
+   "round1_tier": "low",
+   "now": "still_wrong",
+   "note": "edge 705 still low, bound to Command.HasFlags; receiver is a pflag.FlagSet"
+  },
+  {
+   "site": "command.go:1828",
+   "round1_tier": "low",
+   "now": "still_wrong",
+   "note": "edge 708 still low, bound to Command.HasAvailableFlags; receiver is a pflag.FlagSet"
+  },
+  {
+   "site": "command.go:1834",
+   "round1_tier": "low",
+   "now": "still_wrong",
+   "note": "edge 710 still low, bound to Command.HasAvailableFlags; receiver is a pflag.FlagSet"
+  },
+  {
+   "site": "command.go:1840",
+   "round1_tier": "low",
+   "now": "still_wrong",
+   "note": "edge 712 still low, bound to Command.HasAvailableFlags; receiver is a pflag.FlagSet"
+  }
+ ],
+ "regressions": [],
+ "findings": [
+  "The six wrong low edges (pflag FlagSet methods bound to Command.HasFlags/HasAvailableFlags) are unchanged: 0 of 6 fixed.",
+  "Function-local var fix worked: spurious 13 to 0, expected 90 all correct, 0 missed.",
+  "find_callers CompErrorln now opens with INCOMPLETE because the name appears in a markdown doc line; the caller count itself is right, so the new 'passed as a value' warning is a false alarm triggered by documentation text.",
+  "analyze_impact now says on its first line that it was cut at depth 3 and that risk is 'low or higher': round-one complaint fixed.",
+  "No Go hierarchy edges still; find_implementations remains honest (UNKNOWN) but cannot answer.",
+  "Call recall 37/37, high precision 30/30. No crash; index 1.7 s, resolve 0.27 s."
+ ],
+ "not_done": [
+  "Indirect impact count (6) not verified by hand.",
+  "Test-file callers not separated in the precision sample.",
+  "No medium or exact tier exists."
+ ]
+}

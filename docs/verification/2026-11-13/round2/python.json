@@ -1,0 +1,288 @@
+{
+ "language": "python",
+ "project": "pallets/click",
+ "project_commit": "e38188e9e205005d5af5f9e59df51904c984586a",
+ "repocortex_commit": "8748b29",
+ "round": 2,
+ "files_checked": [
+  "src/click/types.py",
+  "src/click/termui.py",
+  "src/click/_termui_impl.py",
+  "src/click/testing.py",
+  "src/click/shell_completion.py"
+ ],
+ "index": {
+  "files": 178,
+  "symbols": 2949,
+  "edges_by_kind_and_tier": {
+   "CALLS": {
+    "high": 2146,
+    "medium": 222,
+    "low": 137
+   },
+   "INSTANTIATES": {
+    "high": 588,
+    "medium": 2,
+    "low": 10
+   },
+   "EXTENDS": {
+    "high": 100,
+    "medium": 1
+   }
+  },
+  "parse_summary": {
+   "Parsed": "151 (151 clean)",
+   "Syntax errors": 0,
+   "Incomplete": 0,
+   "Failed": 0,
+   "Too large": 0,
+   "Text only": "2 (editorconfig 1, ini 1)",
+   "Skipped": "27 (no_grammar 18, empty 5, binary 2)"
+  },
+  "index_seconds": 1.71,
+  "resolve_seconds": 0.4
+ },
+ "definitions": {
+  "expected": 263,
+  "correct": 263,
+  "missed": 0,
+  "spurious": 7,
+  "line_on_attribute": 0,
+  "examples": {
+   "missed": [],
+   "spurious": [
+    "src/click/termui.py:235 prompt_func (nested def in prompt)",
+    "src/click/_termui_impl.py:800 _unquote_file (nested in open_url)",
+    "src/click/testing.py:504 visible_input",
+    "src/click/testing.py:515 hidden_input",
+    "src/click/testing.py:524 _getchar",
+    "src/click/testing.py:535 should_strip_ansi",
+    "src/click/testing.py:554 _patched_pdb_init (all nested in CliRunner.isolation)"
+   ],
+   "note": "Tool rows per file: types 106, termui 27, _termui_impl 47, testing 48, shell_completion 42 = 270 (round one 288). Overload stubs are folded: convert_type (types.py:1318), get_completion_class (shell_completion.py:581), ParamType.__call__ (types.py:144), prompt/progressbar/edit (termui.py), Editor.edit (_termui_impl.py:742) are now one symbol each, starting at the first stub line and ending at the end of the implementation. Expected is now 263 (281 minus 18 stub declarations that round one counted separately). A script comparing every def/class/top-level assignment line with the symbols table found nothing missing apart from the folded stubs. The 7 nested closures are still indexed as functions (spurious by the same rule as round one)."
+  }
+ },
+ "call_precision": {
+  "high": {
+   "right": 30,
+   "wrong": 0,
+   "unclear": 0,
+   "judged": 30,
+   "examples": []
+  },
+  "medium": {
+   "right": 30,
+   "wrong": 0,
+   "unclear": 0,
+   "judged": 30,
+   "examples": [],
+   "note": "21 of 30 are runner.invoke -> CliRunner.invoke on CliRunner fixture/local variables, others Editor(...).edit_files, ctx.call_on_close, click.echo, etc. all verified by reading."
+  },
+  "low": {
+   "right": 8,
+   "wrong": 22,
+   "unclear": 0,
+   "judged": 30,
+   "examples": [
+    "tests/test_commands.py:687 runner.invoke -> OptParseCommand.invoke (test-local class; real target CliRunner.invoke)",
+    "tests/test_context.py:57 runner.invoke -> core.py:1423 Command.invoke (same pattern at 329, 689, 252, 173, 302 etc.; 15 of 22 wrong are this runner.invoke pattern)",
+    "tests/test_commands.py:645 group.parse_args(ctx, ...) -> OptParseCommand.parse_args (test-local class; group is a click.Group)",
+    "src/click/core.py:1395 parser.parse_args -> core.py:2029 Group.parse_args (parser is the option parser)",
+    "tests/test_options.py:2867 opt.get_default -> test-local CustomArgument.get_default (opt is an Option)"
+   ],
+   "note": "Right (8): core.py:2150, core.py:1479, core.py:866, test_context.py:29, repo.py:110, aliases.py:142, test_info_dict.py:328 and :80."
+  },
+  "note": "Fresh sample rule (id*40503)%65521, python callers (.py), tests and examples included. Every low edge's detail says 'the receiver's class is not known, so this rests on the name'; 15 of the 30 low samples are runner.invoke bound to Command.invoke or a test-local invoke. Stdlib-object attribute calls (.close .write .flush .start .fileno .isatty .read1) bound to repo methods: none remain in any tier except self-calls inside the repo class itself (all correct)."
+ },
+ "call_recall": {
+  "sites": 40,
+  "right": 38,
+  "wrong": 0,
+  "none": 2,
+  "none_breakdown": {
+   "extracted_ambiguous": 1,
+   "extracted_unresolved": 1,
+   "not_extracted": 0,
+   "resolved_but_no_edge": 0
+  },
+  "examples": [
+   "src/click/shell_completion.py:48 comp.source() -> ShellComplete.source: reference extracted, ambiguous, no edge (unchanged)",
+   "src/click/_termui_impl.py:75 _default_text_stdout(): extracted, unresolved although a constant of that name exists (_compat.py:576) (unchanged)",
+   "src/click/types.py:263 and :367 super().to_info_dict(): now resolved high to ParamType.to_info_dict (were none)"
+  ],
+  "note": "Per file right/sites: types 8/8 (was 6/8), termui 8/8, _termui_impl 7/8, testing 8/8, shell_completion 7/8. Same sites as round one (comp_cls(...) at shell_completion.py:44 still skipped as a dynamic class call)."
+ },
+ "hierarchy": {
+  "extends_implements_edges": 101,
+  "judged": 20,
+  "right": 20,
+  "wrong": 0,
+  "declared_in_five_files": 30,
+  "right_edges_for_declared": 30,
+  "note": "EXTENDS only: 100 high, 1 medium (round one 42 high, 2 medium, 35 low = 79). All 20 sampled targets are the declared supertype, including ParamType[...] subscripted bases and IntRange with both bases. In the five files all 30 declared repo-internal supertype relationships have the right edge (round one 13 of 30). Non-repo bases (t.Generic, abc.ABC, t.TypedDict, io.BytesIO) correctly have none."
+ },
+ "answers": [
+  {
+   "command": "repocortex --project . tool call find_callers name=resolve_color_default",
+   "first_lines": "=== SYSTEM METADATA ===\n5 caller(s) of resolve_color_default (src/click/globals.py:54) are recorded.\nindex_revision: 1  status: ready\nnote: References spelled \"resolve_color_default\" in this index: 5. 5 bound to this definition.\nprovenance: ...\nverdict: strong (high=5)",
+   "true_of_the_code": true,
+   "comment": "Text search finds 5 call sites; count matches."
+  },
+  {
+   "command": "repocortex --project . tool call analyze_impact symbol=convert_type",
+   "first_lines": "=== SYSTEM METADATA ===\nINCOMPLETE \u2014 5 of the 10 references spelled \"convert_type\" are not among the rows below. 2 symbols on the path to it (__init__, get_metavar) are named in 11 other place(s) not recorded as calls (they may be passed as values), so what reaches them is not listed. convert_type (src/click/types.py:1318): 5 direct, 12 indirect; at least 5 more symbol(s) at low confidence are excluded; pass min_confidence=low. Risk moderate or higher (score 27 ...; the analysis was cut at depth 3; ...)\nindex_revision: 1  status: ready\ntruncated: depth limit 3 reached, and 3 node(s) at the limit were not expanded",
+   "true_of_the_code": true,
+   "comment": "One definition now (overloads folded) and it answers instead of refusing. 10 text call sites of convert_type, 5 in src from 5 distinct callers: '5 direct' is right, and it says honestly that the 5 test references are not counted. One inaccuracy: the note says those 5 are ambiguous because 'several definitions share the name', but there is a single definition; the tests' click.types.convert_type(...) calls are left unbound. Hedging is heavy (INCOMPLETE headline, depth cut, low-confidence callers excluded) but each limit is real."
+  },
+  {
+   "command": "repocortex --project . tool call find_implementations name=ParamType",
+   "first_lines": "=== SYSTEM METADATA ===\nINCOMPLETE \u2014 at least 3 other line(s) read as a type declaration naming it and are not recorded as a subtype, so subtypes exist that this list does not carry. ParamType (src/click/types.py:65): 35 implementing or extending it (29 directly, 6 through other types; direct_only=true lists the direct ones alone), 0 it implements or extends.\nindex_revision: 1  status: ready\nnote: INCOMPLETE FOR THIS TYPE \u2014 at least 3 other line(s) read as a type declaration naming it ... (declaration-like lines: docs/parameter-types.md:225, docs/shell-completion.md:149, docs/support-multiple-versions.md:58).",
+   "true_of_the_code": true,
+   "comment": "Text search finds 29 direct subclasses in src/tests/examples (28 single-line plus one multi-line), matches the 29 direct. The 3 'declaration-like lines' it names are code samples in markdown docs, not code; it says so only as file names, so INCOMPLETE is a mild false alarm but the cause is visible. Round one's 13 of 31 is fixed."
+  }
+ ],
+ "round1_wrong_examples": [
+  {
+   "site": "src/click/_termui_impl.py:963 raw_terminal()",
+   "round1_tier": "high",
+   "now": "still_wrong",
+   "note": "still high, bound to the Windows-branch def at :882 instead of :936"
+  },
+  {
+   "site": "tests/test_stream_lifecycle.py:329 t.start()",
+   "round1_tier": "medium",
+   "now": "gone",
+   "note": "no edge now"
+  },
+  {
+   "site": "tests/test_commands.py:84 runner.invoke",
+   "round1_tier": "low",
+   "now": "still_wrong",
+   "note": "still low -> OptParseCommand.invoke (test-local class)"
+  },
+  {
+   "site": "tests/test_context.py:693 runner.invoke",
+   "round1_tier": "low",
+   "now": "still_wrong",
+   "note": "still low -> Command.invoke"
+  },
+  {
+   "site": "tests/test_context.py:329 runner.invoke",
+   "round1_tier": "low",
+   "now": "still_wrong",
+   "note": "still low -> Command.invoke"
+  },
+  {
+   "site": "tests/test_context.py:504 runner.invoke",
+   "round1_tier": "low",
+   "now": "still_wrong",
+   "note": "still low -> Command.invoke"
+  },
+  {
+   "site": "tests/test_context.py:293 runner.invoke",
+   "round1_tier": "low",
+   "now": "gone",
+   "note": "no edge at that line (round-one line was inside a multi-line statement; other runner.invoke lines in the file still wrong)"
+  },
+  {
+   "site": "tests/test_context.py:390 runner.invoke",
+   "round1_tier": "low",
+   "now": "gone",
+   "note": "no edge at that line (same caveat)"
+  },
+  {
+   "site": "tests/test_context.py:161 runner.invoke",
+   "round1_tier": "low",
+   "now": "gone",
+   "note": "no edge at that line (same caveat)"
+  },
+  {
+   "site": "tests/test_context.py:487 runner.invoke",
+   "round1_tier": "low",
+   "now": "gone",
+   "note": "no edge at that line (same caveat)"
+  },
+  {
+   "site": "src/click/_termui_impl.py:610 stdin.close()",
+   "round1_tier": "low",
+   "now": "gone",
+   "note": "no edge"
+  },
+  {
+   "site": "tests/test_termui.py:409 click.getchar()",
+   "round1_tier": "low",
+   "now": "still_wrong",
+   "note": "still low -> _termui_impl.py:885 (Windows impl)"
+  },
+  {
+   "site": "src/click/core.py:1395 parser.parse_args",
+   "round1_tier": "low",
+   "now": "still_wrong",
+   "note": "still low -> Group.parse_args"
+  },
+  {
+   "site": "tests/test_commands.py:285 ctx.invoke",
+   "round1_tier": "low",
+   "now": "still_wrong",
+   "note": "still low -> test-local invoke"
+  },
+  {
+   "site": "src/click/_compat.py:82 self._stream.isatty()",
+   "round1_tier": "low",
+   "now": "gone",
+   "note": "no edge"
+  },
+  {
+   "site": "tests/test_termui.py:1160 pager.close()",
+   "round1_tier": "low",
+   "now": "gone",
+   "note": "no edge"
+  },
+  {
+   "site": "tests/test_termui.py:1315 f.close()",
+   "round1_tier": "low",
+   "now": "gone",
+   "note": "no edge"
+  },
+  {
+   "site": "src/click/testing.py:755 sys.stdout.flush()",
+   "round1_tier": "low",
+   "now": "gone",
+   "note": "no edge"
+  },
+  {
+   "site": "tests/test_termui.py:1001 pager.write",
+   "round1_tier": "low",
+   "now": "gone",
+   "note": "no edge"
+  },
+  {
+   "site": "src/click/testing.py:76 self._input.read1(n)",
+   "round1_tier": "medium",
+   "now": "gone",
+   "note": "no read1 edge; the only edge on the line is self._echo -> EchoingStdin._echo (high, correct)"
+  }
+ ],
+ "regressions": [
+  "src/click/testing.py:767 outstreams[1].write(fd_err) (BytesIOCopy.write, right low edge in round one) now has no edge; reference ambiguous.",
+  "find_implementations ParamType and analyze_impact now start with INCOMPLETE headlines driven partly by markdown documentation lines (verdict incomplete) where a fully complete answer would otherwise be shown; not wrong but noisier.",
+  "Overload folding makes the symbol start at the first stub line (e.g. convert_type 1318) rather than the implementation def."
+ ],
+ "findings": [
+  "Subscripted base classes now produce EXTENDS edges: in the five files 30 of 30 declared repo-internal supertypes have an edge (was 13 of 30) and find_implementations ParamType gives 29 direct, matching text search (was 13 of 31).",
+  "Standard-library attribute calls no longer bind to same-named repo methods: no remaining wrong edge of that kind; all 8 of round one's .close/.write/.flush/.start/.isatty/.fileno/.read1 examples are gone.",
+  "Low tier is still poor: 22 of 30 wrong (round one 20 of 30). The dominant fault is unchanged and not addressed: runner.invoke on a CliRunner is bound to Command.invoke or a test-local class's invoke (15 of 22 wrong), plus parser.parse_args -> Group.parse_args and opt.get_default -> test-local subclass. Of 8 round-one wrong examples of this kind still sampled, all remain wrong.",
+  "Medium tier is now 30 of 30 right (round one 28 of 30), high 30 of 30 (round one 29 of 30); raw_terminal() at _termui_impl.py:963 is still bound at high to the Windows definition (:882), and tests/test_termui.py:409 click.getchar() is still bound at low to the Windows implementation.",
+  "Overload folding works: convert_type, get_completion_class, ParamType.__call__, prompt, progressbar, edit are single symbols; analyze_impact convert_type now answers instead of returning ambiguous. The 7 nested closures remain indexed as definitions.",
+  "super().to_info_dict() now resolves (call recall 38 of 40, was 36 of 40); comp.source() (ambiguous) and _default_text_stdout() (unresolved though indexed as a constant) are still no-edge.",
+  "analyze_impact note says 5 convert_type test references are ambiguous because several definitions share the name, but only one definition exists; the references go through click.types.convert_type and are left unbound.",
+  "One right low edge disappeared (testing.py:767 outstreams[1].write).",
+  "No crash or error; index 1.71 s, resolve 0.40 s."
+ ],
+ "not_done": [
+  "core.py (4018 lines) still skipped by the size rule.",
+  "Round-one multi-line-statement lines (test_context.py 293, 390, 161, 487) were looked up by exact line, so 'gone' there may only mean the line numbers do not carry an edge.",
+  "Hierarchy sample drawn from the whole project including tests.",
+  "Medium/low samples include test and example callers."
+ ]
+}

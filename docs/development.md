@@ -423,34 +423,39 @@ The highest-value contribution, and deliberately well-bounded.
 
 | Tier | Delivers | Where |
 |---|---|---|
-| 1 | Symbols, imports, outline | Free — the generic path already covers 206 grammars |
-| 1b | Recovering symbols the inferred tags query drops | `internal/parse/queries.go` |
+| 1 | Symbols, imports, outline | Free for the grammars that infer a usable query; 92 of the 206 grammars have a definition query, and 114 have none (text-searchable only) |
+| 1b | A definition query of its own for the language, replacing or adding to the inferred one | `internal/parse/lang_<language>.go`, with a fixture in `fixtures/langs/<language>/` |
 | 2 | Cross-file resolution + confidence | `internal/resolve/infer` — but see below |
 | 3 | Framework awareness (routes, ORM, config keys) | `internal/analyze/{api,db,config,deps}` |
 
 There is **no `internal/parse/lang/<lang>/` directory**, and an earlier revision
 of this file sent contributors looking for one. Language-specific knowledge lives
-in two places: tags-query supplements in `internal/parse/queries.go`, and
-framework recognition in the `internal/analyze` subpackages. That split is what
-lets a framework recogniser be added without touching a parser, and a parser
-without touching the context engine.
+in three places: a definition query per language in `internal/parse/lang_<language>.go`
+(registered with `registerDefinitions`, checked by a fixture), the shared tags-query
+supplements in `internal/parse/queries.go`, and framework recognition in the
+`internal/analyze` subpackages. That split is what lets a framework recogniser be
+added without touching a parser, and a parser without touching the context engine.
 
 **Tier 2 has no per-language extension point today, and that is a real gap rather
 than an omission from this page.** `internal/resolve/infer` is one
 language-agnostic resolver: its tiers are same-file, receiver-type, same-package,
 imported-package and unique-exported-name, and it contains no branch on language.
-That generality is why it works at all across 206 grammars, and it is also why
-its ceiling is `high` rather than `exact`. If your language needs resolution
+That generality is why it works at all across the languages that have a query, and it is also why
+its ceiling is `high` rather than `exact`. What it does know per language is a table of call traits
+(`internal/resolve/infer/calltraits.go`) whose tiers were set from hand measurement. If your language needs resolution
 rules the generic tiers cannot express, raise it before writing code — the answer
 may be a compiler-backed indexer (`internal/indexer`) rather than a resolver
 change.
 
 Tier 1 is not always complete out of the box, and that is worth knowing before
-you start. `gotreesitter` ships zero explicit tags queries — all 206 are
-inferred, and coverage is uneven. The Go query silently dropped type, const and
-var declarations; the additive supplements in `internal/parse/queries.go` recover
-them, and the file documents the capture convention. Checking what your
-language's inferred query actually captures is usually the first useful hour.
+you start. `gotreesitter` ships zero explicit tags queries; the library infers one
+per grammar from a fixed list of node names, and coverage is uneven. A hand check
+of 12 November found that a query which compiles can still extract nothing from valid
+code, and the work since replaced the inferred query for most languages. Start from
+the procedure in [`fixtures/langs/README.md`](../fixtures/langs/README.md): write the fixture and its
+`expected.tsv` first, print the syntax tree and what the query extracts with `TestDumpTree`,
+write the query, and let `TestLanguageConformance` hold it to the list. Record what
+cannot be extracted in `KNOWN_GAPS.md`.
 
 For Tier 2, implement resolution and **report measured precision against a SCIP
 index for the same fixture**. That is now a cheap thing to do rather than an

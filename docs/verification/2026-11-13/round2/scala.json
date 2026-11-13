@@ -1,0 +1,286 @@
+{
+ "language": "scala",
+ "project": "com-lihaoyi/os-lib",
+ "project_commit": "8871ab0bda9bbcc4edbef9b1a402eb4c47ef9398",
+ "repocortex_commit": "8748b29",
+ "files_checked": [
+  "os/src/Path.scala (680 lines)",
+  "os/src/ProcessOps.scala (678)",
+  "os/src/SubProcess.scala (598)",
+  "os/src-jvm/ZipOps.scala (500)",
+  "os/src/FileOps.scala (419)"
+ ],
+ "index": {
+  "files": 102,
+  "indexed_files": 72,
+  "scala_files": 61,
+  "symbols": 861,
+  "scala_symbols": 768,
+  "edges_by_kind_and_tier": {
+   "caller_in_scala_file": "CALLS high 1331 medium 23 low 202; INSTANTIATES high 170 medium 19 low 31; EXTENDS high 57 medium 1 low 13; IMPLEMENTS 0",
+   "round1_caller_in_scala_file": "CALLS high 504 medium 169 low 263; INSTANTIATES high 64 medium 19 low 31; EXTENDS high 54 medium 1 low 13",
+   "all_languages": "high 1561, medium 43, low 249 (1853 edges; round one 1124)"
+  },
+  "parse_summary": {
+   "Parsed": "72 (70 clean, 2 with syntax errors)",
+   "Syntax errors": 2,
+   "Incomplete": 0,
+   "Failed": 0,
+   "Too large": 0,
+   "Text only": 2,
+   "Skipped": "30 discovered-but-not-indexed (no_grammar 21, symlink 3, binary 2, unreadable 2)"
+  },
+  "files_with_macro_masked_or_branches_blanked_in_parse_error": 0,
+  "index_seconds": 0.98,
+  "resolve_seconds": 0.29,
+  "status": "READY, schema v18",
+  "resolve_summary": "calls written os.<name>(...): 842 resolved, 8 unresolved (round one: 772 unresolved, 380 ambiguous, 179 resolved for names equal to an indexed object); edges 1853"
+ },
+ "definitions": {
+  "expected": 372,
+  "correct": 371,
+  "missed": 1,
+  "spurious": 0,
+  "line_on_attribute": 9,
+  "per_file": {
+   "Path.scala": {
+    "expected": 165,
+    "correct": 165,
+    "missed": 0,
+    "spurious": 0,
+    "line_on_attribute": 0
+   },
+   "ProcessOps.scala": {
+    "expected": 22,
+    "correct": 22,
+    "missed": 0,
+    "spurious": 0,
+    "line_on_attribute": 1
+   },
+   "SubProcess.scala": {
+    "expected": 118,
+    "correct": 117,
+    "missed": 1,
+    "spurious": 0,
+    "line_on_attribute": 4
+   },
+   "ZipOps.scala": {
+    "expected": 25,
+    "correct": 25,
+    "missed": 0,
+    "spurious": 0,
+    "line_on_attribute": 2
+   },
+   "FileOps.scala": {
+    "expected": 42,
+    "correct": 42,
+    "missed": 0,
+    "spurious": 0,
+    "line_on_attribute": 2
+   }
+  },
+  "examples": {
+   "missed": [
+    "SubProcess.scala:218 private[os] def joinPumperThreadsHook(): Unit = {...} in class SubProcess (the sibling declarations at :94 in the trait and :470 in ProcessPipeline are extracted; this one is not). Round one extracted it: a regression."
+   ],
+   "spurious": [],
+   "round1_missed_now": [
+    "Path.scala `/` operator methods at :125, :229, :241, :601: FIXED (BasePath./, SegmentedPath./, BasePathImpl./, Path./)",
+    "Path.scala `type IAE` (:266) and `type ThisType` (:321, :393, :597), plus BasePath.ThisType :118: FIXED (kind type_alias)"
+   ],
+   "round1_spurious_now": [
+    "All 26: FIXED (no symbol with <locals> in the whole Scala index; checkSegment.fail/considerStr, FilePath.apply.f, Path.compare, spawn.resolve, the anonymous Thread/Runnable/ProcessInput run/redirectFrom/processInput, addToProcessEnv, destroy0, rec, waitForRec, isDefinedAt/apply of the PartialFunctions, copyOne)"
+   ],
+   "notes": [
+    "Counting rule as round one (fixtures/langs/scala/expected.tsv: traits, classes, case classes, enums, objects as variables, defs; type aliases counted as expected since the tool now lists them). Object-level vals not counted. Secondary constructor SubProcess.this (:113) counted.",
+    "My recount differs from round one by +1 in Path.scala (165 vs 164) and +1 in ZipOps.scala (25 vs 24): round one's spurious=1 in ZipOps was not described; I found no non-definition in the file now, and in Path.scala all 165 extracted symbols are real declarations.",
+    "Whole-index scan for member-level defs without a symbol also found `object /` in os/src/package.scala:73 (an extractor object named with an operator) not extracted; not in the five files.",
+    "end_line problem of round one (one-line brace-less defs running into the next declaration) not re-measured."
+   ]
+  }
+ },
+ "call_precision": {
+  "high": {
+   "right": 30,
+   "wrong": 0,
+   "unclear": 0,
+   "judged": 30,
+   "examples": []
+  },
+  "medium": {
+   "right": 29,
+   "wrong": 1,
+   "unclear": 0,
+   "judged": 30,
+   "examples": [
+    "os/src/SubProcess.scala:532 buffered.readLine() (buffered is a java.io.BufferedReader) -> SubProcess.scala:307 SubProcess.OutputStream.readLine: library call bound to a repository member; detail 'the only member of this name in the repository; the receiver's type is not known'"
+   ]
+  },
+  "low": {
+   "right": 26,
+   "wrong": 4,
+   "unclear": 0,
+   "judged": 30,
+   "examples": [
+    "os/src/ReadWriteOps.scala:70 data.writeBytesTo(out) where out is a SeekableByteChannel -> Source.scala:28 writeBytesTo(OutputStream); callee is the WritableByteChannel overload at :39",
+    "os/src/Source.scala:29 bs.writeBytesTo(out) where bs is a geny.Writable (library) -> Source.writeBytesTo (repo): library call bound to repository member",
+    "os/test/src/PathTests.scala:147 posix(root / \"omg\") -> PathTests.scala:588 posix(String); callee is posix(os.Path) 2 declarations later",
+    "os/watch/src/macos/FSEventsWatcher.scala:88 CFArrayCreate(array) with one argument -> CoreServicesApi.scala:34 the 4-argument native CFArrayCreate; callee is the 1-argument wrapper at :41"
+   ],
+   "note": "13 of the 26 right low edges are the same pattern, `test - prep { wd => ... }` -> TestUtil.prep (3 more are prepChecker); a duplicated pattern inflates the figure."
+  }
+ },
+ "round1_wrong_examples": [
+  {
+   "site": "PathTestsCustomFilesystem.scala:214 os.move.matching { case p / \"test\" => p }",
+   "round1_tier": "high",
+   "now": "lower_tier",
+   "note": "now low, still bound to the 3-parameter-list move.matching (FileOps.scala:67) rather than matching(partialFunction) at :82"
+  },
+  {
+   "site": "OpTests.scala:139 os.move.matching { case d / \"py\" / x => d / x }",
+   "round1_tier": "high",
+   "now": "lower_tier",
+   "note": "same: low, still FileOps.scala:67"
+  },
+  {
+   "site": "os.proc(...) -> TestUtil.proc (9 sites: SubProcessTests.scala:242, ProcessPipelineTests, SpawningSubprocessesTests, PathTestsCustomFilesystem, OpTestsJvmOnly, ProcessOps.scala:31 and :97 ...)",
+   "round1_tier": "medium",
+   "now": "right_target",
+   "note": "os.proc now INSTANTIATES high to case class proc (ProcessOps.scala:155). The 11 remaining edges to TestUtil.proc are calls written TestUtil.proc(...) (correct). Checked SubProcessTests:242, ProcessOps:31, :97 directly; the other six by the absence of any other edge into TestUtil.proc plus the grep of 13 os.proc( sites"
+  },
+  {
+   "site": "os.root(\"/\", fileSystem) x5 (PathTestsCustomFilesystem.scala 50, 89, 106, 118, 181)",
+   "round1_tier": "medium",
+   "now": "right_target",
+   "note": "CALLS high to package.scala:root"
+  },
+  {
+   "site": "os.isFile / os.isDir (FilesystemMetadataTests.scala:31, :41, ZipOpTests.scala:451)",
+   "round1_tier": "medium",
+   "now": "right_target",
+   "note": "CALLS high to StatOps.scala isFile / isDir (the objects)"
+  },
+  {
+   "site": "ProcessOps.scala:97 os.proc(cmd).spawn(...) bound to TestUtil.proc",
+   "round1_tier": "medium",
+   "now": "right_target",
+   "note": "INSTANTIATES high to proc; counted in the 9 os.proc sites above"
+  },
+  {
+   "site": "SubProcessTests.scala:133 and :50 unqualified proc(\"bash\", ...) -> TestUtil.proc",
+   "round1_tier": "low",
+   "now": "gone",
+   "note": "no edge from those lines"
+  },
+  {
+   "site": "Internals.scala:11 transfer0(src, sink, true) -> itself",
+   "round1_tier": "low",
+   "now": "right_target",
+   "note": "now high edge to the 3-argument transfer0 at :13"
+  },
+  {
+   "site": "PermsOps.scala:38 apply(p, followLinks = true) -> itself",
+   "round1_tier": "low",
+   "now": "right_target",
+   "note": "now high edge to owner.apply at :39"
+  },
+  {
+   "site": "ProcessOps.scala:552 proc.spawn(7 args) -> 9-parameter proc.spawn at :295",
+   "round1_tier": "low",
+   "now": "still_wrong",
+   "note": "unchanged: low edge to :295, callee is the 7-parameter overload at :362"
+  }
+ ],
+ "call_recall": {
+  "sites": 40,
+  "right": 30,
+  "wrong": 0,
+  "none": 10,
+  "none_breakdown": {
+   "reference extracted, ambiguous (no edge)": 8,
+   "reference extracted, unresolved": 2,
+   "not extracted": 0
+  },
+  "per_file": {
+   "Path.scala": "6 right, 2 none",
+   "ProcessOps.scala": "6 right, 2 none",
+   "SubProcess.scala": "8 right",
+   "ZipOps.scala": "5 right, 3 none",
+   "FileOps.scala": "5 right, 3 none"
+  },
+  "examples": [
+   "Path.scala:43 InvalidSegment(...) and :47 NonCanonicalLiteral(...): none, still unresolved although imported with `import os.PathError.{InvalidSegment, NonCanonicalLiteral}` and both are case classes in the index (unchanged)",
+   "ProcessOps.scala:31 `.call(` and :97 `.spawn(` on os.proc(cmd): none, ambiguous (several classes declare call/spawn); the os.proc(cmd) part itself is now right (was wrong); :62, :123, :209, :214 right (were none)",
+   "ZipOps.scala:65, :67 checker.value.onWrite/onRead, :74 openedPath.relativeTo: none, ambiguous (unchanged); :69 os.exists and :73 os.walk right (were none)",
+   "FileOps.scala:26, :30, :45 checker.value.onWrite: none, ambiguous (unchanged); :43 right (was a self-edge), :50 isDir and isLink right (were wrong / none)",
+   "SubProcess.scala:68,74,75,77,78,79,82,84 8/8 right (unchanged)",
+   "Sites re-derived: Path 21,40,41,41,43,47,54,72; ProcessOps 31,31,62,97,97,123,209,214; ZipOps 27,65,67,69,70,73,74,74; FileOps 26,30,33,43,45,50,50,55; SubProcess as round one. The exact eight per file for ProcessOps, ZipOps and FileOps may differ from round one's by one or two sites (round one's list was only partly recorded). Round one: 20 right, 4 wrong, 16 none."
+  ]
+ },
+ "hierarchy": {
+  "edges_total": 71,
+  "by_kind_tier": {
+   "EXTENDS/high": 57,
+   "EXTENDS/medium": 1,
+   "EXTENDS/low": 13,
+   "IMPLEMENTS": 0
+  },
+  "judged": 20,
+  "right": 20,
+  "wrong": 0,
+  "unclear": 0,
+  "relationships_in_checked_files_with_repo_target": 48,
+  "relationships_with_correct_edge": 44,
+  "examples": [
+   "Sample of 20 all correct (e.g. PathChunk.StringPathChunk -> StringPathChunkInternal, Pipe -> ProcessOutput, ResourcePath -> ReadablePath (low), PathError.InvalidSegment -> PathError.IAE, which is a type alias of IllegalArgumentException: the declared name, counted right).",
+   "Still missing: `object PathChunk extends PathChunkMacros`, `object RelPath extends RelPathMacros`, `object SubPath extends SubPathMacros`, `object Path extends PathMacros` (Path.scala:24, 356, 417, 444): 4 of 48 relationships have no edge (the traits are defined in both os/src-2 and os/src-3).",
+   "FIXED: `class InputStream extends java.io.OutputStream` / `class OutputStream extends java.io.InputStream` have no edge now (round one: both wrongly bound to the repository's classes).",
+   "Scala traits are still recorded as EXTENDS (no IMPLEMENTS edges); ZipOps.zip.ZipRoot -> Path is a low edge though correct.",
+   "Round one counted 43 relationships / 39 correct in the five files; my recount is 48 / 44 (the same 4 missing)."
+  ]
+ },
+ "answers": [
+  {
+   "command": "repocortex --project . tool call find_callers name=shouldInclude",
+   "first_lines": "=== SYSTEM METADATA ===\n6 caller(s) of shouldInclude (os/src-jvm/ZipOps.scala:192) are recorded.\nindex_revision: 1  status: ready\nnote: References spelled \"shouldInclude\" in this index: 6. 6 bound to this definition.\nnote: How the calls bound to this definition were made: shouldInclude x4, os.zip.shouldInclude x2. A qualified call is bound through what its qualifier names ...\nprovenance: ...",
+   "true_of_the_code": true,
+   "comment": "Same as round one: text search finds exactly 6 call sites (ZipOps.scala 149, 153, 154, 159, 372, 486). Explains how calls were bound."
+  },
+  {
+   "command": "repocortex --project . tool call analyze_impact symbol=checkSegment",
+   "first_lines": "=== SYSTEM METADATA ===\nINCOMPLETE - checkSegment: its name appears in 2 other place(s) that are not recorded as calls: it may be passed as a value. checkSegment (os/src/Path.scala:180): 3 direct, 2 indirect; at least 7 more symbol(s) at low confidence are excluded; pass min_confidence=low. Risk low or higher (score 15; the name occurs where no call is recorded, so a function passed as a value may reach the target).\nindex_revision: 1  status: ready\nnote: INCOMPLETE FOR THIS SYMBOL - The name of the target occurs in 2 other place(s) ... (for example os/src/Path.scala:369, os/src/Path.scala:433). A function passed as a value ...",
+   "true_of_the_code": true,
+   "comment": "Round one was false (said 3 direct, did not admit the two method-reference uses). Now the first line names the value uses and points at Path.scala:369 and :433, which are exactly the two `segments0.foreach(BasePath.checkSegment)` sites. The additional claim 'at least 7 more symbols at low confidence are excluded' I did not verify. Text search shows 5 direct uses (3 calls + 2 as values), consistent with '3 direct'."
+  },
+  {
+   "command": "repocortex --project . tool call find_implementations name=ProcessOutput",
+   "first_lines": "=== SYSTEM METADATA ===\nProcessOutput (os/src/SubProcess.scala:505): 7 implementing or extending it, all directly, 0 it implements or extends.\nindex_revision: 1  status: ready\nnote: A type relationship is recorded only where the source states it ... \nnote: 2 definitions are named \"ProcessOutput\". This answer is for the interface at os/src/SubProcess.scala:505, chosen because ... Pass path and line to choose another.",
+   "true_of_the_code": true,
+   "comment": "7 matches the source (ReadBytes, Readlines, Inherit, InheritRaw, Pipe, PathRedirect, PathAppendRedirect); discloses the trait/object name clash and now says 'all directly'."
+  }
+ ],
+ "regressions": [
+  "SubProcess.scala:218 `private[os] def joinPumperThreadsHook()` (member of class SubProcess) was extracted in round one (118/118) and is not extracted now.",
+  "A new library-call-bound-to-repo pattern at the lower tiers: `buffered.readLine()` on a java BufferedReader (medium) and `bs.writeBytesTo(out)` on a geny.Writable (low) bind to repository members of the same name.",
+  "Self-edge via overload remains: ReadWriteOps.scala:321 apply(p, new Array[Byte](chunkSize)) inside read.chunks.apply@320 is a low edge to itself (callee is the overload at :323)."
+ ],
+ "findings": [
+  "The main round-one defect is fixed: calls written os.<name>(...) now resolve (842 resolved, 8 unresolved; round one 772 unresolved), os.proc / os.root / os.isFile / os.isDir bind to the right definitions, and the sample of 30 high edges is 30/30 right, medium 29/30, low 26/30 (round one 28, 13, 25).",
+  "Definitions in the five files: 371 of 372, 0 spurious (round one 362/370, 8 missed, 26 spurious); `/` operators and type aliases are symbols, local defs and anonymous-class members are not.",
+  "One extraction regression: SubProcess.joinPumperThreadsHook (SubProcess.scala:218) is no longer extracted.",
+  "Recall on the same kind of sites rose from 20 right / 4 wrong / 16 none to 30 right / 0 wrong / 10 none; the remaining none are ambiguous `checker.value.onWrite/onRead`, `.call/.spawn/.relativeTo` on an expression, and two imported case classes (InvalidSegment, NonCanonicalLiteral) that stay unresolved.",
+  "Overload choice is still weak where argument types decide: os.move.matching { ... } still binds to the 3-parameter-list overload (now at low instead of high), proc.spawn with 7 arguments to the 9-parameter one, Source.writeBytesTo(channel) to the OutputStream overload, posix(os.Path) to posix(String), and ReadWriteOps.scala:321 binds to itself.",
+  "Library calls bound to repository members survive at lower tiers: java BufferedReader.readLine (medium), geny Writable.writeBytesTo (low).",
+  "Hierarchy: java.io supertype swap is fixed; the 4 `object X extends XMacros` relationships are still missing.",
+  "analyze_impact for checkSegment is now true on its first line and admits the two value-position uses.",
+  "Index 0.98 s, resolve 0.29 s, READY; 0 files with macro-masked / blanked-branch notes; Scala symbols 768."
+ ],
+ "not_done": [
+  "Java files (os/zip shaded sources) not measured.",
+  "Object-level vals not counted as expected definitions.",
+  "The 'at least 7 more low-confidence symbols' in the analyze_impact line was not verified.",
+  "The six os.proc sites in the round-one wrong list that I did not open individually were judged by the absence of any other edge into TestUtil.proc.",
+  "end_line accuracy of one-line defs not re-measured."
+ ]
+}

@@ -1,0 +1,75 @@
+files:    31759
+== index
+                    api/openapi-spec/swagger.json (4.1 MiB)
+                    pkg/generated/openapi/zz_generated.openapi.go (3.9 MiB)
+                    staging/src/k8s.io/cli-runtime/artifacts/openapi/swagger-with-shared-parameters.json (2.3 MiB)
+                    api/openapi-spec/v3/api__v1_openapi.json (2.0 MiB)
+  Skipped:        1179 files not indexed: no_grammar 1145, binary 27, symlink 5, empty 2
+  Duration:      259540ms
+      259.76 real       650.43 user       150.60 sys
+          2391392256  maximum resident set size
+                   0  average shared memory size
+                   0  average unshared data size
+                   0  average unshared stack size
+             3835566  page reclaims
+                 307  page faults
+                   0  swaps
+                   0  block input operations
+                   0  block output operations
+                   0  messages sent
+                   0  messages received
+             1402756  signals received
+             1157618  voluntary context switches
+            17932417  involuntary context switches
+       6969012567121  instructions retired
+       1870437580615  cycles elapsed
+          2514273568  peak memory footprint
+== resolve
+  Data access: 5 statement(s), 2 bound to a declared table, 2 edges
+    3 access(es) name tables no migration here declares (e.g. a, existing)
+  Config:      82 read(s), 3 bound to a declared key, 3 edges
+    79 read(s) name keys no configuration file here declares — see 'repocortex config'
+  Deployment:  656 unit(s), 0 naming a build context, 0 edges
+  Duration:    57298ms
+       57.39 real        71.87 user         6.26 sys
+           272224256  maximum resident set size
+                   0  average shared memory size
+                   0  average unshared data size
+                   0  average unshared stack size
+              964960  page reclaims
+                  20  page faults
+                   0  swaps
+                   0  block input operations
+                   0  block output operations
+                   0  messages sent
+                   0  messages received
+               26016  signals received
+               34471  voluntary context switches
+              572966  involuntary context switches
+        851983005095  instructions retired
+        201089605276  cycles elapsed
+           255588416  peak memory footprint
+== status
+Relationships:  238507
+Parsed:         15196 (15109 clean, 87 with syntax errors)
+Syntax errors:  87 files read to the end with errors the parser recovered from; definitions inside the unreadable regions may be missing
+Text only:      106 files searchable by text, no definitions (no definition query for the language): gomod 41, dockerfile 35, diff 27, hyprlang 3
+Too large:      5 files over the size limit, not parsed and not searchable (raise index.max_file_bytes in .repocortex.yml to include them)
+                  staging/src/k8s.io/cli-runtime/artifacts/openapi/swagger.json (4.5 MiB)
+                  api/openapi-spec/swagger.json (4.1 MiB)
+                  pkg/generated/openapi/zz_generated.openapi.go (3.9 MiB)
+                  staging/src/k8s.io/cli-runtime/artifacts/openapi/swagger-with-shared-parameters.json (2.3 MiB)
+                  api/openapi-spec/v3/api__v1_openapi.json (2.0 MiB)
+Skipped:        1179 files not indexed: no_grammar 1145, binary 27, symlink 5, empty 2
+Last indexed:   2026-11-13T00:11:46+05:30
+Index size:     636.9 MiB
+Accuracy mode:  auto
+MCP profile:    minimal
+Capabilities:   code
+ 0:12  up 7 days, 10:44, 1 user, load averages: 7.26 9.83 10.58
+
+[exited with code 0]
+
+status head: READY, files 16486, symbols 274838, relationships 238507, parsed 15196 (15109 clean, 87 syntax errors), index size 636.9 MiB
+index 259.8 s wall / 650 s user / 2.39 GB peak RSS (load 7-10); resolve 57.4 s wall / 0.27 GB
+find_callers NewKubeletCommand via CLI: 4.2 s wall; analyze_impact (ambiguous) 0.14 s

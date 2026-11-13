@@ -38,7 +38,7 @@ The engineering rationale and formal models behind deterministic code graphs.
 |---|---|
 | [**Why Not Vector RAG?**](concepts/why-not-vector-rag.md) | Lexical similarity vs causal call-graph reachability for code intelligence |
 | [**Architecture & Invariants**](concepts/architecture.md) | Hexagonal pipeline, in-memory CSR graph, and zero-CGO design |
-| [**Accuracy & Provenance**](reference/accuracy-and-benchmarks.md) | 30,975 edges adjudicated against compiler ground truth, then a hand check of nine projects after calls began to bind by what they are made on |
+| [**Accuracy & Provenance**](reference/accuracy-and-benchmarks.md) | 30,975 edges adjudicated against compiler ground truth, a hand check of nine projects after calls began to bind by what they are made on, and a second hand check of 14 projects and 36 more languages on 13 November, with what is still wrong ([verification record](verification/2026-11-13/README.md)) |
 | [**Non-Goals**](NON-GOALS.md) | Deliberate architectural refusals and scope boundaries |
 | [**Competitive Analysis**](COMPETITIVE_ANALYSIS.md) | 40 open-source and paid tools, and what each has that RepoCortex lacked |
 | [**Implementation Plan**](IMPLEMENTATION_PLAN.md) | What is shipped, planned and declined in answer to that analysis |
