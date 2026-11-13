@@ -41,6 +41,7 @@ The engineering rationale and formal models behind deterministic code graphs.
 | [**Accuracy & Provenance**](reference/accuracy-and-benchmarks.md) | 30,975 edges adjudicated against compiler ground truth, a hand check of nine projects after calls began to bind by what they are made on, and a second hand check of 14 projects and 36 more languages on 13 November, with what is still wrong ([verification record](verification/2026-11-13/README.md)) |
 | [**Non-Goals**](NON-GOALS.md) | Deliberate architectural refusals and scope boundaries |
 | [**Competitive Analysis**](COMPETITIVE_ANALYSIS.md) | 40 open-source and paid tools, and what each has that RepoCortex lacked |
+| [**Market Leader Gap Analysis**](MARKET_LEADER_GAP_ANALYSIS.md) | Structural deficits, resolution inaccuracies, and benchmark gaps vs market leaders |
 | [**Implementation Plan**](IMPLEMENTATION_PLAN.md) | What is shipped, planned and declined in answer to that analysis |
 | [**Portal UX Plan**](design/PORTAL_UX_PLAN.md) | The design of the next portal, its audit, and what is built |
 
