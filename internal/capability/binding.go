@@ -77,6 +77,11 @@ type TargetBinding struct {
 	Unresolved int64 `json:"unresolved"`
 	Pending    int64 `json:"pending"`
 
+	// ProvenOther were left unbound by the resolver in Go files the type
+	// checker read, which proved them uses of something else. They are not
+	// counted in Ambiguous, Unresolved or Pending.
+	ProvenOther int64 `json:"ruled_out_by_type_check,omitempty"`
+
 	// Definitions is how many definitions are spelled like the target in files
 	// that can call it. Zero means not counted.
 	Definitions int64 `json:"definitions_of_name,omitempty"`
@@ -236,6 +241,7 @@ func (d Deps) TargetBinding(ctx context.Context, runID int64, tgt Target) (Targe
 		Ambiguous:           nb.Ambiguous,
 		Unresolved:          nb.Unresolved,
 		Pending:             nb.Pending,
+		ProvenOther:         nb.ProvenOther,
 		Definitions:         nb.Definitions,
 		WithoutEdge:         nb.WithoutEdge,
 	}, nil

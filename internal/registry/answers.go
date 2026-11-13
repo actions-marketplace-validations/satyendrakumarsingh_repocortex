@@ -189,6 +189,16 @@ type NameBinding struct {
 	Unresolved int64
 	Pending    int64
 
+	// ProvenOther were left unbound by the resolver but sit in Go files the
+	// type checker read, while the definition asked about is in a Go file it
+	// read too. Had one of them been a use of this definition the checker
+	// would have proven it and written an exact edge (measured: every call
+	// pair of three repositories, none missed in a checked file); it did not,
+	// so each is a use of something else, json.Valid beside a Valid method.
+	// They are taken out of Ambiguous, Unresolved and Pending, so an answer
+	// does not tell an agent to search for callers the compiler has ruled out.
+	ProvenOther int64
+
 	// Definitions is how many definitions are spelled like the name in files a
 	// call of the symbol's language can reach (its family: see
 	// ReferencingLanguages). Zero when it was not counted. It is what "several
@@ -275,6 +285,11 @@ func (r *Registry) NameBinding(ctx context.Context, runID, symbolID int64, name 
 	}
 	if err := rows.Err(); err != nil {
 		return b, fmt.Errorf("registry: binding of references named %q: %w", name, err)
+	}
+	if b.Language == "go" && b.Ambiguous+b.Unresolved+b.Pending > 0 {
+		if err := r.settleByGoTypes(ctx, runID, symbolID, name, &b); err != nil {
+			return b, err
+		}
 	}
 	if b.BoundHere == 0 {
 		return b, nil
@@ -604,4 +619,74 @@ func (r *Registry) BoundSites(ctx context.Context, runID, symbolID int64, limit 
 		out = append(out, b)
 	}
 	return out, rows.Err()
+}
+
+// GoTypesDetail is the detail the built-in Go type check writes on every edge
+// it proves (gotypes.Detail; a test there keeps the two equal, since this
+// package cannot import that one).
+const GoTypesDetail = "go/types (built in)"
+
+// settleByGoTypes moves the unbound references of a Go name that the type
+// checker has ruled out into ProvenOther: see NameBinding.ProvenOther. It does
+// nothing unless the definition's own file was read by the checker, which is
+// known from an exact edge written there or pointing into it.
+func (r *Registry) settleByGoTypes(ctx context.Context, runID, symbolID int64, name string, b *NameBinding) error {
+	var checked bool
+	if err := r.db.QueryRowContext(ctx, `
+		SELECT EXISTS (
+			SELECT 1 FROM symbols t JOIN files tf ON tf.id = t.file_id
+			 WHERE t.id = ? AND (
+			   EXISTS (SELECT 1 FROM edges e INDEXED BY idx_edges_evidence
+			            WHERE e.index_run_id = ? AND e.evidence_file = tf.path
+			              AND e.source = 'compiler' AND e.detail = ?)
+			   OR EXISTS (SELECT 1 FROM edges e INDEXED BY idx_edges_dst
+			               CROSS JOIN symbols d ON d.id = e.dst_id
+			              WHERE e.index_run_id = ? AND e.dst_id = t.id
+			                AND e.source = 'compiler' AND e.detail = ?)
+			   OR EXISTS (SELECT 1 FROM symbols d CROSS JOIN edges e INDEXED BY idx_edges_dst
+			                ON e.index_run_id = ? AND e.dst_id = d.id
+			              WHERE d.file_id = tf.id AND e.source = 'compiler' AND e.detail = ?)))`,
+		symbolID, runID, GoTypesDetail, runID, GoTypesDetail, runID, GoTypesDetail).Scan(&checked); err != nil {
+		return fmt.Errorf("registry: was the file of symbol %d type-checked: %w", symbolID, err)
+	}
+	if !checked {
+		return nil
+	}
+	rows, err := r.db.QueryContext(ctx, `
+		SELECT sr.resolution, COUNT(*)
+		  FROM symbol_references sr INDEXED BY idx_refs_name_binding
+		  JOIN files f ON f.id = sr.file_id
+		 WHERE sr.index_run_id = ? AND sr.name = ?
+		   AND sr.resolution IN ('ambiguous','unresolved','pending')
+		   AND f.language = 'go'
+		   AND EXISTS (SELECT 1 FROM edges e INDEXED BY idx_edges_evidence
+		                WHERE e.index_run_id = ? AND e.evidence_file = f.path
+		                  AND e.source = 'compiler' AND e.detail = ?)
+		 GROUP BY 1`, runID, name, runID, GoTypesDetail)
+	if err != nil {
+		return fmt.Errorf("registry: references to %q the type check ruled out: %w", name, err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var resolution string
+		var n int64
+		if err := rows.Scan(&resolution, &n); err != nil {
+			return fmt.Errorf("registry: references to %q the type check ruled out: scan: %w", name, err)
+		}
+		switch Resolution(resolution) {
+		case ResolutionAmbiguous:
+			n = min(n, b.Ambiguous)
+			b.Ambiguous -= n
+		case ResolutionUnresolved:
+			n = min(n, b.Unresolved)
+			b.Unresolved -= n
+		case ResolutionPending:
+			n = min(n, b.Pending)
+			b.Pending -= n
+		default:
+			continue
+		}
+		b.ProvenOther += n
+	}
+	return rows.Err()
 }
