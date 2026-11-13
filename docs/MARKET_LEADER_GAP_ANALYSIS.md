@@ -34,6 +34,17 @@ Measured after this document was written. The gaps stand; four figures moved.
   subtypes question, which did not finish in 30 minutes, answers in about a
   second.
 
+**Later the same day: built-in exact Go answers, and round 3.** `resolve` now
+type-checks Go with the standard library and writes compiler-proven calls and
+interface implementations: every call pair of this repository (22,230), of
+spf13/cobra (1,803) and 99.8% of prometheus (33,698), with none wrong; 251 of
+251 Go interface implementations, where there were none. On the round 2
+caller questions the agents with RepoCortex then matched search on accuracy
+with 42% fewer tool calls, half the time and 8.6% fewer tokens (round 3 in
+BENCHMARKING.md). Gap 1 is closed for Go and open for every other language;
+Gap 2's Go items (interfaces, overloads do not apply, calls on values) are
+closed for Go.
+
 **What follows for priorities.** The first item of the roadmap in section 4 is
 done and its answer changes the order of the rest. An incomplete answer is
 worth nothing to an agent that can search, so the work that matters is the

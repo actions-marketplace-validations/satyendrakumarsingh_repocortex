@@ -455,8 +455,53 @@ calls and 13% more time, and made the round's one mistake.
   For Go that means type-checked edges, which today require importing a
   compiler index by hand.
 
-**Do not quote a token saving for RepoCortex.** Two rounds have now looked for
-one and found none.
+**Do not quote a token saving for RepoCortex on the strength of round 2.**
+Round 3 below is the first measured advantage, for Go only.
+
+### Round 3: the same caller questions, with exact Go answers built in (2026-11-14)
+
+Round 2 showed that an answer marked incomplete is worth nothing to an agent
+that can search. Since then `resolve` type-checks Go with `go/types` from the
+standard library (no external indexer), so every call in a checked file is an
+exact edge, references the checker ruled out no longer make an answer
+incomplete, and a caller is printed with its owner (`Writer.AddEdge`). The
+three caller questions of round 2 were asked again, of a clean clone indexed
+by the build of commit `4038617`, with the same wording and the same truth.
+
+| Question (true callers) | Arm | Correct | Wrong | Tokens | Tool calls | Seconds |
+|---|---|---|---|---|---|---|
+| `Edge.Validate` (14) | search only (round 2) | 14 | 0 | 65,855 | 7 | 42.3 |
+| | RepoCortex, round 2 | 13 | 1 | 66,679 | 9 | 40.8 |
+| | **RepoCortex, exact Go** | **14** | **0** | **60,494** | **3** | **19.6** |
+| `Model.Validate` (11) | search only (round 2) | 11 | 0 | 62,411 | 5 | 20.7 |
+| | RepoCortex, round 2 | 11 | 0 | 64,514 | 5 | 24.6 |
+| | **RepoCortex, exact Go** | **11** | **0** | **61,989** | **4** | **16.6** |
+| `Confidence.Valid` (37) | search only (round 2) | 37 | 0 | 74,949 | 7 | 43.4 |
+| | RepoCortex, round 2 | 37 | 0 | 70,882 | 8 | 47.8 |
+| | **RepoCortex, exact Go** | **37** | **0** | **63,296** | **4** | **17.4** |
+| **Total** | search only | 62 / 62 | 0 | 203,215 | 19 | 106.4 |
+| | RepoCortex, round 2 | 61 / 62 | 1 | 202,075 | 22 | 113.2 |
+| | **RepoCortex, exact Go** | **62 / 62** | **0** | **185,779** | **11** | **53.6** |
+
+**Result: an advantage, for the first time.** Against search alone, the agents
+with exact answers were as accurate, used 42% fewer tool calls, half the time,
+and 8.6% fewer tokens. Each read a complete, compiler-proven list, checked a
+few call sites by reading, and stopped, where in round 2 each did the whole
+search.
+
+**What this does and does not show.**
+
+- The token saving is small because about 58,000 tokens of every run are the
+  agent's own fixed overhead; the work itself shrank more than the total
+  shows. The time and tool-call savings are the larger effect.
+- Three questions, one run each, one repository of a thousand files, Go only,
+  one model. The search-only figures are from round 2, run the day before on
+  the same commit's tree with the same wording, not re-run.
+- The question about tests one call away was not repeated: `find_tests`
+  still returns the closure at any depth with no depth on a row (97 rows where
+  30 were asked for), and is the next thing to fix.
+- It says nothing yet about other languages, where the answers are still
+  heuristic and round 2's result stands.
 
 **Reproducing round 2.** Build the truth program (`cd scripts/bench/agenttruth
 && go build -o agenttruth .`; it is its own module so that the tool does not

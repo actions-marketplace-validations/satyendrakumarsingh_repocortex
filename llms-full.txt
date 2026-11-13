@@ -4505,9 +4505,31 @@ which does not exist until every file has been parsed.
 |---|---|
 | `--min-confidence high\|medium\|low` | drop bindings weaker than this instead of recording them |
 | `--no-scip` | do not import an `index.scip` found in the project root or `.repocortex/` |
+| `--accuracy fast\|auto\|exact` | override the configured accuracy mode for this run; `fast` skips the Go type check below |
 
 Resolution itself never produces `exact`; that is reserved for compiler-backed
-SCIP data and is enforced in Go, in a SQL `CHECK`, and again at commit time. If
+data and is enforced in Go, in a SQL `CHECK`, and again at commit time.
+
+**Go is type-checked by default.** In `auto` and `exact` mode, when the index
+holds Go and a `go.mod` covers it, `resolve` runs the standard library's own
+type checker (`go/types`, no tool to install, no child process, no network)
+after the heuristic pass and lands what it proves as `exact` edges whose detail
+says `go/types (built in)`: every call, construction and reference to a
+repository function, method, type, variable or constant, and which repository
+types implement which repository interfaces. Heuristic edges the compiler
+confirms are raised, calls the heuristic could not bind are added, edges a
+previous pass proved and this one does not are retracted, and heuristic call
+edges the compiler resolved to something else are withdrawn. The standard
+library is read from `GOROOT/src` (found from `GOROOT`, else `go` on `PATH`,
+without running it) and dependencies from `vendor/` or the module cache at the
+version `go.mod` requires; an import that cannot be found becomes an empty
+stub, and anything that depends on a stub is withheld, not guessed. Only the
+host platform's view of build constraints is checked: files another platform
+would build keep their heuristic edges. The block is printed as `Go types:`;
+`status` reports whether the Go graph is type-checked. A per-run cost is the
+type check itself: a few seconds for a repository of this size.
+
+If
 an `index.scip` sits in the project root or `.repocortex/`, `resolve` imports it
 afterwards (as `scip import` would) and prints a `SCIP:` line with the edges
 upgraded, or, when the import fails, the path and the reason. A failed import
