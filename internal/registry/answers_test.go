@@ -194,7 +194,7 @@ func TestNameBindingCountsEveryOutcomeForOneName(t *testing.T) {
 	want := NameBinding{
 		Language: "go", References: 12,
 		BoundHere: 5, BoundElsewhere: 1, Ambiguous: 4, Unresolved: 1, Pending: 1,
-		WithoutEdge: 3,
+		Definitions: 2, WithoutEdge: 3,
 	}
 	if b != want {
 		t.Errorf("NameBinding = %+v\nwant          %+v", b, want)
@@ -218,7 +218,7 @@ func TestNameBindingCountsEveryOutcomeForOneName(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if z != (NameBinding{Language: "go"}) {
+	if z != (NameBinding{Language: "go", Definitions: 1}) {
 		t.Errorf("an unreferenced name: %+v", z)
 	}
 }

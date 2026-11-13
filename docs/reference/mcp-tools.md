@@ -497,6 +497,8 @@ Coverage is judged for the language of the symbol asked about, not for the whole
 
 `get_resolution_coverage` lists the same figures for each language in the index.
 
+An unknown risk is still a risk cut short: when the walk stopped at a depth limit or another bound, the first line says so after "Risk unknown", as it does after every other level.
+
 ### A function passed as a value
 
 A function handed to something by name (`.then(handleResponse)`, `register("x", handler)`, a table of callbacks) is used, and the use is not a call, so no edge records it. The graph cannot see it. The text can, because the name is still there.
@@ -523,7 +525,9 @@ This is a doubt and never a finding. The same name may belong to an unrelated sy
 readJsonValue (moshi/src/main/java/com/squareup/moshi/JsonReader.kt:446): 6 direct, 0 indirect; 1 more symbol(s) at low confidence are excluded; pass min_confidence=low. Risk unknown: ...
 ```
 
-When the number of direct callers shown is zero only because of the floor, the answer leads `INCOMPLETE` and says so. `analyze_impact` counts distinct calling symbols and `find_callers` counts call sites, so the second can be larger for the same symbol even with no floor; a note says so when it is.
+When the number of direct callers shown is zero only because of the floor, the answer leads `INCOMPLETE` and says so. `analyze_impact` counts distinct calling symbols and `find_callers` counts call sites, so the second can be larger for the same symbol even with no floor: `find_callers` also lists calls at low confidence and calls the symbol makes to itself, which `analyze_impact` leaves out. A note gives `analyze_impact`'s own symbol and site counts when they differ, and does not quote a number for `find_callers`.
+
+When a reference is "ambiguous" the answer says why in terms that are true of the name. "Several definitions share the name and none was chosen" is said only when the index does not hold exactly one definition of it; for a name with a single definition (the stubs of Python's `@overload` are folded into it) the answer says that the index holds one and that the evidence at those calls did not bind them to it.
 
 ### The verdict
 

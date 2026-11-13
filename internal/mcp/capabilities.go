@@ -169,8 +169,9 @@ func (s *Server) impactAnalysis(ctx stdctx.Context, req *sdk.CallToolRequest, ar
 	resp.Notes = append(resp.Notes, reach.notes(rep)...)
 	if sites := directSites(rep); sites > len(rep.Direct) {
 		resp.Notes = append(resp.Notes, fmt.Sprintf(
-			"%d direct counts the SYMBOLS that call the target; they make %d call site(s) between them, which "+
-				"is what find_callers lists, so its count is the larger of the two.", len(rep.Direct), sites))
+			"%d direct counts the SYMBOLS that call the target; they make %d call site(s) between them. "+
+				"find_callers lists every recorded call site at every confidence, including calls the target makes "+
+				"to itself, so its list can be longer than this count.", len(rep.Direct), sites))
 	}
 
 	// Show the risk score's inputs. A bare "Risk: HIGH" is unactionable — the
@@ -223,8 +224,17 @@ func (s *Server) impactAnalysis(ctx stdctx.Context, req *sdk.CallToolRequest, ar
 func riskSentence(r impact.Risk, reasonAlreadyGiven bool) string {
 	switch {
 	case r.Level == impact.LevelUnknown && reasonAlreadyGiven:
+		// An unknown level is still cut short when the walk stopped at a bound:
+		// "Risk low or higher (... cut at depth 3)" says so on the first line
+		// for every other level, and this one used to drop it.
+		if r.Partial != "" {
+			return fmt.Sprintf("Risk unknown (%s).", r.Partial)
+		}
 		return "Risk unknown."
 	case r.Level == impact.LevelUnknown:
+		if r.Partial != "" {
+			return fmt.Sprintf("Risk unknown: %s (%s).", strings.TrimSuffix(r.Undetermined, "."), r.Partial)
+		}
 		return fmt.Sprintf("Risk unknown: %s.", strings.TrimSuffix(r.Undetermined, "."))
 	case r.Undetermined != "":
 		why := "score " + fmt.Sprint(r.Score) + " counts only the callers that were bound"
