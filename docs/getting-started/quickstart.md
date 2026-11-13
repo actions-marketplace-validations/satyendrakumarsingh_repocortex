@@ -544,7 +544,7 @@ RepoCortex delivers an end-to-end change-safety and code intelligence architectu
 - **Distributed Event Topologies**: Extracts producer and consumer queues across Apache Kafka, RabbitMQ, AWS SQS/SNS, and Google Cloud Pub/Sub.
 
 ### 9.6. AI Coding Agent MCP Server (`repocortex serve`, `repocortex install`)
-- **Compact Subgraph Extraction**: Delivers targeted subgraphs and pruned signatures instead of raw file dumps, saving up to 85% of LLM token windows.
+- **Compact Subgraph Extraction**: Delivers targeted subgraphs and pruned signatures instead of raw file dumps. How much context that saves depends on the task: the one agent benchmark run so far found no token advantage on simple lookups (`docs/BENCHMARKING.md`).
 - **Confidence Advisory Notices**: Automatically attaches warning notes when query results contain heuristic (`medium` or `low`) edges, preventing autonomous agents from acting on hallucinatory call chains.
 
 ---
@@ -582,7 +582,7 @@ Rather than evaluating specific vendor brands, the following analysis benchmarks
   - **Fuzzy Guesswork vs Deterministic Truth**: Vector similarity finds code that *reads similarly*, not code that is *actually executed*. A method named `processPayment` will match unrelated payment helpers while missing the actual interface implementation `settle`.
   - **Extreme Token Waste**: Dumping entire source files or arbitrary chunks into an LLM context consumes tens of thousands of tokens per prompt, leading to high cost and lost-in-the-middle context degradation.
   - **Zero Safety Guarantees**: Vector search provides zero safety invariants for automated refactoring or architecture governance.
-* **Where RepoCortex Excels**: RepoCortex delivers exact call graphs and pruned signatures, reducing prompt token consumption by up to 85% while providing mathematically calibrated confidence tiers.
+* **Where RepoCortex Excels**: RepoCortex delivers exact call graphs and pruned signatures, with a confidence tier on every relationship, each tier measured against real projects (`docs/accuracy.md`).
 
 #### Category 3: Heavyweight Enterprise Static Analysis (SAST) Suites
 * **How They Work**: Execute deep interprocedural taint analysis and abstract interpretation to detect security vulnerabilities and code quality flaws.
