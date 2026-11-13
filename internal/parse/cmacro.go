@@ -1094,7 +1094,7 @@ func wordSet(s string) map[string]bool {
 // named after one.
 func troubleAtCandidates(root *ts.Node, cands []macroCandidate, tags []ts.Tag, names map[string]bool) bool {
 	for _, t := range tags {
-		if len(t.Kind) > len("definition") && t.Kind[:len("definition")] == "definition" && names[t.Name] {
+		if len(t.Kind) > len("definition") && t.Kind[:len("definition")] == "definition" && t.Kind != cMacroDefinitionTag && names[t.Name] {
 			return true
 		}
 	}
@@ -1212,7 +1212,7 @@ func maskGuard(plainRoot *ts.Node, plain []ts.Tag, maskedRoot *ts.Node, masked [
 		if !isDefinitionTag(t.Kind) {
 			continue
 		}
-		if names[t.Name] || keywords[t.Name] {
+		if t.Kind != cMacroDefinitionTag && names[t.Name] || keywords[t.Name] {
 			return false
 		}
 		have[t.Name]++
@@ -1230,7 +1230,7 @@ func maskGuard(plainRoot *ts.Node, plain []ts.Tag, maskedRoot *ts.Node, masked [
 		if !isDefinitionTag(t.Kind) {
 			continue
 		}
-		if names[t.Name] {
+		if t.Kind != cMacroDefinitionTag && names[t.Name] {
 			// A definition named after a masked token is the macro mistaken
 			// for a name; it is not one the mask can lose.
 			continue
@@ -1289,6 +1289,13 @@ func errorBytes(root *ts.Node) int {
 }
 
 func isDefinitionTag(kind string) bool { return strings.HasPrefix(kind, "definition") }
+
+// cMacroDefinitionTag is the capture of a function-like `#define` in C. It is a
+// definition like any other, except to the guard's test for a definition named
+// after a masked token: a file that defines `for_each_css(...)` and uses it as
+// a statement is not misreading a macro as a name, it has the macro's own
+// definition (see lang_c.go).
+const cMacroDefinitionTag = "definition.function.cmacro"
 
 // maskNote is the sentence appended to a parse error when text was masked, so
 // a file read through a mask says so. It names what was overwritten: macro
