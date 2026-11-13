@@ -26,9 +26,10 @@ import "strings"
 // the top level of a script. A Spock feature method is named by its quoted
 // title, without the quotes.
 //
-// Recovery. The grammar fails on common Groovy (a one-line doc comment, a list as an
-// annotation argument, a map keyed by parenthesised expressions), and then reads a class as
-// loose tokens or closes it early. The patterns marked "recovery" below only match shapes that
+// Recovery. The grammar fails on common Groovy (a list as an annotation argument, a map keyed
+// by parenthesised expressions), and then reads a class as loose tokens or closes it early. A
+// one-line doc comment, which it never closes, is dealt with before the parse: see
+// mask_groovy.go. The patterns marked "recovery" below only match shapes that
 // a tree read properly does not have: a doc comment holding a class keyword, a class followed
 // by an ERROR and then members. See fixtures/langs/groovy/KNOWN_GAPS.md.
 //
@@ -100,7 +101,8 @@ func init() {
 (source_file (class_definition) (ERROR) (declaration [(access_modifier) (modifier)] .) . (function_call (identifier) @name (argument_list (closure) .)) @definition.method)
 
 ; The class header itself when an error earlier in the file left the tokens loose under a doc
-; comment that never closed: "class", then the name (with its supertypes, in an ERROR).
+; comment that never closed (a one-line doc comment is masked before the parse, but the mask
+; is refused when it does not help): "class", then the name (with its supertypes, in an ERROR).
 ; A doc comment cannot hold a class keyword in a tree that was read properly.
 (groovy_doc "class" . (ERROR . (identifier) @name) @definition.class)
 (groovy_doc "class" . (identifier) @name @definition.class)
