@@ -524,7 +524,7 @@ func (p *genericParser) Parse(ctx context.Context, path string, src []byte) (*Re
 		if done2 {
 			return doneResult(res, cerr2)
 		}
-		if !(stop2.early && stop2.reason == ts.ParseStopTimeout) {
+		if !stop2.early || stop2.reason != ts.ParseStopTimeout {
 			by, tree, stop, tags, implementers = by2, tree2, stop2, tags2, implementers2
 			mp = by.retryMaskedWithin(ctx, tree, stop, src, tags, p.cfg.ceilingMicros())
 		}

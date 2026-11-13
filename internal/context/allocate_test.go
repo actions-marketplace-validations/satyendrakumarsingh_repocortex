@@ -253,7 +253,7 @@ func TestRelevanceBuysBytesEndToEnd(t *testing.T) {
 	// nothing to do with the allocator.
 	roomy := DefaultTuning()
 	roomy.BodyShare = 0.9
-	roomy.Weights.Recency = 0
+	roomy.Recency = 0
 	full, err := NewAssembler().Assemble(ctx, reg, g, runID, Request{Task: goldenTask, Tuning: &roomy})
 	if err != nil {
 		t.Fatal(err)
@@ -265,7 +265,7 @@ func TestRelevanceBuysBytesEndToEnd(t *testing.T) {
 
 	tight := DefaultTuning()
 	tight.BodyShare = 0.10 // 3,200 characters of source across the whole answer: three items are clipped
-	tight.Weights.Recency = 0
+	tight.Recency = 0
 	pack, err := NewAssembler().Assemble(ctx, reg, g, runID, Request{Task: goldenTask, Tuning: &tight})
 	if err != nil {
 		t.Fatalf("Assemble: %v", err)
