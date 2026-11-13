@@ -245,8 +245,15 @@ func TestRelevanceBuysBytesEndToEnd(t *testing.T) {
 	reg, g, runID := paymentFixture(t)
 	ctx := context.Background()
 
+	// Recency is switched off in both packs. It is read from each file's
+	// modification time, which in a fresh checkout is whatever order the files
+	// were written in: with it on, which items the envelope clipped differed
+	// between a working tree and a clean clone of the same commit, and in the
+	// clone only one was clipped, so the test failed for a reason that has
+	// nothing to do with the allocator.
 	roomy := DefaultTuning()
 	roomy.BodyShare = 0.9
+	roomy.Weights.Recency = 0
 	full, err := NewAssembler().Assemble(ctx, reg, g, runID, Request{Task: goldenTask, Tuning: &roomy})
 	if err != nil {
 		t.Fatal(err)
@@ -257,7 +264,8 @@ func TestRelevanceBuysBytesEndToEnd(t *testing.T) {
 	}
 
 	tight := DefaultTuning()
-	tight.BodyShare = 0.05 // 1,600 characters of source across the whole answer
+	tight.BodyShare = 0.10 // 3,200 characters of source across the whole answer: three items are clipped
+	tight.Weights.Recency = 0
 	pack, err := NewAssembler().Assemble(ctx, reg, g, runID, Request{Task: goldenTask, Tuning: &tight})
 	if err != nil {
 		t.Fatalf("Assemble: %v", err)
@@ -279,7 +287,7 @@ func TestRelevanceBuysBytesEndToEnd(t *testing.T) {
 		}
 	}
 	if len(clipped) < 2 {
-		t.Fatalf("a 1,600-character envelope clipped %d items; the test proves nothing", len(clipped))
+		t.Fatalf("a 3,200-character envelope clipped %d items; the test proves nothing", len(clipped))
 	}
 
 	// Excerpts are cut on line boundaries, so a grant is spent in whole lines and
