@@ -418,7 +418,73 @@ The rest, with the cause the check recorded. Figures are correct / expected from
 
 ### F# and Groovy with the source mask
 
-Measured on the final build; figures are added when the runs complete.
+Two constructs cost these languages whole files, and neither can be fixed in a
+query. An F# statically resolved member constraint call,
+`(^T: (member GetAwaiter: unit -> ^A) (task))`, makes the grammar's parser loop
+until the library stops it, and everything after it is lost. A Groovy doc
+comment written on one line, `/** text */`, is never closed by the grammar, and
+the rest of the file is read as comment text. Commits `80d2664`, `a5be0b0` and
+`5298b1f` overwrite each with text of the same length and parse the file a
+second time, under the guard the C-family masks use: the masked result is kept
+only if it reads further or gains definitions, and loses none the plain parse
+had.
+
+These figures were measured by the author of the change, on the files and
+commits of the definition check above, by counting what each build extracts.
+They are not a second independent check: the extracted names were compared
+with the expected count, not re-read one by one.
+
+| Project, files of the definition check | Expected | Extracted before (`61f5992`) | Extracted after (`ac82f38`) |
+|---|---|---|---|
+| FsToolkit.ErrorHandling `d7110b0`: `TaskValueOptionCE.fs`, `TaskOptionCE.fs`, `TaskValidationCE.fs` | 61 + 61 + 64 = 186 | 24 + 24 + 23 = 71 | 61 + 61 + 64 = 186 |
+| grails-core `57f8d989`: `DefaultConstrainedProperty.groovy`, `RxEntity`, `SimpleMapQuery` | 50 + 59 + 18 = 127 | 1 + 59 + 18 = 78 | 50 + 59 + 18 = 127 |
+
+Whole repositories, before and after:
+
+| Repository | Symbols | Files clean | Files incomplete | Files read with a mask | Index time |
+|---|---|---|---|---|---|
+| FsToolkit.ErrorHandling `d7110b0` | 3,675 to 3,900 | 465 to 473 | 12 to 5 | 9 | 7.9 s to 8.4 s |
+| grails-core `57f8d989` (15,529 files) | 131,418 to 131,672 | 5,601 to 5,605 | not reported | 24 | 53.2 s to 53.9 s |
+| fsprojects/FAKE `1093050c` | 5,224 to 5,259 | 478 to 481 | 12 to 9 | 4 | 133.3 s to 136.1 s |
+| giraffe-fsharp/Giraffe `032ea9b6` | 1,508 to 1,508 | 62 to 62 | 0 to 0 | 0 | 11.9 s to 11.7 s |
+| spockframework/spock `ce7e8afa` | 11,639 to 11,639 | 952 to 952 | 0 to 0 | 0 | 5.2 s to 4.8 s |
+| apache/groovy (head of the default branch on the day) | 72,922 to 73,156 | 4,000 to 4,006 | 0 to 0 | 31 | 54.4 s to 49.7 s |
+
+Across the six repositories no definition the plain parse had is missing by
+name after the change. Giraffe has no constraint call and spock no one-line doc
+comment, and both are unchanged.
+
+The mask is refused far more often than it is accepted, which is the guard
+working: in grails-core 206 Groovy files have a one-line doc comment, the retry
+was tried on 163 and kept on 24; in apache/groovy it was tried on 133 and kept
+on 31. In the others the comment was not what was wrong with the file.
+
+**What this does not fix.** The masks address one construct each. The same
+author read the five largest files under 800 lines in four projects the work
+was not tuned on; none contains either construct, so the figures are the same
+before and after, and for F# they are poor:
+
+| Project | Expected | Correct | Missed | Spurious |
+|---|---|---|---|---|
+| FAKE (F#) | 333 | 162 | 171 | 0 |
+| Giraffe (F#) | 158 | 67 | 91 | 1 |
+| spock (Groovy) | 158 | 156 | 2 | 5 |
+| apache/groovy (Groovy) | 280 | 232 | 48 | 0 |
+
+- F#: a constraint written after a return type
+  (`let inline g (t: ^T) : ^A when ^T: (member M: unit -> ^A) = ...`) still
+  yields nothing; `module internal X =` loses the module's name; FAKE's
+  `AssemblyInfoFile.fs` runs into the 60-second ceiling and `TargetHelper.fs`
+  into the node limit, and each yields no definitions; Giraffe's `Core.fs` is
+  read as one error after line 441; FAKE's `Process.fs` stops at an `extern`
+  declaration. In FAKE's `DotNet.fs` the mask reads to the end but drops 19
+  definitions the plain parse had, so the guard keeps the plain result.
+- Groovy: `CliBuilderTest.groovy` in apache/groovy loses its class header and
+  about 45 test methods to a cause that was not isolated; the 5 spurious
+  symbols in spock are SQL names read out of a string.
+
+F# is the weakest language in this release that is not text-only. Its grammar
+fails on several common constructs, and a file it fails on can yield nothing.
 
 ## Large repositories
 
@@ -607,7 +673,7 @@ commit and the edge comparison above, and no independent check has re-read it.
 | Answers | A correct, complete answer told not to be presented, because the language-wide rate was low | `e18ba91` | Fixed since; not re-read |
 | Answers | Three sentences in `analyze_impact` and `find_callers` answers that were untrue | `aa59ce5` | Fixed since; not re-read |
 | Definitions | Make, Solidity, GraphQL, SCSS, PowerShell, Erlang, Zig, Objective-C, Vue, Svelte, Bash, Elixir: missed or spurious symbols the 36-language check listed | `1235cd5`, `c42506d`, `d7fccbe`, `1f080ba`, `983b431`, `77e6620`, `2f62d1a`, `3f24c89`, `3046876`, `a66c5a5`, `997bd6b` | Fixed since the 36-language check; not re-read by an independent check |
-| Definitions | F#, Groovy, Swift, OCaml, Julia: definitions lost to constructs the grammar cannot read | `3152579`, `71df469`, `24233f3`, `9f52948`, `8cc57c2` | Fixed in part; figures for F# and Groovy are in the placeholder above |
+| Definitions | F#, Groovy, Swift, OCaml, Julia: definitions lost to constructs the grammar cannot read | `3152579`, `71df469`, `24233f3`, `9f52948`, `8cc57c2` | Fixed in part; F# and Groovy are measured again under "F# and Groovy with the source mask" |
 | Scale | On VS Code every one of 651 references to `IDisposable` stayed ambiguous because the name has 11 definitions, over the cap | `3ca1c04`, `7736265` | Fixed since the VS Code run above; the commit reports 30 of 30 `high` and 28 of 30 `medium` new edges read right on a sample from VS Code. The final-build run is the placeholder above |
 
 Not every defect had a fix. See the next section.
@@ -630,7 +696,7 @@ figure comes from the file named.
 - **Hierarchy kind.** Kotlin `class A : B` where `B` is a class without a constructor call is recorded `IMPLEMENTS`, not `EXTENDS` (2 of 20 sampled, target correct). Scala traits are recorded `EXTENDS`; the 4 `object X extends XMacros` relationships in the five Scala files have no edge.
 - **TSX and TypeScript.** `SingleProps extends Omit<PickerProps, ...>` has no edge. TypeScript `c.header(...)` on a `Context` binds to `HonoRequest.header`: 17 of the 54 edges into that method come from receivers `c`, `ctx` or `this`.
 - **JavaScript.** Calls through `this` inside object-literal methods are still not bound (14 of 31 recall sites). Only 40 `CALLS` edges exist in the 111-file koa project, and 59.3% of the references that name something defined are bound, so every JavaScript answer carries the `UNRELIABLE` word.
-- **Definitions in languages whose grammar cannot read common constructs.** With build `f783fa5`: F# 23 of 186 expected found correctly (48 spurious, mostly members of the wrong kind); Groovy 72 of 127 (one 794-line file gave none of its 50); Swift 179 of 219; Julia 174 of 185; Make 22 of 142; Objective-C 80 of 118; OCaml 311 of 408. Later commits address each (see defects); the figures after them are not in this record except where the placeholders say.
+- **Definitions in languages whose grammar cannot read common constructs.** With build `f783fa5`: F# 23 of 186 expected found correctly (48 spurious, mostly members of the wrong kind); Groovy 72 of 127 (one 794-line file gave none of its 50); Swift 179 of 219; Julia 174 of 185; Make 22 of 142; Objective-C 80 of 118; OCaml 311 of 408. Later commits address each (see defects). F# and Groovy are measured again under "F# and Groovy with the source mask": the files of the check are now read in full, and F# remains poor on other files (162 of 333 and 67 of 158 definitions in two further projects). The others were not re-read for this record.
 - **C and C++ headers with `#if` through a declaration or an initialiser list** lose every definition after it (`fmt/core.h`, `leveldb/util/env_posix.cc`; `docs/accuracy.md`, C and C++ section). A guard refuses a mask that would blank most of a file (commit `60a2594`: `fmt`'s `test/enum-test.cc` went from 23 definitions to 1 before it).
 - **Plain `.txt` files are not text-searchable.** A `.txt` file with no Vim help markers has no grammar and is skipped (commit `2695151`).
 - **Eight languages were left without a definition query on purpose:** Perl, Haskell, Pascal, COBOL, Elm, Nix, Verilog and Assembly. `repocortex languages --verbose` on the final build lists every one of them under "text only", so their files are searchable by text and yield no symbols.
