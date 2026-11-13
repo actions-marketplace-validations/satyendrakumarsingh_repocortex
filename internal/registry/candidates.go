@@ -25,12 +25,17 @@ const candidateChunk = 512
 // held 725,000 entries, and resolution's RSS grew 6.96x between 1,000 and
 // 25,000 files.
 //
-// 20,000 rows measured at 24 MB of peak Go heap on a 25,000-file tree, against
-// 137 MB at 200,000 and 14 MB at 5,000. Resolution took 19.5s at every one of
-// those settings, so the cache buys no measurable time on a tree whose name
-// lookups are served by idx_symbols_name; the budget is therefore set for
-// memory, and set low.
-const DefaultCandidateBudget = 20_000
+// The budget is a trade. Set low (20,000 rows, 24 MB of heap on a 25,000-file
+// tree) it cost nothing on a repository whose names are rare. On a Java tree
+// the same budget thrashed: 232,000 of 509,000 lookups on the 8,800-file
+// server module of Elasticsearch missed, because the names a page of files
+// asks for (`get`, `of`, `toString`, each with up to 1,000 definitions)
+// overflow it before the page is resolved, so every file fetched its names
+// again. At 500,000 rows (about 90 MB) that module's whole working set of
+// 119,000 rows stays resident, lookups that reach the database fell from
+// 7,791 to 17, and memory stayed flat in repository size because eviction
+// still bounds it.
+const DefaultCandidateBudget = 500_000
 
 // DefaultMaxInternPaths bounds how many distinct file paths the interning map holds
 // before being cleared to prevent unbounded memory growth in long-running sessions.
