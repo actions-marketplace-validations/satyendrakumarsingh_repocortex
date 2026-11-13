@@ -309,6 +309,16 @@ func (r *Resolver) typeNamed(c call, name string) (t typeRef, found, known bool)
 	if t, ok := pick(innermost(local), true); ok {
 		return t, true, true
 	}
+	// A class the file imports by name is the one it means, before any class
+	// that merely shares its package: a single-type import shadows the
+	// package's own types. moshi: a test in package kotlin.reflect imports
+	// nothing of that name, but `Moshi` (the class) matched the directory
+	// `moshi` and made a deprecated shim two levels up the "imported" one.
+	if c.spec.Calls.Imports == ImportsNameClasses {
+		if t, ok := pick(r.importedByName(c, name, types), true); ok {
+			return t, true, true
+		}
+	}
 	if t, ok := pick(sameDir, true); ok {
 		return t, true, true
 	}
@@ -331,18 +341,6 @@ func (r *Resolver) typeNamed(c call, name string) (t typeRef, found, known bool)
 	}
 
 	switch c.spec.Calls.Imports {
-	case ImportsNameClasses:
-		if m, ok := r.classImport(c.imports, name); ok && m.contains != nil {
-			var imported []registry.SymbolIndexEntry
-			for _, s := range types {
-				if m.contains(s) {
-					imported = append(imported, s)
-				}
-			}
-			if t, ok := pick(imported, true); ok {
-				return t, true, true
-			}
-		}
 	case ImportsNameModules:
 		if m, _, ok := r.scriptQualifier(c.fr, c.imports, name); ok {
 			var imported []registry.SymbolIndexEntry
@@ -399,6 +397,90 @@ func sharesPackageTail(a, b string) bool {
 	ta, okA := tail(a)
 	tb, okB := tail(b)
 	return okA && okB && ta == tb
+}
+
+// importedBare binds a bare name the file imported by name from a package:
+// Kotlin's and Scala's `Foo()`. It comes from that import and from nowhere else,
+// ahead of a class the same file or package holds under that name and of the one
+// definition of the name in the repository; an explicit import outranks the
+// package's own declarations in both languages. moshi: `KotlinJsonAdapterFactory()`
+// in a test of the package that declares it, and in the deprecated shim that
+// imports the real class, was bound at `high` to the shim.
+//
+// A declaration nearer than the file's top level is not outranked by an import:
+// a local, and a type nested in the enclosing one (nestedType).
+func (r *Resolver) importedBare(c call, reach []registry.SymbolIndexEntry) (decision, bool) {
+	if c.spec.Calls.Imports != ImportsNameClasses || !c.spec.Calls.CallConstructs {
+		return decision{}, false
+	}
+	imported := false
+	for _, e := range c.imports.imports {
+		if importsFromPackage(e, c.ref.Name) {
+			imported = true
+			break
+		}
+	}
+	if !imported {
+		return decision{}, false
+	}
+	for _, s := range c.cands {
+		if _, isLocal := localScope(s); isLocal && s.FileID == c.fr.FileID && visibleFrom(c.scope, s) {
+			return decision{}, false
+		}
+	}
+	for qual := c.class; qual != ""; qual = outerQual(qual) {
+		if _, nested := c.nestedType(qual); nested {
+			return decision{}, false
+		}
+	}
+	for _, e := range c.imports.imports {
+		if importsFromPackage(e, c.ref.Name) && r.layout.Known() && !r.layout.HasDirEnding(e.segments[:len(e.segments)-1]) {
+			return externalCall, true
+		}
+	}
+	if group := r.importedByName(c, c.ref.Name, reach); len(group) > 0 {
+		if first, ok := callableFirst(c.ref, group); ok {
+			return bound(candidate{first, model.ConfidenceHigh, ruleImportedByName}), true
+		}
+		return ambiguousCall, true
+	}
+	return decision{}, false
+}
+
+// importedByName returns, of the given definitions, the top-level ones in the
+// package a single-type import of the name brings it from: `import a.b.Foo`
+// names the Foo declared in a directory that ends with a/b, whatever the file
+// is called and whichever source root the directory is under. Nothing when the
+// file has no such import.
+func (r *Resolver) importedByName(c call, name string, among []registry.SymbolIndexEntry) []registry.SymbolIndexEntry {
+	for _, e := range c.imports.imports {
+		if !importsFromPackage(e, name) {
+			continue
+		}
+		pkg := e.segments[:len(e.segments)-1]
+		var out []registry.SymbolIndexEntry
+		for _, s := range among {
+			if isModuleLevel(s) && commonSuffixLen(pkg, pathSegments(path.Dir(s.FilePath))) == len(pkg) {
+				out = append(out, s)
+			}
+		}
+		if len(out) > 0 {
+			return out
+		}
+	}
+	return nil
+}
+
+// importsFromPackage reports whether an import is `import pkg.Name`: it names
+// Name, and what precedes it is a package, not a class or object whose member
+// Name is (`import test.TestUtil.prep` takes a member, not a class of a
+// package `testutil`).
+func importsFromPackage(e importEntry, name string) bool {
+	if e.alias != "" || len(e.segments) < 2 || lastRawSegment(e.raw) != name {
+		return false
+	}
+	parts := strings.Split(e.raw, ".")
+	return len(parts) >= 2 && !capitalised(parts[len(parts)-2])
 }
 
 // sameDirectory reports whether every entry is defined in one directory.
@@ -601,6 +683,10 @@ func (r *Resolver) callBare(c call, stats *Stats) decision {
 		if s.FileID == c.fr.FileID && !c.spec.isObjectMember(s) {
 			local = append(local, s)
 		}
+	}
+
+	if d, ok := r.importedBare(c, reach); ok {
+		return d
 	}
 
 	// The enclosing scope, innermost first, then the file.
@@ -851,7 +937,10 @@ func (r *Resolver) bareByName(c call, reach []registry.SymbolIndexEntry, stats *
 		dir := path.Dir(c.fr.Path)
 		var pkg []registry.SymbolIndexEntry
 		for _, s := range reach {
-			if path.Dir(s.FilePath) == dir {
+			// The same directory, or — on the JVM — the same package under
+			// another source root (`src/test/kotlin/a/b` beside `src/main/java/a/b`).
+			d := path.Dir(s.FilePath)
+			if d == dir || (c.spec.Calls.Imports == ImportsNameClasses && sharesPackageTail(dir, d) && !r.callsTestHelper(c, s)) {
 				pkg = append(pkg, s)
 			}
 		}
