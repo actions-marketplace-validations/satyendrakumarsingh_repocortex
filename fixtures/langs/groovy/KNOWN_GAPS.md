@@ -30,34 +30,6 @@ modifiers and no return type whose parameter list has two typed parameters
 (ERROR) (declaration (builtintype) (identifier)) (ERROR) (closure (function_call ...))
 ```
 
-## A one-line doc comment swallows the rest of the file
-
-```groovy
-class Flat implements Marker {
-    protected final Map<String, Item> items = new LinkedHashMap<String, Item>()
-    /** a one-line doc comment */
-    int size
-```
-
-The grammar's doc-comment rule takes `a one-line doc comment */` as the first
-line of the comment, so the comment never closes. Everything after it up to
-the next `*/` is comment text and the rest of the file is read as that
-comment's content, ending with a missing `*/` at the end of the file:
-
-```
-(groovy_doc (groovy_package ...) "class" (ERROR (identifier) (identifier) (identifier))
-  (identifier) "{" (declaration ...) "/**" (first_line) (MISSING "*/"))
-```
-
-Nothing after the comment is a node, so nothing after it can be extracted. The
-class header, which is loose under the `groovy_doc`, is recovered (the pattern
-cannot match in a tree that was read properly, as a doc comment cannot hold a
-`class` keyword). In grails-core's `DefaultConstrainedProperty.groovy` that is
-1 of 50 definitions: the one-line `/** ... */` at line 73 hides the other 49.
-Measured with the comment's second `*` replaced by a space before parsing (a
-mask like `cmacro.go`'s, which this tree does not have for Groovy), the same
-file yields all 50. Multi-line doc comments are not affected.
-
 ## A class closed early by the grammar
 
 A closure parameter with a dotted type and a default value as the value of a

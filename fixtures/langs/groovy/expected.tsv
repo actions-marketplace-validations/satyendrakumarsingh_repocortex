@@ -79,4 +79,15 @@ ScriptAfterClass.groovy	1	class	Plain
 ScriptAfterClass.groovy	2	method	a
 ScriptAfterClass.groovy	5	function	helper
 ScriptAfterClass.groovy	7	function	other
-OneLineDoc.groovy	3	class	Flat
+OneLineDoc.groovy	4	class	Flat
+OneLineDoc.groovy	10	method	Flat
+OneLineDoc.groovy	15	method	emptied
+OneLineDoc.groovy	18	method	plain
+OneLineDoc.groovy	20	method	sameLine
+OneLineDoc.groovy	25	method	spread
+OneLineDoc.groovy	27	method	quoted
+OneLineDoc.groovy	32	method	count
+OneLineDoc.groovy	34	method	of
+OneLineDoc.groovy	37	class	Tail
+OneLineDoc.groovy	39	method	finish
+OneLineDoc.groovy	41	method	helper

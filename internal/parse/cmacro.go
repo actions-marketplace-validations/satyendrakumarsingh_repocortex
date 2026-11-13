@@ -763,6 +763,9 @@ type maskedParse struct {
 	// conditional branches were blanked.
 	count    int
 	branches int
+	// constructs is how many spans of a language's own construct were
+	// overwritten (see spanMask).
+	constructs int
 	// lost is how many definitions of the plain parse were in blanked
 	// branches and have no counterpart in the masked parse: given up by
 	// design.
@@ -803,7 +806,8 @@ func (p *genericParser) retryMasked(ctx context.Context, tree *ts.Tree, stop sto
 func (p *genericParser) retryMaskedWithin(ctx context.Context, tree *ts.Tree, stop stopInfo, src []byte, tags []ts.Tag, micros uint64) *maskedParse {
 	lang := p.entry.Name
 	macroOK, condOK := maskedLanguages[lang], condLanguages[lang]
-	if !macroOK && !condOK || ctx.Err() != nil || stop.early && stop.reason == ts.ParseStopCancelled {
+	sm := spanMasks[lang]
+	if !macroOK && !condOK && sm.find == nil || ctx.Err() != nil || stop.early && stop.reason == ts.ParseStopCancelled {
 		return nil
 	}
 	root := tree.RootNode()
@@ -838,13 +842,27 @@ func (p *genericParser) retryMaskedWithin(ctx context.Context, tree *ts.Tree, st
 		}
 	}
 	condDue := !plan.empty()
-	if !macroDue && !condDue {
+
+	// A language's own construct (see spanMask): spans by text, and
+	// trouble on or after the first one. Only a tree with errors, or one that
+	// stopped, is looked at.
+	var spans []maskSpan
+	if sm.find != nil && root != nil && (stop.early || root.HasError()) {
+		spans = sm.find(src)
+		if len(spans) == 0 || !stop.early && !troubleFrom(root, spans[0].start) {
+			spans = nil
+		}
+	}
+	if !macroDue && !condDue && len(spans) == 0 {
 		return nil
 	}
 
 	masked := src
 	if condDue {
 		masked = plan.apply(masked)
+	}
+	if len(spans) > 0 {
+		masked = applyMaskSpans(masked, spans)
 	}
 	macros := 0
 	if macroDue {
@@ -868,13 +886,19 @@ func (p *genericParser) retryMaskedWithin(ctx context.Context, tree *ts.Tree, st
 		return nil
 	}
 	var mc *maskContext
-	if condDue || stop.early {
+	if condDue || stop.early || len(spans) > 0 {
 		// A plain parse that stopped early is judged by how far each parse
 		// got, whichever mask was applied; see maskGuard.
 		mc = &maskContext{
 			plan: plan, plainErrs: nearErrorSpans(src, root), language: lang,
 			plainEarly: stop.early, maskedEarly: stop2.early,
 			plainParsed: stop.parsedBytes, maskedParsed: stop2.parsedBytes,
+		}
+		if len(spans) > 0 && sm.swallows && !stop.early {
+			// The plain parse reached the end of the file, but by reading
+			// everything after the first construct as part of it: that is a
+			// parse which stopped there, whatever the parser reported.
+			mc.plainEarly, mc.swallowed, mc.plainParsed = true, true, spans[0].start
 		}
 	}
 	if !maskGuard(root, tags, tree2.RootNode(), tags2, names, mc) {
@@ -888,7 +912,71 @@ func (p *genericParser) retryMaskedWithin(ctx context.Context, tree *ts.Tree, st
 	if mc != nil {
 		lost = mc.givenUp
 	}
-	return &maskedParse{by: p, tree: tree2, stop: stop2, src: masked, tags: tags2, implementers: implementers2, count: macros, branches: branches, lost: lost}
+	return &maskedParse{by: p, tree: tree2, stop: stop2, src: masked, tags: tags2, implementers: implementers2, count: macros, branches: branches, constructs: len(spans), lost: lost}
+}
+
+// maskSpan is one stretch of source a language's own finder wants overwritten:
+// repl replaces the bytes [start, start+len(repl)). It must be exactly as long
+// as the text it replaces and keep its newlines, so that every offset and line
+// number is unchanged; applyMaskSpans skips a span that does not fit the text.
+type maskSpan struct {
+	start int
+	repl  []byte
+}
+
+// spanMask is a language's own construct that the grammar cannot read and that
+// costs the file after it.
+//
+// find reads the source by text and returns the spans to overwrite
+// (mask_fsharp.go, mask_groovy.go). It must leave comments and strings alone,
+// return spans in source order that do not overlap, and return nil for a file
+// with nothing to mask.
+//
+// swallows is set for a construct that, misread, does not stop the parser but
+// turns the text after it into part of itself (a doc comment that is never
+// closed): the plain parse then reaches the end of the file with an error
+// count that only describes the text before the construct, so the guard
+// judges it as a parse that stopped at the first span.
+type spanMask struct {
+	find     func(src []byte) []maskSpan
+	swallows bool
+}
+
+// spanMasks ride on the retry above and share its guard, so a file is still
+// parsed at most twice by these mechanisms in total, and the masked result
+// replaces the plain one only if maskGuard accepts it. A language with a
+// spanMask has no macro or conditional mask, so this is its only retry.
+var spanMasks = map[string]spanMask{
+	"fsharp": {find: findFSharpConstraintCalls},
+	"groovy": {find: findGroovyOneLineDocs, swallows: true},
+}
+
+// applyMaskSpans returns a copy of src with the spans overwritten.
+func applyMaskSpans(src []byte, spans []maskSpan) []byte {
+	out := make([]byte, len(src))
+	copy(out, src)
+	for _, s := range spans {
+		if s.start < 0 || s.start+len(s.repl) > len(out) {
+			continue
+		}
+		copy(out[s.start:], s.repl)
+	}
+	return out
+}
+
+// troubleFrom reports whether the plain tree has an error or missing node that
+// ends at or after pos: where the parser gave up is on or beyond the first
+// span of a construct it is known to misread.
+func troubleFrom(root *ts.Node, pos int) bool {
+	found := false
+	walkErrors(root, func(n *ts.Node) bool {
+		if int(n.EndByte()) >= pos {
+			found = true
+			return false
+		}
+		return true
+	})
+	return found
 }
 
 // errorSpans lists the byte ranges of the error and missing nodes of a tree.
@@ -932,6 +1020,12 @@ type maskContext struct {
 	maskedEarly  bool
 	plainParsed  int
 	maskedParsed int
+	// swallowed marks a plain parse that reached the end of the file but read
+	// everything after plainParsed as part of one construct (see spanMask):
+	// plainEarly is set with it, and the masked parse must also have gained
+	// definitions, since reading further is not a gain when nothing was
+	// unread.
+	swallowed bool
 	// givenUp is set by maskGuard: see maskedParse.lost.
 	givenUp int
 }
@@ -1083,7 +1177,7 @@ func maskGuard(plainRoot *ts.Node, plain []ts.Tag, maskedRoot *ts.Node, masked [
 		if mc.maskedEarly && mc.maskedParsed <= mc.plainParsed {
 			return false
 		}
-		better = true
+		better = !mc.swallowed
 	default:
 		if maskedErrs > plainErrs {
 			// More error nodes can still be a better reading, when one big
@@ -1200,6 +1294,9 @@ func (r *Result) maskNote() string {
 			what = "conditional branch"
 		}
 		parts = append(parts, fmt.Sprintf("%d %s blanked (definitions only in %s are not indexed)", r.BranchesBlanked, what, branchPronoun(r.BranchesBlanked)))
+	}
+	if r.ConstructsMasked > 0 {
+		parts = append(parts, plural(r.ConstructsMasked, "construct")+" masked")
 	}
 	if len(parts) == 0 {
 		return ""
