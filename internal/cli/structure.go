@@ -576,7 +576,7 @@ exist.`,
 			if err != nil {
 				return err
 			}
-			agentArgs := relationshipArgs(name, path, minConfidence)
+			agentArgs := relationshipArgs(name, path, minConfidence, limit)
 			if directOnly {
 				agentArgs["direct_only"] = true
 			}

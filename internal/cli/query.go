@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"sort"
+	"strconv"
 	"strings"
 	"text/tabwriter"
 
@@ -265,6 +266,10 @@ func bindingCaveat(rs registry.ResolutionStats) string {
 		rs.BindingRate()*100, rs.Bindable(), by, rs.Ambiguous, rs.Unresolved)
 }
 
+// targetLookupLimit is how many definitions of one name resolveTarget reads.
+// A name with this many or more is reported as "at least" that many.
+const targetLookupLimit = 50
+
 // resolveTarget picks the symbol a relationship query is about.
 //
 // Ambiguity is reported, never silently resolved. Three methods named `handle`
@@ -272,13 +277,13 @@ func bindingCaveat(rs registry.ResolutionStats) string {
 // whichever one sorted first — while looking exactly like a definite answer —
 // is how a person ends up deleting the wrong one.
 func resolveTarget(ctx stdctx.Context, s *session, name, path string) (registry.SymbolHit, []registry.SymbolHit, error) {
-	syms, err := s.reg.FindSymbolsByName(ctx, s.runID, name, "", 50)
+	syms, err := s.reg.FindSymbolsByName(ctx, s.runID, name, "", targetLookupLimit)
 	if err != nil {
 		return registry.SymbolHit{}, nil, fmt.Errorf("symbol lookup: %w", err)
 	}
 	if len(syms) == 0 {
 		// An owner and a member: Guard.AgainstNull, Guard::AgainstNull, Mailer#deliver.
-		cands, _, qerr := s.reg.SymbolCandidatesQualified(ctx, s.runID, name, 50)
+		cands, _, qerr := s.reg.SymbolCandidatesQualified(ctx, s.runID, name, targetLookupLimit)
 		if qerr != nil {
 			return registry.SymbolHit{}, nil, fmt.Errorf("symbol lookup: %w", qerr)
 		}
@@ -568,7 +573,7 @@ because "nothing found" and "nothing resolvable" are different facts.`,
 			// What an agent asking the same question is told first. The table
 			// below lists edges; this line says what the edges cannot (a
 			// function passed as a value, callers the floor left out).
-			line := askAgentTool(ctx, g, spec.tool, relationshipArgs(name, path, minConfidence))
+			line := askAgentTool(ctx, g, spec.tool, relationshipArgs(name, path, minConfidence, limit))
 
 			if g.JSON {
 				return emitJSON(cmd.OutOrStdout(), map[string]any{
@@ -584,6 +589,7 @@ because "nothing found" and "nothing resolvable" are different facts.`,
 			}
 
 			out := cmd.OutOrStdout()
+			announceAmbiguity(out, all, name, target)
 			line.print(out)
 			fmt.Fprintf(out, "%s (%s) at %s:%d\n\n",
 				target.Name, target.Kind, target.FilePath, target.StartLine)
@@ -625,8 +631,16 @@ because "nothing found" and "nothing resolvable" are different facts.`,
 }
 
 // relationshipArgs are the arguments the agent tool takes for the same question.
-func relationshipArgs(name, path, minConfidence string) map[string]any {
+//
+// limit is passed so that the first line counts the rows the table under it
+// shows: without it the tool answered for its own default page and the line
+// read "rows 1-50 of 5692 are shown" above a table of 100. The tool caps a
+// page, so a larger --limit is still described as the tool's largest page.
+func relationshipArgs(name, path, minConfidence string, limit int) map[string]any {
 	args := map[string]any{"name": name}
+	if limit > 0 {
+		args["limit"] = limit
+	}
 	if path != "" {
 		args["path"] = path
 	}
@@ -645,11 +659,33 @@ func reportAmbiguity(w io.Writer, all []registry.SymbolHit, name string) {
 	if len(all) <= 1 {
 		return
 	}
-	fmt.Fprintf(w, "\n%d definitions share the name %q; this answered for the first.\n", len(all), name)
+	fmt.Fprintf(w, "\n%s definitions share the name %q; this answered for the first.\n", definitionCount(len(all)), name)
 	fmt.Fprintln(w, "Pass --path to choose another:")
 	for _, sym := range all {
 		fmt.Fprintf(w, "  %s:%d (%s)\n", sym.FilePath, sym.StartLine, sym.Kind)
 	}
+}
+
+// announceAmbiguity says, before the answer, that it is about one of several
+// definitions. The list of the others is printed after the result by
+// reportAmbiguity, and on its own that came too late: "callers dispose" on a
+// repository with thousands of dispose methods opened with one of them, in a
+// file of another language, and "No callers found." on the third line.
+func announceAmbiguity(w io.Writer, all []registry.SymbolHit, name string, target registry.SymbolHit) {
+	if len(all) <= 1 {
+		return
+	}
+	fmt.Fprintf(w, "AMBIGUOUS — %s definitions share the name %q. What follows is about the first, %s:%d, "+
+		"and says nothing about the others. Pass --path to choose one; they are listed at the end.\n\n",
+		definitionCount(len(all)), name, target.FilePath, target.StartLine)
+}
+
+// definitionCount words a number of definitions read under targetLookupLimit.
+func definitionCount(n int) string {
+	if n >= targetLookupLimit {
+		return fmt.Sprintf("At least %d", n)
+	}
+	return strconv.Itoa(n)
 }
 
 // ---------------------------------------------------------------- context
