@@ -231,6 +231,15 @@ type Importer struct {
 	reg   *registry.Registry
 	runID int64
 	opts  scip.Options
+	proof *Proof
+}
+
+// Collect makes Import record into p which files the index covers and where it
+// resolved a name outside the repository. See Proof for what that is for, and
+// why an index the user supplied must not be collected.
+func (imp *Importer) Collect(p *Proof) *Importer {
+	imp.proof = p
+	return imp
 }
 
 // NewImporter returns an Importer targeting one committed run.
@@ -255,11 +264,13 @@ func (imp *Importer) Import(ctx context.Context, path string) (ImportResult, err
 	return imp.run(ctx, runMode{
 		label:   "scip import",
 		promote: true,
+		proof:   imp.proof,
 		ingest: func(ctx context.Context, known []string, emit scip.EmitFunc) (scip.Stats, error) {
 			opts := imp.opts
 			if opts.KnownPaths == nil {
 				opts.KnownPaths = known
 			}
+			opts.KeepSites = imp.proof != nil
 			return scip.New(opts).IngestFile(ctx, path, emit)
 		},
 	})
@@ -283,6 +294,8 @@ type runMode struct {
 	// with language: the language of the files the sites describe.
 	sites    []CallSite
 	language string
+	// proof, when set, collects coverage and out-of-repository sites.
+	proof *Proof
 	// ingest streams the facts, given the repository's indexed paths.
 	ingest func(ctx context.Context, known []string, emit scip.EmitFunc) (scip.Stats, error)
 }
@@ -375,10 +388,19 @@ func (imp *Importer) run(ctx context.Context, mode runMode) (ImportResult, error
 	// Pass 1: join compiler definitions to indexed symbols.
 	fqnToID := make(map[string]int64, len(syms))
 	checked := map[string]bool{}
+	// Every definition the index makes, matched to the repository's symbols or
+	// not: an occurrence resolved to one is a use of repository code.
+	definedAll := map[string]struct{}{}
 	st, err := mode.ingest(ctx, known, func(_ context.Context, f *scip.FileFacts) error {
 		checked[f.Path] = true
+		if mode.proof != nil {
+			mode.proof.cover(f.Path, f.Tool.Name, f.Packages)
+		}
 		for i := range f.Symbols {
 			s := &f.Symbols[i]
+			if s.Kind != model.KindFile && mode.proof != nil {
+				definedAll[s.FQN] = struct{}{}
+			}
 			if s.Kind == model.KindFile {
 				// The file-scope anchor. It has no counterpart in an index
 				// whose symbols all come from declarations, and NewWriter
@@ -444,6 +466,13 @@ func (imp *Importer) run(ctx context.Context, mode runMode) (ImportResult, error
 		}
 		f.Symbols = kept
 
+		if mode.proof != nil {
+			for _, site := range f.Sites {
+				_, matched := fqnToID[site.DstFQN]
+				_, defined := definedAll[site.DstFQN]
+				mode.proof.site(f.Path, site, matched || defined)
+			}
+		}
 		edges, unresolved, err := f.Edges(lookup)
 		if err != nil {
 			return fmt.Errorf("resolve edges for %s: %w", f.Path, err)
