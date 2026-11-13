@@ -65,6 +65,12 @@ Not read, measured:
   `getCacheInfoFromScript`, Analyzers' `TASTCollecting.fs` `visitExpr`) leave
   the declarations after them unread with no error node;
 - a `#if` group the guard refuses (FAKE's `CoreCache.fs`);
+- the bare `///` rewrite has no guard, since it is made before the first
+  parse: in FAKE's `PaketTemplateHelper.fs` (4 error nodes, one definition
+  recovered by luck) the rewritten text reads as 6 error nodes and none, the
+  the only definition this rewrite cost in the six repositories measured;
+- `module rec A.B` is not a module header for the grammar; the name is read
+  (the refiner replaces `rec`), the declarations after it are not;
 - about a dozen large files in Fable (`Seq.fs`, `ilwrite.fs`, `Optimizer.fs`)
   and four in Paket still run into the 60 s wall-clock ceiling, in a stall
   that was not isolated.
