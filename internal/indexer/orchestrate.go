@@ -332,17 +332,35 @@ func NewPlanWith(ctx context.Context, repoRoot string, cfg config.Config, opts O
 	}
 
 	allowed := languageFilter(cfg.IndexerLanguages)
+	found := map[Indexer]Installed{}
 	for _, p := range projects {
-		plan.Steps = append(plan.Steps, planStep(ctx, p, plan, cfg, allowed, prov, opts))
+		plan.Steps = append(plan.Steps, planStep(ctx, p, plan, cfg, allowed, prov, opts, found))
 	}
 	return plan, nil
+}
+
+// availableOnce is Provisioner.Available, asked once per indexer for the whole
+// plan. A monorepo has a project per package, and every one of them asked the
+// same tool for its version: twenty TypeScript projects meant twenty starts of
+// a Node program, four seconds of a plan that `resolve` now builds every time.
+// Only an indexer that was found is remembered; a missing one is looked up
+// again, which costs a PATH search and nothing else.
+func availableOnce(ctx context.Context, prov *Provisioner, pin Pin, found map[Indexer]Installed) (Installed, bool) {
+	if inst, ok := found[pin.Indexer]; ok {
+		return inst, true
+	}
+	inst, ok := prov.Available(ctx, pin)
+	if ok {
+		found[pin.Indexer] = inst
+	}
+	return inst, ok
 }
 
 // planStep decides the fate of one project. It calls Provisioner.Available,
 // which looks the binary up and asks its version — read-only, and the reason
 // "already installed" never turns into a download here.
 func planStep(ctx context.Context, p Project, plan Plan, cfg config.Config,
-	allowed map[Language]bool, prov *Provisioner, opts Options) Step {
+	allowed map[Language]bool, prov *Provisioner, opts Options, found map[Indexer]Installed) Step {
 
 	step := Step{Project: p}
 
@@ -392,7 +410,7 @@ func planStep(ctx context.Context, p Project, plan Plan, cfg config.Config,
 		return step
 	}
 
-	if inst, available := prov.Available(ctx, pin); available {
+	if inst, available := availableOnce(ctx, prov, pin, found); available {
 		step.Installed = inst
 		return step
 	}
