@@ -8,12 +8,15 @@ Everything here is reproducible with the tool itself. If you disagree with a
 number, run the four commands in "Method" against a repository you know and
 send the disagreement.
 
-The newest measurement is ["Receivers"](#receivers-binding-a-call-by-what-it-was-made-on),
-below the first result. It re-measured every tier by hand on nine projects
-after the resolver stopped ignoring what a call was made on, it is where the
-floor for `medium` is stated, and it corrects the adjudication the older
-tables in this document were computed with. Where it and an older section
-disagree about what a tier is worth, it is the one to read.
+The newest measurement is [the second verification of 13 November](#2026-11-13-the-second-verification-and-what-is-still-wrong),
+near the end of this page, which re-read 14 projects after the fixes and lists what is
+still wrong. Before it, ["Receivers"](#receivers-binding-a-call-by-what-it-was-made-on),
+below the first result, re-measured every tier by hand on nine projects after the
+resolver stopped ignoring what a call was made on; it is where the floor for
+`medium` is stated, and it corrects the adjudication the older tables in this
+document were computed with. Where a later section and an older one disagree
+about what a tier is worth, the later one is the one to read. The dated
+sections run in order, and "Reproducing" is last.
 
 ## Result
 
@@ -28,6 +31,13 @@ three languages and five repositories — **30,975 adjudicated edges**:
 
 Java was measured later, separately, on a smaller pool: 100.0% `high` on 82 of
 82 judged edges, 32.7% recall — see "Java: measured" below.
+
+*Superseded in part, 13 November 2026.* These figures were adjudicated against a
+compiler index on five repositories in three languages and stand for them. The
+reading drawn from them below ("`high` is worth acting on, in every language
+measured. `medium` is not.") does not hold for the languages and projects read
+by hand since: see ["What this supersedes above"](#what-this-supersedes-above)
+in the second verification.
 
 Per repository:
 
@@ -453,7 +463,10 @@ marked calls `TestReceiverFixtureBindsNothingWrongly` checks end to end.
   attributed to the outer type.
 - Nothing here was measured on PHP, Kotlin, Scala, Swift or Dart, whose rows in
   the trait table are written from the languages' rules and not from a sample.
-  PHP, Kotlin and Scala still extract no references at all.
+  PHP, Kotlin and Scala still extract no references at all. *(Superseded: PHP,
+  Kotlin and Scala record calls since [12 November](#2026-11-12-calls-in-php-kotlin-and-scala-and-new-in-java),
+  and PHP, Kotlin and Scala were read by hand in the
+  [second verification](#2026-11-13-the-second-verification-and-what-is-still-wrong).)*
 
 ### Cost
 
@@ -2393,21 +2406,6 @@ conformance fixtures for the two queries, and `fixtures/receivers/cpp/exported.c
 pins a subclass of an export-macro class whose inherited `this->Fetch()` binds to
 the base's method and not to an unrelated class's.
 
-## Reproducing
-
-The numbers above came from:
-
-| | |
-|---|---|
-| Host | Apple M4 Pro, macOS 26.5.1, `darwin/arm64` native build |
-| RepoCortex | commit at the time of writing, `CGO_ENABLED=0` |
-| Ground truth | `scip-go` 0.2.7, `scip-typescript` 0.3.14, `scip-python` 0.6.6, `scip-java` `HEAD-20260402-1456` (pinned image digest `a05564b9…`, docker runner) |
-| Corpora | `--depth 1` clones: prometheus, nest, scrapy, requests, spring-petclinic-rest (`4cd8e1b`) |
-| Python scope analysis | `--depth 1` clones of scrapy `c7eacdbb30a4563bbbe04ed02781768f4e19eabb`, requests `v2.32.3` (`0e322af8`), httpx `0.28.1` (`26d48e06`), django `5.1.4` (`2d4add11`); `scip-python index --project-name repocortex-repository --project-version 0.0.0`, as `repocortex indexers` runs it; `index --full --accuracy fast`, `resolve --no-scip`, `scip import`, `accuracy` |
-
-`scip-go` on prometheus takes about eight minutes and produces a 57 MB index.
-On RepoCortex's own source it takes nineteen seconds and produces 7 MB.
-
 ## 2026-11-12: calls in PHP, Kotlin and Scala, and `new` in Java
 
 PHP, Kotlin and Scala recorded definitions and not one call, so every "who
@@ -2692,3 +2690,60 @@ Kotlin's `inflated.utf8()` binds to a test function named `utf8` although
 `ByteString` declares `utf8` (in an `expect` class and its `actual` ones; why
 those do not count as members was not diagnosed); `randomBytes(..)`
 from a `nativeTest` source set binds to a `jvmTest` helper of the same name.
+
+## 2026-11-13: the second verification, and what is still wrong
+
+The [verification record of 13 November](verification/2026-11-13/README.md) repeats the hand check of the record of 12 November on the same 14 projects, at the same commits and the same files, after the fixes (build `8748b29`), draws fresh samples, and adds three things: definitions in 36 further languages, two very large repositories, and a comparison of every edge and symbol on the 14 projects between that build and the final one (`61f5992`). Every figure below is in that record with its denominator. It is the same strict reading as the first: a call bound to a same-named function of another class or package is wrong, and an edge that could not be settled is not right.
+
+| | Round 1 (build `53246ac`) | Round 2 (build `8748b29`) |
+|---|---:|---:|
+| `high`, right / judged, 14 projects | 396 / 420 (94%) | 405 / 420 (96%) |
+| `medium` | 207 / 272 (76%) | 249 / 259 (96%) |
+| `low` | 181 / 276 (66%) | 184 / 280 (66%) |
+| Call-site recall, first eight sites per file | 393 / 529 (74%) | 450 / 529 (85%) |
+| Definitions in the five files, correct / expected | 2,996 / 3,113 | 3,081 / 3,106 |
+| Spurious definitions | 153 | 12 |
+
+Round 2 is not a fresh sample: it is the same projects, and several of the fixes were made after reading them. It shows that the fixes held there. The samples differ between rounds (round 2 drew new edges), so a row is not a paired comparison.
+
+### What this supersedes above
+
+- **The "Result" section's reading** ("`high` is worth acting on, in every language measured. `medium` is not.") is superseded for the languages it did not cover. The compiler-index figures in that section stand for the repositories they were measured on. On 14 other projects, read by hand, `high` was below the 86.8% floor on google/benchmark (C++, 22 of 30 in both rounds; in round 2 none was wrong and 8 were unclear) and moshi (Kotlin, 26 of 30 in round 2, from 29 of 30), and `medium` was right on 249 of 259 sampled edges in round 2 wherever the tier had edges. The "Receivers" floors are therefore a description of the nine projects of 12 November and not a guarantee for every project.
+- **"Receivers", "What is still wrong"**: the last bullet says PHP, Kotlin and Scala extract no references and were not measured. They record calls since the section of 12 November below, and round 2 measured recall of 33 of 40 sites in PHP, 40 of 40 in Kotlin (27 in round 1) and 30 of 40 in Scala (20 in round 1).
+- **"Inheritance for Ruby, C#, Rust and C++"**: its note that Rust `impl Trait for Type` is not recorded is superseded by the Rust item of the section of 13 November below; its C++ hierarchy figures are superseded by round 2, which sampled 20 of 33 C++ edges, all pointing at the declared base.
+
+### Known gaps
+
+Each is stated with the figure that measured it, from the record or from the commit named.
+
+- **The `low` tier is poor.** Right / judged in round 2: Python 8 / 30, Kotlin 9 / 30, C# 14 / 30, Java 18 / 30. Use `--min-confidence medium` for anything that matters.
+- **Overloads of the same arity.** The binder uses the argument count and not the argument types. Wrong `low` edges in round 2: Java 12 of 30, Kotlin 21 of 30, C# 15 of 30. In C++ google/benchmark's `FormatKV` (47 references) all bind to the first overload, now at `low`.
+- **Go has no interface-implementation edges.** Zero `EXTENDS` or `IMPLEMENTS` edges for Go in both rounds (621 Go definitions in round 1); `find_implementations` answers `UNKNOWN`.
+- **A call at module level has no caller symbol,** so it makes no edge. Resolved references with no enclosing symbol: express 2,015 of 2,180, zod 2,952 of 7,540, taxonomy 20 of 429 (JavaScript section above).
+- **Calls on a value need type inference.** On VS Code (build `a75b887`) 426,853 references were left unbound because the name has more candidates than the cap; the second look at those names (commits `3ca1c04`, `7736265`) came after that run, and its figure is pending in the record. Calls in a chain that starts from `new` or a call are not extracted in C# (4 of 8 recall sites in one file).
+- **Definitions in languages whose grammar cannot read common constructs.** Correct / expected, build `f783fa5`, before the later fixes and not re-read since: F# 23 / 186, Make 22 / 142, Groovy 72 / 127, Objective-C 80 / 118, OCaml 311 / 408, Swift 179 / 219, Julia 174 / 185. Commits `3152579`, `1235cd5`, `71df469`, `3f24c89`, `9f52948`, `24233f3`, `8cc57c2` address them; Alamofire's `DownloadRequest.swift` went from 13 to 35 of 41 definitions in the last. Figures for F# and Groovy on the final build are pending in the record.
+- **C and C++ with `#if` through a declaration or an initialiser list** lose every definition after it (`fmt/core.h`, `leveldb/util/env_posix.cc`; the C and C++ section above). The guard refuses a mask that would blank most of a file (`fmt`'s `test/enum-test.cc` went from 23 definitions to 1 before it).
+- **A TSX arrow function followed by a ternary on the next line** is read as a syntax error: 4 chart files in tremor, 4 definitions missed.
+- **A Scala method dropped without a message.** `SubProcess.joinPumperThreadsHook` (os-lib, `private[os] def`) was extracted in round 1 and is not in round 2.
+- **PHP names written from the global namespace.** A supertype `extends \DateTimeImmutable` is rooted since commit `aba5f47` and the edge to a monolog class of that name is gone. Calls and `new` written with a leading backslash are still recorded with an opaque receiver.
+- **Kotlin secondary constructors are not extracted** (commit `0127387`).
+- **"Receiver named like the type declares it"** still misfires. In C# it measured 9 right of 21 on serilog and moved to `low`, where its edges are still wrong. In Ruby a stdlib `URI::Parser` bound to `Multipart::Parser.parse` at `high` in round 2.
+- **Plain `.txt` files are not text-searchable;** a `.txt` file without Vim help markers has no grammar (commit `2695151`).
+- **`get_task_context` is slow on a very large repository:** 17.3 s on VS Code at build `a75b887`, before the stored coverage figures (`6ba89a1`) and the answer indexes (`5c77f65`). The figure on the final build is pending in the record.
+- **Eight languages have no definition query on purpose:** Perl, Haskell, Pascal, COBOL, Elm, Nix, Verilog and Assembly. `repocortex languages --verbose` lists each under text only: searchable, with no symbols.
+- **Platforms and assets.** `install.ps1` has not been run on Windows (commit `d28e6a4`); no result of the test suite on Windows or Linux for the work in this document is in the record. The demo images in `docs/assets` were last regenerated at v1.0.1 and the portal screenshots on 11 November, before these changes.
+
+## Reproducing
+
+The numbers above came from:
+
+| | |
+|---|---|
+| Host | Apple M4 Pro, macOS 26.5.1, `darwin/arm64` native build |
+| RepoCortex | commit at the time of writing, `CGO_ENABLED=0` |
+| Ground truth | `scip-go` 0.2.7, `scip-typescript` 0.3.14, `scip-python` 0.6.6, `scip-java` `HEAD-20260402-1456` (pinned image digest `a05564b9…`, docker runner) |
+| Corpora | `--depth 1` clones: prometheus, nest, scrapy, requests, spring-petclinic-rest (`4cd8e1b`) |
+| Python scope analysis | `--depth 1` clones of scrapy `c7eacdbb30a4563bbbe04ed02781768f4e19eabb`, requests `v2.32.3` (`0e322af8`), httpx `0.28.1` (`26d48e06`), django `5.1.4` (`2d4add11`); `scip-python index --project-name repocortex-repository --project-version 0.0.0`, as `repocortex indexers` runs it; `index --full --accuracy fast`, `resolve --no-scip`, `scip import`, `accuracy` |
+
+`scip-go` on prometheus takes about eight minutes and produces a 57 MB index.
+On RepoCortex's own source it takes nineteen seconds and produces 7 MB.
