@@ -772,6 +772,17 @@ type maskedParse struct {
 	lost int
 }
 
+// unclean reports whether the masked parse still has a syntax error or was
+// itself stopped early: a reading that is better than a parse cut short, and
+// not as good as one that read the file.
+func (m *maskedParse) unclean() bool {
+	if m.stop.early {
+		return true
+	}
+	root := m.tree.RootNode()
+	return root != nil && root.HasError()
+}
+
 // retryMasked is the guarded second parse. plain is the parse already done;
 // it returns nil when the plain result stands, which is the answer for every
 // file with no candidate and for every file whose plain parse is clean where

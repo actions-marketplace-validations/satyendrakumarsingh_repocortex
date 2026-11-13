@@ -501,11 +501,32 @@ func (p *genericParser) Parse(ctx context.Context, path string, src []byte) (*Re
 	// answer is every file with nothing to mask and every file that parsed
 	// cleanly. The two masks share that one retry.
 	mp := by.retryMaskedWithin(ctx, tree, stop, src, tags, probe)
-	if mp == nil && probe < p.cfg.ceilingMicros() && stop.early && stop.reason == ts.ParseStopTimeout && ctx.Err() == nil {
+	outran := probe < p.cfg.ceilingMicros() && stop.early && stop.reason == ts.ParseStopTimeout
+	if mp == nil && outran && ctx.Err() == nil {
 		// The first parse ran out of its shorter allowance and no mask
 		// rescued it: it gets the whole ceiling, as every file does.
 		if by, tree, stop, tags, implementers, done, cerr = readTree(p.cfg.ceilingMicros()); done {
 			return doneResult(res, cerr)
+		}
+	}
+	if mp != nil && outran && mp.unclean() && ctx.Err() == nil {
+		// The mask was taken because the plain parse ran out of a wall-clock
+		// allowance, and what it bought still has errors. On a slow or loaded
+		// machine that is a file the plain parse would have read cleanly a
+		// moment later (seen under the race detector: a C# file recorded ok on
+		// one run and partial with four error nodes on the next). So the plain
+		// parse gets a second, longer allowance, and if it finishes inside it
+		// the decision is made as it is on a fast machine: against a complete
+		// plain parse, by the same guard. A parse that does not finish inside
+		// it is one the parser does not finish, and the masked reading stands.
+		second := min(p.cfg.ceilingMicros(), probe*probeSecondLook)
+		by2, tree2, stop2, tags2, implementers2, done2, cerr2 := readTree(second)
+		if done2 {
+			return doneResult(res, cerr2)
+		}
+		if !(stop2.early && stop2.reason == ts.ParseStopTimeout) {
+			by, tree, stop, tags, implementers = by2, tree2, stop2, tags2, implementers2
+			mp = by.retryMaskedWithin(ctx, tree, stop, src, tags, p.cfg.ceilingMicros())
 		}
 	}
 	if mp != nil {
@@ -780,6 +801,13 @@ const (
 	probePerKiB = 10 * time.Millisecond
 )
 
+// probeSecondLook is how many times the first allowance the plain parse is
+// given when it ran out of the first one and the masked reading that replaced
+// it still has errors. It bounds what a file the parser never finishes costs
+// (the 60 s ceiling is not paid again) and is what keeps a verdict the same on
+// a machine several times slower than the one the allowance was measured on.
+const probeSecondLook = 4
+
 // probeMicros is the wall-clock allowance of the first parse of a file, in
 // microseconds.
 //
@@ -806,8 +834,10 @@ const (
 // benchmark_test.cc takes 80 ms and is allowed 2 s), but it is a wall-clock
 // figure, and a file that ran out of it on a slow machine and not on a fast
 // one would get the masked reading on the first and the plain one on the
-// second. None was seen: the files that run out of it here are ones the
-// parser does not finish at all.
+// second. One was seen, under the race detector with every package's tests
+// running at once, and the second look in Parse (probeSecondLook) is the
+// answer to it: a masked reading that still has errors is not kept on the
+// strength of the short allowance alone.
 func (c parserConfig) probeMicros(language string, srcLen int) uint64 {
 	full := c.ceilingMicros()
 	if !maskedLanguages[language] && !condLanguages[language] {
