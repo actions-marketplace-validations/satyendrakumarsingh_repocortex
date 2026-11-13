@@ -75,8 +75,8 @@ function f() { var inner = require('./inner'); }
 	}
 	for _, want := range []string{
 		"./parse|parse", "./parse|",
-		"./lib|.a", "./lib|.c", "./lib|",
-		"./q|.q", "./q|",
+		"./lib|.a", "./lib|.c=b", "./lib|",
+		"./q|.q=y", "./q|",
 		"./inner|",
 	} {
 		if !got[want] {

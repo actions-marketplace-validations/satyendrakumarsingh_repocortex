@@ -33,6 +33,9 @@ type receiverMarker struct {
 	// <name> starts on that line, whether or not the clause was extracted.
 	verb, name string
 
+	// exported is the name a renamed import's use is exported by, or "".
+	exported string
+
 	// target is a def label, or "none" or "external". instantiates is true
 	// for `-> new <ID>`. tier is "" when the marker does not require one.
 	target       string
@@ -113,8 +116,12 @@ func readReceiverMarkers(t *testing.T, root string) (map[string]receiverDef, []r
 					if c == nil {
 						t.Fatalf("%s:%d: malformed marker %q", rel, line, part)
 					}
+					// `call Local=Exported`: a use of an import renamed
+					// `Exported as Local`. The reference is named Local; an
+					// edge to a definition named Exported or Local is its.
+					name, exported, _ := strings.Cut(c[1], "=")
 					markers = append(markers, receiverMarker{file: rel, line: line, verb: "call",
-						name: c[1], instantiates: c[2] != "", target: c[3], tier: c[4]})
+						name: name, exported: exported, instantiates: c[2] != "", target: c[3], tier: c[4]})
 				default:
 					t.Fatalf("%s:%d: unknown marker %q", rel, line, part)
 				}
@@ -150,8 +157,8 @@ func receiverEdgesAt(t *testing.T, db *sql.DB, m receiverMarker) []receiverEdge 
 		  JOIN files f ON f.id = s.file_id
 		 WHERE e.source = 'source_code'
 		   AND e.evidence_file = ? AND e.evidence_line = ?
-		   AND (s.name = ? OR (s.name = 'apply' AND s.fqn LIKE '%:' || ? || '.apply'))
-		 ORDER BY e.id`, m.file, m.line, m.name, m.name)
+		   AND (s.name = ? OR s.name = ? OR (s.name = 'apply' AND s.fqn LIKE '%:' || ? || '.apply'))
+		 ORDER BY e.id`, m.file, m.line, m.name, m.exported, m.name)
 	if err != nil {
 		t.Fatal(err)
 	}

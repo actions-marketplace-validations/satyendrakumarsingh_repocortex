@@ -17,7 +17,7 @@ class Savings(id: Int) : Account(id) { // def kt.Savings
         "x".shout() // call shout -> kt.shout high
         println("x") // call println -> none
         listOf(1).map { it } // call listOf -> none; call map -> none
-        val xs = ArrayList<String>() // call ArrayList -> none
+        val xs = ArrayList<String>() // call ArrayList -> external
         xs.add("q") // call add -> none
         xs?.clear() // call clear -> none
     }

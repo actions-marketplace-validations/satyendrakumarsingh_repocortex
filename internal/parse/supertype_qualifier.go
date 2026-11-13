@@ -1,6 +1,9 @@
 package parse
 
-import "strings"
+import (
+	"regexp"
+	"strings"
+)
 
 // supertypeQualifierLanguages are the languages whose inheritance query
 // captures the last segment of a qualified supertype and that write the
@@ -22,6 +25,14 @@ var supertypeQualifierLanguages = map[string]bool{
 // the characters before it are an identifier, a separator, an identifier, until
 // something else. Generic arguments are never in front of the name.
 //
+// PHP is the one language whose qualifier can be rooted: a name written with a
+// leading backslash is fully qualified from the global namespace. `\X` is a
+// class declared in NO namespace, and `\A\B\X` the class X of the namespace
+// A\B, whatever namespace the file is in. That is recorded as a leading
+// RootedQualifier in front of the dotted path (`\` for `\X`, `\A.B` for
+// `\A\B\X`), but only in a file that declares a namespace: in a file that
+// declares none, `\X` and `X` are the same name and are recorded alike.
+//
 // Path words that mean "this crate or package" and name no directory (`crate`,
 // `self`, `super`, `global`) are dropped; if nothing is left the name is
 // treated as unqualified, as before.
@@ -31,6 +42,7 @@ func supertypeQualifier(language string, src []byte, nameStart uint32) string {
 	}
 	i := int(nameStart)
 	var segs []string
+	rooted := false
 	for {
 		// A separator directly in front of the segment just read.
 		j := i
@@ -50,7 +62,9 @@ func supertypeQualifier(language string, src []byte, nameStart uint32) string {
 			k--
 		}
 		if k == j {
-			break // a leading separator (`\Ns\Base`, `::Base`): nothing before it
+			// A leading separator (`\Ns\Base`, `::Base`): nothing before it.
+			rooted = language == "php" && src[j] == '\\'
+			break
 		}
 		segs = append(segs, string(src[k:j]))
 		i = k
@@ -67,7 +81,26 @@ func supertypeQualifier(language string, src []byte, nameStart uint32) string {
 		}
 		break
 	}
-	return strings.Join(segs, ".")
+	qual := strings.Join(segs, ".")
+	if rooted && declaresNamespace(src[:nameStart]) {
+		return RootedQualifier + qual
+	}
+	return qual
+}
+
+// RootedQualifier begins a supertype qualifier that was written with a leading
+// backslash in a PHP file that declares a namespace: it is relative to the
+// global namespace and to no other. internal/resolve/infer reads it.
+const RootedQualifier = `\`
+
+// namespaceStatement matches a PHP `namespace A\B;` or `namespace A\B {`. The
+// global block `namespace {` names no namespace and does not match.
+var namespaceStatement = regexp.MustCompile(`(?m)^\s*namespace\s+[A-Za-z_\x80-\xff][A-Za-z0-9_\x80-\xff\\]*\s*[;{]`)
+
+// declaresNamespace reports whether the PHP source before a point names a
+// namespace for the code after it.
+func declaresNamespace(before []byte) bool {
+	return namespaceStatement.Match(before)
 }
 
 func isQualifierIdent(b byte) bool {

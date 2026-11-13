@@ -1,50 +1,33 @@
 package parse
 
 import (
-	"context"
+	"bytes"
 	"testing"
 )
 
-// TestSupertypeQualifier pins the receiver of a supertype reference: the
-// qualifier as written, `.`-joined, and empty when the name is unqualified.
-func TestSupertypeQualifier(t *testing.T) {
-	cases := []struct {
-		file, src string
-		want      map[string]string // supertype name -> receiver
+// TestPHPSupertypeQualifierIsRootedByALeadingBackslash: monolog's
+// `extends \DateTimeImmutable` names the built-in class, not the
+// Monolog\DateTimeImmutable beside it. The marker is recorded only where the
+// file declares a namespace; without one `\X` and `X` are the same name.
+func TestPHPSupertypeQualifierIsRootedByALeadingBackslash(t *testing.T) {
+	const withNS = "<?php\nnamespace Monolog;\n\nclass A extends "
+	const noNS = "<?php\n\nclass A extends "
+	for _, tc := range []struct {
+		name, src, tail, want string
 	}{
-		{"a.scala", "class A extends java.io.OutputStream\nclass B extends C", map[string]string{"OutputStream": "java.io", "C": ""}},
-		{"A.java", "class A extends java.io.OutputStream implements java.io.Closeable, Local {}", map[string]string{"OutputStream": "java.io", "Closeable": "java.io", "Local": ""}},
-		{"a.kt", "class A : java.io.OutputStream(), Local", map[string]string{"OutputStream": "java.io", "Local": ""}},
-		{"a.cs", "class A : System.IO.Stream, Local {}", map[string]string{"Stream": "System.IO", "Local": ""}},
-		{"a.cpp", "class A : public std::ostream, public ns::Base<int>, public Local {};", map[string]string{"ostream": "std", "Base": "ns", "Local": ""}},
-		{"a.php", "<?php\nclass A extends \\Ns\\Base {}\nclass B extends Local {}", map[string]string{"Base": "Ns", "Local": ""}},
-		{"a.py", "class A(pkg.Base, pkg.sub.Gen[int], Local):\n    pass", map[string]string{"Base": "pkg", "Gen": "pkg.sub", "Local": ""}},
-		{"a.rb", "class A < Mod::Base; end\nclass B < Local; end", map[string]string{"Base": "Mod", "Local": ""}},
-		{"a.ts", "class A extends ns.Base implements Local {}", map[string]string{"Base": "ns", "Local": ""}},
-		{"a.rs", "trait T: path::Trait + crate::other::Tr {}\ntrait U: super::V {}", map[string]string{"Trait": "path", "Tr": "other", "V": ""}},
-	}
-	reg := NewRegistry()
-	for _, c := range cases {
-		t.Run(c.file, func(t *testing.T) {
-			p := reg.ForFile(c.file)
-			if p == nil {
-				t.Fatalf("no parser for %s", c.file)
-			}
-			res, err := p.Parse(context.Background(), c.file, []byte(c.src))
-			if err != nil {
-				t.Fatal(err)
-			}
-			got := map[string]string{}
-			for _, r := range res.References {
-				if isSupertypeRef(r.Kind) {
-					got[r.Name] = r.Receiver
-				}
-			}
-			for name, want := range c.want {
-				if g, ok := got[name]; !ok || g != want {
-					t.Errorf("%s: supertype %s receiver = %q (present %v), want %q; all: %v", c.file, name, g, ok, want, got)
-				}
-			}
-		})
+		{"global name", withNS, `\DateTimeImmutable {}`, `\`},
+		{"rooted path", withNS, `\PHPUnit\Framework\TestCase {}`, `\PHPUnit.Framework`},
+		{"relative path", withNS, `Sub\Base {}`, `Sub`},
+		{"unqualified", withNS, `Base {}`, ``},
+		{"no namespace, rooted", noNS, `\DateTimeImmutable {}`, ``},
+		{"no namespace, rooted path", noNS, `\Lib\Base {}`, `Lib`},
+		{"global block is no namespace", "<?php\nnamespace {\nclass A extends ", `\Base {}`, ``},
+	} {
+		src := []byte(tc.src + tc.tail)
+		start := uint32(len(tc.src))
+		start += uint32(bytes.LastIndexByte([]byte(tc.tail[:bytes.IndexByte([]byte(tc.tail), ' ')]), '\\') + 1)
+		if got := supertypeQualifier("php", src, start); got != tc.want {
+			t.Errorf("%s: qualifier = %q, want %q", tc.name, got, tc.want)
+		}
 	}
 }

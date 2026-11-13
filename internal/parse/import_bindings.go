@@ -117,14 +117,16 @@ func (p *genericParser) importedBindings(tree *ts.Tree, src []byte) (out []Impor
 						if local == nil {
 							local = original
 						}
-						if local != nil {
-							add(path, memberAliasPrefix+local.Text(src), local)
+						if local == nil {
+							continue
 						}
-						// A renamed member also gets a row under the name the
-						// module exports it by. See renamedImports.
-						if local != nil && original != nil && local != original && original.Text(src) != "default" {
-							add(path, memberAliasPrefix+original.Text(src), original)
+						alias := memberAliasPrefix + local.Text(src)
+						// A renamed member carries the name the module exports
+						// it by. See renamedMember.
+						if original != nil && original != local && original.Text(src) != "default" {
+							alias = renamedMember(local.Text(src), original.Text(src))
 						}
+						add(path, alias, local)
 					}
 				}
 			}
@@ -138,67 +140,28 @@ func (p *genericParser) importedBindings(tree *ts.Tree, src []byte) (out []Impor
 //	import { Calendar as CalendarPrimitive } from "./cal"
 //	<CalendarPrimitive />
 //
-// binds the local name CalendarPrimitive to the export Calendar. The row for
-// the local name says that a receiver spelled CalendarPrimitive came from
-// "./cal", but a bare use of the name has no symbol of that name to reach: the
-// module exports Calendar. Two things make the use reach it, both made here and
-// neither needing the resolver to know about renames:
+// binds the local name CalendarPrimitive to the export Calendar of "./cal". The
+// use keeps the name it is written with: it IS a use of CalendarPrimitive, and
+// a different symbol of that name, or of the name Calendar, in this file or its
+// neighbours is not what it reaches. What it reaches is stated by ONE row, and
+// the resolver binds the use through it (viaRenamedImport in internal/resolve):
 //
-//   - a second member row, for the exported name (".Calendar"), so the
-//     resolver restricts a use of Calendar to that module, and
-//   - the reference itself is recorded under the exported name, since it IS a
-//     use of that export. renamedImports lists the pairs.
+//	Path "./cal", Alias ".CalendarPrimitive=Calendar"
 //
-// A default import (`import X from`, `{ default as X }`) names the module's
-// default, whose declared name this file cannot see, and is not renamed.
-// A local variable of the same name as the exported one would be taken for the
-// import; a file that renames an import and also declares a binding by its
-// exported name is the one case this gets wrong.
-func (p *genericParser) renamedImports(tree *ts.Tree, src []byte) map[string]string {
-	if tree == nil || !importBindingLanguages[p.entry.Name] {
-		return nil
-	}
-	defer func() { _ = recover() }()
-	root := tree.RootNode()
-	if root == nil {
-		return nil
-	}
-	lang := p.lang
-	var out map[string]string
-	for i := 0; i < root.ChildCount(); i++ {
-		stmt := root.Child(i)
-		if stmt == nil || !stmt.IsNamed() || stmt.Type(lang) != "import_statement" {
-			continue
-		}
-		var walk func(n *ts.Node, depth int)
-		walk = func(n *ts.Node, depth int) {
-			if depth > 4 {
-				return
-			}
-			for j := 0; j < n.ChildCount(); j++ {
-				c := n.Child(j)
-				if c == nil || !c.IsNamed() {
-					continue
-				}
-				if c.Type(lang) != "import_specifier" {
-					walk(c, depth+1)
-					continue
-				}
-				original := c.ChildByFieldName("name", lang)
-				local := c.ChildByFieldName("alias", lang)
-				if original == nil || local == nil || original.Text(src) == "default" {
-					continue
-				}
-				if out == nil {
-					out = map[string]string{}
-				}
-				out[local.Text(src)] = original.Text(src)
-			}
-		}
-		walk(stmt, 0)
-	}
-	return out
+// The alias is the member form (".local") followed by "=" and the exported
+// name. "=" cannot occur in an identifier, so a reader that does not know the
+// suffix cannot mistake it for part of a name, and one that does splits on the
+// first. A default import (`import X from`, `{ default as X }`) names the
+// module's default, whose declared name this file cannot see, and carries no
+// suffix.
+
+// renamedMember is the Alias of a member imported under another name.
+func renamedMember(local, exported string) string {
+	return memberAliasPrefix + local + renameSeparator + exported
 }
+
+// renameSeparator joins the local name and the exported name in an Alias.
+const renameSeparator = "="
 
 // # CommonJS
 //
@@ -215,8 +178,7 @@ func (p *genericParser) renamedImports(tree *ts.Tree, src []byte) map[string]str
 // bareByName). The other two name something INSIDE the module, as a named
 // import does, recorded under the local name for the reason the ES form is:
 // what the resolver needs is that the receiver came from that module. A
-// rename therefore binds by the local name, which is a known limit (see
-// docs/accuracy.md).
+// rename carries the exported name as well (see renamedMember).
 //
 // A `require` inside a function binds a name only there, and two functions
 // may bind one name to two modules, so it is left to the import query, which
@@ -240,6 +202,15 @@ func (p *genericParser) requiredBindings(decl *ts.Node, src []byte) (out []Impor
 			alias := name.Text(src)
 			if member {
 				alias = memberAliasPrefix + alias
+				// `const y = require('./x').z` takes the export z under the
+				// name y.
+				if v := d.ChildByFieldName("value", lang); v != nil && v.Type(lang) == "member_expression" {
+					prop := v.ChildByFieldName("property", lang)
+					if _, inner, found := requireTarget(v.ChildByFieldName("object", lang), lang, src); found && !inner && prop != nil &&
+						prop.Type(lang) == "property_identifier" && prop.Text(src) != name.Text(src) && prop.Text(src) != "default" {
+						alias = renamedMember(name.Text(src), prop.Text(src))
+					}
+				}
 			}
 			out = appendBinding(out, path, alias, name)
 		case "object_pattern":
@@ -257,7 +228,13 @@ func (p *genericParser) requiredBindings(decl *ts.Node, src []byte) (out []Impor
 						local = local.ChildByFieldName("left", lang)
 					}
 					if local != nil && local.Type(lang) == "identifier" {
-						out = appendBinding(out, path, memberAliasPrefix+local.Text(src), local)
+						alias := memberAliasPrefix + local.Text(src)
+						// `{ a: b }` takes the export a under the name b.
+						if key := c.ChildByFieldName("key", lang); key != nil && key.Text(src) != local.Text(src) &&
+							key.Text(src) != "default" && (key.Type(lang) == "property_identifier" || key.Type(lang) == "identifier") {
+							alias = renamedMember(local.Text(src), key.Text(src))
+						}
+						out = appendBinding(out, path, alias, local)
 					}
 				case "object_assignment_pattern":
 					if left := c.ChildByFieldName("left", lang); left != nil {

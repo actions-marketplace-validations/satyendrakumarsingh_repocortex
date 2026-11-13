@@ -34,11 +34,27 @@ import (
 //     the repository declares unqualified, in the same file or anywhere, is
 //     not what a qualified clause reaches.
 
+// rootedQualifier begins the qualifier of a PHP supertype written with a
+// leading backslash, in a file that declares a namespace. It is
+// parse.RootedQualifier; the two packages do not import each other.
+const rootedQualifier = `\`
+
 // qualifiedSupertype narrows the candidates of a supertype reference by the
 // qualifier it was written with. kept is what the qualifier fits; when it is
 // empty the verdict says whether the supertype leaves the repository.
 func (r *Resolver) qualifiedSupertype(spec LanguageSpec, ref registry.Reference, cands []registry.SymbolIndexEntry) (kept []registry.SymbolIndexEntry, v verdict) {
-	segs := receiverSegments(ref.Receiver)
+	rooted := strings.HasPrefix(ref.Receiver, rootedQualifier)
+	segs := receiverSegments(strings.TrimPrefix(ref.Receiver, rootedQualifier))
+	if rooted && len(segs) == 0 {
+		// `extends \DateTimeImmutable` in a file that declares a namespace: a
+		// class declared in NO namespace. The index does not say which
+		// namespace a definition is in, and a class of the name that lies in a
+		// namespace (monolog's own Monolog\DateTimeImmutable, bound at
+		// `medium` as "same directory") is not it. Nothing the index holds is
+		// known to be in the global namespace, so the supertype is the
+		// language's or a library's.
+		return nil, verdictExternal
+	}
 	if len(segs) == 0 {
 		return cands, verdictBound
 	}

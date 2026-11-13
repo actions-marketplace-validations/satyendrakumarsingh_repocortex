@@ -99,7 +99,9 @@ func buildCoreFunctions() map[string]map[string]struct{} {
 		exp isalpha isdigit isspace isupper islower toupper tolower assert
 		pthread_mutex_lock pthread_mutex_unlock pthread_mutex_init pthread_mutex_destroy
 		pthread_once pthread_key_create pthread_key_delete pthread_getspecific
-		pthread_setspecific pthread_create pthread_join`)
+		pthread_setspecific pthread_create pthread_join
+		clearerr freopen putc ungetc fgetpos fsetpos setbuf tmpfile vfprintf vprintf vsprintf
+		vfscanf vscanf vsscanf`)
 	out["c"] = libc
 	out["cpp"] = libc
 

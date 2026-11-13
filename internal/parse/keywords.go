@@ -35,6 +35,10 @@ var keywordNames = map[string]map[string]bool{
 	"python": keywordSet("if elif else for while try except finally with return def class lambda import from pass raise yield assert"),
 	"kotlin": keywordSet("if else for while do when return break continue try catch throw fun class object interface"),
 	"scala":  keywordSet("if else for while do match case return try catch finally throw new def class object trait"),
+	// make: the directives of GNU make and of automake's Makefile.am, which
+	// reads `if ENABLE_X` ... `endif` as a conditional. jq's Makefile.am had two
+	// symbols named `if`. A target or variable cannot be named by a directive.
+	"make": keywordSet("if else endif ifeq ifneq ifdef ifndef include define endef export unexport override vpath"),
 }
 
 func keywordSet(words string) map[string]bool {

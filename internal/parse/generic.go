@@ -533,10 +533,8 @@ func (p *genericParser) Parse(ctx context.Context, path string, src []byte) (*Re
 	// it, and running after the drop is how the first receiver extraction
 	// silently extracted nothing at all. See shape.go.
 	var shapes *shapeFacts
-	var renames map[string]string
 	if py == nil {
 		shapes = by.analyzeShapes(tree, src, tags)
-		renames = by.renamedImports(tree, src)
 		res.Imports = mergeMemberImports(res.Imports, by.importedBindings(tree, src))
 	}
 
@@ -712,12 +710,6 @@ func (p *genericParser) Parse(ctx context.Context, path string, src []byte) (*Re
 				// The qualifier the supertype is written with, if any. See
 				// supertypeQualifier.
 				r.Receiver = supertypeQualifier(p.entry.Name, src, tag.NameRange.StartByte)
-			}
-			// A use of a renamed import is a use of the export. See
-			// renamedImports.
-			if orig, ok := renames[r.Name]; ok && (isSupertypeRef(tag.Kind) ||
-				(isCallTag(tag.Kind) && r.ReceiverKind == model.ReceiverBare)) {
-				r.Name = orig
 			}
 			res.References = append(res.References, r)
 		}
