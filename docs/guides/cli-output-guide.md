@@ -1881,17 +1881,17 @@ with.
 ```console
 $ repocortex languages
 TIER              COUNT  WHAT YOU GET
-typed             4      definitions, imports, receiver discrimination by arity or class — references can reach 'high'
-resolved          10     definitions and imports — references bind across files
-parsed            72     definitions and search only — no cross-file references claimed
-with definitions  86     
-text only         120    no definition query: full-text search only, no symbols
+typed             8      definitions, imports, receiver discrimination by arity or class — references can reach 'high'
+resolved          6      definitions and imports — references bind across files
+parsed            78     definitions and search only — no cross-file references claimed
+with definitions  92
+text only         114    no definition query: full-text search only, no symbols
 total             206    
 
-typed:    [go java python typescript]
-resolved: [c c_sharp cpp javascript kotlin php ruby rust scala tsx]
+typed:    [c_sharp cpp go java kotlin python scala typescript]
+resolved: [c javascript php ruby rust tsx]
 
-(72 parsed-tier and 120 text-only languages not listed; pass --verbose)
+(78 parsed-tier and 114 text-only languages not listed; pass --verbose)
 ```
 
 **How to read it:**

@@ -56,6 +56,7 @@ the index cannot stand behind the answer, the summary opens with the reason:
 | `UNRELIABLE` | Most references in the symbol's language are unbound. Treat the rows as leads |
 | `UNVERIFIED` | Some rows are probably bound to the wrong definition |
 | `INCOMPLETE` | The rows are sound and the list is known to be short |
+| `AMBIGUOUS` | The name has several definitions and the tool answered for none. The extension offers them as a choice and never shows them as callers, tests or impact |
 
 The same word, in lower case, is shown beside the row count, as in
 `unreliable · 1 row`. A verdict of `mixed` reads `mixed confidence` there.

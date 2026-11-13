@@ -233,8 +233,8 @@ Two more:
 - `text_only: no definition query for "markdown"; …` — the grammar exists but
   ships no definition query, so no symbols can be extracted. The file's **text is
   indexed**: `repocortex search` finds a name that appears in it, `repocortex
-  symbol` does not. 120 of the 206 grammars are in this group, including Perl,
-  Haskell, YAML, JSON, Markdown and Makefiles; `repocortex languages --verbose`
+  symbol` does not. 114 of the 206 grammars are in this group, including Perl,
+  Haskell, Pascal, COBOL, Nix and Assembly; `repocortex languages --verbose`
   lists them.
 
 ### `repocortex index` says "up to date" after an edit

@@ -40,6 +40,16 @@ heuristic edges to 25,736 additional compiler facts.
 
 Show it. Do not act on it. That is the whole recommendation.
 
+*Updated 13 November 2026.* The 5.7–37.5% below was measured against compiler
+ground truth on five repositories before the resolver bound a call by what it
+was made on. On the current build, a hand check of 14 projects found `medium`
+right on 249 of 259 sampled edges (83–100% by project), and `medium` now has a
+floor of 60%; see [accuracy.md](accuracy.md#2026-11-13-the-second-verification-and-what-is-still-wrong).
+The advice stands for a different reason: `medium` is still a lead to check.
+The `low` tier is the poor one now (8 of 30 sampled edges right in Python, 9 of
+30 in Kotlin, 14 of 30 in C#). The text that follows is the earlier measurement,
+kept because the accuracy page records the correction rather than editing it.
+
 `medium` is the tier the resolver assigns when the evidence narrowed the
 candidates but did not make one unique — a receiver type matching an overload
 set, or several matches among the imports. Measured against compiler ground
@@ -416,6 +426,8 @@ Syntax errors:  6 files read to the end with errors the parser recovered from; d
 Text only:      7 files searchable by text, no definitions (no definition query for the language): yaml 3, html 2, dockerfile 1, gomod 1
 Skipped:        8 files not indexed: no_grammar 8
 ```
+
+*This output was captured before YAML, JSON, HTML and Markdown gained definition queries. On a current build those languages are parsed and yield symbols, so a `Text only` row lists fewer of them (for example Dockerfile, `go.mod` and diffs).*
 
 The six files with syntax errors are SQL migrations the SQL grammar does not
 fully accept. They are indexed; the status says so and does not call it a

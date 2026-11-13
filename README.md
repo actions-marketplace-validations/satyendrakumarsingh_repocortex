@@ -8,7 +8,7 @@
 # RepoCortex: a code graph MCP server for AI coding agents
 
 [![CI](https://img.shields.io/github/actions/workflow/status/satyendrakumarsingh/repocortex/ci.yml?branch=main&label=CI&style=flat-square)](https://github.com/satyendrakumarsingh/repocortex/actions/workflows/ci.yml)
-[![MCP server](https://img.shields.io/badge/MCP-7_tools_default_·_25_total-059669?style=flat-square)](#mcp-tools)
+[![MCP server](https://img.shields.io/badge/MCP-7_tools_default_·_28_total-059669?style=flat-square)](#mcp-tools)
 [![Go 1.26+](https://img.shields.io/badge/Go-1.26%2B-00ADD8?logo=go&logoColor=white&style=flat-square)](https://go.dev)
 [![Local first](https://img.shields.io/badge/runs-100%25_local-2563eb?style=flat-square)](#security-and-privacy)
 [![License](https://img.shields.io/badge/license-Apache--2.0-475569?style=flat-square)](LICENSE)
@@ -53,10 +53,10 @@ One Go binary. A SQLite file in `.repocortex/`. Nothing leaves your machine.
 
 <table>
 <tr>
-<td align="center" width="20%"><h3>86</h3><sub>languages with definitions extracted, of 206 grammars bundled</sub></td>
+<td align="center" width="20%"><h3>92</h3><sub>languages with definitions extracted, of 206 grammars bundled</sub></td>
 <td align="center" width="20%"><h3>28</h3><sub>tools for agents, over MCP, HTTP or the shell</sub></td>
 <td align="center" width="20%"><h3>30</h3><sub>coding agents configured by one install command</sub></td>
-<td align="center" width="20%"><h3>95–100%</h3><sub>hand-checked precision of syntax-tree <code>high</code> edges, nine projects</sub></td>
+<td align="center" width="20%"><h3>405 of 420</h3><sub>sampled syntax-tree <code>high</code> edges judged right by hand, 14 projects (73–100% by project)</sub></td>
 <td align="center" width="20%"><h3>0</h3><sub>network calls while indexing or serving your code</sub></td>
 </tr>
 </table>
@@ -408,7 +408,7 @@ Every tool's schema costs the agent context on every request, so the default pro
 ```mermaid
 flowchart LR
     subgraph Sources["Your repository"]
-        Code["Source<br/>86 languages"]
+        Code["Source<br/>92 languages"]
         Compiler["Compiler indexes<br/>SCIP"]
         Runtime["Traces, manifests,<br/>Git history"]
     end
@@ -436,43 +436,49 @@ flowchart LR
 | Tier | How the edge was found | Measured precision | How to use it |
 |---|---|---|---|
 | `exact` | A compiler index (SCIP) proved it | 100% | Safe for automated refactors and blocking CI gates |
-| `high` | Syntax tree: what the call was made on (an import, a stated type, the enclosing type, a bare name in scope) names the definition | 95.1–100% in a hand check of nine projects, 30 edges each; 98.7–100% against a compiler index on gin, flask and this repository | Guidance for exploring and planning; check it before acting on it |
-| `medium` | A weaker rule, or a choice among candidates | At least 60% by design; hand-checked 75.4–93.8% on the four projects with a sample worth weighting | A lead to check, never acted on alone |
-| `low` | Mostly a match on the name where the receiver's type is not known | No promise: a hint that a name exists. 32.9–94.0% in the hand check | Hidden unless you ask for it |
+| `high` | Syntax tree: what the call was made on (an import, a stated type, the enclosing type, a bare name in scope) names the definition | 405 of 420 (96%) sampled edges right in a hand check of 14 projects on 13 November, 73–100% by project; 95.1–100% in the check of nine projects on 12 November; 98.7–100% against a compiler index on gin, flask and this repository | Guidance for exploring and planning; check it before acting on it |
+| `medium` | A weaker rule, or a choice among candidates | At least 60% by design; hand-checked 249 of 259 (96%) sampled edges on the 13 November projects that have any, 83–100% by project | A lead to check, never acted on alone |
+| `low` | Mostly a match on the name where the receiver's type is not known | No promise: a hint that a name exists. 184 of 280 (66%) in the 13 November check, but 8 of 30 in Python, 9 of 30 in Kotlin and 14 of 30 in C# | Hidden unless you ask for it |
 
 ## Language support
 
 | Tier | Languages | What you get |
 |---|---|---|
-| typed (4) | Go, Java, Python, TypeScript | Definitions, imports and receiver matching; references can reach `high` |
-| resolved (10) | C, C#, C++, JavaScript, Kotlin, PHP, Ruby, Rust, Scala, TSX | Definitions and imports. Calls are bound for seven of them; **Kotlin, PHP and Scala extract no calls yet** |
-| parsed (72) | Apex, Bash, Clojure, Dart, Elixir, Erlang, OCaml, Solidity, Swift, Zig and 62 more | Definitions and search only. Quality varies: of the 72, a hand check rated 10 good, 25 usable, 15 poor and 22 broken |
-| text only (120) | Perl, Haskell, Pascal, YAML, JSON, HTML and 114 more | The grammar is bundled but has no definition query yet: files are searchable by text and yield no symbols |
+| typed (8) | C#, C++, Go, Java, Kotlin, Python, Scala, TypeScript | Definitions, imports and receiver matching by argument count or class; references can reach `high` |
+| resolved (6) | C, JavaScript, PHP, Ruby, Rust, TSX | Definitions and imports; references bind across files |
+| parsed (78) | Apex, Bash, Clojure, Dart, Elixir, Erlang, OCaml, Solidity, Swift, Zig and 68 more | Definitions and search only. Quality varies: of 36 of them checked by hand on 13 November, 27 found at least 90% of the definitions sampled with at least 90% precision, and F#, Make and Groovy were far lower before later fixes |
+| text only (114) | Perl, Haskell, Pascal, COBOL, Elm, Nix, Verilog, Assembly and 106 more | The grammar is bundled but has no definition query: files are searchable by text and yield no symbols |
 
 Run `repocortex languages` for your build. A compiler index raises any of these to `exact`.
 
-A tier says what the parser is built to do, not how well it does it. Every language with definitions was checked by hand on real public code on 12 November 2026; the per-language results, and the defects behind them, are in [docs/verification](docs/verification/2026-11-12/README.md).
+A tier says what the parser is built to do, not how well it does it. Languages were checked by hand on real public code on 12 and 13 November 2026 (72, then 14 re-read after fixes and 36 more); the per-language results, and the defects behind them and still open, are in [docs/verification](docs/verification/2026-11-13/README.md) and the [first record](docs/verification/2026-11-12/README.md).
 
 ## Accuracy
 
-Measured by hand and against compiler indexes on real repositories, after the resolver started binding a call by what it was made on (12 November 2026). Hand check: 30 edges per tier per project, judged strictly; recall is on the first ten call sites of five files per project.
+Measured by hand on 14 real projects, one per language, that the work was not tuned on, and against compiler indexes on others (13 November 2026, second round, after the fixes). Hand check: 30 edges per tier per project, judged strictly, an edge that could not be settled counted as not right; recall is on the first eight call sites of five files per project.
 
 | Language (project) | `high` precision, sampled | Call-site recall |
 |---|---|---|
-| Go (gin) | 30 of 30 | 89% |
-| Java (gson) | 30 of 30 | 55% |
-| TypeScript (zod) | 30 of 30 | 56% |
-| Ruby (sinatra) | 30 of 30 | 65% |
-| Rust (ripgrep) | 30 of 30 | 73% |
-| C (redis) | 25 of 25 | 87% |
-| C++ (leveldb) | 29 of 29 | 7% |
-| Python (flask) | 29 of 30 | 77% |
-| C# (Newtonsoft.Json) | 27 of 30 | 35% |
+| Go (cobra) | 30 of 30 | 100% |
+| Java (javapoet) | 30 of 30 | 88% |
+| TypeScript (hono) | 29 of 30 | 78% |
+| TSX (tremor) | 30 of 30 | 100% |
+| JavaScript (koa) | 30 of 30 | 55% |
+| Python (click) | 30 of 30 | 95% |
+| Ruby (rack) | 28 of 30 | 78% |
+| C (jq) | 30 of 30 | 100% |
+| C++ (google/benchmark) | 22 of 30 | 65% |
+| C# (serilog) | 30 of 30 | 80% |
+| Rust (fd) | 30 of 30 | 86% |
+| PHP (monolog) | 30 of 30 | 83% |
+| Kotlin (moshi) | 26 of 30 | 100% |
+| Scala (os-lib) | 30 of 30 | 75% |
+| **All 14** | **405 of 420 (96%)** | **450 of 529 (85%)** |
 
-Samples of 30 edges carry a wide margin, and the recall sites are few and chosen by a fixed rule, not at random. Against a compiler index, `high` was 100.0% (1,976 of 1,976) on gin, 100.0% (10,396 of 10,398) on this repository and 98.7% (293 of 297) on flask. Python measured 98.3–100.0% precise and 67.3–83.8% recall on four public repositories once the compiler index's own errors on wildcard re-exports are corrected, and 71.8–99.7% and 50.8–83.8% as indexed. JavaScript, TSX, Kotlin, PHP and Scala were not re-measured after the change; Kotlin, PHP and Scala extract no calls. The method, every sampled edge and the record this answers are in [docs/accuracy.md](docs/accuracy.md) and [docs/verification](docs/verification/2026-11-12/README.md).
+Below 30 of 30: TypeScript has 1 wrong edge, Ruby 1 wrong and 1 unclear, C++ 8 unclear (none wrong), Kotlin 4 wrong. The first round of the same check (before the fixes) found 396 of 420 and 393 of 529. Samples of 30 edges carry a wide margin, the recall sites are few and chosen by a fixed rule, not at random, and round 2 re-read the projects round 1 read, so it shows the fixes held there and is not a fresh sample. The `low` tier is poor: right on 8 of 30 sampled edges in Python, 9 in Kotlin, 14 in C# and 18 in Java. Against a compiler index, `high` was 100.0% (1,976 of 1,976) on gin, 100.0% (10,396 of 10,398) on this repository and 98.7% (293 of 297) on flask. Python measured 98.3–100.0% precise and 67.3–83.8% recall on four public repositories once the compiler index's own errors on wildcard re-exports are corrected, and 71.8–99.7% and 50.8–83.8% as indexed. The method, every sampled edge, the defects found and what is still wrong are in [docs/accuracy.md](docs/accuracy.md) and [docs/verification](docs/verification/2026-11-13/README.md).
 
 > [!NOTE]
-> Many call sites can't be bound from syntax alone: call-site recall above runs from 7% to 89%. RepoCortex reports those gaps instead of returning an empty answer, and `repocortex scip import` closes many of them. Run `repocortex accuracy` on your own code. Method and every caveat: [docs/accuracy.md](docs/accuracy.md).
+> Many call sites can't be bound from syntax alone: call-site recall above runs from 55% to 100% on the sampled files, and was lower on the larger projects of 12 November (7% on leveldb). RepoCortex reports those gaps instead of returning an empty answer, and `repocortex scip import` closes many of them. Run `repocortex accuracy` on your own code. Method and every caveat: [docs/accuracy.md](docs/accuracy.md).
 
 ## Performance
 
@@ -508,7 +514,7 @@ After the first run, `repocortex index` only re-reads changed files, and `repoco
 | Compiler-proven edges | Yes, labelled `exact` | No | Through the language server | No | No | No |
 | States how sure each relationship is | Four tiers, each with measured precision | No | No | Scores | Three labels | Four labels |
 | Needs a model or embeddings | No | Bundles an embedding model | No | Optional | For documents only | Optional |
-| Languages with definitions extracted | 86 (206 grammars bundled) | 163 | 40+ | 15 to 18 | about 40 | about 40 |
+| Languages with definitions extracted | 92 (206 grammars bundled) | 163 | 40+ | 15 to 18 | about 40 | about 40 |
 | Reaches agents over | MCP, REST with OpenAPI, CLI | MCP, CLI | MCP | MCP, HTTP, web UI | MCP, CLI | MCP, CLI |
 | Pull-request gate with SARIF | Yes, free | Not documented | No | Paid tier | Paid tier | GitHub Action |
 | Runs offline from one binary | Yes (Go) | Yes (C) | Needs language servers | Node | Python | Python |
@@ -582,7 +588,7 @@ Threat model: [docs/security.md](docs/security.md). Report a vulnerability: [SEC
 <details>
 <summary><b>How accurate is it?</b></summary>
 
-<br>Compiler-backed edges are exact. In a hand check of nine projects, syntax-tree <code>high</code> edges measured 95.1–100% precise, and against a compiler index 98.7–100% on three repositories. Recall is the weaker half: 7–89% of call sites on those projects, and a call the index could not bind is reported as unbound, not dropped. It depends on the language and the repository. See <a href="docs/accuracy.md">docs/accuracy.md</a> and <a href="docs/verification/2026-11-12/README.md">the verification record</a>.
+<br>Compiler-backed edges are exact. In a hand check of 14 projects, syntax-tree <code>high</code> edges were right on 405 of 420 sampled edges (73–100% by project), and against a compiler index 98.7–100% on three repositories. Recall is the weaker half: 55–100% of the call sites sampled in those projects, lower on larger ones, and a call the index could not bind is reported as unbound, not dropped. The <code>low</code> tier is poor. It depends on the language and the repository. See <a href="docs/accuracy.md">docs/accuracy.md</a> and <a href="docs/verification/2026-11-13/README.md">the verification record</a>.
 </details>
 
 <details>
