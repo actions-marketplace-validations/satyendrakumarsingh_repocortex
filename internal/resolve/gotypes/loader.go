@@ -3,6 +3,7 @@ package gotypes
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"go/ast"
 	"go/build"
@@ -245,7 +246,7 @@ func (l *loader) discover(files []string) {
 		}
 	} else {
 		_ = filepath.WalkDir(l.root, func(p string, d os.DirEntry, err error) error {
-			if err != nil {
+			if err != nil { //nolint:nilerr // an unreadable entry is not part of the walk; the rest is
 				return nil
 			}
 			rel, _ := filepath.Rel(l.root, p)
@@ -534,7 +535,8 @@ func (l *loader) checkVariant(u *unit, v variant, ov *override, extract bool) *v
 		GoVersion:   u.mod.goVersion,
 		Sizes:       l.sizes,
 		Error: func(err error) {
-			if te, ok := err.(types.Error); ok && te.Soft {
+			var te types.Error
+			if errors.As(err, &te) && te.Soft {
 				return
 			}
 			hard++
@@ -686,7 +688,7 @@ func (i *importer) ImportFrom(p, _ string, _ types.ImportMode) (*types.Package, 
 	if p == "unsafe" {
 		return types.Unsafe, nil
 	}
-	if err := l.ctx.Err(); err != nil {
+	if err := l.ctx.Err(); err != nil { //nolint:nilerr // a stopped run degrades to stubs, it does not fail the check
 		return i.stub(p), nil
 	}
 	if !i.std {
