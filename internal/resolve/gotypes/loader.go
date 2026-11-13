@@ -425,6 +425,12 @@ func (l *loader) langVersion(v string) string {
 	return version.Lang(gv)
 }
 
+// pos is where a token really is. fset.Position would apply //line
+// directives, which generated code (cgo, yacc, templates) uses to point at the
+// file it was generated from: a use reported at the generator's file and line
+// is a fact about a place that does not hold it.
+func (l *loader) pos(p token.Pos) token.Position { return l.fset.PositionFor(p, false) }
+
 // process runs the checks of one directory and extracts the facts.
 func (l *loader) process(u *unit) {
 	if u.parseFailed {
@@ -705,7 +711,48 @@ func (i *importer) repoUnit(p string) *unit {
 			return u
 		}
 	}
-	return i.l.allPath[p]
+	if u := i.l.allPath[p]; u != nil {
+		return u
+	}
+	return i.l.lazyUnit(i.mod, p)
+}
+
+// lazyUnit makes a unit for a package of a repository module that the index
+// holds no file of (a directory it excludes, say), because an import of it
+// must still be a real package and not a stub. It is checked when imported and
+// carries no facts: none of its files is indexed.
+func (l *loader) lazyUnit(m *module, p string) *unit {
+	for _, cand := range append([]*module{m}, l.mods...) {
+		if cand == nil || cand.file.Path == "" {
+			continue
+		}
+		sub, ok := strings.CutPrefix(p, cand.file.Path+"/")
+		if !ok && p != cand.file.Path {
+			continue
+		}
+		dir := cand.dir
+		if ok {
+			dir = filepath.Join(cand.dir, filepath.FromSlash(sub))
+		}
+		if cand.notfound[p] || !hasGoFiles(dir) || skipPath(sub+"/x.go") {
+			continue
+		}
+		if _, nested := os.Stat(filepath.Join(dir, "go.mod")); nested == nil && dir != cand.dir {
+			continue
+		}
+		rel, err := filepath.Rel(l.root, dir)
+		if err != nil {
+			continue
+		}
+		u := &unit{dir: dir, rel: filepath.ToSlash(rel), mod: cand, importPath: p}
+		if !l.scanDir(u) {
+			cand.notfound[p] = true
+			continue
+		}
+		cand.byPath[p] = u
+		return u
+	}
+	return nil
 }
 
 func (i *importer) importRepo(u *unit, p string) *types.Package {

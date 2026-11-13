@@ -42,8 +42,13 @@ Indexing extracts references but cannot bind them: doing so requires the
 complete symbol table, which does not exist until every file is parsed.
 
 Every binding records the evidence that justified it and a confidence level.
-Nothing here produces 'exact' confidence — that is reserved for compiler-backed
-SCIP indexes.`,
+The heuristic pass never produces 'exact' confidence: that is reserved for what
+a compiler proved. Two things can: a SCIP index found in the project root, and,
+for Go, the standard library's own type checker, which resolve runs by default
+(accuracy auto or exact) after the heuristic pass, with no tool to install. It
+checks the host platform's view of the code, raises the heuristic edges it
+confirms to exact, adds the ones the heuristic could not bind, and withdraws
+heuristic call edges it proves false. --accuracy fast skips it.`,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			ctx := cmd.Context()
 			cfg := g.Config()

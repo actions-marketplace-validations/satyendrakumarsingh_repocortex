@@ -119,7 +119,7 @@ func (x *extractor) defs(f *ast.File, rel string, ff *FileFact) {
 }
 
 func (x *extractor) ref(id *ast.Ident, rel, recv string, kind model.EntityKind) ObjRef {
-	p := x.l.fset.Position(id.Pos())
+	p := x.l.pos(id.Pos())
 	return ObjRef{File: rel, Line: p.Line, Col: p.Column - 1, Name: id.Name, Recv: recv, Kind: kind}
 }
 
@@ -251,7 +251,7 @@ func (x *extractor) use(id *ast.Ident, haveEncl bool, encl ObjRef, rel string, f
 		return
 	}
 	l := x.l
-	p := l.fset.Position(id.Pos())
+	p := l.pos(id.Pos())
 	isCallee := x.callee[id]
 	site := Callee{Line: p.Line, Col: p.Column - 1, Name: id.Name}
 	record := func() {
@@ -394,7 +394,7 @@ func (l *loader) objRef(obj types.Object) (ref ObjRef, repo, emit bool) {
 	default:
 		return ObjRef{}, false, false
 	}
-	p := l.fset.Position(obj.Pos())
+	p := l.pos(obj.Pos())
 	rel, ok := l.repoFile[p.Filename]
 	if !ok {
 		return ObjRef{}, false, true

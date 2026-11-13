@@ -30,7 +30,7 @@ func (l *loader) collectImplCandidates(u *unit, v variant, pkg *types.Package) {
 		if !ok || named.TypeParams().Len() > 0 {
 			continue
 		}
-		p := l.fset.Position(tn.Pos())
+		p := l.pos(tn.Pos())
 		rel, ok := l.repoFile[p.Filename]
 		if !ok || !l.report[rel] {
 			continue
@@ -181,7 +181,7 @@ func (l *loader) matchMethods(tc, ic implCandidate, it *types.Interface, set *ty
 // interface got by embedding another interface is declared there, and that
 // declaration is what the graph holds, so the reference follows it.
 func (l *loader) interfaceMethodRef(ic implCandidate, m *types.Func) (ObjRef, bool, bool) {
-	p := l.fset.Position(m.Pos())
+	p := l.pos(m.Pos())
 	rel, ok := l.repoFile[p.Filename]
 	if !ok {
 		return ObjRef{}, false, true
