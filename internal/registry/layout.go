@@ -38,8 +38,11 @@ func (r *Registry) RunLayout(ctx context.Context, runID int64) (paths, dependenc
 	}
 	_ = rows.Close()
 
+	// No index covers kind. The name index was chosen anyway and fetched every
+	// symbol row at random to read its kind: 13 s on 770,000 symbols, against
+	// 2 s for the scan.
 	rows, err = r.db.QueryContext(ctx,
-		`SELECT DISTINCT name FROM symbols WHERE index_run_id = ? AND kind = 'dependency' ORDER BY name`, runID)
+		`SELECT DISTINCT name FROM symbols NOT INDEXED WHERE index_run_id = ? AND kind = 'dependency' ORDER BY name`, runID)
 	if err != nil {
 		return nil, nil, fmt.Errorf("registry: run layout: dependencies: %w", err)
 	}
