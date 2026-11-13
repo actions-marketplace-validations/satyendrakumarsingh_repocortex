@@ -84,10 +84,16 @@ func TestStoppedParseIsRetriedOnTheOtherRecoveryRoute(t *testing.T) {
 	if res.Reason == model.ParseReasonBudgetExceeded || res.Reason == model.ParseReasonStoppedEarly {
 		t.Fatalf("the file was not read to its end: %v", res.Err)
 	}
-	// The construct is not valid to the grammar on either route, so the honest
-	// verdict is "read to the end, with syntax errors", never "ok".
-	if res.Status != StatusPartial || res.Reason != model.ParseReasonSyntaxErrors {
-		t.Errorf("status=%s reason=%q, want partial / syntax_errors", res.Status, res.Reason)
+	// The construct is not valid to the grammar on either route. Read as it
+	// stands the honest verdict is "read to the end, with syntax errors". The C
+	// mask (cmacro_c.go) overwrites a #define written between the braces of an
+	// initialiser, after which the table parses, and the verdict is ok with the
+	// mask noted; either way the file was read to its end.
+	switch {
+	case res.Status == StatusPartial && res.Reason == model.ParseReasonSyntaxErrors:
+	case res.Status == StatusOK && res.MacrosMasked > 0:
+	default:
+		t.Errorf("status=%s reason=%q masked=%d, want partial / syntax_errors, or ok with macros masked", res.Status, res.Reason, res.MacrosMasked)
 	}
 	for _, name := range []string{"before_table", "after_table"} {
 		if !hasSymbol(res, name, "") {
