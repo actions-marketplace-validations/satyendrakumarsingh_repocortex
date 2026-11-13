@@ -560,7 +560,77 @@ rather than on a named module need type inference the tool does not do.
 
 ### Large repositories on the final build
 
-Measured on the final build; figures are added when the runs complete.
+Three repositories, one after another on build `ac82f38`, on a 14-core machine
+with about 4 to 6 other runnable processes (the load averages are in each
+file). Each was cloned at depth 1, indexed from nothing, resolved, and asked
+about ten questions from the command line, one process per question.
+
+| | VS Code `5c8590b` | Elasticsearch `12d4505` | Linux kernel `7e1392a` |
+|---|---|---|---|
+| Files tracked / indexed | 21,263 / 18,757 | 51,910 / 42,665 | 97,371 / 84,603 |
+| Symbols | 443,518 | 769,904 | 1,486,461 |
+| References | 1,885,744 | 3,811,785 | 5,574,630 |
+| Files clean / with syntax errors / incomplete | 18,638 / 119 / 0 | 42,327 / 338 / 0 | 48,700 / 35,894 / 9 |
+| Index, wall | 580.2 s | 941.9 s | 1,538.2 s |
+| Index, peak resident | 1.50 GB | 0.99 GB | 2.20 GB |
+| Resolve, wall | 227.2 s | 2,087.9 s | 281.0 s |
+| Resolve, peak resident | 0.62 GB | 1.01 GB | 0.71 GB |
+| References bound, of those naming something indexed | 865,468 of 1,459,570 (59.3%) | 1,547,951 of 2,329,217 (66.5%) | 1,312,126 of 2,996,695 (43.8%) |
+| Left unbound for exceeding the candidate cap | 421,929 | 714,763 | 60,054 |
+| Edges | 450,989 | 1,527,008 | 1,292,516 |
+| Index size on disk | 1.2 GiB | 2.8 GiB | 3.9 GB (database and its write-ahead log, by `du`) |
+| Status | READY | READY | DEGRADED (9 files stopped early) |
+
+Result files: `large-repositories/results-vscode-build-ac82f38.txt`,
+`results-elasticsearch-build-ac82f38.txt`, `results-linux-build-ac82f38.txt`.
+
+Time to answer, in seconds, from a new process each time:
+
+| Question | VS Code | Elasticsearch | Linux |
+|---|---|---|---|
+| Subtypes of a widely implemented type (`IDisposable`, `ActionListener`) | 1.14 | 2.16 | not asked |
+| Callers of one definition chosen by path | 0.46 | 0.18 | 0.66 |
+| References to one definition | 0.47 | 0.18 | 0.24 |
+| Callers of a name with many definitions (answers for the first, says so) | 0.37 | 0.29 | 0.22 |
+| Definitions by name | 0.18 | 0.15 | 0.18 |
+| Text search | 0.18 | 0.15 | 0.16 |
+| Task context, first and second ask | 7.50, 7.98 | 13.96, 14.76 | 31.28, 32.68 |
+| Dead code, first five | 2.99 | 7.73 | 4.63 |
+
+What these runs show, including what is not good:
+
+- **A question that did not finish, found here and fixed.** On build `61f5992`
+  the subtypes of `IDisposable` were still being computed after 30 minutes
+  (`results-vscode-build-61f5992-question-that-did-not-finish.txt`; the run was
+  stopped by hand at 1,823 s). One query read every edge of the index once per
+  type it visited. Commit `96982d5` fixes the join order and pins the query
+  plan with a test; the same question takes 1.14 s above. No test had caught
+  it, because no fixture has a type with thousands of subtypes.
+- **Indexing VS Code takes longer than it did.** 580 s here against 342 s at
+  build `a75b887`, both with other work on the machine. On a small project
+  (moshi) the same two builds take 2.4 s and 3.0 s. The schema gained indexes
+  in between (migrations 0016 to 0018) and files are parsed a second time when
+  a mask is tried; which of these costs the time was not measured.
+- **Resolving Elasticsearch takes 35 minutes**, seven times as long as the
+  Linux kernel with fewer references, and only 1,111 s of it is CPU time. The
+  cause was not investigated. Java has the most candidates per name
+  (714,763 references over the cap).
+- **Task context is slow in a new process and grows with the index:** 7.5 s,
+  14 s and 31 s. A second ask in a new process is no faster. Inside a running
+  server the catalogue is kept in memory; that was measured earlier on VS Code
+  (under 300 ms) and not on this build.
+- **The Linux kernel is read poorly.** 35,894 of 84,603 files have syntax
+  errors, because kernel C is written in macros the grammar cannot see
+  through, and only 43.8% of the references that name something indexed are
+  bound. `schedule` in `kernel/sched/core.c` has 8 recorded callers; the kernel
+  calls it from far more places. The answer opens with `UNRELIABLE` and the
+  percentage, which is the tool saying so, but the count itself is not useful.
+  58 files are over the 2 MiB limit and are not indexed; the largest are AMD register-mask headers of 10 to 23 MiB.
+  The clone was made on a file system that does not distinguish case, so files
+  whose names differ only by case are missing from it (97,357 found on disk of
+  97,371 tracked).
+- **Answers about one definition are fast at every size**: under 0.7 s for
+  callers and references with 1.5 million symbols indexed.
 
 ## The final build against the round-2 build
 
@@ -733,7 +803,7 @@ figure comes from the file named.
 | `round1/<language>.json` | Round 1, calls and definitions, 14 files (build `53246ac`) |
 | `definitions/<language>.json` | Definition extraction, 36 files (build `f783fa5`) |
 | `round2/<language>.json` | Round 2, the same 14 projects (build `8748b29`), with `round1_wrong_examples` and `regressions` |
-| `large-repositories/` | The two large-repository result files |
+| `large-repositories/` | The large-repository result files: Kubernetes and VS Code on earlier builds, VS Code, Elasticsearch and the Linux kernel on the final build, and the VS Code run in which one question did not finish |
 | `edge-comparison/summary.txt` | One line per project: edges and symbols under the two builds |
 | `edge-comparison/<language>.added`, `.removed` | Edges only in the final build, and only in the round-2 build, as `kind|tier|file|line|target` |
 | `edge-comparison/<language>.sym_added`, `.sym_removed` | The same for symbols, as `file|line|kind|name` |

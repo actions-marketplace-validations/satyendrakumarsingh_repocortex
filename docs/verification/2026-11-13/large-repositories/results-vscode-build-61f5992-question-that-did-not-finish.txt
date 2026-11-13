@@ -1,0 +1,144 @@
+== machine: 14 cpus, load before: 15.09 9.86 6.84
+== repository: 5c8590bb41d7c1c59e1cceab4f464b3d82440acb, 21263 tracked files
+== index
+time=2026-11-13T13:39:16.769+05:30 level=INFO msg=indexing progress=10% files=2045/20448
+time=2026-11-13T13:39:44.732+05:30 level=INFO msg=indexing progress=20% files=4090/20448
+time=2026-11-13T13:40:08.408+05:30 level=INFO msg=indexing progress=30% files=6135/20448
+time=2026-11-13T13:40:43.173+05:30 level=INFO msg=indexing progress=40% files=8180/20448
+time=2026-11-13T13:41:21.295+05:30 level=INFO msg=indexing progress=50% files=10224/20448
+time=2026-11-13T13:43:12.603+05:30 level=INFO msg=indexing progress=60% files=12269/20448
+time=2026-11-13T13:44:50.574+05:30 level=INFO msg=indexing progress=70% files=14314/20448
+time=2026-11-13T13:46:48.371+05:30 level=INFO msg=indexing progress=80% files=16359/20448
+time=2026-11-13T13:47:59.276+05:30 level=INFO msg=indexing progress=90% files=18404/20448
+time=2026-11-13T13:48:43.348+05:30 level=INFO msg=indexing progress=100% files=20448/20448
+Indexed vscode
+  Revision:      1
+  Git:           5c8590bb41d7
+  Files:         18757 indexed, 1691 skipped (20448 discovered)
+  Symbols:       443518
+  References:    1885744 (bound by `repocortex resolve`)
+  Imports:       457080
+  Parsed:         18757 (18638 clean, 119 with syntax errors)
+  Syntax errors:  119 files read to the end with errors the parser recovered from; definitions inside the unreadable regions may be missing
+  Text only:      131 files searchable by text, no definitions (no definition query for the language): diff 82, xml 34, desktop 2, dockerfile 2, perl 2, pug 2, +7 more
+  Too large:      7 files over the size limit, not parsed and not searchable (raise index.max_file_bytes in .repocortex.yml to include them)
+                    src/vs/sessions/services/chatBackground/browser/media/koi-dark.webp (9.3 MiB)
+                    src/vs/sessions/services/chatBackground/browser/media/koi-light.webp (9.2 MiB)
+                    src/vs/base/test/node/uri.perf.data.txt (8.5 MiB)
+                    extensions/vscode-colorize-perf-tests/test/colorize-fixtures/test-checker.ts (8.0 MiB)
+                    extensions/copilot/src/platform/tokenizer/node/o200k_base.tiktoken (3.4 MiB)
+                    extensions/copilot/src/extension/inlineEdits/test/node/recordings/EditSourceTracker.test1.recording.w.json (2.7 MiB)
+                    src/vs/platform/agentHost/test/node/agentService.test.ts (2.4 MiB)
+  Skipped:        1553 files not indexed: no_grammar 1208, binary 326, empty 18, symlink 1
+  Duration:      608694ms
+      608.88 real       885.11 user       191.62 sys
+          1630760960  maximum resident set size
+          1785138112  peak memory footprint
+== resolve
+Resolved vscode (revision 1)
+  References:  1885744
+  Resolved:    865465 (59.3% of the 1459567 that name something this index defines)
+    by confidence:
+      high:    812005
+      medium:  41019
+      low:     12441
+  Ambiguous:   594102
+    421929 had more candidates than the cap allows and were left unbound (6976 more exceeded it and the receiver narrowed them to a binding)
+  Unresolved:  426177  (no definition of that name is indexed: code outside this
+               repository, or code in it that the index did not extract)
+    286999 shown to leave this repository (a standard-library or dependency call)
+  Constructs:  44747 of the resolved calls create a type (INSTANTIATES, not CALLS)
+  Edges:       450986  (one per caller and definition; references between the same pair share one)
+    high:    422426
+    medium:  19494
+    low:     9066
+  Data access: 1027 statement(s), 816 bound to a declared table, 633 edges
+    211 access(es) name tables no migration here declares (e.g. archive, checkpoints, copied, directories, hidden, ids)
+  Config:      392 read(s), 7 bound to a declared key, 6 edges
+    385 read(s) name keys no configuration file here declares — see 'repocortex config'
+  Deployment:  4 unit(s), 0 naming a build context, 0 edges
+  Duration:    218103ms
+      218.37 real       207.38 user        33.28 sys
+           737587200  maximum resident set size
+           726523216  peak memory footprint
+== status
+Project:        vscode
+Index:          READY
+Schema:         v18
+Revision:       5c8590bb41d7c1c59e1cceab4f464b3d82440acb
+Files:          20448
+Symbols:        443518
+Relationships:  451627
+Parsed:         18757 (18638 clean, 119 with syntax errors)
+Syntax errors:  119 files read to the end with errors the parser recovered from; definitions inside the unreadable regions may be missing
+Text only:      131 files searchable by text, no definitions (no definition query for the language): diff 82, xml 34, desktop 2, dockerfile 2, perl 2, pug 2, +7 more
+Too large:      7 files over the size limit, not parsed and not searchable (raise index.max_file_bytes in .repocortex.yml to include them)
+                  src/vs/sessions/services/chatBackground/browser/media/koi-dark.webp (9.3 MiB)
+                  src/vs/sessions/services/chatBackground/browser/media/koi-light.webp (9.2 MiB)
+                  src/vs/base/test/node/uri.perf.data.txt (8.5 MiB)
+                  extensions/vscode-colorize-perf-tests/test/colorize-fixtures/test-checker.ts (8.0 MiB)
+                  extensions/copilot/src/platform/tokenizer/node/o200k_base.tiktoken (3.4 MiB)
+                  extensions/copilot/src/extension/inlineEdits/test/node/recordings/EditSourceTracker.test1.recording.w.json (2.7 MiB)
+                  src/vs/platform/agentHost/test/node/agentService.test.ts (2.4 MiB)
+Skipped:        1553 files not indexed: no_grammar 1208, binary 326, empty 18, symlink 1
+Last indexed:   2026-11-13T13:48:47+05:30
+Index size:     1.2 GiB
+Accuracy mode:  auto
+MCP profile:    minimal
+Capabilities:   code
+== questions (one process each; the first of each kind pays the cold start)
+-- implementations IDisposable --path src/vs/base/common/lifecycle.ts
+error: relationship lookup: registry: subtypes of symbol 157842: context canceled
+real 1823.85 s
+-- callers createDecorator --path src/vs/platform/instantiation/common/instantiation.ts
+UNRELIABLE — only 59% of the TypeScript references that name something this index defines are bound; rows 1-50 of 750 are shown. 750 caller(s) of createDecorator (src/vs/platform/instantiation/common/instantiation.ts:109) are recorded.
+
+createDecorator (function) at src/vs/platform/instantiation/common/instantiation.ts:109
+
+real 0.83 s
+-- references createDecorator --path src/vs/platform/instantiation/common/instantiation.ts
+UNRELIABLE — only 59% of the TypeScript references that name something this index defines are bound; rows 1-50 of 750 are shown. 750 reference(s) of createDecorator (src/vs/platform/instantiation/common/instantiation.ts:109) are recorded.
+
+createDecorator (function) at src/vs/platform/instantiation/common/instantiation.ts:109
+
+real 0.45 s
+-- tests createDecorator --path src/vs/platform/instantiation/common/instantiation.ts
+error: unknown flag: --path
+real 0.15 s
+-- callers dispose
+dispose (function) at cli/src/tunnels/control_server.rs:133
+
+No callers found.
+
+real 1.19 s
+-- symbol Emitter
+KIND      NAME     LOCATION                                                                                                    CONFIDENCE
+class     Emitter  extensions/copilot/src/extension/completions-core/vscode-node/lib/src/util/event.ts:25                      high (source_code)
+class     Emitter  extensions/copilot/src/extension/typescriptContext/serverPlugin/fixtures/context/testbed/src/events.ts:105  high (source_code)
+class     Emitter  extensions/copilot/src/util/vs/base/common/event.ts:1163                                                    high (source_code)
+real 0.19 s
+-- search "registerSingleton" -n 5
+src/vs/workbench/api/common/extHost.common.services.ts
+src/vs/workbench/api/node/extHost.node.services.ts
+src/vs/sessions/sessions.core.web.main.ts
+src/vs/sessions/services/sessions/browser/sessionsCoreServices.registration.ts
+real 0.19 s
+-- context "add a setting that disables the minimap in the diff editor"
+Task: add a setting that disables the minimap in the diff editor
+Understood as: Concepts: diff, disables, editor, minimap, setting, add; action: add. Anchored on 21 symbols named by the task (_onDiffEditorAdd, onDiffEditorAdd, addDiffEditor, multiDiffEditorExperimentalVariantSetting, multiDiffEditorExperimentalFileListSetti
+
+KIND           NAME                                        LOCATION                                                                              WHY
+real 8.20 s
+-- context "add a setting that disables the minimap in the diff editor"
+Task: add a setting that disables the minimap in the diff editor
+Understood as: Concepts: diff, disables, editor, minimap, setting, add; action: add. Anchored on 21 symbols named by the task (_onDiffEditorAdd, onDiffEditorAdd, addDiffEditor, multiDiffEditorExperimentalVariantSetting, multiDiffEditorExperimentalFileListSetti
+
+KIND           NAME                                        LOCATION                                                                              WHY
+real 9.50 s
+-- dead-code -n 5
+73384 definition(s) have no caller in the index: 0 likely unused, 73384 possibly.
+
+Nothing is graded likely unused.
+Pass --all to list the 73384 possible candidate(s); most are uses the index could not bind.
+real 4.30 s
+== load after: 6.87 8.44 7.97

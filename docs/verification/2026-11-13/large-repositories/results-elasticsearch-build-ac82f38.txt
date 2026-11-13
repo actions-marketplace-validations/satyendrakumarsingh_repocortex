@@ -1,0 +1,153 @@
+== machine: 14 cpus, load before: 3.68 4.57 6.34
+== repository: 12d450583f0553000d81d4a1b6559ff704e7cf5a, 51910 tracked files
+== index
+time=2026-11-13T14:48:00.549+05:30 level=INFO msg=indexing progress=10% files=5188/51877
+time=2026-11-13T14:48:38.724+05:30 level=INFO msg=indexing progress=20% files=10376/51877
+time=2026-11-13T14:50:10.832+05:30 level=INFO msg=indexing progress=30% files=15564/51877
+time=2026-11-13T14:51:28.198+05:30 level=INFO msg=indexing progress=40% files=20751/51877
+time=2026-11-13T14:54:21.243+05:30 level=INFO msg=indexing progress=50% files=25939/51877
+time=2026-11-13T14:55:55.794+05:30 level=INFO msg=indexing progress=60% files=31127/51877
+time=2026-11-13T14:58:04.421+05:30 level=INFO msg=indexing progress=70% files=36314/51877
+time=2026-11-13T14:58:45.557+05:30 level=INFO msg=indexing progress=80% files=41502/51877
+time=2026-11-13T15:00:29.534+05:30 level=INFO msg=indexing progress=90% files=46690/51877
+time=2026-11-13T15:02:46.870+05:30 level=INFO msg=indexing progress=100% files=51877/51877
+Indexed elasticsearch
+  Revision:      1
+  Git:           12d450583f05
+  Files:         42665 indexed, 9212 skipped (51877 discovered)
+  Symbols:       769904
+  References:    3811785 (bound by `repocortex resolve`)
+  Imports:       562343
+  Parsed:         42665 (42327 clean, 338 with syntax errors)
+  Syntax errors:  338 files read to the end with errors the parser recovered from; definitions inside the unreadable regions may be missing
+  Text only:      1181 files searchable by text, no definitions (no definition query for the language): csv 923, xml 87, pem 83, properties 51, dockerfile 11, ini 11, +7 more
+  Too large:      10 files over the size limit, not parsed and not searchable (raise index.max_file_bytes in .repocortex.yml to include them)
+                    x-pack/plugin/esql/qa/testFixtures/src/main/resources/data/many_numbers.csv (18.9 MiB)
+                    x-pack/plugin/inference/qa/inference-service-tests/src/javaRestTest/resources/rerank-v1.pt (11.8 MiB)
+                    x-pack/plugin/inference/qa/inference-service-tests/src/javaRestTest/resources/multilingual-e5-small.vocab.json (10.9 MiB)
+                    libs/simdjson/native/src/simdjson.h (7.4 MiB)
+                    x-pack/plugin/inference/qa/inference-service-tests/src/javaRestTest/resources/multilingual-e5-small.pt (5.3 MiB)
+                    libs/h3/src/test/resources/org/elasticsearch/h3/res04ic.txt.gz (4.6 MiB)
+                    x-pack/plugin/inference/qa/inference-service-tests/src/javaRestTest/resources/rerank-v1.vocab.json (2.7 MiB)
+                    libs/simdjson/native/src/simdjson.cpp (2.6 MiB)
+                    docs/reference/aggregations/images/geoshape_hexgrid.png (2.1 MiB)
+                    x-pack/plugin/inference/src/test/resources/org/elasticsearch/xpack/inference/highlight/sample-doc-semantic_text.json (2.0 MiB)
+  Skipped:        8021 files not indexed: no_grammar 7338, binary 675, empty 8
+  Duration:      941706ms
+      941.93 real      1231.85 user       303.74 sys
+           989466624  maximum resident set size
+          1341957808  peak memory footprint
+== resolve
+Resolved elasticsearch (revision 1)
+  References:  3811785
+  Resolved:    1547951 (66.5% of the 2329217 that name something this index defines)
+    by confidence:
+      high:    1247182
+      medium:  51423
+      low:     249346
+  Ambiguous:   781266
+    714763 had more candidates than the cap allows and were left unbound (11986 more exceeded it and the receiver narrowed them to a binding)
+  Unresolved:  1482568  (no definition of that name is indexed: code outside this
+               repository, or code in it that the index did not extract)
+    688496 shown to leave this repository (a standard-library or dependency call)
+  Constructs:  235681 of the resolved calls create a type (INSTANTIATES, not CALLS)
+  Edges:       1527008  (one per caller and definition; references between the same pair share one)
+    high:    1230482
+    medium:  50812
+    low:     245714
+  Data access: 718 statement(s), 652 bound to a declared table, 602 edges
+    66 access(es) name tables no migration here declares (e.g. bar, bla, cli_restricted_index, date, emp, emps)
+  Config:      369 read(s), 54 bound to a declared key, 53 edges
+    315 read(s) name keys no configuration file here declares — see 'repocortex config'
+  Deployment:  54 unit(s), 0 naming a build context, 0 edges
+  Duration:    2087663ms
+     2087.92 real      1111.14 user       304.17 sys
+          1010266112  maximum resident set size
+          1293419512  peak memory footprint
+== status
+Project:        elasticsearch
+Index:          READY
+Schema:         v18
+Revision:       12d450583f0553000d81d4a1b6559ff704e7cf5a
+Files:          51877
+Symbols:        769904
+Relationships:  1527861
+Parsed:         42665 (42327 clean, 338 with syntax errors)
+Syntax errors:  338 files read to the end with errors the parser recovered from; definitions inside the unreadable regions may be missing
+Text only:      1181 files searchable by text, no definitions (no definition query for the language): csv 923, xml 87, pem 83, properties 51, dockerfile 11, ini 11, +7 more
+Too large:      10 files over the size limit, not parsed and not searchable (raise index.max_file_bytes in .repocortex.yml to include them)
+                  x-pack/plugin/esql/qa/testFixtures/src/main/resources/data/many_numbers.csv (18.9 MiB)
+                  x-pack/plugin/inference/qa/inference-service-tests/src/javaRestTest/resources/rerank-v1.pt (11.8 MiB)
+                  x-pack/plugin/inference/qa/inference-service-tests/src/javaRestTest/resources/multilingual-e5-small.vocab.json (10.9 MiB)
+                  libs/simdjson/native/src/simdjson.h (7.4 MiB)
+                  x-pack/plugin/inference/qa/inference-service-tests/src/javaRestTest/resources/multilingual-e5-small.pt (5.3 MiB)
+                  libs/h3/src/test/resources/org/elasticsearch/h3/res04ic.txt.gz (4.6 MiB)
+                  x-pack/plugin/inference/qa/inference-service-tests/src/javaRestTest/resources/rerank-v1.vocab.json (2.7 MiB)
+                  libs/simdjson/native/src/simdjson.cpp (2.6 MiB)
+                  docs/reference/aggregations/images/geoshape_hexgrid.png (2.1 MiB)
+                  x-pack/plugin/inference/src/test/resources/org/elasticsearch/xpack/inference/highlight/sample-doc-semantic_text.json (2.0 MiB)
+Skipped:        8021 files not indexed: no_grammar 7338, binary 675, empty 8
+Last indexed:   2026-11-13T15:02:56+05:30
+Index size:     2.8 GiB
+Accuracy mode:  auto
+MCP profile:    minimal
+Capabilities:   code
+== questions (one process each; the first of each kind pays the cold start)
+-- implementations ActionListener --path server/src/main/java/org/elasticsearch/action/ActionListener.java
+INCOMPLETE — at least 15 anonymous class or object expression(s) name it as a supertype and are not listed (an anonymous type has no name to list), so subtypes exist that this list does not carry; rows 1-84 of 159 are shown. ActionListener (server/src/main/j
+
+ActionListener (interface) at server/src/main/java/org/elasticsearch/action/ActionListener.java:139
+
+real 2.16 s
+-- callers dispatchRequest --path server/src/main/java/org/elasticsearch/rest/RestController.java
+AMBIGUOUS — 2 definitions share the name "dispatchRequest". What follows is about the first, server/src/main/java/org/elasticsearch/rest/RestController.java:425, and says nothing about the others. Pass --path to choose one; they are listed at the end.
+
+dispatchRequest (method) at server/src/main/java/org/elasticsearch/rest/RestController.java:425
+
+real 0.18 s
+-- references RestController --path server/src/main/java/org/elasticsearch/rest/RestController.java
+AMBIGUOUS — 2 definitions share the name "RestController". What follows is about the first, server/src/main/java/org/elasticsearch/rest/RestController.java:81, and says nothing about the others. Pass --path to choose one; they are listed at the end.
+
+RestController (class) at server/src/main/java/org/elasticsearch/rest/RestController.java:81
+
+real 0.18 s
+-- tool call find_tests name=RestController path=server/src/main/java/org/elasticsearch/rest/RestController.java
+validating "arguments": validating root: unexpected additional properties ["name"]
+real 0.16 s
+-- callers onResponse
+AMBIGUOUS — At least 50 definitions share the name "onResponse". What follows is about the first, client/rest/src/main/java/org/elasticsearch/client/RestClient.java:528, and says nothing about the others. Pass --path to choose one; they are listed at the end
+
+onResponse (method) at client/rest/src/main/java/org/elasticsearch/client/RestClient.java:528
+
+real 0.29 s
+-- symbol ClusterState
+KIND    NAME          LOCATION                                                              CONFIDENCE
+class   ClusterState  server/src/main/java/org/elasticsearch/cluster/ClusterState.java:123  high (source_code)
+method  ClusterState  server/src/main/java/org/elasticsearch/cluster/ClusterState.java:203  high (source_code)
+method  ClusterState  server/src/main/java/org/elasticsearch/cluster/ClusterState.java:220  high (source_code)
+real 0.15 s
+-- search "registerHandler" -n 5
+server/src/main/java/org/elasticsearch/action/ActionModule.java
+server/src/test/java/org/elasticsearch/rest/RestControllerTests.java
+modules/reindex/src/test/java/org/elasticsearch/reindex/RestReindexRethrottleActionTests.java
+x-pack/plugin/ml/src/test/java/org/elasticsearch/xpack/ml/rest/inference/RestUpdateTrainedModelDeploymentActionTests.java
+real 0.15 s
+-- context "add a cluster setting that limits the number of shards per index"
+Task: add a cluster setting that limits the number of shards per index
+Understood as: Concepts: cluster, index, limits, number, per, setting, shards, add; action: add. Anchored on 23 symbols named by the task (cluster_stats.indices.shards.index, cluster_stats.indices.shards.index.shards, cluster_stats.indices.shards.index.shards.
+
+KIND           NAME                                                                               LOCATION                                                                                                      WHY
+real 13.96 s
+-- context "add a cluster setting that limits the number of shards per index"
+Task: add a cluster setting that limits the number of shards per index
+Understood as: Concepts: cluster, index, limits, number, per, setting, shards, add; action: add. Anchored on 23 symbols named by the task (cluster_stats.indices.shards.index, cluster_stats.indices.shards.index.shards, cluster_stats.indices.shards.index.shards.
+
+KIND           NAME                                                                               LOCATION                                                                                                      WHY
+real 14.76 s
+-- dead-code -n 5
+94896 definition(s) have no caller in the index: 0 likely unused, 94896 possibly.
+
+Nothing is graded likely unused.
+Pass --all to list the 94896 possible candidate(s); most are uses the index could not bind.
+real 7.73 s
+== load after: 5.79 4.86 4.55

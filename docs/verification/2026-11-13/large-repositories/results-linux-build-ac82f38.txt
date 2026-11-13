@@ -1,0 +1,161 @@
+== machine: 14 cpus, load before: 5.79 4.86 4.55
+== repository: 7e1392a42ea288d70a266f6553fe06f57f8647ea, 97371 tracked files
+== index
+time=2026-11-13T15:38:38.209+05:30 level=WARN msg="working tree has uncommitted changes; the index describes files on disk, not the commit"
+time=2026-11-13T15:39:37.011+05:30 level=INFO msg=indexing progress=10% files=9736/97357
+time=2026-11-13T15:40:21.502+05:30 level=INFO msg=indexing progress=20% files=19472/97357
+time=2026-11-13T15:41:25.607+05:30 level=INFO msg=indexing progress=30% files=29208/97357
+time=2026-11-13T15:44:49.659+05:30 level=INFO msg=indexing progress=40% files=38943/97357
+time=2026-11-13T15:47:31.629+05:30 level=INFO msg=indexing progress=50% files=48679/97357
+time=2026-11-13T15:51:38.455+05:30 level=INFO msg=indexing progress=60% files=58415/97357
+time=2026-11-13T15:56:22.219+05:30 level=INFO msg=indexing progress=70% files=68150/97357
+time=2026-11-13T15:58:45.401+05:30 level=INFO msg=indexing progress=80% files=77886/97357
+time=2026-11-13T16:02:13.464+05:30 level=INFO msg=indexing progress=90% files=87622/97357
+time=2026-11-13T16:03:51.101+05:30 level=INFO msg=indexing progress=100% files=97357/97357
+Indexed linux
+  Revision:      1
+  Git:           7e1392a42ea2
+  Files:         84603 indexed, 12754 skipped (97357 discovered)
+  Symbols:       1486461
+  References:    5574630 (bound by `repocortex resolve`)
+  Imports:       421927
+  Parsed:         84603 (48700 clean, 35894 with syntax errors, 9 incomplete)
+  Syntax errors:  35894 files read to the end with errors the parser recovered from; definitions inside the unreadable regions may be missing
+  Incomplete:     9 files whose parse was stopped early; definitions after the stop are missing
+                    arch/s390/boot/boot.h (5.3 KiB): budget_exceeded: parser stopped at byte 2772 of 5382 (line 77) on its iteration limit (569 of 161460); definitions after that point are missing
+                    drivers/gpu/drm/i915/display/intel_dpio_phy.c (34.6 KiB): budget_exceeded: parser stopped at byte 15106 of 35441 (line 513) on its iteration limit (2032 of 1063230); definitions after that point are missing
+                    drivers/media/platform/qcom/camss/camss-csiphy.c (24.8 KiB): budget_exceeded: parser stopped at byte 16779 of 25416 (line 651) on its iteration limit (2931 of 762480); definitions after that point are missing
+                    drivers/mtd/nand/raw/nandsim.c (67.0 KiB): budget_exceeded: parser stopped at byte 28985 of 68570 (line 873) on its iteration limit (4975 of 2057100); definitions after that point are missing
+                    drivers/net/ethernet/dec/tulip/tulip_core.c (56.0 KiB): budget_exceeded: parser stopped at byte 34955 of 57365 (line 1119) on its iteration limit (7777 of 1720950); definitions after that point are missing
+                    drivers/net/ethernet/intel/ixgbe/ixgbe_ethtool.c (114.0 KiB): budget_exceeded: parser stopped at byte 17683 of 116712 (line 528) on its iteration limit (3155 of 3501360); definitions after that point are missing
+                    fs/crypto/fscrypt_private.h (23.5 KiB): budget_exceeded: parser stopped at byte 9383 of 24026 (line 319) on its iteration limit (921 of 720780); definitions after that point are missing
+                    include/kunit/test.h (68.2 KiB): budget_exceeded: parser stopped at byte 20905 of 69799 (line 618) on its iteration limit (1459 of 2093970); definitions after that point are missing
+                    tools/bpf/bpftool/btf.c (44.0 KiB): budget_exceeded: parser stopped at byte 22153 of 45085 (line 907) on its iteration limit (6006 of 1352550); definitions after that point are missing
+  Text only:      5880 files searchable by text, no definitions (no definition query for the language): rst 4120, asm 1350, jinja2 161, perl 67, dot 41, xml 34, +10 more
+  Too large:      58 files over the size limit, not parsed and not searchable (raise index.max_file_bytes in .repocortex.yml to include them)
+                    drivers/gpu/drm/amd/include/asic_reg/dcn/dcn_3_2_0_sh_mask.h (22.9 MiB)
+                    drivers/gpu/drm/amd/include/asic_reg/nbio/nbio_7_7_0_sh_mask.h (16.0 MiB)
+                    drivers/gpu/drm/amd/include/asic_reg/nbio/nbio_7_2_0_sh_mask.h (15.7 MiB)
+                    drivers/gpu/drm/amd/include/asic_reg/dcn/dcn_4_1_0_sh_mask.h (14.9 MiB)
+                    drivers/gpu/drm/amd/include/asic_reg/dpcs/dpcs_4_2_3_sh_mask.h (13.7 MiB)
+                    drivers/gpu/drm/amd/include/asic_reg/nbio/nbio_6_1_sh_mask.h (13.5 MiB)
+                    drivers/gpu/drm/amd/include/asic_reg/nbio/nbio_2_3_sh_mask.h (12.2 MiB)
+                    drivers/gpu/drm/amd/include/asic_reg/nbio/nbio_7_0_sh_mask.h (12.2 MiB)
+                    drivers/gpu/drm/amd/include/asic_reg/dpcs/dpcs_4_2_2_sh_mask.h (10.9 MiB)
+                    drivers/gpu/drm/amd/include/asic_reg/dpcs/dpcs_4_2_0_sh_mask.h (10.8 MiB)
+                    and 48 more; list them with: repocortex query "SELECT path, size_bytes, parse_error FROM files WHERE index_run_id = :run AND parse_status <> 'ok' ORDER BY size_bytes DESC"
+  Skipped:        6816 files not indexed: no_grammar 6669, symlink 106, empty 36, binary 5
+  Duration:      1537882ms
+     1538.19 real      2405.26 user       712.32 sys
+          2199396352  maximum resident set size
+          2595845528  peak memory footprint
+== resolve
+Resolved linux (revision 1)
+  References:  5574630
+  Resolved:    1312126 (43.8% of the 2996695 that name something this index defines)
+    by confidence:
+      high:    832682
+      medium:  467323
+      low:     12121
+  Ambiguous:   1684569
+    60054 had more candidates than the cap allows and were left unbound (183 more exceeded it and the receiver narrowed them to a binding)
+  Unresolved:  2577935  (no definition of that name is indexed: code outside this
+               repository, or code in it that the index did not extract)
+    7339 shown to leave this repository (a standard-library or dependency call)
+  Constructs:  4335 of the resolved calls create a type (INSTANTIATES, not CALLS)
+  Edges:       1292516  (one per caller and definition; references between the same pair share one)
+    high:    821354
+    medium:  461358
+    low:     9804
+  Data access: 138 statement(s), 135 bound to a declared table, 135 edges
+    3 access(es) name tables no migration here declares (e.g. columns, sqlite_master, tables)
+  Config:      75 read(s), 0 bound to a declared key, 0 edges
+    75 read(s) name keys no configuration file here declares — see 'repocortex config'
+  Duration:    280861ms
+      280.96 real       224.57 user        39.08 sys
+           707727360  maximum resident set size
+           691514608  peak memory footprint
+== status
+Project:              linux
+Index:                DEGRADED
+Schema:               v18
+Revision:             7e1392a42ea288d70a266f6553fe06f57f8647ea
+Files:                97357
+Symbols:              1486461
+Relationships:        1292651
+Parsed:               84603 (48700 clean, 35894 with syntax errors, 9 incomplete)
+Syntax errors:        35894 files read to the end with errors the parser recovered from; definitions inside the unreadable regions may be missing
+Incomplete:           9 files whose parse was stopped early; definitions after the stop are missing
+                        arch/s390/boot/boot.h (5.3 KiB): budget_exceeded: parser stopped at byte 2772 of 5382 (line 77) on its iteration limit (569 of 161460); definitions after that point are missing
+                        drivers/gpu/drm/i915/display/intel_dpio_phy.c (34.6 KiB): budget_exceeded: parser stopped at byte 15106 of 35441 (line 513) on its iteration limit (2032 of 1063230); definitions after that point are missing
+                        drivers/media/platform/qcom/camss/camss-csiphy.c (24.8 KiB): budget_exceeded: parser stopped at byte 16779 of 25416 (line 651) on its iteration limit (2931 of 762480); definitions after that point are missing
+                        drivers/mtd/nand/raw/nandsim.c (67.0 KiB): budget_exceeded: parser stopped at byte 28985 of 68570 (line 873) on its iteration limit (4975 of 2057100); definitions after that point are missing
+                        drivers/net/ethernet/dec/tulip/tulip_core.c (56.0 KiB): budget_exceeded: parser stopped at byte 34955 of 57365 (line 1119) on its iteration limit (7777 of 1720950); definitions after that point are missing
+                        drivers/net/ethernet/intel/ixgbe/ixgbe_ethtool.c (114.0 KiB): budget_exceeded: parser stopped at byte 17683 of 116712 (line 528) on its iteration limit (3155 of 3501360); definitions after that point are missing
+                        fs/crypto/fscrypt_private.h (23.5 KiB): budget_exceeded: parser stopped at byte 9383 of 24026 (line 319) on its iteration limit (921 of 720780); definitions after that point are missing
+                        include/kunit/test.h (68.2 KiB): budget_exceeded: parser stopped at byte 20905 of 69799 (line 618) on its iteration limit (1459 of 2093970); definitions after that point are missing
+                        tools/bpf/bpftool/btf.c (44.0 KiB): budget_exceeded: parser stopped at byte 22153 of 45085 (line 907) on its iteration limit (6006 of 1352550); definitions after that point are missing
+Text only:            5880 files searchable by text, no definitions (no definition query for the language): rst 4120, asm 1350, jinja2 161, perl 67, dot 41, xml 34, +10 more
+Too large:            58 files over the size limit, not parsed and not searchable (raise index.max_file_bytes in .repocortex.yml to include them)
+                        drivers/gpu/drm/amd/include/asic_reg/dcn/dcn_3_2_0_sh_mask.h (22.9 MiB)
+                        drivers/gpu/drm/amd/include/asic_reg/nbio/nbio_7_7_0_sh_mask.h (16.0 MiB)
+                        drivers/gpu/drm/amd/include/asic_reg/nbio/nbio_7_2_0_sh_mask.h (15.7 MiB)
+                        drivers/gpu/drm/amd/include/asic_reg/dcn/dcn_4_1_0_sh_mask.h (14.9 MiB)
+                        drivers/gpu/drm/amd/include/asic_reg/dpcs/dpcs_4_2_3_sh_mask.h (13.7 MiB)
+                        drivers/gpu/drm/amd/include/asic_reg/nbio/nbio_6_1_sh_mask.h (13.5 MiB)
+                        drivers/gpu/drm/amd/include/asic_reg/nbio/nbio_2_3_sh_mask.h (12.2 MiB)
+                        drivers/gpu/drm/amd/include/asic_reg/nbio/nbio_7_0_sh_mask.h (12.2 MiB)
+                        drivers/gpu/drm/amd/include/asic_reg/dpcs/dpcs_4_2_2_sh_mask.h (10.9 MiB)
+== questions (one process each; the first of each kind pays the cold start)
+-- callers schedule --path kernel/sched/core.c
+UNRELIABLE — only 43% of the C references that name something this index defines are bound. 8 caller(s) of schedule (kernel/sched/core.c:7471) are recorded.
+
+schedule (function) at kernel/sched/core.c:7471
+
+real 0.66 s
+-- callers list_add_tail --path include/linux/list.h
+AMBIGUOUS — 2 definitions share the name "list_add_tail". What follows is about the first, include/linux/list.h:204, and says nothing about the others. Pass --path to choose one; they are listed at the end.
+
+UNRELIABLE — only 43% of the C references that name something this index defines are bound. 10 caller(s) of list_add_tail (include/linux/list.h:204) are recorded.
+
+real 0.63 s
+-- references kmalloc
+AMBIGUOUS — 4 definitions share the name "kmalloc". What follows is about the first, tools/lib/slab.c:14, and says nothing about the others. Pass --path to choose one; they are listed at the end.
+
+kmalloc (function) at tools/lib/slab.c:14
+
+real 0.24 s
+-- callers copy_from_user
+AMBIGUOUS — 2 definitions share the name "copy_from_user". What follows is about the first, include/linux/uaccess.h:217, and says nothing about the others. Pass --path to choose one; they are listed at the end.
+
+copy_from_user (function) at include/linux/uaccess.h:217
+
+real 0.22 s
+-- symbol task_struct
+KIND   NAME         LOCATION                                                       CONFIDENCE
+class  task_struct  include/linux/sched.h:836                                      high (source_code)
+class  task_struct  tools/perf/util/bpf_skel/vmlinux/vmlinux.h:108                 high (source_code)
+class  task_struct  tools/testing/selftests/bpf/progs/strobemeta.h:16              high (source_code)
+real 0.18 s
+-- search "EXPORT_SYMBOL_GPL(schedule" -n 5
+error: search: registry: search: SQL logic error: fts5: syntax error near "" (1)
+real 0.16 s
+-- context "add a sysctl that caps the number of open files per cgroup"
+Task: add a sysctl that caps the number of open files per cgroup
+Understood as: Concepts: caps, cgroup, files, number, open, per, sysctl, add; action: add. Anchored on 22 symbols named by the task (number_of_cells_per_pte, spufs_caps_open, align_to_chunks_number_per_line, genwqe_open_files, kernfs_should_drain_open_files, �
+
+KIND           NAME                                                            LOCATION                                                           WHY
+real 31.28 s
+-- context "add a sysctl that caps the number of open files per cgroup"
+Task: add a sysctl that caps the number of open files per cgroup
+Understood as: Concepts: caps, cgroup, files, number, open, per, sysctl, add; action: add. Anchored on 22 symbols named by the task (number_of_cells_per_pte, spufs_caps_open, align_to_chunks_number_per_line, genwqe_open_files, kernfs_should_drain_open_files, �
+
+KIND           NAME                                                            LOCATION                                                           WHY
+real 32.68 s
+-- dead-code -n 5
+5195 definition(s) have no caller in the index: 0 likely unused, 5195 possibly.
+
+Nothing is graded likely unused.
+Pass --all to list the 5195 possible candidate(s); most are uses the index could not bind.
+real 4.63 s
+== load after: 4.08 5.09 6.95
