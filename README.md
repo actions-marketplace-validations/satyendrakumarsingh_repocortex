@@ -53,7 +53,7 @@ One Go binary. A SQLite file in `.repocortex/`. Nothing leaves your machine.
 
 <table>
 <tr>
-<td align="center" width="20%"><h3>92</h3><sub>languages with definitions extracted, of 206 grammars bundled</sub></td>
+<td align="center" width="20%"><h3>91</h3><sub>languages with definitions extracted, of 206 grammars bundled</sub></td>
 <td align="center" width="20%"><h3>28</h3><sub>tools for agents, over MCP, HTTP or the shell</sub></td>
 <td align="center" width="20%"><h3>30</h3><sub>coding agents configured by one install command</sub></td>
 <td align="center" width="20%"><h3>405 of 420</h3><sub>sampled syntax-tree <code>high</code> edges judged right by hand, 14 projects (73–100% by project)</sub></td>
@@ -408,7 +408,7 @@ Every tool's schema costs the agent context on every request, so the default pro
 ```mermaid
 flowchart LR
     subgraph Sources["Your repository"]
-        Code["Source<br/>92 languages"]
+        Code["Source<br/>91 languages"]
         Compiler["Compiler indexes<br/>SCIP"]
         Runtime["Traces, manifests,<br/>Git history"]
     end
@@ -446,8 +446,8 @@ flowchart LR
 |---|---|---|
 | typed (8) | C#, C++, Go, Java, Kotlin, Python, Scala, TypeScript | Definitions, imports and receiver matching by argument count or class; references can reach `high` |
 | resolved (6) | C, JavaScript, PHP, Ruby, Rust, TSX | Definitions and imports; references bind across files |
-| parsed (78) | Apex, Bash, Clojure, Dart, Elixir, Erlang, OCaml, Solidity, Swift, Zig and 68 more | Definitions and search only. Quality varies: of 36 of them checked by hand on 13 November, 27 found at least 90% of the definitions sampled with at least 90% precision, and F#, Make and Groovy were far lower before later fixes |
-| text only (114) | Perl, Haskell, Pascal, COBOL, Elm, Nix, Verilog, Assembly and 106 more | The grammar is bundled but has no definition query: files are searchable by text and yield no symbols |
+| parsed (77) | Apex, Bash, Clojure, Dart, Elixir, Erlang, OCaml, Solidity, Swift, Zig and 67 more | Definitions and search only. Quality varies: of 36 of them checked by hand on 13 November, 27 found at least 90% of the definitions sampled with at least 90% precision, and F#, Make and Groovy were far lower before later fixes |
+| text only (115) | Perl, Haskell, Pascal, COBOL, Elm, Nix, Verilog, Assembly and 107 more | The grammar is bundled but has no definition query: files are searchable by text and yield no symbols |
 
 Run `repocortex languages` for your build. A compiler index raises any of these to `exact`.
 
@@ -514,7 +514,7 @@ After the first run, `repocortex index` only re-reads changed files, and `repoco
 | Compiler-proven edges | Yes, labelled `exact` | No | Through the language server | No | No | No |
 | States how sure each relationship is | Four tiers, each with measured precision | No | No | Scores | Three labels | Four labels |
 | Needs a model or embeddings | No | Bundles an embedding model | No | Optional | For documents only | Optional |
-| Languages with definitions extracted | 92 (206 grammars bundled) | 163 | 40+ | 15 to 18 | about 40 | about 40 |
+| Languages with definitions extracted | 91 (206 grammars bundled) | 163 | 40+ | 15 to 18 | about 40 | about 40 |
 | Reaches agents over | MCP, REST with OpenAPI, CLI | MCP, CLI | MCP | MCP, HTTP, web UI | MCP, CLI | MCP, CLI |
 | Pull-request gate with SARIF | Yes, free | Not documented | No | Paid tier | Paid tier | GitHub Action |
 | Runs offline from one binary | Yes (Go) | Yes (C) | Needs language servers | Node | Python | Python |

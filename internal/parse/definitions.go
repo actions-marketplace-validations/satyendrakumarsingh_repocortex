@@ -2,6 +2,7 @@ package parse
 
 import (
 	"sort"
+	"strings"
 
 	"github.com/odvcencio/gotreesitter/grammars"
 )
@@ -24,8 +25,15 @@ func ExtractsDefinitions(language string) bool {
 	if entry == nil {
 		return false
 	}
-	return definitionQueryText(*entry) != ""
+	return strings.Contains(definitionQueryText(*entry), definitionCapturePrefix)
 }
+
+// definitionCapturePrefix opens every capture that records a definition. A
+// query without one cannot produce a symbol whatever else it matches: the
+// query the Angular template grammar ships has a single call pattern, and
+// counting it made the language one of those "with definitions" while its
+// fixture records that it declares nothing.
+const definitionCapturePrefix = "@definition."
 
 // TextOnlyLanguages returns the languages whose grammar is bundled but which
 // have no definition query, sorted. Their files are searchable by text and

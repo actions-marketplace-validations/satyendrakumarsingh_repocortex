@@ -520,7 +520,7 @@ The `Collect Findings` step saves `repocortex --json arch|missed|impact` output;
 RepoCortex delivers an end-to-end change-safety and code intelligence architecture. The following matrix details each capability and its operational mechanism:
 
 ### 9.1. Polyglot AST Precision Engine & Arity Dialects
-- **Multi-Language Parsing**: Zero-external-dependency Tree-Sitter grammars compiled directly into pure Go. Reads definitions in 92 of the 206 bundled grammars, and binds calls across files for 14 languages: Go, Java, Python, TypeScript, C#, C++, Kotlin and Scala (typed), and C, JavaScript, PHP, Ruby, Rust and TSX (resolved). `repocortex languages` prints the current list.
+- **Multi-Language Parsing**: Zero-external-dependency Tree-Sitter grammars compiled directly into pure Go. Reads definitions in 91 of the 206 bundled grammars, and binds calls across files for 14 languages: Go, Java, Python, TypeScript, C#, C++, Kotlin and Scala (typed), and C, JavaScript, PHP, Ruby, Rust and TSX (resolved). `repocortex languages` prints the current list.
 - **Arity & Overload Resolution**: Parameter count queries (`paramCountQueries`) and call argument queries (`argCountQueries`) distinguish methods overloaded by parameter count in Go, Java, TypeScript, C#, C++, Kotlin and Scala. Argument types are not used, so two overloads with the same count are still confused, at `low`.
 - **Bounded Parsing and Memory**: A parse stops on the parser library's work limits, which give the same verdict for the same bytes at any machine load, and files up to 2 MiB are parsed (`index.max_file_bytes` changes the limit). A file over 512 KiB reserves eight times its size from an in-flight memory budget, so large files are parsed a few at a time.
 

@@ -219,8 +219,8 @@ not.
 
 Additionally, a file whose language has no definition query is recorded as
 skipped with `text_only: no definition query for "markdown"; …`. Its text is
-indexed for `search`; it has no symbols. 114 of the 206 grammars are in this
-group, and 92 have a definition query.
+indexed for `search`; it has no symbols. 115 of the 206 grammars are in this
+group, and 91 have a definition query.
 
 `repocortex index` and `repocortex status` print the totals: how many files
 parsed cleanly, with syntax errors or incompletely, how many are text only, how
@@ -661,9 +661,9 @@ $ repocortex languages
 TIER              COUNT  WHAT YOU GET
 typed             8      definitions, imports, receiver discrimination by arity or class — references can reach 'high'
 resolved          6      definitions and imports — references bind across files
-parsed            78     definitions and search only — no cross-file references claimed
-with definitions  92
-text only         114    no definition query: full-text search only, no symbols
+parsed            77     definitions and search only — no cross-file references claimed
+with definitions  91
+text only         115    no definition query: full-text search only, no symbols
 ```
 
 The tiers are computed from what the parser can do at run time, so this output cannot

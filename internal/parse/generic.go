@@ -299,10 +299,11 @@ func buildGenericParser(entry grammars.LangEntry, cfg parserConfig, lang *ts.Lan
 	// a future release that improves inference cannot regress us, and a
 	// duplicate capture is handled by de-duplication downstream.
 	query := definitionQueryText(entry)
-	if strings.TrimSpace(query) == "" {
-		// Not a fault. 120 of the embedded grammars ship no definition query,
-		// so their files have a syntax tree nobody can ask anything of. The
-		// file is still worth finding by its text.
+	if !strings.Contains(query, definitionCapturePrefix) {
+		// Not a fault. More than half of the embedded grammars ship no
+		// definition query (or, for Angular templates, one that can only
+		// record a call), so their files have a syntax tree nobody can ask
+		// anything of. The file is still worth finding by its text.
 		p.initReason = model.ParseReasonTextOnly
 		p.initErr = fmt.Errorf("no definition query for %q; text is indexed for search, no symbols are extracted", entry.Name)
 		return p

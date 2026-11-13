@@ -513,15 +513,15 @@ $ repocortex languages
 TIER              COUNT  WHAT YOU GET
 typed             8      definitions, imports, receiver discrimination by arity or class — references can reach 'high'
 resolved          6      definitions and imports — references bind across files
-parsed            78     definitions and search only — no cross-file references claimed
-with definitions  92
-text only         114    no definition query: full-text search only, no symbols
+parsed            77     definitions and search only — no cross-file references claimed
+with definitions  91
+text only         115    no definition query: full-text search only, no symbols
 total             206    
 
 typed:    [c_sharp cpp go java kotlin python scala typescript]
 resolved: [c javascript php ruby rust tsx]
 
-(78 parsed-tier and 114 text-only languages not listed; pass --verbose)
+(77 parsed-tier and 115 text-only languages not listed; pass --verbose)
 ```
 
 Read the tiers as a coverage statement before trusting an empty relationship

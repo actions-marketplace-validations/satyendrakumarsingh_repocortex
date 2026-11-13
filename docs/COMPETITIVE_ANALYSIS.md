@@ -196,7 +196,7 @@ in the [implementation plan](IMPLEMENTATION_PLAN.md).
 
 | Strength | Field |
 |---|---|
-| 206 grammars bundled, 92 with definitions extracted | 163 (codebase-memory-mcp), 79+ (jCodeMunch), about 40 (Graphify), 15–18 (GitNexus) |
+| 206 grammars bundled, 91 with definitions extracted | 163 (codebase-memory-mcp), 79+ (jCodeMunch), about 40 (Graphify), 15–18 (GitNexus) |
 | Compiler-proven `exact` edges from SCIP, across repositories | Only jCodeMunch imports SCIP, capped and single-repository |
 | A measured precision figure per confidence tier | Others label edges without publishing how often a label is right |
 | CI gate with pull-request comment and SARIF, free | Paid in Graphify (`gate`) and GitNexus (review) |
