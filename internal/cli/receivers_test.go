@@ -180,7 +180,9 @@ func receiverEdgesAt(t *testing.T, db *sql.DB, m receiverMarker) []receiverEdge 
 // TestReceiverFixtureBindsNothingWrongly is the gate.
 func TestReceiverFixtureBindsNothingWrongly(t *testing.T) {
 	// fixtureCopy initialises, indexes and resolves the copy.
-	root := fixtureCopy(t, "receivers")
+	// The heuristic resolver is what this suite audits, so the compiler passes
+	// stay off: the Go type check would raise the edges it reads by source.
+	root := fixtureCopyHeuristic(t, "receivers")
 	defs, markers := readReceiverMarkers(t, root)
 	db := corpusDB(t, root)
 

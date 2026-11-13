@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/satyendrakumarsingh/repocortex/internal/config"
 	"github.com/satyendrakumarsingh/repocortex/internal/pipeline"
 	"github.com/satyendrakumarsingh/repocortex/internal/registry"
 	"github.com/satyendrakumarsingh/repocortex/internal/resolve/scip"
@@ -30,6 +31,7 @@ const resolveBatchSize = 25_000
 func newResolveCmd(g *Global) *cobra.Command {
 	var minConfidence string
 	var noSCIP bool
+	var accuracy string
 
 	cmd := &cobra.Command{
 		Use:   "resolve",
@@ -40,8 +42,13 @@ Indexing extracts references but cannot bind them: doing so requires the
 complete symbol table, which does not exist until every file is parsed.
 
 Every binding records the evidence that justified it and a confidence level.
-Nothing here produces 'exact' confidence — that is reserved for compiler-backed
-SCIP indexes.`,
+The heuristic pass never produces 'exact' confidence: that is reserved for what
+a compiler proved. Two things can: a SCIP index found in the project root, and,
+for Go, the standard library's own type checker, which resolve runs by default
+(accuracy auto or exact) after the heuristic pass, with no tool to install. It
+checks the host platform's view of the code, raises the heuristic edges it
+confirms to exact, adds the ones the heuristic could not bind, and withdraws
+heuristic call edges it proves false. --accuracy fast skips it.`,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			ctx := cmd.Context()
 			cfg := g.Config()
@@ -72,6 +79,11 @@ SCIP indexes.`,
 				return fmt.Errorf("read current index revision: %w", err)
 			}
 
+			switch accuracy {
+			case "", string(config.AccuracyFast), string(config.AccuracyAuto), string(config.AccuracyExact):
+			default:
+				return fmt.Errorf("--accuracy %q: want fast, auto or exact", accuracy)
+			}
 			min := model.Confidence(minConfidence)
 			if minConfidence != "" && !min.Valid() {
 				return fmt.Errorf("--min-confidence %q: want exact, high, medium or low", minConfidence)
@@ -123,6 +135,18 @@ SCIP indexes.`,
 			scipOut := scipAutoOutcome{}
 			if !noSCIP {
 				scipOut = autoImportSCIP(ctx, g, reg, run.ID, cfg.RepoRoot)
+			}
+
+			// The compiler pass for Go, built in: the standard library's own
+			// type checker, no tool to install. `fast` skips it, and so does a
+			// repository with no Go.
+			mode := cfg.Accuracy
+			if accuracy != "" {
+				mode = config.AccuracyMode(accuracy)
+			}
+			var goOut pipeline.GoTypesOutcome
+			if mode != config.AccuracyFast {
+				goOut = pipeline.CheckGoTypes(ctx, reg, run.ID, pipeline.GoTypesOptions{Root: cfg.RepoRoot})
 			}
 
 			// Counted from the table, after every pass above has written to
@@ -187,6 +211,7 @@ SCIP indexes.`,
 						"ambiguous": infra.Ambiguous, "edges": infra.Edges,
 					},
 					"scip":        scipOut.json(),
+					"go_types":    goTypesJSON(mode, goOut),
 					"duration_ms": time.Since(start).Milliseconds(),
 				})
 			}
@@ -328,11 +353,14 @@ SCIP indexes.`,
 				}
 			}
 			scipOut.render(out)
+			renderGoTypes(out, mode, goOut)
 			fmt.Fprintf(out, "  Duration:    %dms\n", time.Since(start).Milliseconds())
 			return nil
 		},
 	}
 	cmd.Flags().StringVar(&minConfidence, "min-confidence", "", "drop bindings weaker than: high|medium|low")
+	cmd.Flags().StringVar(&accuracy, "accuracy", "",
+		"override the accuracy mode for this run: fast|auto|exact (fast skips the Go type check)")
 	cmd.Flags().BoolVar(&noSCIP, "no-scip", false, "do not import an index.scip found in the project root or .repocortex/")
 	return cmd
 }

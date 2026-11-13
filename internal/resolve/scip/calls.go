@@ -82,17 +82,32 @@ import (
 // of what was called, held against RepoCortex's own record of what the target is
 // named, with the compiler supplying only the link between them.
 //
-// THE UNAMBIGUITY RESTRICTION IS LOAD-BEARING, not caution. On the line
+// THE JOIN IS PER CALL, NOT PER LINE. It used to demand that the compiler
+// resolved exactly ONE target on the whole line, on the reasoning that on
 //
 //	total = compute(order.subtotal)
 //
-// the parser records a call and the compiler resolves two symbols: `compute`
-// and the field `order.subtotal`. Promoting both would stamp a field read as a
-// call, at exact, which is precisely the lie this system must not tell. A line
-// carrying more than one compiler target has no single answer to "what does the
-// call on this line reach", so it is left as REFERENCES. That is conservative
-// in the direction that costs recall rather than precision, and every line it
-// declines is counted so the cost is visible rather than assumed.
+// the parser records one call and the compiler resolves two symbols, `compute`
+// and the field `order.subtotal`, and promoting both would stamp a field read
+// as a call. The guard against that is the NAME check, which already rejects
+// the field: the parser's call is written `compute`, and `subtotal` is not
+// named as any call on the line. The one-target-per-line rule was a second,
+// cruder guard for the same case, and it threw away the common one:
+//
+//	if err := ruleModel().Validate(); err != nil {
+//
+// is two calls and two compiler targets, and neither was promoted (6,439 lines
+// of this repository), so `find_callers` listed 8 of 11 callers of a method
+// and said nothing was missing.
+//
+// So the unit of decision is (line, name): the compiler's occurrences of that
+// name on that line against the parser's calls written as that name. They must
+// pair off one to one, by position when the name occurs more than once (the
+// parser's column is where the call expression starts, at or before the
+// identifier the compiler resolved). A method value beside a call of the same
+// name, or a call the compiler resolved outside the repository beside one it
+// resolved inside, cannot be paired and is declined, which costs recall in the
+// direction this system chooses to be wrong in. Every decline is counted.
 
 // CallSites reports whether RepoCortex's parser recognised a call expression at a
 // source position.
@@ -116,6 +131,10 @@ type CallSites interface {
 	// IsReceiver reports whether name is what some call on this line was
 	// written AGAINST, rather than what was called. See PromoteCalls.
 	IsReceiver(path string, line int, name string) bool
+	// CallColumns lists, ascending and without repeats, the columns at which a
+	// call written as name starts on this line. A column of -1 means the
+	// parser's column was not recorded.
+	CallColumns(path string, line int, name string) []int
 }
 
 // callSite is one parser-recorded call position.
@@ -143,6 +162,7 @@ type CallSiteSet struct {
 	lines     map[callSite]struct{}
 	named     map[namedCallSite]struct{}
 	receivers map[namedCallSite]struct{}
+	cols      map[namedCallSite][]int
 }
 
 // NewCallSiteSet returns an empty set sized for n entries.
@@ -154,6 +174,7 @@ func NewCallSiteSet(n int) *CallSiteSet {
 		lines:     make(map[callSite]struct{}, n),
 		named:     make(map[namedCallSite]struct{}, n),
 		receivers: make(map[namedCallSite]struct{}, n),
+		cols:      make(map[namedCallSite][]int, n),
 	}
 }
 
@@ -161,12 +182,27 @@ func NewCallSiteSet(n int) *CallSiteSet {
 // below zero are ignored: the parser writes 0 for a reference whose position it
 // could not place, and a position-free call site cannot be joined to anything.
 func (s *CallSiteSet) Add(path string, line int, name, receiver string) {
+	s.AddAt(path, line, -1, name, receiver)
+}
+
+// AddAt is Add with the column at which the call expression starts, or -1 when
+// the column is not known.
+func (s *CallSiteSet) AddAt(path string, line, col int, name, receiver string) {
 	if s == nil || line <= 0 {
 		return
 	}
 	s.lines[callSite{path: path, line: line}] = struct{}{}
 	if name != "" {
-		s.named[namedCallSite{path: path, line: line, name: name}] = struct{}{}
+		k := namedCallSite{path: path, line: line, name: name}
+		s.named[k] = struct{}{}
+		cs := s.cols[k]
+		i := sort.SearchInts(cs, col)
+		if i == len(cs) || cs[i] != col {
+			cs = append(cs, 0)
+			copy(cs[i+1:], cs[i:])
+			cs[i] = col
+			s.cols[k] = cs
+		}
 	}
 	if receiver != "" {
 		s.receivers[namedCallSite{path: path, line: line, name: receiver}] = struct{}{}
@@ -200,6 +236,14 @@ func (s *CallSiteSet) IsReceiver(path string, line int, name string) bool {
 	return ok
 }
 
+// CallColumns implements CallSites.
+func (s *CallSiteSet) CallColumns(path string, line int, name string) []int {
+	if s == nil || name == "" {
+		return nil
+	}
+	return s.cols[namedCallSite{path: path, line: line, name: name}]
+}
+
 // Len is how many distinct positions the set holds. Positions, not names: it
 // answers "how much of the repository has a call parsed in it", which is the
 // figure that explains a promotion count of zero.
@@ -223,8 +267,11 @@ type PromoteStats struct {
 	// CallLines is parser-recorded call lines that carried at least one
 	// compiler edge — the population the promotion was decided over.
 	CallLines int
-	// Ambiguous is call lines left alone because the compiler resolved more
-	// than one distinct target there, so no single call target is defined.
+	// Ambiguous is calls left alone because the compiler's occurrences of a
+	// name on a call line could not be paired one to one with the calls the
+	// parser recorded under that name: a name the compiler resolved more often
+	// (a method value beside a call), or fewer times, than the parser saw it
+	// called.
 	Ambiguous int
 	// Receivers is call lines left alone because the compiler's single target
 	// there is what a call on that line was written AGAINST, not what was
@@ -287,54 +334,15 @@ func PromoteCalls(
 ) (PromoteStats, error) {
 	var st PromoteStats
 
-	// Pass 1: mirror accuracyCTE's `unambiguous` — distinct destinations per
-	// evidence line, over every compiler edge the file produced.
-	targets := make(map[int]map[int64]struct{}, len(edges))
-	for i := range edges {
-		line := edges[i].Evidence.Range.Start.Line
-		if line <= 0 {
-			continue
-		}
-		byDst, ok := targets[line]
-		if !ok {
-			byDst = make(map[int64]struct{}, 2)
-			targets[line] = byDst
-		}
-		byDst[edges[i].DstID] = struct{}{}
+	// Pass 1: group the file's compiler references by (line, target name). The
+	// grouping key is the name because the parser records WHAT each call is
+	// written as, so "the calls named Validate on this line" is a question both
+	// sides can answer from their own facts.
+	type lineName struct {
+		line int
+		name string
 	}
-
-	// Pass 2: mirror `truth` — of those lines, the ones the parser called on —
-	// and rewrite. Lines are visited in sorted order purely so the counting is
-	// reproducible under -race and readable in a failure message; the verdict
-	// per line does not depend on it.
-	lines := make([]int, 0, len(targets))
-	for line := range targets {
-		lines = append(lines, line)
-	}
-	sort.Ints(lines)
-
-	promote := make(map[int]bool, len(lines))
-	for _, line := range lines {
-		if calls == nil || !calls.HasCall(path, line) {
-			continue
-		}
-		st.CallLines++
-		if len(targets[line]) != 1 {
-			st.Ambiguous++
-			continue
-		}
-		name := names[onlyTarget(targets[line])]
-		if !calls.IsCallTo(path, line, name) {
-			st.NameMismatch++
-			continue
-		}
-		if calls.IsReceiver(path, line, name) {
-			st.Receivers++
-			continue
-		}
-		promote[line] = true
-	}
-
+	groups := make(map[lineName][]int, len(edges))
 	for i := range edges {
 		if edges[i].Kind != model.EdgeReferences {
 			// IMPORTS and IMPLEMENTS are already specific claims the index
@@ -342,7 +350,62 @@ func PromoteCalls(
 			// them calls.
 			continue
 		}
-		if !promote[edges[i].Evidence.Range.Start.Line] {
+		line := edges[i].Evidence.Range.Start.Line
+		if line <= 0 {
+			continue
+		}
+		k := lineName{line: line, name: names[edges[i].DstID]}
+		groups[k] = append(groups[k], i)
+	}
+
+	// Pass 2: decide each group. Visited in sorted order purely so the counting
+	// is reproducible under -race and readable in a failure message; the
+	// verdict for a group depends only on that group and on calls.
+	keys := make([]lineName, 0, len(groups))
+	for k := range groups {
+		keys = append(keys, k)
+	}
+	sort.Slice(keys, func(i, j int) bool {
+		if keys[i].line != keys[j].line {
+			return keys[i].line < keys[j].line
+		}
+		return keys[i].name < keys[j].name
+	})
+
+	promote := make(map[int]bool, len(edges))
+	lastLine := 0
+	for _, k := range keys {
+		if calls == nil || !calls.HasCall(path, k.line) {
+			continue
+		}
+		if k.line != lastLine {
+			st.CallLines++
+			lastLine = k.line
+		}
+		callCols := calls.CallColumns(path, k.line, k.name)
+		if len(callCols) == 0 {
+			st.NameMismatch++
+			continue
+		}
+		if calls.IsReceiver(path, k.line, k.name) {
+			st.Receivers++
+			continue
+		}
+		idx := groups[k]
+		if !pairsOneToOne(edges, idx, callCols) {
+			st.Ambiguous++
+			continue
+		}
+		for _, i := range idx {
+			promote[i] = true
+		}
+	}
+
+	for i := range edges {
+		if edges[i].Kind != model.EdgeReferences {
+			continue
+		}
+		if !promote[i] {
 			st.Unpromoted++
 			continue
 		}
@@ -357,12 +420,55 @@ func PromoteCalls(
 	return st, nil
 }
 
-// onlyTarget returns the single member of a one-element set. The caller has
-// already established the length, so this is a lookup and not a choice — which
-// is why it may range over a map without threatening determinism.
-func onlyTarget(set map[int64]struct{}) int64 {
-	for id := range set {
-		return id
+// pairsOneToOne reports whether the compiler's occurrences of one name on one
+// line (edges idx) and the parser's calls of that name (their start columns)
+// pair off exactly: each call has one occurrence and each occurrence is one
+// call.
+//
+// It is the join the line-level rule could not make. On
+//
+//	if err := ruleModel().Validate(); err != nil {
+//
+// the compiler resolves two targets and the parser records two calls, and a
+// rule that demands ONE target per line promotes neither. Here `ruleModel` and
+// `Validate` are separate groups, each with one occurrence and one call, and
+// each is promoted on its own.
+//
+// Equal counts are necessary but not sufficient when a name occurs more than
+// once, so occurrences are also matched to calls by position: a call starts at
+// the beginning of its callee expression, at or before the identifier the
+// compiler resolved. Each occurrence takes the nearest call at or before it,
+// and the pairing must be a bijection. Anything else (a method value
+// `f(x.Foo)` beside the call `Foo(...)`, a call the compiler resolved outside
+// the repository) is declined as ambiguous, which costs recall and never
+// precision.
+func pairsOneToOne(edges []model.Edge, idx []int, callCols []int) bool {
+	occ := make([]int, 0, len(idx))
+	targetAt := make(map[int]int64, len(idx))
+	for _, i := range idx {
+		c := edges[i].Evidence.Range.Start.Col
+		if prev, ok := targetAt[c]; ok && prev != edges[i].DstID {
+			return false // two targets on one occurrence: nothing to pair
+		}
+		if _, ok := targetAt[c]; !ok {
+			occ = append(occ, c)
+		}
+		targetAt[c] = edges[i].DstID
 	}
-	return 0
+	if len(occ) != len(callCols) {
+		return false
+	}
+	if len(occ) == 1 {
+		return true
+	}
+	sort.Ints(occ)
+	taken := make(map[int]bool, len(occ))
+	for _, c := range occ {
+		j := sort.SearchInts(callCols, c+1) - 1 // nearest call at or before c
+		if j < 0 || callCols[j] < 0 || taken[j] {
+			return false
+		}
+		taken[j] = true
+	}
+	return true
 }

@@ -365,6 +365,20 @@ func fixtureCopy(t *testing.T, name string) string {
 // indexed.
 func fixtureCopyWith(t *testing.T, name string, edit func(dst string)) string {
 	t.Helper()
+	return fixtureCopyArgs(t, name, edit, nil)
+}
+
+// fixtureCopyHeuristic is fixtureCopy with the compiler passes off: resolve runs
+// with --accuracy fast, so what the copy holds is the heuristic resolver's own
+// output. The suites that audit that resolver (they read edges by source) need
+// it, because the Go type check would otherwise raise what they measure.
+func fixtureCopyHeuristic(t *testing.T, name string) string {
+	t.Helper()
+	return fixtureCopyArgs(t, name, nil, []string{"--accuracy", "fast"})
+}
+
+func fixtureCopyArgs(t *testing.T, name string, edit func(dst string), resolveArgs []string) string {
+	t.Helper()
 	src, err := filepath.Abs(filepath.Join("..", "..", "fixtures", name))
 	if err != nil {
 		t.Fatal(err)
@@ -396,9 +410,9 @@ func fixtureCopyWith(t *testing.T, name string, edit func(dst string)) string {
 	if edit != nil {
 		edit(dst)
 	}
-	for _, step := range []string{"init", "index", "resolve"} {
-		if out, err := run(t, dst, step); err != nil {
-			t.Fatalf("%s: %v\n%s", step, err, out)
+	for _, step := range [][]string{{"init"}, {"index"}, append([]string{"resolve"}, resolveArgs...)} {
+		if out, err := run(t, dst, step...); err != nil {
+			t.Fatalf("%v: %v\n%s", step, err, out)
 		}
 	}
 	return dst

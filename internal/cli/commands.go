@@ -17,6 +17,7 @@ import (
 
 	"github.com/satyendrakumarsingh/repocortex/internal/config"
 	"github.com/satyendrakumarsingh/repocortex/internal/registry"
+	"github.com/satyendrakumarsingh/repocortex/internal/resolve/gotypes"
 	"github.com/satyendrakumarsingh/repocortex/internal/store"
 
 	"github.com/spf13/cobra"
@@ -224,6 +225,16 @@ All figures are read from the registry. Nothing is estimated.`,
 				return err
 			}
 			st.Parse = &summary
+			// Whether the Go graph is backed by the compiler's front end,
+			// read from the edges themselves so that it cannot disagree with
+			// them: an incremental update that drops edges changes this.
+			goFiles, checked, edges, err := registry.New(db).GoTypesCoverage(ctx, runID, gotypes.Detail)
+			if err != nil {
+				return err
+			}
+			if goFiles > 0 {
+				st.GoTypes = &goTypesStatus{GoFiles: goFiles, FilesWithProof: checked, ExactEdges: edges}
+			}
 			// The same number the run row and the portal carry: files whose
 			// indexing was abandoned. A gate that reads this field and wants
 			// zero is asking the right question.
@@ -288,8 +299,18 @@ type statusReport struct {
 	LastIndexed    string   `json:"last_indexed,omitempty"`
 	IndexSizeBytes int64    `json:"index_size_bytes"`
 	AccuracyMode   string   `json:"accuracy_mode"`
-	MCPProfile     string   `json:"mcp_profile"`
-	Capabilities   []string `json:"capabilities"`
+	// GoTypes says whether the Go graph has been type-checked. Nil when the
+	// index holds no Go.
+	GoTypes      *goTypesStatus `json:"go_types,omitempty"`
+	MCPProfile   string         `json:"mcp_profile"`
+	Capabilities []string       `json:"capabilities"`
+}
+
+// goTypesStatus is the built-in Go type check's footprint in an index.
+type goTypesStatus struct {
+	GoFiles        int64 `json:"go_files"`
+	FilesWithProof int64 `json:"files_with_proven_edges"`
+	ExactEdges     int64 `json:"exact_edges"`
 }
 
 func renderStatus(cmd *cobra.Command, g *Global, st statusReport, hint string) error {
@@ -315,6 +336,14 @@ func renderStatus(cmd *cobra.Command, g *Global, st statusReport, hint string) e
 				for _, d := range l.Detail {
 					_, _ = fmt.Fprintf(w, "\t  %s\n", d)
 				}
+			}
+		}
+		if g := st.GoTypes; g != nil {
+			if g.ExactEdges > 0 {
+				_, _ = fmt.Fprintf(w, "Go graph:\ttype-checked (go/types): %d exact edge(s) across %d of %d Go file(s)\n",
+					g.ExactEdges, g.FilesWithProof, g.GoFiles)
+			} else {
+				_, _ = fmt.Fprintf(w, "Go graph:\theuristic only (%d Go file(s), no type check on record): run 'repocortex resolve'\n", g.GoFiles)
 			}
 		}
 		if st.AmbiguousLanguages > 0 {
