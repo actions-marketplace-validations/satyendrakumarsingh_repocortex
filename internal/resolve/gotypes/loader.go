@@ -1,6 +1,7 @@
 package gotypes
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"go/ast"
@@ -9,6 +10,7 @@ import (
 	"go/token"
 	"go/types"
 	"go/version"
+	"io"
 	"os"
 	"path"
 	"path/filepath"
@@ -200,6 +202,10 @@ type unit struct {
 	tstFiles []string // absolute _test.go, accepted
 	rejected int      // .go files the host's build constraints exclude
 	pkgName  string
+
+	splitDone  bool
+	inPkgTests []string
+	xtestTests []string
 
 	res [3]*variantResult
 
@@ -449,6 +455,10 @@ func (l *loader) process(u *unit) {
 // splitTests separates a unit's test files into the in-package ones and the
 // external `_test` package's, by package clause.
 func (l *loader) splitTests(u *unit) (inPkg, xtest []string) {
+	if u.splitDone {
+		return u.inPkgTests, u.xtestTests
+	}
+	defer func() { u.splitDone, u.inPkgTests, u.xtestTests = true, inPkg, xtest }()
 	for _, f := range u.tstFiles {
 		name, _ := l.packageName(f)
 		switch name {
@@ -494,7 +504,7 @@ func (l *loader) checkVariant(u *unit, v variant, ov *override, extract bool) *v
 		r.failed = true
 		return r
 	}
-	asts, ok := l.parseAll(files, false)
+	asts, ok := l.parseAll(files, false, nil)
 	if !ok {
 		r.failed = true
 		if extract {
@@ -594,7 +604,7 @@ var parseWorkers = max(2, runtime.GOMAXPROCS(0))
 // result does not depend on scheduling. ok is false when any file did not
 // parse: a package whose own files are not syntax is skipped, not guessed at.
 // strip blanks function bodies first (dependencies only).
-func (l *loader) parseAll(files []string, strip bool) ([]*ast.File, bool) {
+func (l *loader) parseAll(files []string, strip bool, data map[string][]byte) ([]*ast.File, bool) {
 	out := make([]*ast.File, len(files))
 	bad := make([]bool, len(files))
 	sem := make(chan struct{}, parseWorkers)
@@ -605,10 +615,14 @@ func (l *loader) parseAll(files []string, strip bool) ([]*ast.File, bool) {
 		go func() {
 			defer wg.Done()
 			defer func() { <-sem }()
-			src, err := os.ReadFile(f) //nolint:gosec // a file of the repository or of the Go toolchain/module cache
-			if err != nil {
-				bad[i] = true
-				return
+			src, ok := data[f]
+			if !ok {
+				var err error
+				src, err = os.ReadFile(f) //nolint:gosec // a file of the repository or of the Go toolchain/module cache
+				if err != nil {
+					bad[i] = true
+					return
+				}
 			}
 			if strip {
 				src = stripBodies(src)
@@ -892,18 +906,34 @@ func (l *loader) loadExt(dir, p string, std bool, from *importer) *types.Package
 		l.ext[dir] = &extEntry{err: err}
 		return nil
 	}
-	var files []string
+	// Every candidate file is read ONCE: the build-constraint check and the
+	// parse both work from these bytes. A closure of hundreds of packages is
+	// tens of thousands of files and opening each twice was the largest single
+	// cost of the run.
+	var cands []string
 	for _, e := range ents {
 		n := e.Name()
 		if e.IsDir() || !strings.HasSuffix(n, ".go") || strings.HasSuffix(n, "_test.go") {
 			continue
 		}
-		if ok, err := l.pure.MatchFile(dir, n); err != nil || !ok {
+		cands = append(cands, n)
+	}
+	data := l.readAll(dir, cands)
+	ctxt := l.pure
+	ctxt.OpenFile = func(p string) (io.ReadCloser, error) {
+		if b, ok := data[p]; ok {
+			return io.NopCloser(bytes.NewReader(b)), nil
+		}
+		return os.Open(p) //nolint:gosec // a file of the Go toolchain or module cache
+	}
+	var files []string
+	for _, n := range cands {
+		if ok, err := ctxt.MatchFile(dir, n); err != nil || !ok {
 			continue
 		}
 		files = append(files, filepath.Join(dir, n))
 	}
-	asts, _ := l.parseAll(files, true)
+	asts, _ := l.parseAll(files, true, data)
 	asts = majorityPackage(asts)
 	if len(asts) == 0 {
 		l.ext[dir] = &extEntry{err: fmt.Errorf("no Go files")}
@@ -926,6 +956,33 @@ func (l *loader) loadExt(dir, p string, std bool, from *importer) *types.Package
 	}
 	l.ext[dir] = &extEntry{pkg: pkg}
 	return pkg
+}
+
+// readAll reads the named files of a directory in parallel, keyed by the path
+// MatchFile will ask for. A file that cannot be read is absent from the map.
+func (l *loader) readAll(dir string, names []string) map[string][]byte {
+	out := make(map[string][]byte, len(names))
+	var mu sync.Mutex
+	sem := make(chan struct{}, parseWorkers)
+	var wg sync.WaitGroup
+	for _, n := range names {
+		wg.Add(1)
+		sem <- struct{}{}
+		go func() {
+			defer wg.Done()
+			defer func() { <-sem }()
+			p := filepath.Join(dir, n)
+			b, err := os.ReadFile(p) //nolint:gosec // a file of the Go toolchain or module cache
+			if err != nil {
+				return
+			}
+			mu.Lock()
+			out[p] = b
+			mu.Unlock()
+		}()
+	}
+	wg.Wait()
+	return out
 }
 
 // majorityPackage keeps the files of the most common package clause, so a
