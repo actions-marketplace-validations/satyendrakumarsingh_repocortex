@@ -121,6 +121,7 @@ func Check(ctx context.Context, opts Options) (*Result, error) {
 		}
 	}
 
+	l.work = loadWorkspace(root)
 	l.discover(opts.Files)
 
 	for _, u := range l.units {
@@ -158,6 +159,7 @@ type loader struct {
 	pure     build.Context // dependencies and std: pure Go, no cgo
 	sizes    types.Sizes
 	only     map[string]bool // indexed files, or nil
+	work     *workspace      // go.work at the root, or nil
 
 	mods    []*module
 	units   []*unit
@@ -190,6 +192,24 @@ type module struct {
 	vendor    string
 	byPath    map[string]*unit
 	notfound  map[string]bool
+	work      *workspace // the go.work this module is a member of, or nil
+}
+
+// requirements is what the module's dependencies are built at: its own go.mod,
+// or, inside a workspace, the highest version any member requires.
+func (m *module) requirements() map[string]string {
+	if m.work != nil {
+		return m.work.require
+	}
+	return m.file.Require
+}
+
+// replacements is the replace directives that apply to the module.
+func (m *module) replacements() []modReplace {
+	if m.work != nil {
+		return m.work.replace
+	}
+	return m.file.Replace
 }
 
 // unit is one directory: up to three type-checks, as the go tool does them.
@@ -280,6 +300,9 @@ func (l *loader) discover(files []string) {
 			mf := parseGoMod(data)
 			m = &module{dir: dir, file: mf, byPath: map[string]*unit{}, notfound: map[string]bool{}}
 			m.goVersion = l.langVersion(mf.GoVersion)
+			if l.work != nil && l.work.dirs[dir] {
+				m.work = l.work
+			}
 			if fi, err := os.Stat(filepath.Join(dir, "vendor")); err == nil && fi.IsDir() {
 				m.vendor = filepath.Join(dir, "vendor")
 			}
@@ -878,11 +901,11 @@ func (l *loader) locate(p string, i *importer) (dir string, std bool) {
 // local directory), in the module cache's case-escaped layout.
 func (l *loader) moduleDir(m *module, p string) string {
 	for cand := p; cand != "." && cand != ""; {
-		ver, required := m.file.Require[cand]
+		ver, required := m.requirements()[cand]
 		if required {
 			suffix := strings.TrimPrefix(strings.TrimPrefix(p, cand), "/")
 			modPath, modVer, local := cand, ver, ""
-			for _, r := range m.file.Replace {
+			for _, r := range m.replacements() {
 				if r.Old != cand || (r.OldVersion != "" && r.OldVersion != ver) {
 					continue
 				}
