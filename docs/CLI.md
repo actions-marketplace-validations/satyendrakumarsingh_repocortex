@@ -2218,7 +2218,9 @@ what it implements or extends. Direct subtypes come first; a deeper one shows it
 depth and the type it names. Flags: `--path`, `--limit`, `--min-confidence`,
 `--direct-only`. Only declared relationships are visible without a compiler
 index. The first line is the one the agent tool `find_implementations` leads
-with, including how many subtypes the index saw and could not list.
+with, including how many subtypes the index saw and could not list. A table row
+is always a type: an anonymous class or a class declared inside a function is
+counted on the first line and is not a row.
 
 ### `tests <symbol>`
 

@@ -30,6 +30,30 @@ func lowCoverageJava(b *indexBuilder) {
 	for i := 0; i < 12; i++ {
 		b.ref("api/Handler.java", "process", "x", 40+i, registry.ResolutionAmbiguous, "")
 	}
+	// A reference spelled like the target that was bound to nothing: the
+	// symbol's own accounting is NOT complete, so the language's rate stands.
+	b.ref("api/Handler.java", "update", "svc", 55, registry.ResolutionAmbiguous, "")
+}
+
+// lowCoverageJavaTargetBound is the same index with every reference spelled
+// like `update` bound to it: the language resolves badly and this symbol does
+// not. Its own accounting is complete, which is the narrowest evidence there is.
+func lowCoverageJavaTargetBound(b *indexBuilder) {
+	b.file("svc/Service.java", "java", 80,
+		typ("Service", model.KindClass, 1, 80),
+		method("update", 10, 20, 1),
+		method("helper", 30, 40, 0))
+	b.file("api/Handler.java", "java", 60,
+		typ("Handler", model.KindClass, 1, 60),
+		method("handle", 5, 15, 0),
+		method("retry", 20, 30, 0))
+	update := symKey("svc/Service.java", "update", 10)
+	b.call(symKey("api/Handler.java", "handle", 5), update, "update", "svc", "api/Handler.java", 7, model.ConfidenceHigh)
+	b.call(symKey("api/Handler.java", "retry", 20), update, "update", "svc", "api/Handler.java", 22, model.ConfidenceHigh)
+	b.call(update, symKey("svc/Service.java", "helper", 30), "helper", "", "svc/Service.java", 12, model.ConfidenceHigh)
+	for i := 0; i < 12; i++ {
+		b.ref("api/Handler.java", "process", "x", 40+i, registry.ResolutionAmbiguous, "")
+	}
 }
 
 // kotlinWithoutReferences is okio's shape: thousands of Kotlin definitions,
@@ -57,6 +81,10 @@ func kotlinWithoutReferences(b *indexBuilder) {
 	for i := 0; i < 6; i++ {
 		b.ref("samples/Sample.java", "other", "", 40+i, registry.ResolutionAmbiguous, "")
 	}
+	// Two references spelled like the Java symbol that were bound to nothing,
+	// so its own accounting is incomplete and the language's rate is its grade.
+	b.ref("samples/Sample.java", "step", "", 50, registry.ResolutionAmbiguous, "")
+	b.ref("samples/Sample.java", "step", "", 51, registry.ResolutionAmbiguous, "")
 }
 
 // wellCoveredGo is a Go index with nothing held against it.
@@ -146,6 +174,10 @@ func TestNoAnswerSaysBothDoNotUseAndActOnThese(t *testing.T) {
 		{"low coverage", lowCoverageJava, "update", "svc/Service.java", true},
 		{"language without references", kotlinWithoutReferences, "emit", "okio/Sink.kt", true},
 		{"well covered", wellCoveredGo, "serve", "app/app.go", false},
+		// The language resolves badly and the target does not. The tools that
+		// hold the target's own accounting no longer doubt it; the ones that do
+		// not (callees, hierarchy, routes) still do, on their first line.
+		{"low language rate, target accounted for", lowCoverageJavaTargetBound, "update", "svc/Service.java", true},
 	}
 	for _, fx := range fixtures {
 		t.Run(fx.name, func(t *testing.T) {
@@ -746,7 +778,7 @@ func TestCoverageIsReportedForTheSymbolsOwnLanguage(t *testing.T) {
 
 	// The Java symbol beside it is judged on the Java files.
 	java, _ := answer(t, fs.sess, "find_callers", map[string]any{"name": "step"})
-	if !strings.HasPrefix(firstLine(java), leadUnreliable+" — only 14% of the Java references") {
+	if !strings.HasPrefix(firstLine(java), leadUnreliable+" — only 11% of the Java references") {
 		t.Errorf("the Java symbol was not judged on the Java files: %q", firstLine(java))
 	}
 	if strings.Contains(java, "Kotlin") {

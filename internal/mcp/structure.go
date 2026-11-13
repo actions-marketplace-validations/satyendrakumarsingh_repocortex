@@ -298,6 +298,9 @@ func (s *Server) findImplementations(ctx context.Context, req *sdk.CallToolReque
 	}
 	s.applyCoverage(resp, cov, "type hierarchy lookup")
 
+	if n := localSubtypeNote(subs, target.Name); n != "" {
+		resp.Notes = append(resp.Notes, n)
+	}
 	resp.Notes = append(resp.Notes,
 		"A type relationship is recorded only where the source states it (extends, implements, an "+
 			"embedded type) or a compiler index proved it. Structural typing — a Go type that satisfies "+
@@ -313,6 +316,22 @@ func (s *Server) findImplementations(ctx context.Context, req *sdk.CallToolReque
 // or implement the target, split into the ones that name it and the ones that
 // reach it through another type.
 func subtypeCounts(subs registry.Subtypes, directOnly bool) string {
+	out := subtypeCountsOfTypes(subs, directOnly)
+	if subs.Local > 0 {
+		out += fmt.Sprintf("; %s%d anonymous or local type(s) inside functions also extend it (not rows: they are not types)",
+			capFloor(subs.Capped), subs.Local)
+	}
+	return out
+}
+
+func capFloor(capped bool) string {
+	if capped {
+		return "at least "
+	}
+	return ""
+}
+
+func subtypeCountsOfTypes(subs registry.Subtypes, directOnly bool) string {
 	floor := ""
 	if subs.Capped {
 		floor = "at least "
@@ -331,6 +350,28 @@ func subtypeCounts(subs registry.Subtypes, directOnly bool) string {
 	default:
 		return fmt.Sprintf("%d implementing or extending it, all directly", subs.Direct)
 	}
+}
+
+// localSubtypeNote names the functions that contain an anonymous or local type
+// extending the target. The index attributes such a class to the function that
+// holds it, so the edge's source is a function and not a type; listing it as a
+// subtype put `buildInitParams` among the subclasses of a router. It is counted
+// on the first line and named here instead.
+func localSubtypeNote(subs registry.Subtypes, target string) string {
+	if subs.Local == 0 {
+		return ""
+	}
+	var where []string
+	for _, h := range subs.LocalHits {
+		where = append(where, fmt.Sprintf("inside %s (%s:%d)", h.SrcName, h.EvidenceFile, h.EvidenceLine))
+	}
+	more := ""
+	if n := subs.Local - len(subs.LocalHits); n > 0 {
+		more = fmt.Sprintf(", and %s%d more", capFloor(subs.Capped), n)
+	}
+	return fmt.Sprintf("%s%d anonymous or local type(s) declared inside functions extend or implement %s: %s%s. "+
+		"They are subtypes with no name of their own, so they are counted here and are not rows of the list.",
+		capFloor(subs.Capped), subs.Local, target, strings.Join(where, "; "), more)
 }
 
 // subtypeItem renders one subtype. A direct one says it names the target; a
@@ -358,7 +399,7 @@ func subtypeItem(e registry.SubtypeHit, target string) Item {
 // read as a declaration naming the target and are recorded as nothing.
 type subtypeGap struct {
 	refs registry.SupertypeRefs
-	text registry.UnrecordedMentions
+	text registry.UnrecordedSubtypes
 }
 
 func (s *Server) subtypeGap(ctx context.Context, runID int64, t registry.SymbolCandidate) (subtypeGap, error) {
@@ -375,7 +416,7 @@ func (s *Server) subtypeGap(ctx context.Context, runID int64, t registry.SymbolC
 	for _, h := range defs {
 		spans = append(spans, registry.DefSpan{Path: h.FilePath, From: h.StartLine, To: max(h.EndLine, h.StartLine)})
 	}
-	g.text, err = s.deps.Registry.UnrecordedDeclarations(ctx, runID, t.Name, spans)
+	g.text, err = s.deps.Registry.UnrecordedSubtypeDeclarations(ctx, runID, t.Name, spans)
 	return g, err
 }
 
@@ -399,15 +440,25 @@ func (g subtypeGap) parts(name string) []string {
 		out = append(out, fmt.Sprintf("%d of the %d supertype reference(s) spelled %q did not become a subtype below (%s)",
 			n, g.refs.References, name, strings.Join(why, ", ")))
 	}
-	if g.text.Known && g.text.Total > 0 {
-		floor := ""
-		if !g.text.Complete {
-			floor = "at least "
-		}
-		out = append(out, fmt.Sprintf("%s%d other line(s) read as a type declaration naming it and are not recorded as a "+
-			"subtype", floor, g.text.Total))
+	if g.text.Known && g.text.Named > 0 {
+		out = append(out, fmt.Sprintf("%s%d other line(s) declare a named type whose supertype list names it and are not "+
+			"recorded as a subtype", capFloor(!g.text.Complete), g.text.Named))
+	}
+	if g.text.Known && g.text.Anonymous > 0 {
+		out = append(out, fmt.Sprintf("%s%d anonymous class or object expression(s) name it as a supertype and are not "+
+			"listed (an anonymous type has no name to list)", capFloor(!g.text.Complete), g.text.Anonymous))
 	}
 	return out
+}
+
+func placeList(groups ...[]registry.Place) string {
+	var sites []string
+	for _, g := range groups {
+		for _, p := range g {
+			sites = append(sites, fmt.Sprintf("%s:%d", p.Path, p.Line))
+		}
+	}
+	return strings.Join(sites, ", ")
 }
 
 // lead is the clause for the first line. Empty when nothing is outstanding.
@@ -427,12 +478,8 @@ func (g subtypeGap) detail(name string) string {
 	}
 	out := strings.Join(parts, ". Also, ") + ". Each of them may be a type that extends or implements " + name +
 		" and is missing from the list, so the count above is a floor"
-	if len(g.text.Sample) > 0 {
-		sites := make([]string, 0, len(g.text.Sample))
-		for _, p := range g.text.Sample {
-			sites = append(sites, fmt.Sprintf("%s:%d", p.Path, p.Line))
-		}
-		out += " (declaration-like lines: " + strings.Join(sites, ", ") + ")"
+	if sites := placeList(g.text.Sample, g.text.AnonymousSample); sites != "" {
+		out += " (lines: " + sites + ")"
 	}
 	return out + ". Search for the name before concluding which types extend it."
 }

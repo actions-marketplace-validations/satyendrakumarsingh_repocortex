@@ -62,27 +62,33 @@ func TestStoredStatsEqualTheLiveFigures(t *testing.T) {
 // the index no longer has.
 func TestAWriteClearsTheStoredFiguresSoAnAnswerIsNeverStale(t *testing.T) {
 	ctx := context.Background()
-	r, run := seedStatsRun(t)
-	if err := r.RefreshRunStats(ctx, run); err != nil {
-		t.Fatal(err)
-	}
 
-	writes := map[string]string{
-		"a reference is re-resolved": `UPDATE symbol_references SET resolution = 'unresolved'
-		                                WHERE index_run_id = ` + "%d" + ` AND name = 'B'`,
-		"a reference is deleted": `DELETE FROM symbol_references WHERE index_run_id = ` + "%d" + ` AND name = 'C'`,
-		"a file is deleted":      `DELETE FROM files WHERE index_run_id = ` + "%d" + ` AND path = 'b.go'`,
+	// Each write gets an index of its own. They used to share one and run in
+	// map order, so when the file was deleted first its references went with
+	// it, the later DELETE of a reference removed no row, no trigger fired,
+	// and the test failed about one run in twelve.
+	writes := []struct{ name, stmt string }{
+		{"a reference is re-resolved", `UPDATE symbol_references SET resolution = 'unresolved'
+		                                WHERE index_run_id = ` + "%d" + ` AND name = 'B'`},
+		{"a reference is deleted", `DELETE FROM symbol_references WHERE index_run_id = ` + "%d" + ` AND name = 'C'`},
+		{"a file is deleted", `DELETE FROM files WHERE index_run_id = ` + "%d" + ` AND path = 'b.go'`},
 	}
-	for name, stmt := range writes {
+	for _, w := range writes {
+		name, stmt := w.name, w.stmt
 		t.Run(name, func(t *testing.T) {
+			r, run := seedStatsRun(t)
 			if err := r.RefreshRunStats(ctx, run); err != nil {
 				t.Fatal(err)
 			}
 			if _, ok, _ := r.storedResolutionStats(ctx, run); !ok {
 				t.Fatal("refresh did not make the stored figures valid")
 			}
-			if _, err := r.db.ExecContext(ctx, fmt.Sprintf(stmt, run)); err != nil {
+			res, err := r.db.ExecContext(ctx, fmt.Sprintf(stmt, run))
+			if err != nil {
 				t.Fatal(err)
+			}
+			if n, _ := res.RowsAffected(); n == 0 {
+				t.Fatalf("%s changed no row, so the test proves nothing", name)
 			}
 			if _, ok, _ := r.storedResolutionStats(ctx, run); ok {
 				t.Errorf("stored figures still valid after %s", name)

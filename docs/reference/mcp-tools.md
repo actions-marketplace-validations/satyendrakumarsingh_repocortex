@@ -484,22 +484,28 @@ The first line under `SYSTEM METADATA` is the summary. It is written to be safe 
 | First word | Meaning | What to do |
 |---|---|---|
 | `UNKNOWN` | Nothing can be concluded. The symbol's language yields no references in this index, or none has been resolved | Do not use the answer. Search for the name |
-| `UNRELIABLE` | Most references in the symbol's language are unbound, so the rows are a minority of the evidence | Treat the rows as leads |
+| `UNRELIABLE` | Most references in the symbol's language are unbound, so the rows are a minority of the evidence. Not said of a symbol whose own references are all accounted for (below) | Treat the rows as leads |
 | `UNVERIFIED` | Some rows are probably bound to the wrong definition: the index records a call made on something that cannot reach it, such as a Go function called through a value | Read how each row's call is written; discard the ones made on a value, an instance or an expression |
 | `INCOMPLETE` | The rows are sound and the list is known to be short: rows were cut, references spelled like the symbol were left unbound, its name occurs where no call is recorded, the confidence floor left callers out, or supertype references did not become subtypes | Use the rows, conclude nothing from what is absent, read on with `offset` |
 | `AMBIGUOUS` | The name matched several definitions and nothing was analysed | Pass `path` and `line` from one of the listed rows |
 
 A first line with none of these words has no known problem. It is still a lower bound: static analysis does not see reflection, dependency injection or code in other repositories.
 
+Coverage is judged at three widths and the narrowest evidence decides. Of the references spelled like the symbol, how many are bound to it is the narrowest; how the symbol's language resolved is wider; the whole run is the widest, used only when the language is unknown. When every reference spelled like the name is bound (none ambiguous, none unresolved, none pending, none bound from outside a function that no caller list records) and the text check found no other place the name occurs, the language-wide binding rate does not make the answer `UNRELIABLE`. It is stated in a note instead, beside the symbol's own count: koa's `isStream` has five callers, exactly right, and every reference spelled `isStream` is bound to it, while 59% of the JavaScript references in the repository are bound. When the symbol's own accounting is not complete, the language's rate stands. The tools that have the symbol's own accounting are `find_callers`, `find_references`, `analyze_impact`, `find_tests`, `plan_change`, `find_owners` and `plan_rename`. `find_callees`, `find_implementations`, `trace_call_path` and the whole-repository reports have none for a name, and are graded on the language.
+
 Coverage is judged for the language of the symbol asked about, not for the whole repository. A Kotlin symbol in a repository with a few Java files is described by the Kotlin files. When a language yields no references at all the answer says so in these words: "RepoCortex does not extract calls from Kotlin; nothing about callers can be concluded." That is said of the language when the index holds at least 20 definitions in it and no reference from any of them. With fewer, the answer says only that the index holds no reference from those files; nothing about callers follows either way. `repocortex resolve` is named as a remedy only when references are still pending.
 
 `get_resolution_coverage` lists the same figures for each language in the index.
+
+An unknown risk is still a risk cut short: when the walk stopped at a depth limit or another bound, the first line says so after "Risk unknown", as it does after every other level.
 
 ### A function passed as a value
 
 A function handed to something by name (`.then(handleResponse)`, `register("x", handler)`, a table of callbacks) is used, and the use is not a call, so no edge records it. The graph cannot see it. The text can, because the name is still there.
 
-`analyze_impact`, `find_callers`, `find_tests` and `plan_change` read the stored text for the target, and for `analyze_impact`, `find_tests` and `plan_change` also for up to four symbols on the reported path that have two or fewer recorded callers. They count the places where the name occurs as an identifier that are not a definition of it, not inside a definition of it, not an import, not inside a string, not a comment-only line and not the line of any reference the index recorded. Only functions and methods are checked, and a constructor never is: its name is its type's.
+`analyze_impact`, `find_callers`, `find_tests` and `plan_change` read the stored text for the target, and for `analyze_impact`, `find_tests` and `plan_change` also for up to four symbols on the reported path that have two or fewer recorded callers. They count the places where the name occurs as an identifier in a SOURCE file of a language that can reference it, and that are none of these: a definition of it, inside a definition of it, an `import`, `use`, `require` or `#include` statement (every line of one that spans several, and a CommonJS `const x = require(...)`), a declaration or prototype of the function itself (`def`, `fn`, `func`, `function`, and `void f(int);` in C, C++ and Java, including a header that pairs with the file defining it), inside a string, a comment-only line, or the line of any reference the index recorded. Only functions and methods are checked, and a constructor never is: its name is its type's.
+
+"A language that can reference it" is the resolver's rule for which languages can call which: the language of the file that defines the name, and the members of its family (JavaScript, TypeScript, TSX, JSX and Vue; C, C++ and Objective-C; Java, Kotlin, Scala and Groovy; and the others in `languageFamilies` in `internal/resolve/infer/calltraits.go`, which `internal/registry/languages.go` mirrors). A Go function is looked for in Go files and nowhere else. Markdown, reStructuredText, YAML, JSON, TOML and every other prose, text-only, configuration or data format is never read, so a CHANGELOG, a README or a workflow file that says the name is not a use of it. Without this, cobra's `CompErrorln` (one caller, correct) opened `INCOMPLETE` because a documentation page contains it.
 
 When there are such places the first line leads `INCOMPLETE` and says so:
 
@@ -509,7 +515,7 @@ INCOMPLETE — respond: its name appears in at least 9 other place(s) that are n
 
 Three things follow. The verdict cannot be `strong`. Certainty is never `high`. And no tool says "no test reaches this" as a fact: `find_tests` says whether one does is `NOT KNOWN`, and `analyze_impact` adds no points for missing tests.
 
-This is a doubt and never a finding. The same name may belong to an unrelated symbol, or to a property (`ctx.respond`). A place counted is not a place proven to pass the function. The check reads the text of at most a dozen files per name, so a name found in more files than that is reported "at least". A name with more recorded references than 5,000 is not checked.
+This is a doubt and never a finding. The same name may belong to an unrelated symbol, or to a property (`ctx.respond`). A place counted is not a place proven to pass the function. The check reads the text of at most a dozen source files per name, so a name found in more files than that is reported "at least". A name with more recorded references than 5,000 is not checked.
 
 ### Callers the confidence floor left out
 
@@ -519,7 +525,9 @@ This is a doubt and never a finding. The same name may belong to an unrelated sy
 readJsonValue (moshi/src/main/java/com/squareup/moshi/JsonReader.kt:446): 6 direct, 0 indirect; 1 more symbol(s) at low confidence are excluded; pass min_confidence=low. Risk unknown: ...
 ```
 
-When the number of direct callers shown is zero only because of the floor, the answer leads `INCOMPLETE` and says so. `analyze_impact` counts distinct calling symbols and `find_callers` counts call sites, so the second can be larger for the same symbol even with no floor; a note says so when it is.
+When the number of direct callers shown is zero only because of the floor, the answer leads `INCOMPLETE` and says so. `analyze_impact` counts distinct calling symbols and `find_callers` counts call sites, so the second can be larger for the same symbol even with no floor: `find_callers` also lists calls at low confidence and calls the symbol makes to itself, which `analyze_impact` leaves out. A note gives `analyze_impact`'s own symbol and site counts when they differ, and does not quote a number for `find_callers`.
+
+When a reference is "ambiguous" the answer says why in terms that are true of the name. "Several definitions share the name and none was chosen" is said only when the index does not hold exactly one definition of it; for a name with a single definition (the stubs of Python's `@overload` are folded into it) the answer says that the index holds one and that the evidence at those calls did not bind them to it.
 
 ### The verdict
 
@@ -598,15 +606,25 @@ A zero there would be a statement about a constructor, read as one about the typ
 HandlerInterface (src/Monolog/Handler/HandlerInterface.php:21): 69 implementing or extending it (4 directly, 65 through other types; direct_only=true lists the direct ones alone), 0 it implements or extends.
 ```
 
+A row is always a type. An anonymous class expression, or a class declared inside a function body, is attributed by the extractor to the function that contains it, so its extends edge starts at a function (hono's `buildInitParams` holds a class that extends `RegExpRouter`). Such an edge is not a subtype row. It is counted on the first line, in one clause, and the enclosing functions are named in a note:
+
+```text
+Router (src/router.ts:29): 6 implementing or extending it, all directly; 1 anonymous or local type(s) inside functions also extend it (not rows: they are not types), 0 it implements or extends.
+note: 1 anonymous or local type(s) declared inside functions extend or implement Router: inside buildInitParams (src/router/reg-exp-router/prepared-router.ts:98). They are subtypes with no name of their own, so they are counted here and are not rows of the list.
+```
+
+This does not lead `INCOMPLETE` by itself: the edges are recorded and counted. The anonymous expressions the index recorded no edge for are the text check below.
+
 Supertypes are the target's direct ones. The index holds supertype references that did not become subtypes, and when it does the first line leads `INCOMPLETE` with their count, so the verdict cannot be `strong`:
 
 | What the first line counts | Why the type is missing |
 |---|---|
 | Supertype references that bound to the target and became no edge | The extending type has no definition in the index: `impl Matcher for ExternalType` |
 | Supertype references that are ambiguous, unresolved or pending | The spelling is all that is known |
-| Lines that read as a type declaration (`class`, `struct`, `interface`, `trait`, `impl`, `extends`, `implements`) naming the target and recorded as no reference | The extractor did not read the declaration, such as `class URL(click.ParamType[str])` |
+| Lines in a source file that declare ANOTHER named type with the target in its supertype list, and are recorded as no supertype reference | The extractor did not read the declaration, such as `class URL(click.ParamType[str])` |
+| Lines that build an anonymous class or object with the target as a supertype (`new Target() {`, Kotlin's `object : Target()`, `new class extends Target`), counted apart | An anonymous type has no name, so a list of types cannot carry it. The first line says "N anonymous class or object expression(s) name it as a supertype and are not listed" |
 
-The last is a text check of the kind described under "A function passed as a value", and it is a doubt, not a finding. Types that reach the target only through a type whose own supertype reference is unbound are not counted.
+The last two are a text check of the kind described under "A function passed as a value", and a doubt, not a finding. It reads source files of a compatible language only, and a line counts only when it reads as a declaration in the form its language writes it: `extends` and `implements` in Java, TypeScript and PHP, `:` in Kotlin, C#, C++ and Swift, `extends` and `with` in Scala, `impl Target for X` and `trait X: Target` in Rust, the parenthesised bases of a Python `class`, `<` and `include` in Ruby. The target must be in the supertype list as a whole name at its top level. So a generic constraint (`<T extends Target>`, `where T : Target`), a wildcard bound (`? extends Target`), a type argument of another supertype (`extends Base<Target>`), a constructor or method parameter, a forward declaration (`class Target;`), the target's own declaration and every line of documentation are not counted. Go has no pattern, because its interfaces are satisfied without naming them and its embedded types are references. Types that reach the target only through a type whose own supertype reference is unbound are not counted. The count of supertype references that did not bind comes from the index and not from the text, and is unaffected.
 
 ## Paging
 

@@ -189,6 +189,13 @@ type NameBinding struct {
 	Unresolved int64
 	Pending    int64
 
+	// Definitions is how many definitions are spelled like the name in files a
+	// call of the symbol's language can reach (its family: see
+	// ReferencingLanguages). Zero when it was not counted. It is what "several
+	// definitions share the name" must be checked against: overloads and
+	// `@overload` stubs the extractor folds into one are one definition.
+	Definitions int64
+
 	// WithoutEdge counts distinct sites bound to the definition asked about
 	// that produced no relationship row, because the reference sits outside
 	// every extracted definition: at module top level, or inside an anonymous
@@ -215,6 +222,22 @@ func (r *Registry) NameBinding(ctx context.Context, runID, symbolID int64, name 
 		return b, fmt.Errorf("registry: language of symbol %d: %w", symbolID, err)
 	}
 	b.Language = strings.ToLower(b.Language)
+
+	langs := ReferencingLanguages([]string{b.Language})
+	ph := strings.TrimSuffix(strings.Repeat("?,", len(langs)), ",")
+	defArgs := []any{runID, name}
+	for _, l := range langs {
+		defArgs = append(defArgs, l)
+	}
+	if err := r.db.QueryRowContext(ctx, `
+		SELECT COUNT(*)
+		  FROM symbols s INDEXED BY idx_symbols_name
+		  JOIN files f ON f.id = s.file_id
+		 WHERE s.index_run_id = ? AND s.name = ?
+		   AND s.kind IN ('function','method','class','interface','type_alias','variable','constant','field')
+		   AND f.language IN (`+ph+`)`, defArgs...).Scan(&b.Definitions); err != nil {
+		return b, fmt.Errorf("registry: definitions named %q: %w", name, err)
+	}
 
 	rows, err := r.db.QueryContext(ctx, `
 		SELECT sr.resolution, COALESCE(sr.resolved_symbol_id, 0) = ?, COUNT(*)

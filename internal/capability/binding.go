@@ -77,6 +77,10 @@ type TargetBinding struct {
 	Unresolved int64 `json:"unresolved"`
 	Pending    int64 `json:"pending"`
 
+	// Definitions is how many definitions are spelled like the target in files
+	// that can call it. Zero means not counted.
+	Definitions int64 `json:"definitions_of_name,omitempty"`
+
 	// WithoutEdge counts sites bound to the target that no relationship
 	// records, because the reference sits outside every extracted definition
 	// (module top level, an anonymous function). They are uses of the target
@@ -171,7 +175,7 @@ func (b TargetBinding) UnlistedSentence() string {
 func (b TargetBinding) unlistedSentence() string {
 	var parts []string
 	if b.Ambiguous > 0 {
-		parts = append(parts, fmt.Sprintf("%d ambiguous (several definitions share the name and none was chosen)", b.Ambiguous))
+		parts = append(parts, fmt.Sprintf("%d ambiguous %s", b.Ambiguous, b.ambiguousWhy()))
 	}
 	if b.Unresolved > 0 {
 		parts = append(parts, fmt.Sprintf("%d unresolved", b.Unresolved))
@@ -185,6 +189,19 @@ func (b TargetBinding) unlistedSentence() string {
 	}
 	return fmt.Sprintf("%d of the %d reference(s) spelled like this name are not listed as its callers: %s",
 		b.Unlisted(), b.References, strings.Join(parts, "; "))
+}
+
+// ambiguousWhy says why references are ambiguous, in terms that are true of
+// this name. "Several definitions share the name" is said only when the index
+// does not hold exactly one; a name with a single definition (overload stubs
+// folded into it) was ambiguous because the evidence at the call did not single
+// that definition out, and saying otherwise sends a reader looking for a
+// namesake that does not exist.
+func (b TargetBinding) ambiguousWhy() string {
+	if b.Definitions == 1 {
+		return "(the index holds one definition of this name; the evidence at these calls did not bind them to it)"
+	}
+	return "(several definitions share the name and none was chosen)"
 }
 
 // TargetBinding reads the binding evidence for tgt.
@@ -219,6 +236,7 @@ func (d Deps) TargetBinding(ctx context.Context, runID int64, tgt Target) (Targe
 		Ambiguous:           nb.Ambiguous,
 		Unresolved:          nb.Unresolved,
 		Pending:             nb.Pending,
+		Definitions:         nb.Definitions,
 		WithoutEdge:         nb.WithoutEdge,
 	}, nil
 }
