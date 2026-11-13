@@ -80,23 +80,25 @@ func TestFSharpConstraintCallForms(t *testing.T) {
 // Everything that looks like a call but is not one, or is not code.
 func TestFSharpConstraintCallsInCommentsAndStringsAreLeftAlone(t *testing.T) {
 	for name, src := range map[string]string{
-		"a string":                 "let s = \"(^T: (member GetAwaiter: unit -> ^A) (task))\"\n",
-		"a string with an escape":  "let s = \"a\\\" (^T: (member M: unit -> int) x)\"\n",
-		"a verbatim string":        "let s = @\"(^T: (member M: unit -> int) x)\"\n",
-		"a verbatim string, quote": "let s = @\"say \"\"hi\"\" (^T: (member M: unit -> int) x)\"\n",
-		"a triple-quoted string":   "let s = \"\"\"\n(^T: (member M: unit -> int) x)\n\"\"\"\n",
-		"an interpolated string":   "let s = $\"(^T: (member M: unit -> int) x)\"\n",
-		"a line comment":           "// (^T: (member M: unit -> int) x)\nlet a = 1\n",
-		"a doc comment":            "/// Calls (^T: (member M: unit -> int) x) on it.\nlet a = 1\n",
-		"a block comment":          "(* (^T: (member M: unit -> int) x) *)\nlet a = 1\n",
-		"a nested block comment":   "(* a (* b *) (^T: (member M: unit -> int) x) *)\nlet a = 1\n",
-		"a type annotation":        "let f (x: ^T) = x\n",
-		"a plain parenthesis":      "let f x = (x: int)\n",
-		"a hat without a colon":    "let f x = (^T)\n",
-		"a different construct":    "let f x = (^T: int) x\n",
-		"a when constraint":        "let inline f (t: ^T) : ^A when ^T: (member GetAwaiter: unit -> ^A) = t.GetAwaiter()\n",
-		"the multiplication op":    "let m = (*)\nlet n = 1\n",
-		"no closing parenthesis":   "let a = (^T: (member M: unit -> int) x\n",
+		"a string":                   "let s = \"(^T: (member GetAwaiter: unit -> ^A) (task))\"\n",
+		"a string with an escape":    "let s = \"a\\\" (^T: (member M: unit -> int) x)\"\n",
+		"a verbatim string":          "let s = @\"(^T: (member M: unit -> int) x)\"\n",
+		"a verbatim string, quote":   "let s = @\"say \"\"hi\"\" (^T: (member M: unit -> int) x)\"\n",
+		"a triple-quoted string":     "let s = \"\"\"\n(^T: (member M: unit -> int) x)\n\"\"\"\n",
+		"an interpolated string":     "let s = $\"(^T: (member M: unit -> int) x)\"\n",
+		"a line comment":             "// (^T: (member M: unit -> int) x)\nlet a = 1\n",
+		"a doc comment":              "/// Calls (^T: (member M: unit -> int) x) on it.\nlet a = 1\n",
+		"a block comment":            "(* (^T: (member M: unit -> int) x) *)\nlet a = 1\n",
+		"a nested block comment":     "(* a (* b *) (^T: (member M: unit -> int) x) *)\nlet a = 1\n",
+		"a type annotation":          "let f (x: ^T) = x\n",
+		"a plain parenthesis":        "let f x = (x: int)\n",
+		"a hat without a colon":      "let f x = (^T)\n",
+		"a different construct":      "let f x = (^T: int) x\n",
+		"a match guard":              "match x with\n| y when y > 0 -> 1\n| _ -> 2\n",
+		"a guard on a type var":      "match x with\n| y when 'a = 1 -> 1\n| _ -> 2\n",
+		"a clause in angle brackets": "let f<'T when 'T: struct> (x: 'T) = x\n",
+		"the multiplication op":      "let m = (*)\nlet n = 1\n",
+		"no closing parenthesis":     "let a = (^T: (member M: unit -> int) x\n",
 	} {
 		if got := findFSharpConstraintCalls([]byte(src)); len(got) != 0 {
 			t.Errorf("%s: %q", name, spanTexts(src, got))
@@ -147,32 +149,141 @@ func TestFSharpMaskKeepsEveryOffset(t *testing.T) {
 	}
 }
 
-// A mask that does not make the file better is not kept. The first stop is a
-// different construct (a conditional type body) that lies before the call, so
-// masking the call reads no further.
-func TestFSharpMaskIsRefusedWhenItDoesNotHelp(t *testing.T) {
-	src := "module M\n\ntype ExceptionNull =\n#if NET9_0_OR_GREATER && !FABLE_COMPILER\n    Exception | null\n#else\n    Exception\n#endif\n\nlet f task = (^T: (member GetAwaiter: unit -> ^A) (task))\n\nlet g x = x\n"
+// The forms of a type constraint clause after a return type, and the mask over
+// each: the clause up to the `=` is blanked, nothing else.
+func TestFSharpWhenClauseForms(t *testing.T) {
+	for name, c := range map[string][2]string{
+		"member":         {"let inline g (t: ^T) : ^A when ^T: (member GetAwaiter: unit -> ^A) = t.GetAwaiter()\n", "when ^T: (member GetAwaiter: unit -> ^A) "},
+		"struct":         {"let inline g (t: ^T) : int when ^T: struct = 1\n", "when ^T: struct "},
+		"subtype":        {"let inline g (t: ^T) : int when ^T :> System.IDisposable = 1\n", "when ^T :> System.IDisposable "},
+		"two":            {"let inline g (t: ^T) : int when ^T: (static member Zero: ^T) and ^T: (static member One: ^T) = 1\n", "when ^T: (static member Zero: ^T) and ^T: (static member One: ^T) "},
+		"no return":      {"let inline g (t: ^T) when ^T: (member Length: int) = 1\n", "when ^T: (member Length: int) "},
+		"a member":       {"type X() =\n    member inline _.M(t: ^T) : int when ^T: (member Length: int) = 1\n", "when ^T: (member Length: int) "},
+		"over two lines": {"let inline g (t: ^T) : int\n    when ^T: (member Length: int)\n    and ^T: struct =\n    1\n", "when ^T: (member Length: int)\n    and ^T: struct "},
+	} {
+		got := spanTexts(c[0], findFSharpConstraintCalls([]byte(c[0])))
+		if len(got) != 1 || got[0] != c[1] {
+			t.Errorf("%s: got %q, want %q", name, got, c[1])
+		}
+	}
+}
+
+func TestFSharpExternDeclarations(t *testing.T) {
+	for name, c := range map[string]struct{ src, want string }{
+		"one line":   {"[<DllImport(\"libc\")>]\nextern int getpid()\n", "let          getpid()=()"},
+		"parameters": {"extern uint32 QueryFull(nativeint h, [<Out>] uint32& n)\nlet a = 1\n", "let                    QueryFull()=()"},
+		"two lines":  {"    extern int kill(\n        int pid,\n        int signal)\n", ""},
+	} {
+		spans := findFSharpConstraintCalls([]byte(c.src))
+		if len(spans) != 1 {
+			t.Errorf("%s: %d spans", name, len(spans))
+			continue
+		}
+		out := string(applyMaskSpans([]byte(c.src), spans))
+		if len(out) != len(c.src) || strings.Count(out, "\n") != strings.Count(c.src, "\n") {
+			t.Errorf("%s: the text changed shape: %q", name, out)
+		}
+		if strings.Contains(out, "extern") || !strings.Contains(out, "()=()") {
+			t.Errorf("%s: not rewritten: %q", name, out)
+		}
+	}
+	// Not declarations: the word inside a string, a comment, or mid-line.
+	for _, src := range []string{"let s = \"extern int f()\"\n", "// extern int f()\n", "let extern = 1\n"} {
+		if got := findFSharpConstraintCalls([]byte(src)); len(got) != 0 {
+			t.Errorf("%q: %d spans", src, len(got))
+		}
+	}
+}
+
+// `= function` with its cases in the column of the `let` is the form the
+// grammar loops on; cases indented further, and a `function` that is not the
+// end of a binding line, are read properly and are left alone.
+func TestFSharpUndentedFunctionCases(t *testing.T) {
+	src := "let f a =\n    let (|One|_|) = function\n    | 1 -> Some ()\n    | _ -> None\n\n    a\n"
+	spans := findFSharpConstraintCalls([]byte(src))
+	if len(spans) != 1 {
+		t.Fatalf("%d spans", len(spans))
+	}
+	out := string(applyMaskSpans([]byte(src), spans))
+	want := "let f a =\n    let (|One|_|) =       ()\n                  \n               \n\n    a\n"
+	if out != want {
+		t.Errorf("got %q\nwant %q", out, want)
+	}
+	for name, s := range map[string]string{
+		"indented cases":     "let f = function\n    | 1 -> 2\n    | _ -> 3\n",
+		"a lambda in a call": "xs |> List.map (function\n| 1 -> 2\n| _ -> 3)\n",
+		"text after":         "let f = function | 1 -> 2 | _ -> 3\n",
+		"a string":           "let s = \"let f = function\\n| 1 -> 2\"\n",
+	} {
+		if got := findFSharpConstraintCalls([]byte(s)); len(got) != 0 {
+			t.Errorf("%s: %d spans", name, len(got))
+		}
+	}
+}
+
+func TestFSharpAbstractTupleResult(t *testing.T) {
+	src := "type I =\n    abstract Try: context: int -> int * int option\n    abstract Note: int -> int * int // two\n    abstract Ok: int * int -> int\n    abstract Paren: int -> (int * int)\n    abstract Curried: int -> int -> a * b\n"
+	spans := findFSharpConstraintCalls([]byte(src))
+	var got []string
+	for _, s := range spans {
+		got = append(got, string(src[s.start:s.start+len(s.repl)]))
+	}
+	want := []string{"int * int option", "int * int", "a * b"}
+	if strings.Join(got, "|") != strings.Join(want, "|") {
+		t.Fatalf("got %q, want %q", got, want)
+	}
+	out := string(applyMaskSpans([]byte(src), spans))
+	if !strings.Contains(out, "-> _               \n") || len(out) != len(src) {
+		t.Errorf("not rewritten as expected: %q", out)
+	}
+	for name, s := range map[string]string{
+		"a string":  "let s = \"abstract Try: int -> int * int\"\n",
+		"a comment": "// abstract Try: int -> int * int\n",
+		"a member":  "type I =\n    member this.M: int -> int * int = x\n",
+	} {
+		if got := findFSharpConstraintCalls([]byte(s)); len(got) != 0 {
+			t.Errorf("%s: %d spans", name, len(got))
+		}
+	}
+}
+
+func TestFSharpBareDocCommentsAreNormalised(t *testing.T) {
+	src := "///\nlet a = 1\n    ///   \n    /// text\nlet s = \"///\"\n(* ///\n*)\n////\n///x\n"
+	out := string(fsNormalizeBareDocComments([]byte(src)))
+	want := "// \nlet a = 1\n    //    \n    /// text\nlet s = \"///\"\n(* ///\n*)\n////\n///x\n"
+	if out != want || len(out) != len(src) {
+		t.Errorf("got %q, want %q", out, want)
+	}
+	if got := fsNormalizeBareDocComments([]byte("/// a\nlet b = 2\n")); string(got) != "/// a\nlet b = 2\n" {
+		t.Errorf("text changed: %q", got)
+	}
+}
+
+// A mask that makes the parse worse is not kept: the guard compares the two
+// trees, here a clean file against a broken one standing in for the masked
+// text, and a broken file against a clean one.
+func TestFSharpGuardJudgesTheMaskedParse(t *testing.T) {
 	p := fsharpParser(t)
-	tree, stop, err := p.parseOnce(t.Context(), []byte(src))
-	if err != nil {
-		t.Fatal(err)
+	good := "module M\n\nlet a x = x\n\nlet b x = x\n"
+	bad := "module M\n\nlet a x = x\n\nlet b x = (^T: (member M: int) x\n"
+	judge := func(plainSrc, maskedSrc string) bool {
+		pt, _, err := p.parseOnce(t.Context(), []byte(plainSrc))
+		if err != nil {
+			t.Fatal(err)
+		}
+		mt, _, err := p.parseOnce(t.Context(), []byte(maskedSrc))
+		if err != nil {
+			t.Fatal(err)
+		}
+		ptags, _, _ := p.tagTree(pt, []byte(plainSrc))
+		mtags, _, _ := p.tagTree(mt, []byte(maskedSrc))
+		return maskGuard(pt.RootNode(), ptags, mt.RootNode(), mtags, map[string]bool{}, &maskContext{language: "fsharp"})
 	}
-	if len(findFSharpConstraintCalls([]byte(src))) != 1 {
-		t.Fatal("expected a candidate")
+	if judge(good, bad) {
+		t.Error("the guard kept a worse masked parse")
 	}
-	if !stop.early && !tree.RootNode().HasError() {
-		t.Fatal("the plain parse shows no trouble, so this input tests nothing")
-	}
-	tags, _, _ := p.tagTree(tree, []byte(src))
-	res, err := p.Parse(t.Context(), "m.fsx", []byte(src))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if mp := p.retryMasked(t.Context(), tree, stop, []byte(src), tags); mp != nil {
-		t.Errorf("the mask was kept (parsed to byte %d of %d)", mp.stop.parsedBytes, len(src))
-	}
-	if res.ConstructsMasked != 0 {
-		t.Errorf("ConstructsMasked = %d for a refused mask", res.ConstructsMasked)
+	if judge(good, good) {
+		t.Error("the guard kept a mask that gains nothing")
 	}
 }
 

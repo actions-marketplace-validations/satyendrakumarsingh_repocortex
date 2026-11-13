@@ -37,21 +37,37 @@ header entirely (`module Bson =` after `module Json =` in `Combinators.fs`),
 and a `let` in it can come out as a bare `value_declaration_left` with no
 `function_or_value_defn`, which is not extracted.
 
-## A constraint written after the return type
+## What is read around, and what is not
 
-A member constraint in a `when` clause that follows a return type is not read:
+`internal/parse/mask_fsharp.go` rewrites, before a second parse that the guard
+must accept, the constructs the grammar cannot read, and one before the first
+parse; `Interop.fsx`, `Modifiers.fsx` and `ConstraintCalls.fsx` hold each form.
 
-```fsharp
-let inline g (t: ^T) : ^A when ^T: (member GetAwaiter: unit -> ^A) = t.GetAwaiter()
-```
+- a statically resolved member call, `(^T: (member M: sig) args)`;
+- a `when ^T: (member ...)` or `when 'a: struct` clause after a return type,
+  up to the `=`;
+- an `extern` P/Invoke declaration, rewritten as a function of the same name;
+- `let (|Case|_|) = function` with the cases in the column of the `let`;
+- `abstract M: a -> b * c`, whose tuple result is read as `_`;
+- `#if ... #else ... #endif` inside a body (cond.go's mask, one branch kept:
+  a definition only in the other branch is not indexed);
+- a bare `///` line, rewritten to `//` and a space before the first parse: the
+  grammar reads it as an operator, loses the declaration after it with no
+  error, and takes time that grows with the square of the number of such lines.
 
-The file gets two error nodes and no definition (measured on a six-line file
-with two more `let`s after it); the same constraint inside the angle brackets
-(`let inline f< ^T, ^A when ^T: (member GetAwaiter: unit -> ^A)> (t: ^T) =`)
-is read properly. The mask in `internal/parse/mask_fsharp.go` covers only the
-statically resolved member call used as an expression, `(^T: (member M: sig) args)`,
-which stopped the parser (see `lang_fsharp_test.go`); this constraint is a type
-annotation, not an expression, and is left alone.
+Not read, measured:
+
+- `let inline f<'T when 'T: (static member Zero: 'T)> () : 'T = 'T.Zero`
+  (a static abstract member used as `'T.Zero`) gives error nodes;
+- an `and` group (`let rec f ... and g ...`) puts every function after the
+  first in the first function's definition, so they are recorded at its line;
+- a few deeply nested expressions in one function (FAKE's `FSIHelper.fs`
+  `getCacheInfoFromScript`, Analyzers' `TASTCollecting.fs` `visitExpr`) leave
+  the declarations after them unread with no error node;
+- a `#if` group the guard refuses (FAKE's `CoreCache.fs`);
+- about a dozen large files in Fable (`Seq.fs`, `ilwrite.fs`, `Optimizer.fs`)
+  and four in Paket still run into the 60 s wall-clock ceiling, in a stall
+  that was not isolated.
 
 ## Indented namespaces
 
