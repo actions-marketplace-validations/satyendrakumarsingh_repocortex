@@ -38,6 +38,8 @@ SCIP indexes.`,
 			ctx := cmd.Context()
 			cfg := g.Config()
 			start := time.Now()
+			stopProfile := startResolveProfile(os.Getenv(resolveProfileEnv))
+			defer stopProfile()
 
 			dbPath := g.DBPath()
 			if _, err := os.Stat(dbPath); errors.Is(err, os.ErrNotExist) {
