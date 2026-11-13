@@ -95,7 +95,6 @@ func Check(ctx context.Context, opts Options) (*Result, error) {
 		fset:      token.NewFileSet(),
 		env:       env,
 		limit:     limit,
-		goroot:    findGoroot(env),
 		modcache:  findModCache(env),
 		ext:       map[string]*extEntry{},
 		inprog:    map[string]bool{},
@@ -112,7 +111,7 @@ func Check(ctx context.Context, opts Options) (*Result, error) {
 	l.pure = build.Default
 	l.pure.CgoEnabled = false
 	l.stats.GOOS, l.stats.GOARCH = l.host.GOOS, l.host.GOARCH
-	l.stats.Goroot, l.stats.ModCache = l.goroot, l.modcache
+	l.stats.ModCache = l.modcache
 	l.sizes = types.SizesFor("gc", l.host.GOARCH)
 	if opts.Files != nil {
 		l.only = make(map[string]bool, len(opts.Files))
@@ -123,6 +122,8 @@ func Check(ctx context.Context, opts Options) (*Result, error) {
 
 	l.work = loadWorkspace(root)
 	l.discover(opts.Files)
+	l.goroot = findGoroot(env, l.modcache, l.requiredGo())
+	l.stats.Goroot = l.goroot
 
 	for _, u := range l.units {
 		if ctx.Err() != nil {
@@ -345,6 +346,22 @@ func (l *loader) discover(files []string) {
 	sort.Slice(l.mods, func(i, j int) bool { return l.mods[i].dir < l.mods[j].dir })
 	l.stats.Modules = len(l.mods)
 	l.stats.Packages = len(l.units)
+}
+
+// requiredGo is the newest Go release any module of the repository asks for in
+// its go.mod `go` line, or "" when none does.
+func (l *loader) requiredGo() string {
+	need := ""
+	for _, m := range l.mods {
+		v := m.file.GoVersion
+		if v == "" || !version.IsValid("go"+v) {
+			continue
+		}
+		if need == "" || version.Compare("go"+v, "go"+need) > 0 {
+			need = v
+		}
+	}
+	return need
 }
 
 // skipPath reports whether a repo-relative file lives where the go tool does

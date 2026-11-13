@@ -14,7 +14,7 @@ import (
 
 func needGoroot(t *testing.T) {
 	t.Helper()
-	if findGoroot(os.Getenv) == "" {
+	if findGoroot(os.Getenv, "", "") == "" {
 		t.Skip("no GOROOT can be found without running anything; set GOROOT")
 	}
 }
