@@ -446,7 +446,8 @@ func cacheKey(root string, s indexer.Step, version, runner string, files []model
 	if entries, err := os.ReadDir(projectDir); err == nil {
 		for _, e := range entries {
 			name := e.Name()
-			if e.IsDir() || !(buildInputs[name] || strings.HasPrefix(name, "tsconfig") || strings.HasPrefix(name, "requirements")) {
+			isInput := buildInputs[name] || strings.HasPrefix(name, "tsconfig") || strings.HasPrefix(name, "requirements")
+			if e.IsDir() || !isInput {
 				continue
 			}
 			inputs = append(inputs, name+"\x00"+hashFile(filepath.Join(projectDir, name)))
