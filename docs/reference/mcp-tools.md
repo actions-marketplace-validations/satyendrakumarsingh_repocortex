@@ -42,7 +42,7 @@ The counts are what `repocortex tool list --profile <name>` prints.
 | `get_symbol` | minimal (default) | `name` (required), `line`, `min_confidence`, `path` | Get a symbol's definition with a bounded source excerpt and its immediate relationships. |
 | `find_references` | minimal (default) | `name` (required), `limit`, `line`, `min_confidence`, `offset`, `path` | Find where a symbol is used. |
 | `find_callers` | minimal (default) | `name` (required), `limit`, `line`, `min_confidence`, `offset`, `path` | Find the functions and methods that call a symbol — the callers, not merely the files mentioning it. |
-| `find_tests` | standard | `symbol` (required), `hub_degree_limit`, `limit`, `line`, `min_confidence`, `offset`, `path` | Find the tests covering a symbol, and which signal found each one — a proven call edge is far stronger evidence than a matching filename, and the response names which you got. |
+| `find_tests` | standard | `symbol` (required), `hub_degree_limit`, `limit`, `line`, `max_depth`, `min_confidence`, `offset`, `path` | Find the tests covering a symbol, and which signal found each one — a proven call edge is far stronger evidence than a matching filename, and the response names which you got. |
 | `analyze_impact` | standard | `symbol` (required), `hub_degree_limit`, `limit`, `line`, `min_confidence`, `offset`, `path` | Before changing a symbol, find out what depends on it. |
 | `get_resolution_coverage` | standard | none | Ask this when a find_callers, find_references or analyze_impact result came back shorter than you expected, BEFORE concluding anything from it. |
 | `plan_rename` | standard | `name` (required), `new_name` (required), `limit`, `line`, `min_confidence`, `offset`, `path` | Plan a symbol rename. |
@@ -149,6 +149,7 @@ Find the tests covering a symbol, and which signal found each one — a proven c
 | `hub_degree_limit` | integer | no | Stop the walk from expanding THROUGH any symbol with more than this many edges. Default 0 (off), which is what every result you have seen so far used. Set it (50 is a reasonable start) when a result is enormous because the walk crossed a logger, a util or a base class; pruned symbols are still listed, only their neighbours are not explored, and the response says how many were cut. |
 | `limit` | integer | no | Most rows to return. Default 50, maximum 200. |
 | `line` | integer | no | Line the definition starts on, to choose between several in one file (overloads). |
+| `max_depth` | integer | no | Most calls between a test and the symbol, 1 to 8. 1 lists the tests that call it directly; 2 adds tests that call a function that calls it. Default 4. |
 | `min_confidence` | string | no | Lowest confidence to return: exact, high, medium or low. Default low. Recommended: 'high' for safe automated code changes and blast radius analysis to filter out heuristic false positives. |
 | `offset` | integer | no | Rows to skip. The answer names the next offset when more rows exist. |
 | `path` | string | no | File or directory of the definition, to choose between symbols that share the name. |

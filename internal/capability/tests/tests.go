@@ -144,6 +144,16 @@ type TestHit struct {
 	// and never upgraded because several weak signals agreed. Three guesses
 	// pointing the same way are still three guesses.
 	Confidence model.Confidence `json:"confidence"`
+
+	// Depth is how many calls lie between this test and the target on the
+	// shortest recorded path: 1 calls it directly. Zero when no call path was
+	// found (matched by name or by file only).
+	Depth int `json:"depth,omitempty"`
+
+	// Runnable is false for a helper in a test file that a test runner does
+	// not run itself (see capability.IsRunnableTest). A helper is listed
+	// apart: the tests that reach the target through it are what to run.
+	Runnable bool `json:"runnable"`
 }
 
 // ErrorPath is a proven outgoing call from the target to a symbol that
@@ -591,11 +601,15 @@ func (a *accumulator) add(sym capability.Symbol, m SignalMatch) {
 	h, ok := a.hits[sym.ID]
 	if !ok {
 		h = &TestHit{
-			Symbol: sym,
-			Kind:   capability.ClassifyTestKind(sym.FilePath, sym.Name),
+			Symbol:   sym,
+			Kind:     capability.ClassifyTestKind(sym.FilePath, sym.Name),
+			Runnable: capability.IsRunnableTest(sym.Kind, sym.Name, sym.FilePath),
 		}
 		a.hits[sym.ID] = h
 		a.order = append(a.order, sym.ID)
+	}
+	if m.Signal == SignalGraph && m.Depth > 0 && (h.Depth == 0 || m.Depth < h.Depth) {
+		h.Depth = m.Depth
 	}
 	for _, existing := range h.Signals {
 		if existing.Signal == m.Signal {
@@ -640,10 +654,23 @@ func (a *accumulator) finish() []TestHit {
 		if out[i].Strongest.rank() != out[j].Strongest.rank() {
 			return out[i].Strongest.rank() > out[j].Strongest.rank()
 		}
+		// Nearest first: the test that calls the target directly is the one
+		// to run first, and a list cut by a page keeps the closest.
+		if di, dj := depthKey(out[i].Depth), depthKey(out[j].Depth); di != dj {
+			return di < dj
+		}
 		if out[i].Confidence.Rank() != out[j].Confidence.Rank() {
 			return out[i].Confidence.Rank() > out[j].Confidence.Rank()
 		}
 		return out[i].ID < out[j].ID
 	})
 	return out
+}
+
+// depthKey orders a hit with no call path after every hit that has one.
+func depthKey(d int) int {
+	if d <= 0 {
+		return 1 << 30
+	}
+	return d
 }

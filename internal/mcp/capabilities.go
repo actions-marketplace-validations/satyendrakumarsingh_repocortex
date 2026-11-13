@@ -27,6 +27,12 @@ type targetArgs struct {
 	pageArg
 }
 
+// testsArgs is targetArgs with the depth find_tests walks to.
+type testsArgs struct {
+	targetArgs
+	MaxDepth int `json:"max_depth,omitempty" jsonschema:"Most calls between a test and the symbol, 1 to 8. 1 lists the tests that call it directly; 2 adds tests that call a function that calls it. Default 4."`
+}
+
 // impactArgs takes its own min_confidence wording, and that is the ONE place
 // this parameter is described twice on purpose.
 //
@@ -558,7 +564,7 @@ func testsMissingFrom(unfiltered, filtered []tests.TestHit) int {
 	return missing
 }
 
-func (s *Server) findTests(ctx stdctx.Context, req *sdk.CallToolRequest, args targetArgs) (*sdk.CallToolResult, *Response, error) {
+func (s *Server) findTests(ctx stdctx.Context, req *sdk.CallToolRequest, args testsArgs) (*sdk.CallToolResult, *Response, error) {
 	if strings.TrimSpace(args.Symbol) == "" {
 		return failWith("invalid_argument",
 			"Pass a non-empty symbol name, then call find_tests again.",
@@ -570,6 +576,10 @@ func (s *Server) findTests(ctx stdctx.Context, req *sdk.CallToolRequest, args ta
 	}
 	if err := parseHubDegreeLimit(args.HubDegreeLimit); err != nil {
 		return failFrom(err, "%v", err)
+	}
+	if args.MaxDepth < 0 || args.MaxDepth > 8 {
+		return failWith("invalid_argument", "Pass max_depth between 1 and 8, or omit it.",
+			"max_depth %d is out of range", args.MaxDepth)
 	}
 	page, err := s.page(args.pageArg, "test(s)")
 	if err != nil {
@@ -588,6 +598,7 @@ func (s *Server) findTests(ctx stdctx.Context, req *sdk.CallToolRequest, args ta
 	// Options.withDefaults, which is exactly what FindTests would have applied.
 	rep, err := tests.FindTestsForTarget(ctx, deps, runID, tgt, tests.Options{
 		MinConfidence:  minConf,
+		MaxDepth:       args.MaxDepth,
 		HubDegreeLimit: args.HubDegreeLimit,
 		CheckValueUse:  true,
 	})
@@ -605,6 +616,7 @@ func (s *Server) findTests(ctx stdctx.Context, req *sdk.CallToolRequest, args ta
 
 	resp := &Response{IndexRevision: runID, IndexStatus: status}
 	where := fmt.Sprintf("%s (%s:%d)", rep.Target.Name, rep.Target.FilePath, rep.Target.Line)
+	runnable, helpers, proven := splitRunnable(rep.Tests)
 	switch {
 	case rep.Untested && rep.Undetermined != "" && cov.saysWhyNothingIsKnown():
 		resp.Summary = fmt.Sprintf("%s: no test found, and whether one reaches it is UNKNOWN.", where)
@@ -621,15 +633,30 @@ func (s *Server) findTests(ctx stdctx.Context, req *sdk.CallToolRequest, args ta
 		resp.Summary = fmt.Sprintf("%s: no test found, and whether one reaches it is NOT KNOWN: a function passed "+
 			"as a value is reached without a call edge, and its name occurs where no call is recorded.", where)
 	default:
-		resp.Summary = fmt.Sprintf("%s: %d test(s), %d proven by a call edge.",
-			where, len(rep.Tests), rep.ProvenByGraph)
+		resp.Summary = fmt.Sprintf("%s: %d test(s), %d proven by a call edge%s.",
+			where, len(runnable), proven, depthBreakdown(runnable))
+	}
+	if helpers > 0 {
+		// A helper is not run by itself; the tests that reach the target
+		// through it are listed and are what to run. Listing the helpers too
+		// made the list three times longer than the tests it named.
+		resp.Notes = append(resp.Notes, fmt.Sprintf("%d helper function(s) in test files also reach %s and are "+
+			"not listed: a test runner does not run them, and every test that reaches %s through one is listed "+
+			"if it is within the depth.", helpers, rep.Target.Name, rep.Target.Name))
 	}
 
-	items := make([]Item, 0, len(rep.Tests))
-	for _, t := range rep.Tests {
+	items := make([]Item, 0, len(runnable))
+	for _, t := range runnable {
 		var sigs []string
 		for _, s := range t.Signals {
 			sigs = append(sigs, string(s.Signal))
+		}
+		why := "found by " + strings.Join(sigs, ", ")
+		switch {
+		case t.Depth == 1:
+			why = "calls it directly; " + why
+		case t.Depth > 1:
+			why = fmt.Sprintf("reaches it through %d calls; %s", t.Depth, why)
 		}
 		items = append(items, Item{
 			Kind: "test", Name: t.Name, Path: t.FilePath,
@@ -637,7 +664,7 @@ func (s *Server) findTests(ctx stdctx.Context, req *sdk.CallToolRequest, args ta
 			// Naming the signal matters: "found by a proven call edge" and
 			// "found because the filename looked right" are different claims,
 			// and an agent deciding what to run should know which it has.
-			Why: "found by " + strings.Join(sigs, ", "),
+			Why: why,
 		})
 	}
 	paginate(resp, page, items)
@@ -856,4 +883,50 @@ func (s *Server) detectBlindspots(ctx stdctx.Context, req *sdk.CallToolRequest, 
 	}
 
 	return s.reply(ctx, req, resp)
+}
+
+// splitRunnable separates the tests a runner runs from helpers in test files,
+// and counts the runnable ones proven by a call path.
+func splitRunnable(all []tests.TestHit) (runnable []tests.TestHit, helpers, proven int) {
+	for _, t := range all {
+		if !t.Runnable {
+			helpers++
+			continue
+		}
+		runnable = append(runnable, t)
+		if t.Strongest == tests.SignalGraph {
+			proven++
+		}
+	}
+	return runnable, helpers, proven
+}
+
+// depthBreakdown says how near the tests are: ": 6 call it directly, 24
+// through one more call, 3 deeper".
+func depthBreakdown(ts []tests.TestHit) string {
+	var direct, two, deeper int
+	for _, t := range ts {
+		switch {
+		case t.Depth == 1:
+			direct++
+		case t.Depth == 2:
+			two++
+		case t.Depth > 2:
+			deeper++
+		}
+	}
+	if direct+two+deeper == 0 {
+		return ""
+	}
+	var parts []string
+	if direct > 0 {
+		parts = append(parts, fmt.Sprintf("%d call it directly", direct))
+	}
+	if two > 0 {
+		parts = append(parts, fmt.Sprintf("%d through one more call", two))
+	}
+	if deeper > 0 {
+		parts = append(parts, fmt.Sprintf("%d deeper", deeper))
+	}
+	return ": " + strings.Join(parts, ", ")
 }

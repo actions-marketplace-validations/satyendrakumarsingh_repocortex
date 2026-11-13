@@ -314,3 +314,27 @@ func dedupeStrings(in []string) []string {
 	}
 	return out
 }
+
+// IsRunnableTest reports whether a test-code symbol is something a test runner
+// runs, as opposed to a helper that lives in a test file.
+//
+// Only Go is told apart, because only Go fixes it by convention: the runner
+// runs a top-level TestXxx, BenchmarkXxx, FuzzXxx or ExampleXxx of a _test.go
+// file and nothing else, so syntheticRepo or seedChain in a _test.go file is a
+// helper. Elsewhere a test is often named freely (a JUnit method annotated
+// @Test, an `it(...)` block), so every test-code symbol counts as runnable
+// rather than dropping real tests on a guess.
+func IsRunnableTest(kind, name, filePath string) bool {
+	if kind == "test" {
+		return true
+	}
+	if strings.HasSuffix(filePath, "_test.go") {
+		for _, p := range []string{"Test", "Benchmark", "Fuzz", "Example"} {
+			if strings.HasPrefix(name, p) && startsWord(strings.TrimPrefix(name, p)) {
+				return true
+			}
+		}
+		return false
+	}
+	return IsTestSymbol(kind, name, filePath)
+}
