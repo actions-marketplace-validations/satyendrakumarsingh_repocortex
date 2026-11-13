@@ -63,6 +63,11 @@ type macroCandidate struct {
 	// `class EXPORT Foo { };` can parse as a function called Foo whose return
 	// type is a class, without a single error node.
 	expect int
+
+	// repl, when not nil, replaces the span instead of blanking it. It is
+	// exactly as long as the span (see cmacro_c.go: a function written as a
+	// macro call is rewritten so that the grammar sees a definition).
+	repl []byte
 }
 
 type ctokKind uint8
@@ -295,7 +300,10 @@ func findMacroCandidates(src []byte, language string) []macroCandidate {
 			add(c)
 		}
 	}
-	sort.Slice(out, func(a, b int) bool { return out[a].start < out[b].start })
+	if language == "c" {
+		out = append(out, findCCandidates(src, toks)...)
+	}
+	sort.Slice(out, func(a, b int) bool { return preferRewrite(out[a], out[b]) })
 	kept := out[:0]
 	for _, c := range out {
 		if len(kept) > 0 && c.start < kept[len(kept)-1].end {
@@ -740,6 +748,10 @@ func maskCandidates(src []byte, cands []macroCandidate) []byte {
 	out := make([]byte, len(src))
 	copy(out, src)
 	for _, c := range cands {
+		if len(c.repl) == c.end-c.start && c.end <= len(out) {
+			copy(out[c.start:c.end], c.repl)
+			continue
+		}
 		for i := c.start; i < c.end && i < len(out); i++ {
 			if out[i] != '\n' && out[i] != '\r' {
 				out[i] = ' '
@@ -897,7 +909,11 @@ func (p *genericParser) retryMaskedWithin(ctx context.Context, tree *ts.Tree, st
 		return nil
 	}
 	var mc *maskContext
-	if condDue || stop.early || len(spans) > 0 {
+	if condDue || stop.early || len(spans) > 0 || macroDue && lang == "c" {
+		// C's macro mask is judged with the same extra rules as the
+		// conditional one: a kernel file whose plain parse is one error node
+		// that swallowed most of it is not compared with a masked parse by
+		// the number of error nodes alone (see cmacro_c.go).
 		// A plain parse that stopped early is judged by how far each parse
 		// got, whichever mask was applied; see maskGuard.
 		mc = &maskContext{
@@ -1195,7 +1211,7 @@ func maskGuard(plainRoot *ts.Node, plain []ts.Tag, maskedRoot *ts.Node, masked [
 			// error that swallowed the text became several small ones: the
 			// conditional mask accepts that, and only if the text under
 			// errors shrank and the definitions grew (checked below).
-			if mc == nil || errorBytes(maskedRoot) >= errorBytes(plainRoot) {
+			if mc == nil || errorBytes(maskedRoot) >= errorBytes(plainRoot) && !(mc.language == "c" && grewMuch(plain, masked)) {
 				return false
 			}
 			moreDefs = true
@@ -1274,6 +1290,29 @@ func maskGuard(plainRoot *ts.Node, plain []ts.Tag, maskedRoot *ts.Node, masked [
 		return false
 	}
 	return better || nMasked > nPlain
+}
+
+// grewMuch reports whether the masked parse has at least half as many
+// definitions again as the plain one, and at least five more. A plain parse can
+// read most of a file as part of one construct without an error node at all
+// (a `__printf(2, 3)` in front of a function leaves the parser reading
+// everything after it as one declaration); the masked parse then has more
+// error nodes of its own, each small, and many more definitions. For C only:
+// the guard's other rules still apply, in particular that no definition the
+// plain parse had is lost.
+func grewMuch(plain, masked []ts.Tag) bool {
+	np, nm := 0, 0
+	for _, t := range plain {
+		if isDefinitionTag(t.Kind) {
+			np++
+		}
+	}
+	for _, t := range masked {
+		if isDefinitionTag(t.Kind) {
+			nm++
+		}
+	}
+	return nm >= np+5 && nm*2 >= np*3
 }
 
 // errorBytes is the number of bytes under the innermost error nodes of a tree:
