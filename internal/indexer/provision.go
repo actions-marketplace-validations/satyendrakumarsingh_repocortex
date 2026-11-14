@@ -25,6 +25,10 @@ const (
 	SCIPTypeScript Indexer = "scip-typescript"
 	SCIPPython     Indexer = "scip-python"
 	SCIPJava       Indexer = "scip-java"
+	SCIPClang      Indexer = "scip-clang"
+	// SCIPRustAnalyzer is `rust-analyzer scip`: the indexer is a subcommand of
+	// the language server, so the binary is rust-analyzer.
+	SCIPRustAnalyzer Indexer = "rust-analyzer"
 )
 
 // Channel is how an indexer is obtained.
@@ -49,6 +53,13 @@ const (
 	// verification: the daemon refuses content whose manifest does not hash to
 	// the requested value, so a compromised tag cannot substitute an image.
 	ChannelDocker Channel = "docker"
+
+	// ChannelUser is an indexer RepoCortex never installs: it runs the one the
+	// user put on PATH and says how to get it when it is absent. It is used
+	// where no exact version AND digest could be recorded from a source that
+	// was readable offline, and inventing either would be worse than saying
+	// so. See userPins.
+	ChannelUser Channel = "user"
 )
 
 // RunnerNative and RunnerDocker are config.Config.IndexerRunner's two values.
@@ -113,6 +124,10 @@ type Pin struct {
 	// own arguments. Kept as data because it is the thing most likely to change
 	// when the image is rebuilt.
 	DockerEntry []string
+
+	// InstallHint is the tool's own install instruction, shown where
+	// RepoCortex cannot or will not install it. Compile-time text only.
+	InstallHint string
 }
 
 // pins is the pin table.
@@ -213,6 +228,45 @@ var pins = []Pin{
 	},
 }
 
+// userPins are indexers RepoCortex runs when they are installed and never
+// installs: no exact version with a digest could be recorded for them without
+// downloading, so there is nothing to verify an install against. They are
+// deliberately absent from Pins(), the table `indexers pins` prints and CI
+// keys a cache on, which lists only what RepoCortex may fetch.
+//
+// How each is invoked comes from the tool's own published interface, not from
+// running it (neither is installed on the machine this was written on):
+//
+//	rust-analyzer scip <path> [--output <file>]   rust-analyzer's
+//	    crates/rust-analyzer/src/cli/flags.rs: `path` is a required
+//	    positional, --output defaults to index.scip.
+//	scip-clang --compdb-path=<compile_commands.json>   scip-clang's
+//	    docs/Development.md: run from the project root, not the build root.
+//	    --index-output-path is read from the option name in the driver source
+//	    (cliOpts.indexOutputPath) and is NOT confirmed against --help.
+var userPins = []Pin{
+	{
+		Indexer:     SCIPClang,
+		Language:    LangCPP,
+		Binary:      "scip-clang",
+		VersionArgs: []string{"--version"},
+		Channel:     ChannelUser,
+		InstallHint: "download the scip-clang release for your platform from " +
+			"https://github.com/sourcegraph/scip-clang/releases and put it on PATH",
+	},
+	{
+		Indexer:     SCIPRustAnalyzer,
+		Language:    LangRust,
+		Binary:      "rust-analyzer",
+		VersionArgs: []string{"--version"},
+		Channel:     ChannelUser,
+		InstallHint: "rustup component add rust-analyzer",
+	},
+}
+
+// UserInstalled returns the indexers RepoCortex runs but does not install.
+func UserInstalled() []Pin { return append([]Pin(nil), userPins...) }
+
 // Pins returns the pin table, sorted by indexer name.
 // Pin provenance, verified 2026-08-16. Each digest below was fetched and
 // checked, not copied from documentation:
@@ -269,6 +323,11 @@ func PinFor(l Language) (Pin, bool) {
 			return p, true
 		}
 	}
+	for _, p := range userPins {
+		if p.Language == l {
+			return p, true
+		}
+	}
 	return Pin{}, false
 }
 
@@ -284,6 +343,8 @@ func (p Pin) Ref() string {
 			return p.Image + "@" + p.ImageDigest
 		}
 		return p.Image + ":" + p.Version
+	case ChannelUser:
+		return p.Binary + " (user-installed)"
 	}
 	return string(p.Indexer) + "@" + p.Version
 }
@@ -500,6 +561,9 @@ func (p *Provisioner) Ensure(ctx context.Context, pin Pin) (Installed, error) {
 // verifiable reports whether there is anything to check the download against.
 func (pin Pin) verifiable() error {
 	switch pin.Channel {
+	case ChannelUser:
+		return fmt.Errorf("%w: %s is user-installed, RepoCortex has no pinned release of it (%s)",
+			ErrNoRecordedDigest, pin.Binary, pin.InstallHint)
 	case ChannelNPM:
 		if pin.TarballSHA256 == "" {
 			return fmt.Errorf("%w: %s", ErrNoRecordedDigest, pin.Ref())

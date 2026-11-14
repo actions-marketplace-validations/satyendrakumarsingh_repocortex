@@ -225,6 +225,28 @@ func (e *Executor) command(inst Installed, p Project, rel, projectDir, repoRoot,
 			Env: os.Environ(),
 		}, nil
 
+	case SCIPClang:
+		// Run from the project directory, which scip-clang's documentation
+		// asks for ("the project root, not the build root"). Both arguments
+		// are fixed names or a path built here; the compilation database is
+		// the file whose NAME made this a runnable project.
+		return Command{
+			Path: inst.Path,
+			Args: []string{"--compdb-path=compile_commands.json", "--index-output-path=" + indexPath},
+			Dir:  projectDir,
+			Env:  os.Environ(),
+		}, nil
+
+	case SCIPRustAnalyzer:
+		// `rust-analyzer scip <path> --output <file>`. The path is the literal
+		// "." with Dir set, so no repository-derived string is an argument.
+		return Command{
+			Path: inst.Path,
+			Args: []string{"scip", ".", "--output", indexPath},
+			Dir:  projectDir,
+			Env:  os.Environ(),
+		}, nil
+
 	case SCIPJava:
 		if e.RunnerKind == RunnerDocker {
 			return e.dockerJavaCommand(inst, p, rel, repoRoot, outDir, indexPath)
@@ -348,7 +370,7 @@ func (i Installed) DockerEntryOr(def string) []string {
 }
 
 func languageOf(ix Indexer) Language {
-	for _, p := range pins {
+	for _, p := range append(append([]Pin(nil), pins...), userPins...) {
 		if p.Indexer == ix {
 			return p.Language
 		}
