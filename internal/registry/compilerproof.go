@@ -73,6 +73,8 @@ type RefSite struct {
 	Line     int
 	Name     string
 	Resolved bool
+	// ByCompiler is true when a compiler settled the reference itself.
+	ByCompiler bool
 }
 
 // CoveredReferences streams the references of every file a compiler indexer
@@ -80,7 +82,7 @@ type RefSite struct {
 // returns.
 func (r *Registry) CoveredReferences(ctx context.Context, runID int64, fn func(RefSite) error) error {
 	rows, err := r.db.QueryContext(ctx, `
-		SELECT sr.id, f.path, sr.start_line, sr.name, sr.resolution = 'resolved'
+		SELECT sr.id, f.path, sr.start_line, sr.name, sr.resolution = 'resolved', sr.resolution_source = 'compiler'
 		  FROM compiler_coverage c
 		  JOIN files f ON f.id = c.file_id
 		  JOIN symbol_references sr ON sr.file_id = f.id
@@ -92,7 +94,7 @@ func (r *Registry) CoveredReferences(ctx context.Context, runID int64, fn func(R
 	defer rows.Close()
 	for rows.Next() {
 		var s RefSite
-		if err := rows.Scan(&s.ID, &s.Path, &s.Line, &s.Name, &s.Resolved); err != nil {
+		if err := rows.Scan(&s.ID, &s.Path, &s.Line, &s.Name, &s.Resolved, &s.ByCompiler); err != nil {
 			return fmt.Errorf("registry: references of covered files: scan: %w", err)
 		}
 		if err := fn(s); err != nil {
@@ -102,11 +104,19 @@ func (r *Registry) CoveredReferences(ctx context.Context, runID int64, fn func(R
 	return rows.Err()
 }
 
-// MarkRuledOut stamps the given unbound references as ruled out by a compiler
-// indexer (ResolutionSourceRuledOut). Rows that are bound are left alone.
-func (r *Registry) MarkRuledOut(ctx context.Context, ids []int64) (int, error) {
+// MarkRuledOut stamps the given references as ruled out by a compiler indexer
+// (ResolutionSourceRuledOut). An unbound reference keeps the resolver's verdict
+// and gains the stamp. A reference the RESOLVER bound is moved to 'unresolved'
+// and loses its binding, because the compiler resolved that very position to
+// something this repository does not define: the binding was a name match with
+// a stranger, and `json.Valid(...)` beside a `Valid` method is the case. The
+// resolver's verdict stays in prior_resolution, which is what the accuracy
+// report scores it by. A reference a compiler itself bound is left alone.
+//
+// It returns how many references were stamped and, of those, how many had been
+// bound.
+func (r *Registry) MarkRuledOut(ctx context.Context, ids []int64) (marked, unbound int, err error) {
 	const chunk = 500
-	total := 0
 	for len(ids) > 0 {
 		n := min(chunk, len(ids))
 		ph := strings.TrimSuffix(strings.Repeat("?,", n), ",")
@@ -119,14 +129,29 @@ func (r *Registry) MarkRuledOut(ctx context.Context, ids []int64) (int, error) {
 			UPDATE symbol_references SET resolution_source = ?
 			 WHERE resolution <> 'resolved' AND id IN (`+ph+`)`, args...)
 		if err != nil {
-			return total, fmt.Errorf("registry: mark references ruled out: %w", err)
+			return marked, unbound, fmt.Errorf("registry: mark references ruled out: %w", err)
 		}
 		if c, err := res.RowsAffected(); err == nil {
-			total += int(c)
+			marked += int(c)
+		}
+		res, err = r.db.ExecContext(ctx, `
+			UPDATE symbol_references
+			   SET prior_resolution   = CASE WHEN prior_resolution = '' THEN resolution
+			                                 ELSE prior_resolution END,
+			       resolution         = 'unresolved',
+			       resolved_symbol_id = NULL,
+			       resolution_source  = ?
+			 WHERE resolution = 'resolved' AND resolution_source <> 'compiler' AND id IN (`+ph+`)`, args...)
+		if err != nil {
+			return marked, unbound, fmt.Errorf("registry: mark bound references ruled out: %w", err)
+		}
+		if c, err := res.RowsAffected(); err == nil {
+			marked += int(c)
+			unbound += int(c)
 		}
 		ids = ids[n:]
 	}
-	return total, nil
+	return marked, unbound, nil
 }
 
 // CheckedLanguage is how much of one language's code a compiler stands
@@ -155,7 +180,7 @@ func (r *Registry) CompilerCoverage(ctx context.Context, runID int64, goDetail s
 		  FROM files f
 		  LEFT JOIN compiler_coverage c ON c.file_id = f.id AND c.index_run_id = f.index_run_id
 		 WHERE f.index_run_id = ? AND f.language <> ''
-		   AND EXISTS (SELECT 1 FROM symbols s WHERE s.file_id = f.id)
+		   AND EXISTS (SELECT 1 FROM symbols s WHERE s.file_id = f.id AND s.kind <> 'file')
 		 GROUP BY f.language ORDER BY f.language`, runID)
 	if err != nil {
 		return nil, fmt.Errorf("registry: compiler coverage: %w", err)

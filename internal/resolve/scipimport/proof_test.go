@@ -2,6 +2,8 @@ package scipimport
 
 import (
 	"context"
+	"database/sql"
+	"sync"
 	"testing"
 
 	scippb "github.com/scip-code/scip/bindings/go/scip"
@@ -23,6 +25,15 @@ const (
 	tsUseSym   = "scip-typescript npm proj 1.0.0 `src/use.ts`/run()."
 )
 
+// testDBs maps a test registry to its database, for tests that must read or
+// write a table the registry has no method for.
+var testDBs sync.Map
+
+func dbOf(reg *registry.Registry) *store.DB {
+	db, _ := testDBs.Load(reg)
+	return db.(*store.DB)
+}
+
 // proofRepo is a TypeScript repository of three files: svc.ts defines the
 // method get, use.ts calls get several ways, and skipped.ts calls get too but
 // is outside the indexer's program.
@@ -35,6 +46,7 @@ func proofRepo(t *testing.T) (*registry.Registry, int64, map[string]int64) {
 	}
 	t.Cleanup(func() { _ = db.Close() })
 	reg := registry.New(db)
+	testDBs.Store(reg, db)
 	run, err := reg.BeginRun(ctx, "auto", "cafe")
 	if err != nil {
 		t.Fatal(err)
@@ -194,6 +206,43 @@ func TestProofIgnoresADefinitionTheIndexerNeverRead(t *testing.T) {
 	}
 	if b.ProvenOther != 0 {
 		t.Errorf("ProvenOther = %d for a definition in an unread file, want 0", b.ProvenOther)
+	}
+}
+
+// TestProofUnbindsAReferenceTheResolverBoundToAStranger: the resolver bound the
+// reference at line 10 to the repository's `get` by name, and the compiler
+// resolved that position to lodash. The binding goes, the reference is marked
+// as ruled out, and the resolver's own verdict is kept for the accuracy report.
+func TestProofUnbindsAReferenceTheResolverBoundToAStranger(t *testing.T) {
+	ctx := context.Background()
+	reg, runID, ids := proofRepo(t)
+	if _, err := dbOf(reg).ExecContext(ctx, `
+		UPDATE symbol_references SET resolution = 'resolved', resolved_symbol_id = ?
+		 WHERE index_run_id = ? AND start_line = 10`, ids["get"], runID); err != nil {
+		t.Fatal(err)
+	}
+	st := importProof(t, reg, runID, true)
+	if st.RuledOut != 1 || st.Unbound != 1 {
+		t.Fatalf("stats %+v, want the one bound reference ruled out and unbound", st)
+	}
+	var resolution, source, prior string
+	var bound sql.NullInt64
+	if err := dbOf(reg).QueryRowContext(ctx, `
+		SELECT resolution, resolution_source, prior_resolution, resolved_symbol_id
+		  FROM symbol_references WHERE index_run_id = ? AND start_line = 10`, runID).
+		Scan(&resolution, &source, &prior, &bound); err != nil {
+		t.Fatal(err)
+	}
+	if resolution != "unresolved" || source != registry.ResolutionSourceRuledOut || prior != "resolved" || bound.Valid {
+		t.Errorf("line 10 is %q by %q (prior %q, bound %v), want unresolved, ruled out, prior resolved, unbound",
+			resolution, source, prior, bound)
+	}
+	b, err := reg.NameBinding(ctx, runID, ids["get"], "get")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if b.ProvenOther != 1 {
+		t.Errorf("ProvenOther = %d, want the unbound reference counted as a use of something else", b.ProvenOther)
 	}
 }
 

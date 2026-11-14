@@ -70,6 +70,12 @@ type ImportResult struct {
 	// than treated as an error.
 	RelationsUnresolved int
 
+	// Reattributed counts relations whose source the compiler named as a
+	// definition this index does not hold, or as the file itself, written as
+	// edges from the enclosing indexed definition or from the file's synthetic
+	// caller (registry.FileCallerKind).
+	Reattributed int
+
 	// FileAnchored counts relations SCIP attributed to a file rather than to an
 	// enclosing definition. RepoCortex's index has no file-scope symbols, so
 	// these have no source node to hang off and are skipped.
@@ -133,9 +139,16 @@ func (r ImportResult) Summary() string {
 			r.Promote.Receivers)
 	}
 	if r.Resolutions.Bound > 0 {
-		fmt.Fprintf(&b, "refs:    %d reference(s) the resolver could not bind were settled by "+
-			"the compiler (%d it had found no candidate for, %d it could not choose between)\n",
-			r.Resolutions.Bound, r.Resolutions.FromUnresolved, r.Resolutions.FromAmbiguous)
+		fmt.Fprintf(&b, "refs:    %d reference(s) were settled by the compiler (%d the resolver "+
+			"had found no candidate for, %d it could not choose between, %d it had bound to "+
+			"another definition)\n",
+			r.Resolutions.Bound, r.Resolutions.FromUnresolved, r.Resolutions.FromAmbiguous,
+			r.Resolutions.Corrected)
+	}
+	if r.Reattributed > 0 {
+		fmt.Fprintf(&b, "         %d relation(s) the compiler placed outside any definition the "+
+			"index holds were attached to the enclosing definition or to the file's top level\n",
+			r.Reattributed)
 	}
 	if r.Promote.NameMismatch > 0 {
 		fmt.Fprintf(&b, "         %d call line(s) left as REFERENCES: the compiler's target "+
@@ -196,7 +209,7 @@ func newSymbolTable(syms []model.Symbol, pathOf map[int64]string) *symbolTable {
 	}
 	for _, s := range syms {
 		path, ok := pathOf[s.FileID]
-		if !ok {
+		if !ok || s.Kind == model.KindFile {
 			continue
 		}
 		t.byKey[symbolKey{path: path, name: s.Name, line: s.Range.Start.Line}] = s.ID
@@ -233,7 +246,8 @@ type Importer struct {
 	opts  scip.Options
 	proof *Proof
 
-	shared *SharedTables
+	shared  *SharedTables
+	callers map[string]int64
 }
 
 // Collect makes Import record into p which files the index covers and where it
@@ -343,12 +357,45 @@ func (imp *Importer) ImportFacts(ctx context.Context, files []scip.FileFacts, si
 // (an import writes edges and marks references, never symbols or the parser's
 // references), so several imports of one run can read it once.
 type tables struct {
+	// fileIDs and spans are what attributes a compiler relation whose source is
+	// not an indexed definition: the file it is in, and where each indexed
+	// definition of that file starts and ends.
+	fileIDs map[string]int64
+	spans   map[string][]defSpan
 	known   []string
 	table   *symbolTable
 	calls   *scip.CallSiteSet
 	nameOf  map[int64]string
 	kindOf  map[int64]model.EntityKind
 	symbols int
+}
+
+// defSpan is one indexed definition's extent, for finding what encloses a line.
+type defSpan struct {
+	id         int64
+	start, end int
+}
+
+// enclosingDef finds the innermost indexed definition of path whose span holds
+// line, the way the resolver does (infer.enclosing): spans are ordered by start
+// line then by end line descending, so the last match is the innermost, and a
+// span of no recorded end covers only its own line.
+func (t *tables) enclosingDef(path string, line int) (int64, bool) {
+	var best int64
+	var found bool
+	for _, s := range t.spans[path] {
+		if s.start > line {
+			break
+		}
+		end := s.end
+		if end == 0 {
+			end = s.start
+		}
+		if line <= end {
+			best, found = s.id, true
+		}
+	}
+	return best, found
 }
 
 // SharedTables lets the importers of one run read the repository's tables once.
@@ -385,7 +432,27 @@ func (imp *Importer) loadTables(ctx context.Context, mode runMode) (*tables, err
 	if err != nil {
 		return nil, fmt.Errorf(mode.label+": read indexed symbols: %w", err)
 	}
-	tb := &tables{known: known, table: newSymbolTable(syms, pathOf), symbols: len(syms)}
+	tb := &tables{known: known, table: newSymbolTable(syms, pathOf), symbols: len(syms),
+		fileIDs: make(map[string]int64, len(files)), spans: make(map[string][]defSpan, len(files))}
+	for _, f := range files {
+		tb.fileIDs[f.Path] = f.ID
+	}
+	for i := range syms {
+		if syms[i].Kind == model.KindFile {
+			continue
+		}
+		path := pathOf[syms[i].FileID]
+		tb.spans[path] = append(tb.spans[path], defSpan{
+			id: syms[i].ID, start: syms[i].Range.Start.Line, end: syms[i].Range.End.Line})
+	}
+	for _, sp := range tb.spans {
+		sort.SliceStable(sp, func(i, j int) bool {
+			if sp[i].start != sp[j].start {
+				return sp[i].start < sp[j].start
+			}
+			return sp[i].end > sp[j].end
+		})
+	}
 
 	// The parser's half of the CALLS join, read once for the whole import.
 	// Loaded here rather than queried per occurrence because an import touches
@@ -520,6 +587,50 @@ func (imp *Importer) run(ctx context.Context, mode runMode) (ImportResult, error
 		if err != nil {
 			return fmt.Errorf("resolve edges for %s: %w", f.Path, err)
 		}
+		if !mode.strict && len(unresolved) > 0 {
+			// A relation the compiler placed in a definition this index does not
+			// hold (an arrow function in a describe() callback, a function nested
+			// where the parser records no symbol) or in no definition at all (the
+			// file anchor) is attributed the way the resolver attributes a
+			// reference: to the innermost indexed definition whose lines hold it,
+			// else to the file's own code. What counts as outside is the index's
+			// view, not the compiler's, so the two producers agree on a line.
+			local := f.LocalIDs()
+			known := func(fqn string) (int64, bool) {
+				if id, ok := local[fqn]; ok {
+					return id, true
+				}
+				return lookup(fqn)
+			}
+			rest := unresolved[:0]
+			for _, r := range unresolved {
+				_, srcOK := known(r.SrcFQN)
+				dst, dstOK := known(r.DstFQN)
+				if srcOK || !dstOK || r.Kind == model.EdgeImports {
+					rest = append(rest, r)
+					continue
+				}
+				src, ok := tb.enclosingDef(f.Path, r.Evidence.Range.Start.Line)
+				if !ok {
+					id, err := imp.fileCaller(ctx, tb, f.Path)
+					if err != nil {
+						return err
+					}
+					src, ok = id, id != 0
+				}
+				if !ok {
+					rest = append(rest, r)
+					continue
+				}
+				e, err := r.Edge(src, dst)
+				if err != nil {
+					return err
+				}
+				edges = append(edges, e)
+				res.Reattributed++
+			}
+			unresolved = rest
+		}
 		res.RelationsUnresolved += len(unresolved)
 
 		// Promote per file, before the batch, and that is not an optimisation:
@@ -602,6 +713,26 @@ func (imp *Importer) run(ctx context.Context, mode runMode) (ImportResult, error
 
 	sort.Strings(res.UnmatchedSymbols)
 	return res, nil
+}
+
+// fileCaller returns the synthetic caller of a file, creating it on first use.
+func (imp *Importer) fileCaller(ctx context.Context, tb *tables, path string) (int64, error) {
+	if id, ok := imp.callers[path]; ok {
+		return id, nil
+	}
+	fileID, ok := tb.fileIDs[path]
+	if !ok {
+		return 0, nil
+	}
+	id, err := imp.reg.FileCaller(ctx, imp.runID, fileID, path)
+	if err != nil {
+		return 0, err
+	}
+	if imp.callers == nil {
+		imp.callers = map[string]int64{}
+	}
+	imp.callers[path] = id
+	return id, nil
 }
 
 // edgeFlushBatch bounds how many edges are held before a write. Keeps peak

@@ -122,8 +122,12 @@ func (p *Proof) site(path string, s scip.Site, inRepo bool) {
 type ProofStats struct {
 	// Files is how many indexed files a compiler read.
 	Files int
-	// RuledOut is how many unbound references were marked.
+	// RuledOut is how many references were marked.
 	RuledOut int
+	// Unbound is how many of them the resolver had bound to a definition of the
+	// repository: the compiler resolved that position outside it, so the
+	// binding was removed.
+	Unbound int
 }
 
 // Apply writes the proof: the covered files and the ruled-out references. It
@@ -155,10 +159,10 @@ func (p *Proof) Apply(ctx context.Context, reg *registry.Registry, runID int64) 
 	}
 
 	var (
-		cur     siteAt
-		have    bool
-		ids     []int64
-		unbound []int64
+		cur      siteAt
+		have     bool
+		ids      []int64
+		markable []int64
 	)
 	var marks []int64
 	ruled := map[siteAt]struct{}{}
@@ -168,9 +172,9 @@ func (p *Proof) Apply(ctx context.Context, reg *registry.Registry, runID int64) 
 		}
 		if t := p.sites[cur]; t != nil && p.ruledOut(t, len(ids)) {
 			ruled[cur] = struct{}{}
-			marks = append(marks, unbound...)
+			marks = append(marks, markable...)
 		}
-		ids, unbound, have = ids[:0], unbound[:0], false
+		ids, markable, have = ids[:0], markable[:0], false
 	}
 	err := reg.CoveredReferences(ctx, runID, func(r registry.RefSite) error {
 		k := siteAt{path: r.Path, line: r.Line, name: r.Name}
@@ -179,8 +183,8 @@ func (p *Proof) Apply(ctx context.Context, reg *registry.Registry, runID int64) 
 		}
 		cur, have = k, true
 		ids = append(ids, r.ID)
-		if !r.Resolved {
-			unbound = append(unbound, r.ID)
+		if !r.ByCompiler {
+			markable = append(markable, r.ID)
 		}
 		return nil
 	})
@@ -188,8 +192,8 @@ func (p *Proof) Apply(ctx context.Context, reg *registry.Registry, runID int64) 
 		return st, 0, err
 	}
 	flush()
-	n, err := reg.MarkRuledOut(ctx, marks)
-	st.RuledOut = n
+	n, wasBound, err := reg.MarkRuledOut(ctx, marks)
+	st.RuledOut, st.Unbound = n, wasBound
 	if err != nil {
 		return st, 0, err
 	}
