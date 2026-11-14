@@ -558,6 +558,19 @@ between the arms than of either one's accuracy. Java was not run: its compiler
 indexer needs Maven, Gradle or Docker, none of which is available on the
 machine used, so a Java run would measure only the heuristic answers.
 
+**Round 5, after the Python environment fix (same day).** The six references
+the tool left ambiguous were not a join bug: click's tests did `import click`,
+which resolved to an older click in site-packages, so the compiler spelled the
+checkout's symbols as another copy's. scip-python is now given the project's
+`src` as an analysis path (a one-line `pyrightconfig.json` for the run; putting
+`src` on `PYTHONPATH` was rejected because the indexer's interpreter would
+import repository code). The compiler then proves 3,310 calls (was 902) and
+the answer lists all 10 sites; `convert` and `get_metavar` match jedi
+exactly. The agent again found 10 of 10 at 63,494 tokens, 6 tool calls and
+25 seconds, against 62,507 tokens, 4 calls and 16 seconds for search alone: the
+four references that remain unlisted (calls on untyped pytest parameters) are
+real unknowns and keep the answer INCOMPLETE, so the agent still grepped.
+
 **Reproducing round 2.** Build the truth program (`cd scripts/bench/agenttruth
 && go build -o agenttruth .`; it is its own module so that the tool does not
 depend on `golang.org/x/tools`), then `agenttruth -dir <clone> list` for
