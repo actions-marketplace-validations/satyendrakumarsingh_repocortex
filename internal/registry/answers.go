@@ -209,6 +209,12 @@ type NameBinding struct {
 	// `@overload` stubs the extractor folds into one are one definition.
 	Definitions int64
 
+	// InstalledCopy is how many of the unbound references (Ambiguous,
+	// Unresolved, Pending: they are still counted there) sit where a compiler
+	// resolved this repository's own package to an installed copy of it instead
+	// of this checkout. See ResolutionSourceInstalled.
+	InstalledCopy int64
+
 	// WithoutEdge counts distinct sites bound to the definition asked about
 	// that produced no relationship row, because the reference sits outside
 	// every extracted definition: at module top level, or inside an anonymous
@@ -729,6 +735,13 @@ func (r *Registry) settleByCompilerIndex(ctx context.Context, runID, symbolID in
 	}
 	if !covered {
 		return nil
+	}
+	if err := r.db.QueryRowContext(ctx, `
+		SELECT COUNT(*) FROM symbol_references sr INDEXED BY idx_refs_name_binding
+		 WHERE sr.index_run_id = ? AND sr.name = ?
+		   AND sr.resolution IN ('ambiguous','unresolved','pending')
+		   AND sr.resolution_source = ?`, runID, name, ResolutionSourceInstalled).Scan(&b.InstalledCopy); err != nil {
+		return fmt.Errorf("registry: references to %q seen against an installed copy: %w", name, err)
 	}
 	rows, err := r.db.QueryContext(ctx, `
 		SELECT sr.resolution, COUNT(*)

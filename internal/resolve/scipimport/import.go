@@ -99,6 +99,10 @@ type ImportResult struct {
 	// this one no longer proves.
 	Retracted registry.RetractStats
 
+	// InstalledCopies names the packages the repository itself provides that the
+	// indexer resolved to an installed copy instead of this checkout.
+	InstalledCopies []string
+
 	// Resolutions is what the compiler settled in symbol_references — the
 	// column that answers "what does this name refer to", which until now only
 	// the heuristic resolver ever wrote. See registry.MarkCompilerResolutions.
@@ -500,16 +504,27 @@ func (imp *Importer) run(ctx context.Context, mode runMode) (ImportResult, error
 	checked := map[string]bool{}
 	// Every definition the index makes, matched to the repository's symbols or
 	// not: an occurrence resolved to one is a use of repository code.
-	definedAll := map[string]struct{}{}
+	// Mapped to where it is defined and what it is.
+	definedAll := map[string]definition{}
+	// The packages the index's occurrences name, and those its documents define.
+	seenPkgs, definedPkgs := map[string]struct{}{}, map[string]struct{}{}
 	st, err := mode.ingest(ctx, known, func(_ context.Context, f *scip.FileFacts) error {
 		checked[f.Path] = true
 		if mode.proof != nil {
 			mode.proof.cover(f.Path, f.Tool.Name, f.Packages)
+			for _, pk := range f.Packages {
+				definedPkgs[normalizePackage(pk)] = struct{}{}
+			}
+			for i := range f.Sites {
+				if pk := f.Sites[i].Package; pk != "" {
+					seenPkgs[normalizePackage(pk)] = struct{}{}
+				}
+			}
 		}
 		for i := range f.Symbols {
 			s := &f.Symbols[i]
 			if s.Kind != model.KindFile && mode.proof != nil {
-				definedAll[s.FQN] = struct{}{}
+				definedAll[s.FQN] = definition{path: f.Path, kind: s.Kind}
 			}
 			if s.Kind == model.KindFile {
 				// The file-scope anchor. It has no counterpart in an index
@@ -519,7 +534,13 @@ func (imp *Importer) run(ctx context.Context, mode runMode) (ImportResult, error
 				// rather than silently discarded.
 				continue
 			}
-			id, ok := table.lookupMode(f.Path, s.Name, s.Range.Start.Line, mode.strict)
+			// A document-scoped symbol (a variable, a parameter, a function written
+			// inside another) joins on its exact line only: it shares its name with
+			// whatever the file declares at its top level, and the by-name fallback
+			// would give `const match = ...` inside a function the identity of the
+			// function `match` beside it, so that a call of the local became an exact
+			// edge to the function.
+			id, ok := table.lookupMode(f.Path, s.Name, s.Range.Start.Line, mode.strict || isLocalFQN(s.FQN))
 			if !ok {
 				res.SymbolsUnmatched++
 				if len(res.UnmatchedSymbols) < maxUnmatchedSymbolSamples {
@@ -530,6 +551,9 @@ func (imp *Importer) run(ctx context.Context, mode runMode) (ImportResult, error
 			}
 			res.SymbolsMatched++
 			fqnToID[s.FQN] = id
+			if mode.proof != nil {
+				mode.proof.matchedSymbol(id)
+			}
 		}
 		return nil
 	})
@@ -538,6 +562,23 @@ func (imp *Importer) run(ctx context.Context, mode runMode) (ImportResult, error
 	}
 	res.Ingest = st
 	res.FileAnchored = st.FileAnchored
+
+	// A package the repository provides, which an occurrence names although no
+	// document of the index defines it, is an installed copy of the repository's
+	// own library: the indexer resolved `import click` to site-packages, and that
+	// copy may be another version than this checkout (the installed click 8.1.8
+	// has no Option.process_value, which the checkout overrides). What the
+	// compiler says about such a position describes that copy, so it is neither
+	// a proof that the call is outside the repository nor one that it is inside.
+	if mode.proof != nil {
+		for pk := range seenPkgs {
+			if _, defined := definedPkgs[pk]; !defined && mode.proof.provided(pk) {
+				res.InstalledCopies = append(res.InstalledCopies, pk)
+			}
+		}
+		sort.Strings(res.InstalledCopies)
+		mode.proof.setInstalled(res.InstalledCopies)
+	}
 
 	if res.SymbolsMatched == 0 {
 		return res, fmt.Errorf(mode.label+": none of the index's %d definition(s) matched a symbol "+
@@ -579,8 +620,8 @@ func (imp *Importer) run(ctx context.Context, mode runMode) (ImportResult, error
 		if mode.proof != nil {
 			for _, site := range f.Sites {
 				_, matched := fqnToID[site.DstFQN]
-				_, defined := definedAll[site.DstFQN]
-				mode.proof.site(f.Path, site, matched || defined)
+				d, defined := definedAll[site.DstFQN]
+				mode.proof.site(f.Path, site, siteTarget{matched: matched, defined: defined, defPath: d.path, kind: d.kind})
 			}
 		}
 		edges, unresolved, err := f.Edges(lookup)
@@ -842,3 +883,13 @@ func (imp *Importer) withdrawContradicted(ctx context.Context, mode runMode, fqn
 	}
 	return imp.reg.DeleteEdges(ctx, drop)
 }
+
+// definition is where the index defines a symbol and what kind of symbol it is.
+type definition struct {
+	path string
+	kind model.EntityKind
+}
+
+// isLocalFQN reports whether fqn is a document-scoped symbol as the ingester
+// names one (see scip.qualifyFQN).
+func isLocalFQN(fqn string) bool { return strings.Contains(fqn, "#local ") }

@@ -157,6 +157,15 @@ type Site struct {
 	Package string
 	// Local is true for a document-scoped symbol (a variable, a parameter).
 	Local bool
+	// Col is the 0-based column the occurrence starts at, in the document's
+	// position encoding, and Len how many units it spans (0 when it spans
+	// lines). With Line they place the occurrence against a parsed reference.
+	Col, Len int
+	// Declared is true for a local symbol this same document defines (a
+	// variable, a parameter, a function written inside another function), as
+	// opposed to one it only mentions: an import binding the indexer could not
+	// resolve is a local symbol no document defines.
+	Declared bool
 }
 
 // LocalIDs maps the FQN of every symbol defined in this file to its current id,
