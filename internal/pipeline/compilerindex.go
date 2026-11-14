@@ -225,6 +225,7 @@ func RunCompilerIndexers(ctx context.Context, reg *registry.Registry, runID int6
 		// have none now, and remove what appears.
 		inferred := inferredTsconfigs(opts.Root, toRunProjects(toRun))
 		inferred = append(inferred, writePythonSourceRoots(opts.Root, toRunProjects(toRun))...)
+		inferred = append(inferred, stageVueMirrors(opts.Root, toRunProjects(toRun))...)
 		defer func() {
 			for _, f := range inferred {
 				_ = os.Remove(f)

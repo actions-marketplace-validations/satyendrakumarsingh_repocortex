@@ -80,6 +80,8 @@ func (s *Server) Scoped(profile config.MCPProfile, tools []string) (*Server, err
 func ToolsOf(p config.MCPProfile) []string {
 	minimal, standard := profileLists()
 	switch p {
+	case config.MCPCompact, config.MCPFrontdoor:
+		return []string{"repocortex"}
 	case config.MCPStandard:
 		return standard
 	case config.MCPFull:

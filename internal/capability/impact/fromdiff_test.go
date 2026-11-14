@@ -23,10 +23,15 @@ import (
 // case would make every assertion here depend on go-git's rename heuristics.
 type fakeChanges struct {
 	changes []git.Change
+	commits []git.Commit
 	err     error
 	calls   int
 	from    string
 	to      string
+}
+
+func (f *fakeChanges) RecentCommits(ctx context.Context, limit int) ([]git.Commit, error) {
+	return f.commits, nil
 }
 
 func (f *fakeChanges) ChangedSince(ctx context.Context, from, to string) ([]git.Change, error) {
@@ -1273,4 +1278,47 @@ func stripMultiplier(s string) string {
 		return s[:i]
 	}
 	return s
+}
+
+func TestAnalyzeDiffPopulatesCoChangedCompanionFiles(t *testing.T) {
+	deps, runID := captest.Build(t,
+		[]captest.Sym{captest.S(1, "HandlePayment", "svc/payment.go")},
+		nil, realisticRefs)
+
+	commits := []git.Commit{
+		{
+			SHA:   "c1",
+			Paths: []string{"svc/payment.go", "svc/payment_test.go", "config/payment.yaml"},
+		},
+		{
+			SHA:   "c2",
+			Paths: []string{"svc/payment.go", "svc/payment_test.go"},
+		},
+		{
+			SHA:   "c3",
+			Paths: []string{"svc/unrelated.go"},
+		},
+	}
+
+	rep, err := AnalyzeDiff(context.Background(), deps, runID, DiffRequest{
+		Changes: &fakeChanges{
+			changes: modified("svc/payment.go"),
+			commits: commits,
+		},
+		BaseRev: "HEAD~1", HeadRev: "HEAD",
+	})
+	if err != nil {
+		t.Fatalf("AnalyzeDiff: %v", err)
+	}
+
+	if len(rep.CoChangedFiles) != 2 {
+		t.Fatalf("expected 2 co-changed files, got %d: %+v", len(rep.CoChangedFiles), rep.CoChangedFiles)
+	}
+
+	if rep.CoChangedFiles[0].FilePath != "svc/payment_test.go" || rep.CoChangedFiles[0].Count != 2 {
+		t.Errorf("top co-changed file mismatch: got %+v", rep.CoChangedFiles[0])
+	}
+	if rep.CoChangedFiles[0].Score != 1.0 {
+		t.Errorf("top co-changed score mismatch: got %f, want 1.0", rep.CoChangedFiles[0].Score)
+	}
 }

@@ -248,5 +248,8 @@ func cleanDocumentPath(p string) (string, bool) {
 	if c == "." || c == ".." || strings.HasPrefix(c, "../") {
 		return "", false
 	}
+	if strings.HasSuffix(c, ".vue.ts") {
+		c = strings.TrimSuffix(c, ".ts")
+	}
 	return c, true
 }

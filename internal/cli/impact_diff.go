@@ -340,6 +340,21 @@ func writeImpactDiff(out io.Writer, rep impact.DiffReport, limit int, coverage s
 			"them takes that path, which is why they are not counted above.")
 	}
 
+	if len(rep.CoChangedFiles) > 0 {
+		fmt.Fprintf(out, "\nHISTORICALLY CO-CHANGED COMPANION FILES (%d)\n\n", len(rep.CoChangedFiles))
+		tw := tabwriter.NewWriter(out, 0, 8, 2, ' ', 0)
+		fmt.Fprintln(tw, "  COMMITS\tCOUPLING\tFILE")
+		for i, c := range rep.CoChangedFiles {
+			if i == limit {
+				fmt.Fprintf(tw, "  …and %d more\n", len(rep.CoChangedFiles)-limit)
+				break
+			}
+			fmt.Fprintf(tw, "  %d\t%.0f%%\t%s\n", c.Count, c.Score*100, c.FilePath)
+		}
+		_ = tw.Flush()
+		fmt.Fprintln(out, "\n  Companion files committed together with the changed files in recent git history.")
+	}
+
 	if rep.Truncated {
 		// Printed verbatim. impact aggregates the per-seed reasons into one
 		// counted set before the report leaves that package, so there is

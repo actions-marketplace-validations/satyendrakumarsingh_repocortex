@@ -520,6 +520,11 @@ func toolDescriptions() map[string]string {
 			"reported apart, or in no community at all, when what connects them is a reference the " +
 			"index could not bind; the response says how many those are. No communities found is not " +
 			"proof the files are unrelated.",
+
+		"repocortex": "Compact front-door code intelligence interface. Executes targeted code intelligence actions " +
+			"(context, search, symbol, callers, callees, references, impact, tests, diff, overview) through a single unified schema, " +
+			"saving over 25 KB of agent token context. Use action='context' for task-oriented context packing, 'search' for regex/code " +
+			"search, 'symbol' for definitions, 'callers'/'callees'/'references' for graph traversal, and 'impact'/'tests' for blast-radius analysis.",
 	}
 }
 

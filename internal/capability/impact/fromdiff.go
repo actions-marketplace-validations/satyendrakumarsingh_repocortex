@@ -66,12 +66,18 @@ type Rooter interface {
 	Root() string
 }
 
+// HistorySource supplies recent commit history for temporal co-change coupling.
+type HistorySource interface {
+	RecentCommits(ctx context.Context, limit int) ([]git.Commit, error)
+}
+
 // Compile-time proof the production types satisfy the ports without adapters.
 var (
 	_ ChangeSource     = (*git.Repo)(nil)
 	_ RevisionResolver = (*git.Repo)(nil)
 	_ Rooter           = (*git.Repo)(nil)
 	_ RunSource        = (*registry.Registry)(nil)
+	_ HistorySource    = (*git.Repo)(nil)
 )
 
 // DiffRequest asks what a change puts at risk.
@@ -131,6 +137,13 @@ type Seed struct {
 	Report Report `json:"report"`
 }
 
+// CoChangedFile represents a companion file historically committed together with the changed files.
+type CoChangedFile struct {
+	FilePath string  `json:"file_path"`
+	Count    int     `json:"count"`
+	Score    float64 `json:"score"`
+}
+
 // DiffReport is what a change puts at risk.
 type DiffReport struct {
 	BaseRev string `json:"base_rev"`
@@ -160,6 +173,10 @@ type DiffReport struct {
 	// — is index-space, because that is what the index recorded. IndexRootPrefix
 	// is the mapping between the two.
 	ChangedFiles []string `json:"changed_files"`
+
+	// CoChangedFiles lists companion files historically committed together with
+	// the changed files, capturing temporal coupling invisible to static ASTs.
+	CoChangedFiles []CoChangedFile `json:"co_changed_files,omitempty"`
 
 	// UnindexedFiles are changed paths the committed run holds no symbols for:
 	// non-code files, files added since the index was built, files whose parse
@@ -309,6 +326,10 @@ func AnalyzeDiff(ctx context.Context, deps capability.Deps, runID int64, req Dif
 	provenance = append(provenance, revUnknowns...)
 	provenance = append(provenance, prefixUnknowns...)
 	rep.Unknown = append(rep.Unknown, provenance...)
+
+	if hs, ok := req.Changes.(HistorySource); ok && len(rep.ChangedFiles) > 0 {
+		rep.CoChangedFiles = computeCoChangedFiles(ctx, hs, rep.ChangedFiles)
+	}
 
 	// Loaded before the empty-diff guard, not after, so IndexedSymbols is the
 	// real denominator on every path. It costs one query on a no-op diff; the
@@ -1063,4 +1084,71 @@ func (t *truncationSet) result() (bool, string) {
 		parts = append(parts, r)
 	}
 	return true, strings.Join(parts, truncationSep)
+}
+
+func computeCoChangedFiles(ctx context.Context, hs HistorySource, changedFiles []string) []CoChangedFile {
+	commits, err := hs.RecentCommits(ctx, 200)
+	if err != nil || len(commits) == 0 {
+		return nil
+	}
+
+	changedSet := make(map[string]bool, len(changedFiles))
+	for _, f := range changedFiles {
+		changedSet[filepath.ToSlash(f)] = true
+	}
+
+	touchedCommits := 0
+	coOccur := make(map[string]int)
+
+	for _, c := range commits {
+		touchesChanged := false
+		for _, p := range c.Paths {
+			if changedSet[filepath.ToSlash(p)] {
+				touchesChanged = true
+				break
+			}
+		}
+		if !touchesChanged {
+			continue
+		}
+		touchedCommits++
+		for _, p := range c.Paths {
+			norm := filepath.ToSlash(p)
+			if !changedSet[norm] {
+				coOccur[norm]++
+			}
+		}
+	}
+
+	if touchedCommits == 0 || len(coOccur) == 0 {
+		return nil
+	}
+
+	var result []CoChangedFile
+	for f, count := range coOccur {
+		score := float64(count) / float64(touchedCommits)
+		if count >= 2 || (touchedCommits <= 3 && score >= 0.25) {
+			result = append(result, CoChangedFile{
+				FilePath: f,
+				Count:    count,
+				Score:    score,
+			})
+		}
+	}
+
+	sort.Slice(result, func(i, j int) bool {
+		if result[i].Count != result[j].Count {
+			return result[i].Count > result[j].Count
+		}
+		if result[i].Score != result[j].Score {
+			return result[i].Score > result[j].Score
+		}
+		return result[i].FilePath < result[j].FilePath
+	})
+
+	if len(result) > 20 {
+		result = result[:20]
+	}
+
+	return result
 }

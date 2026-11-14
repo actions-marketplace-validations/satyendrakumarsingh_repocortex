@@ -234,6 +234,7 @@ func newServer(deps Deps, share *Server) (*Server, error) {
 	s.registerCommunities(allowed)
 	s.registerSessionStats(allowed)
 	s.registerPrompts()
+	s.registerFrontdoor(allowed)
 
 	s.sdk.AddReceivingMiddleware(s.usageMiddleware)
 	return s, nil
@@ -352,6 +353,8 @@ func profileTools(p config.MCPProfile) map[string]bool {
 	}
 
 	switch p {
+	case config.MCPCompact, config.MCPFrontdoor:
+		return map[string]bool{"repocortex": true}
 	case config.MCPStandard:
 		return set(standard)
 	case config.MCPFull:

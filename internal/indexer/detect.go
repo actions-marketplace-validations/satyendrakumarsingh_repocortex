@@ -267,7 +267,7 @@ func foldNestedCPP(projects []Project) []Project {
 }
 
 // tsSourceExt are the extensions scip-typescript indexes as program input.
-var tsSourceExt = map[string]bool{".ts": true, ".tsx": true, ".js": true, ".jsx": true}
+var tsSourceExt = map[string]bool{".ts": true, ".tsx": true, ".js": true, ".jsx": true, ".vue": true}
 
 // hasSourceUnder reports whether any recorded source directory is dir or lies
 // beneath it. "." is the repository root and contains everything.

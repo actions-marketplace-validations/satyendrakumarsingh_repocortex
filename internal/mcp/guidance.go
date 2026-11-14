@@ -44,6 +44,9 @@ func instructionsFor(allowed map[string]bool) string {
 		"Ask it before searching or reading files.")
 
 	var first []string
+	if allowed != nil && allowed["repocortex"] {
+		first = append(first, "use repocortex with action='context' to start a task, 'symbol' or 'search' for lookups, 'callers'/'callees' for relationships, or 'impact'/'tests' before editing")
+	}
 	if has("get_task_context") {
 		first = append(first, "start a task with get_task_context")
 	}

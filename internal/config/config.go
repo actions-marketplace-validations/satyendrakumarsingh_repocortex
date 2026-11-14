@@ -96,14 +96,16 @@ const (
 	// a number in a comment beside a list in another package drifts the first
 	// time either changes. internal/mcp.profileTools is the definition, and
 	// `repocortex serve --list-tools` prints what a profile actually exposes.
-	MCPMinimal  MCPProfile = "minimal"  // the default: lookup, search and task context
-	MCPStandard MCPProfile = "standard" // adds blast radius and test discovery
-	MCPFull     MCPProfile = "full"     // every enabled capability
+	MCPMinimal   MCPProfile = "minimal"   // the default: lookup, search and task context
+	MCPStandard  MCPProfile = "standard"  // adds blast radius and test discovery
+	MCPFull      MCPProfile = "full"      // every enabled capability
+	MCPCompact   MCPProfile = "compact"   // single front-door tool: saves prompt tokens
+	MCPFrontdoor MCPProfile = "frontdoor" // alias for compact
 )
 
 func (p MCPProfile) Valid() bool {
 	switch p {
-	case MCPMinimal, MCPStandard, MCPFull:
+	case MCPMinimal, MCPStandard, MCPFull, MCPCompact, MCPFrontdoor:
 		return true
 	}
 	return false
@@ -600,7 +602,7 @@ func (c Config) Validate() error {
 		return fmt.Errorf("accuracy.indexers.provision %q: want never, prompt or auto", c.ProvisionPolicy)
 	}
 	if !c.MCPProfile.Valid() {
-		return fmt.Errorf("mcp.profile %q: want minimal, standard or full", c.MCPProfile)
+		return fmt.Errorf("mcp.profile %q: want minimal, standard, full, compact or frontdoor", c.MCPProfile)
 	}
 	if c.IndexerRunner != "native" && c.IndexerRunner != "docker" {
 		return fmt.Errorf("accuracy.indexers.runner %q: want native or docker", c.IndexerRunner)
