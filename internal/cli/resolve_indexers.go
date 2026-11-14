@@ -38,14 +38,18 @@ func compilerIndexersJSON(mode config.AccuracyMode, o pipeline.CompilerIndexOutc
 				m["calls_proven"] = s.Import.Promote.Promoted
 				m["edges_raised_to_exact"] = s.Import.Edges.Upgraded
 				m["edges_new"] = s.Import.Edges.Inserted
+				m["relations_attributed_to_top_level"] = s.Import.Reattributed
+				m["references_settled"] = s.Import.Resolutions.Bound
+				m["references_corrected"] = s.Import.Resolutions.Corrected
 			}
 		}
 		steps = append(steps, m)
 	}
 	out := map[string]any{
 		"steps": steps, "files_covered": o.Proof.Files,
-		"references_ruled_out": o.Proof.RuledOut, "heuristic_calls_withdrawn": o.Withdrawn,
-		"nested_projects_folded": o.Folded,
+		"references_ruled_out": o.Proof.RuledOut, "references_unbound": o.Proof.Unbound,
+		"heuristic_calls_withdrawn": o.Withdrawn,
+		"nested_projects_folded":    o.Folded,
 	}
 	if o.Note != "" {
 		out["note"] = o.Note
@@ -83,6 +87,10 @@ func renderCompilerIndexers(out io.Writer, mode config.AccuracyMode, o pipeline.
 			fmt.Fprintf(out, "               %d files covered, %d calls proven, %d edges raised to exact, %d new\n",
 				s.Import.Ingest.DocumentsMatched, s.Import.Promote.Promoted,
 				s.Import.Edges.Upgraded, s.Import.Edges.Inserted)
+			if s.Import.Reattributed > 0 || s.Import.Resolutions.Corrected > 0 {
+				fmt.Fprintf(out, "               %d relations outside any indexed definition attached to a top level or an enclosing definition, %d references moved to the definition the compiler named\n",
+					s.Import.Reattributed, s.Import.Resolutions.Corrected)
+			}
 		}
 	}
 	if o.Folded > 0 {
@@ -94,7 +102,8 @@ func renderCompilerIndexers(out io.Writer, mode config.AccuracyMode, o pipeline.
 	}
 	if o.Imported() > 0 {
 		fmt.Fprintf(out, "               %d files read by a compiler indexer; %d references it resolved outside this "+
-			"repository, %d heuristic calls it proved false\n", o.Proof.Files, o.Proof.RuledOut, o.Withdrawn)
+			"repository (%d of them bound by name and unbound), %d heuristic calls it proved false\n",
+			o.Proof.Files, o.Proof.RuledOut, o.Proof.Unbound, o.Withdrawn)
 	}
 }
 

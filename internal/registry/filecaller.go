@@ -24,23 +24,13 @@ import (
 // by `index`, so the parser's definitions and the conformance fixtures stay as
 // they are), of kind `file`, named FileCallerName(path) so a caller list reads
 // "(top level of src/foo.test.ts)", with the qualified name
-// "<path>:(top level of <path>)". It is the SOURCE of edges only: nothing is ever bound to
-// it, and no tool that lists, searches or counts definitions shows it (see
-// registry.NotFileCaller). Anonymous callbacks nested inside a named function
-// stay with that function: the symbol is only the fallback when no extracted
-// definition encloses the line.
+// "<path>:(top level of <path>)". It is the SOURCE of edges only: nothing is ever
+// bound to it, and no tool that lists, searches or counts definitions shows it:
+// each query that does carries `kind <> 'file'`, and a query that follows an edge
+// to its source does not, so a caller can be named. Anonymous callbacks nested
+// inside a named function stay with that function: the symbol is only the
+// fallback when no extracted definition encloses the line.
 const FileCallerKind = string(model.KindFile)
-
-// NotFileCaller is the SQL condition, for a symbols table aliased alias, that
-// leaves the synthetic per-file callers out. Every query that LISTS, SEARCHES
-// or COUNTS definitions carries it; a query that follows an edge to its source
-// does not, since the caller must be nameable.
-func NotFileCaller(alias string) string {
-	if alias == "" {
-		return "kind <> 'file'"
-	}
-	return alias + ".kind <> 'file'"
-}
 
 // FileCallerName names the synthetic caller of a file the way an answer reads
 // it.
@@ -138,6 +128,27 @@ func (r *Registry) FileCallerIDs(ctx context.Context, runID int64) (map[string]i
 			return nil, err
 		}
 		out[p] = id
+	}
+	return out, rows.Err()
+}
+
+// ReferenceLines returns the lines of a file on which the parser recorded a
+// reference: a call, a construction or a mention of a name. An import or an
+// export-from statement is not one of them.
+func (r *Registry) ReferenceLines(ctx context.Context, fileID int64) (map[int]struct{}, error) {
+	rows, err := r.db.QueryContext(ctx,
+		`SELECT DISTINCT start_line FROM symbol_references WHERE file_id = ? AND start_line > 0`, fileID)
+	if err != nil {
+		return nil, fmt.Errorf("registry: reference lines of file %d: %w", fileID, err)
+	}
+	defer rows.Close()
+	out := map[int]struct{}{}
+	for rows.Next() {
+		var l int
+		if err := rows.Scan(&l); err != nil {
+			return nil, err
+		}
+		out[l] = struct{}{}
 	}
 	return out, rows.Err()
 }

@@ -602,11 +602,28 @@ func (imp *Importer) run(ctx context.Context, mode runMode) (ImportResult, error
 				}
 				return lookup(fqn)
 			}
+			var refLines map[int]struct{}
 			rest := unresolved[:0]
 			for _, r := range unresolved {
 				_, srcOK := known(r.SrcFQN)
 				dst, dstOK := known(r.DstFQN)
 				if srcOK || !dstOK || r.Kind == model.EdgeImports {
+					rest = append(rest, r)
+					continue
+				}
+				// Only a position the parser also recorded a reference at. An
+				// import, an `export { x } from` and a declaration's own name are
+				// occurrences to the compiler and are not uses written in code,
+				// and a top level that "references" everything it imports would
+				// make every unused import look used.
+				if refLines == nil {
+					lines, err := imp.reg.ReferenceLines(ctx, tb.fileIDs[f.Path])
+					if err != nil {
+						return err
+					}
+					refLines = lines
+				}
+				if _, ok := refLines[r.Evidence.Range.Start.Line]; !ok {
 					rest = append(rest, r)
 					continue
 				}

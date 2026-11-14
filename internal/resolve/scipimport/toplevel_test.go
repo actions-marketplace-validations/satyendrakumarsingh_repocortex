@@ -6,6 +6,7 @@ import (
 
 	scippb "github.com/scip-code/scip/bindings/go/scip"
 
+	"github.com/satyendrakumarsingh/repocortex/internal/registry"
 	"github.com/satyendrakumarsingh/repocortex/internal/resolve/scip"
 )
 
@@ -25,8 +26,26 @@ func topLevelDocs() []*scippb.Document {
 		ref(tsGetSym, rng(4, 14, 4, 17)),
 		// Outside every definition the compiler knows: the file's own code.
 		ref(tsGetSym, rng(29, 0, 29, 3)),
+		// An import line: an occurrence to the compiler, and no reference the
+		// parser recorded, so not a use written in code.
+		ref(tsGetSym, rng(1, 9, 1, 12)),
 	)
 	return docs
+}
+
+// addParsedReferences records the references the parser would have written for
+// the two uses in topLevelDocs, one on a line of `run` and one outside every
+// definition. The import line has none.
+func addParsedReferences(t *testing.T, reg *registry.Registry, runID int64) {
+	t.Helper()
+	for _, line := range []int{5, 30} {
+		if _, err := dbOf(reg).ExecContext(context.Background(), `
+			INSERT INTO symbol_references (index_run_id, file_id, name, kind, start_line, start_col, resolution)
+			SELECT ?, f.id, 'get', 'reference.call', ?, 0, 'unresolved' FROM files f
+			 WHERE f.index_run_id = ? AND f.path = ?`, runID, line, runID, tsUse); err != nil {
+			t.Fatal(err)
+		}
+	}
 }
 
 // TestCompilerRelationsOutsideTheIndexedDefinitionsAreAttributed: a relation the
@@ -36,13 +55,14 @@ func topLevelDocs() []*scippb.Document {
 func TestCompilerRelationsOutsideTheIndexedDefinitionsAreAttributed(t *testing.T) {
 	ctx := context.Background()
 	reg, runID, ids := proofRepo(t)
+	addParsedReferences(t, reg, runID)
 	path := scipFile(t, topLevelDocs()...)
 	res, err := NewImporter(reg, runID, scip.Options{RepoRoot: "/build/repo"}).Import(ctx, path)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if res.Reattributed != 2 {
-		t.Fatalf("reattributed %d relation(s), want 2 (line 5 and line 30): %+v", res.Reattributed, res)
+		t.Fatalf("reattributed %d relation(s), want 2 (line 5 and line 30, not the import on line 2): %+v", res.Reattributed, res)
 	}
 
 	callers, err := reg.FileCallerIDs(ctx, runID)
@@ -88,12 +108,7 @@ func TestCompilerRelationsOutsideTheIndexedDefinitionsAreAttributed(t *testing.T
 func TestFileCallerEdgesSettleReferences(t *testing.T) {
 	ctx := context.Background()
 	reg, runID, ids := proofRepo(t)
-	if _, err := dbOf(reg).ExecContext(ctx, `
-		INSERT INTO symbol_references (index_run_id, file_id, name, kind, start_line, start_col, resolution)
-		SELECT ?, f.id, 'get', 'reference.call', 30, 0, 'unresolved' FROM files f WHERE f.index_run_id = ? AND f.path = ?`,
-		runID, runID, tsUse); err != nil {
-		t.Fatal(err)
-	}
+	addParsedReferences(t, reg, runID)
 	path := scipFile(t, topLevelDocs()...)
 	res, err := NewImporter(reg, runID, scip.Options{RepoRoot: "/build/repo"}).Import(ctx, path)
 	if err != nil {

@@ -73,7 +73,10 @@ func (r *Registry) WithdrawContradictedCalls(ctx context.Context, runID int64) (
 	// (file, line, wrong target); the references are then found through
 	// idx_refs_file_line. The statement used to be one UPDATE with a correlated
 	// subquery per reference, which is a scan of every reference of the run for
-	// each removed edge once a compiler withdraws hundreds of them.
+	// each removed edge once a compiler withdraws hundreds of them. The joins
+	// are CROSS JOINs on purpose, as in structure.go: with no statistics the
+	// planner starts from the large edges table and probes the withdrawn ones,
+	// 18 s on honojs/hono with nothing to withdraw.
 	if _, err := tx.ExecContext(ctx, `DROP TABLE IF EXISTS temp.contradicted_rebind`); err != nil {
 		return 0, 0, fmt.Errorf("registry: withdraw contradicted calls: %w", err)
 	}
@@ -87,13 +90,14 @@ func (r *Registry) WithdrawContradictedCalls(ctx context.Context, runID int64) (
 		INSERT INTO temp.contradicted_rebind (file_id, line, old, new)
 		SELECT hf.id, h.evidence_line, h.dst_id, MIN(x.dst_id)
 		  FROM contradicted_edge c
-		  JOIN edges h ON h.id = c.id
-		  JOIN files hf ON hf.index_run_id = h.index_run_id AND hf.path = h.evidence_file
-		  JOIN symbols hd ON hd.id = h.dst_id
-		  JOIN edges x ON x.index_run_id = h.index_run_id AND x.evidence_file = h.evidence_file
-		       AND x.evidence_line = h.evidence_line AND x.source = 'compiler'
-		       AND x.kind IN ('CALLS','INSTANTIATES')
-		  JOIN symbols xd ON xd.id = x.dst_id AND xd.name = hd.name
+		 CROSS JOIN edges h ON h.id = c.id
+		 CROSS JOIN files hf ON hf.index_run_id = h.index_run_id AND hf.path = h.evidence_file
+		 CROSS JOIN symbols hd ON hd.id = h.dst_id
+		 CROSS JOIN edges x INDEXED BY idx_edges_evidence
+		         ON x.index_run_id = h.index_run_id AND x.evidence_file = h.evidence_file
+		        AND x.evidence_line = h.evidence_line AND x.source = 'compiler'
+		        AND x.kind IN ('CALLS','INSTANTIATES')
+		 CROSS JOIN symbols xd ON xd.id = x.dst_id AND xd.name = hd.name
 		 GROUP BY hf.id, h.evidence_line, h.dst_id
 		HAVING COUNT(DISTINCT x.dst_id) = 1`); err != nil {
 		return 0, 0, fmt.Errorf("registry: withdraw contradicted calls: re-bind targets: %w", err)

@@ -20,9 +20,11 @@ import (
 // files it never read.
 //
 // WHAT COUNTS AS RULED OUT. A reference row is spelled like the definition an
-// answer is about, was bound to nothing, and sits where a compiler resolved an
-// occurrence spelled the same way to a symbol of another package, one this
-// repository does not define. The test is made per (file, line, name):
+// answer is about, was bound to nothing (or only by the resolver's guess from
+// the name, which is then undone: see registry.MarkRuledOut), and sits where a
+// compiler resolved an occurrence spelled the same way to a symbol of another
+// package, one this repository does not define. A reference a compiler itself
+// bound is never touched. The test is made per (file, line, name):
 //
 //   - every occurrence of that name on the line must resolve outside the
 //     repository (none to a symbol the index defines, matched or not, and none
