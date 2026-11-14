@@ -23,6 +23,7 @@ const (
 	ToolGradle Tool = "gradle"
 	ToolPython Tool = "python3"
 	ToolDocker Tool = "docker"
+	ToolCargo  Tool = "cargo"
 )
 
 // probeTimeout bounds a version probe. A version flag that has not answered in
@@ -55,6 +56,7 @@ var probes = map[Tool]probe{
 	ToolPython: {args: []string{"--version"}, cheap: true},
 	ToolMaven:  {args: []string{"-v"}, cheap: false},
 	ToolGradle: {args: []string{"--version"}, cheap: false},
+	ToolCargo:  {args: []string{"--version"}, cheap: true},
 
 	// Docker is probed against the DAEMON, not the CLI, and the probe failing
 	// means the tool is not usable.
@@ -271,6 +273,14 @@ func RequiredTools(p Project, runner string) []Tool {
 		// checker — so Node is the hard requirement and python3 is not needed to
 		// analyse the source.
 		return []Tool{ToolNode}
+	case LangRust:
+		// rust-analyzer loads the package through `cargo metadata`, so cargo
+		// has to be on PATH beside it.
+		return []Tool{ToolCargo}
+	case LangCPP:
+		// scip-clang is one self-contained binary and reads the compilation
+		// database; no further tool is required to run it.
+		return nil
 	case LangJava:
 		if p.hasMarker("pom.xml") {
 			return []Tool{ToolJava, ToolMaven}

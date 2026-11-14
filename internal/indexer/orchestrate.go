@@ -315,7 +315,7 @@ func NewPlanWith(ctx context.Context, repoRoot string, cfg config.Config, opts O
 	}
 	plan.Projects = projects
 	if len(projects) == 0 {
-		plan.Note = "no Java, TypeScript, Go or Python project markers found"
+		plan.Note = "no Java, TypeScript, Go, Python, C/C++ or Rust project markers found"
 		return plan, nil
 	}
 
@@ -334,6 +334,11 @@ func NewPlanWith(ctx context.Context, repoRoot string, cfg config.Config, opts O
 	allowed := languageFilter(cfg.IndexerLanguages)
 	found := map[Indexer]Installed{}
 	for _, p := range projects {
+		if p.Language == LangRust && cargoWorkspaceAbove(abs, projects, p) {
+			// A member crate is part of the workspace whose root is already a
+			// step, and that step says why none of them is indexed.
+			continue
+		}
 		plan.Steps = append(plan.Steps, planStep(ctx, p, plan, cfg, allowed, prov, opts, found))
 	}
 	return plan, nil
@@ -391,6 +396,16 @@ func planStep(ctx context.Context, p Project, plan Plan, cfg config.Config,
 		return step
 	}
 
+	// Reasons a project cannot be indexed that cost nothing to find out and
+	// that no install fixes. They come before availability: a user told to
+	// install an indexer and then told it cannot run has been sent on an
+	// errand.
+	if why := projectBlock(plan.RepoRoot, p); why != "" {
+		step.Blocked = true
+		step.Reason = why
+		return step
+	}
+
 	// Preflight before consent, deliberately. Asking a user to accept running
 	// an untrusted build, and only then discovering the indexer could never
 	// have compiled it, spends their trust on nothing.
@@ -399,6 +414,26 @@ func planStep(ctx context.Context, p Project, plan Plan, cfg config.Config,
 	if why := releaseMismatch(pin, filepath.Join(plan.RepoRoot, p.Dir)); why != "" {
 		step.Blocked = true
 		step.Reason = why
+		return step
+	}
+
+	if p.Language == LangCPP && !opts.AllowRepoBuild {
+		// scip-clang reads the compiler invocations out of the repository's own
+		// compile_commands.json: which compiler, with which flags. That file is
+		// repository-controlled, so what it names is code the repository
+		// chooses, and running it needs the same explicit opt-in as a build.
+		step.Blocked = true
+		step.Reason = "indexing C/C++ runs the compilers and flags named in the repository's " +
+			"compile_commands.json, which executes code the repository chooses; " +
+			"re-run with --allow-repo-build"
+		return step
+	}
+
+	if p.Language == LangRust && !opts.AllowRepoBuild {
+		step.Blocked = true
+		step.Reason = "indexing Rust runs cargo to load the package, which executes the repository's " +
+			"own build scripts and procedural macros, which executes code the repository chooses; " +
+			"re-run with --allow-repo-build"
 		return step
 	}
 
@@ -416,6 +451,11 @@ func planStep(ctx context.Context, p Project, plan Plan, cfg config.Config,
 	}
 
 	step.NeedsProvision = true
+	if pin.Channel == ChannelUser {
+		step.Blocked = true
+		step.Reason = pin.Binary + " is not installed; it is user-installed, and RepoCortex does not install it (no pinned release of it): " + pin.InstallHint
+		return step
+	}
 	if pin.Channel == ChannelDocker && plan.Runner != RunnerDocker {
 		// Installing scip-java natively means letting coursier fetch JVM
 		// artifacts and wiring it into the build — a host mutation with a much
@@ -473,6 +513,12 @@ func languageFilter(langs []string) map[Language]bool {
 	}
 	if set["py"] {
 		set[LangPython] = true
+	}
+	if set["c"] || set["c++"] || set["cxx"] {
+		set[LangCPP] = true
+	}
+	if set["rs"] {
+		set[LangRust] = true
 	}
 	if set["golang"] {
 		set[LangGo] = true

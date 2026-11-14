@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/satyendrakumarsingh/repocortex/internal/config"
+	"github.com/satyendrakumarsingh/repocortex/internal/indexer"
 	"github.com/satyendrakumarsingh/repocortex/internal/registry"
 	"github.com/satyendrakumarsingh/repocortex/internal/resolve/gotypes"
 	"github.com/satyendrakumarsingh/repocortex/internal/store"
@@ -244,6 +245,12 @@ All figures are read from the registry. Nothing is estimated.`,
 					st.Compiler = append(st.Compiler, l)
 				}
 			}
+			langsWithFiles := make([]indexer.LanguageFiles, 0, len(langs))
+			for _, l := range langs {
+				langsWithFiles = append(langsWithFiles, indexer.LanguageFiles{Language: l.Language, Files: l.Files})
+			}
+			st.SuggestedIndexers = indexer.Suggest(ctx, nil, cfg, langsWithFiles)
+
 			// The same number the run row and the portal carry: files whose
 			// indexing was abandoned. A gate that reads this field and wants
 			// zero is asking the right question.
@@ -314,9 +321,13 @@ type statusReport struct {
 	// Compiler says, per language that has definitions, how many files a
 	// compiler read: Go through the built-in type check, the others through
 	// the compiler indexer `resolve` ran. Absent languages are heuristic only.
-	Compiler     []registry.CheckedLanguage `json:"compiler_checked,omitempty"`
-	MCPProfile   string                     `json:"mcp_profile"`
-	Capabilities []string                   `json:"capabilities"`
+	Compiler []registry.CheckedLanguage `json:"compiler_checked,omitempty"`
+	// SuggestedIndexers are compiler indexers that are not installed for a
+	// language with many files here, each with the command to get it. Status
+	// installs nothing.
+	SuggestedIndexers []indexer.Suggestion `json:"suggested_indexers,omitempty"`
+	MCPProfile        string               `json:"mcp_profile"`
+	Capabilities      []string             `json:"capabilities"`
 }
 
 // goTypesStatus is the built-in Go type check's footprint in an index.
@@ -368,6 +379,12 @@ func renderStatus(cmd *cobra.Command, g *Global, st statusReport, hint string) e
 					titleCase(l.Language), l.Files, compilerHint(l.Language))
 			}
 		}
+		if !g.Quiet {
+			for _, s := range st.SuggestedIndexers {
+				_, _ = fmt.Fprintf(w, "Suggested:\t%s: %d files with definitions, no %s installed. It would add %s. To get it: %s\n",
+					s.Language, s.Files, s.Indexer, s.Adds, s.Command)
+			}
+		}
 		if st.AmbiguousLanguages > 0 {
 			_, _ = fmt.Fprintf(w, "Ambiguous languages:\t%d  (language guessed from the extension; see index.language_overrides)\n",
 				st.AmbiguousLanguages)
@@ -405,7 +422,7 @@ var documentLanguage = map[string]bool{
 // something could.
 func compilerHint(lang string) string {
 	switch lang {
-	case "typescript", "tsx", "javascript", "jsx", "python", "java", "kotlin", "scala":
+	case "typescript", "tsx", "javascript", "jsx", "python", "java", "kotlin", "scala", "c", "cpp", "rust":
 		return ": run 'repocortex resolve' with the language's indexer installed (see 'repocortex indexers list')"
 	}
 	return ": no compiler indexer is wired for it"

@@ -292,7 +292,7 @@ repo with your machine.`,
 	// CLI surface at all, so the only way past the Java gate was to edit config
 	// — which is why Java shipped unmeasured.
 	cmd.Flags().BoolVar(&allowBuild, "allow-repo-build", false,
-		"permit running the repository's own build (Java); it executes code from the repo")
+		"permit indexers that execute code the repository chooses (Java build, C/C++ compile_commands.json, Rust cargo); it executes code from the repo")
 	cmd.Flags().StringVar(&outDir, "out-dir", "",
 		"write .scip files here (created if absent, must be empty) instead of a temporary directory")
 	return cmd

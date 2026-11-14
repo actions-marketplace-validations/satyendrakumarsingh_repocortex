@@ -32,6 +32,7 @@ func newResolveCmd(g *Global) *cobra.Command {
 	var minConfidence string
 	var noSCIP bool
 	var accuracy string
+	var allowBuild bool
 
 	cmd := &cobra.Command{
 		Use:   "resolve",
@@ -52,8 +53,12 @@ heuristic call edges it proves false.
 
 For the other languages (accuracy auto or exact), resolve runs the compiler
 indexer already installed for each project, as 'repocortex indexers list'
-shows it: scip-typescript, scip-python, and scip-java where the plan allows
-it. It installs nothing and runs nothing the plan marks blocked. Each index is
+shows it: scip-typescript, scip-python, scip-clang (C and C++, needs a
+compile_commands.json), rust-analyzer (a single Cargo package) and scip-java
+where the plan allows it. Java without Docker, C/C++ and Rust execute code the
+repository chooses, so they run only with --allow-repo-build, which only your
+command line sets. When a language with many files has no
+indexer installed, resolve says so and prints the command; it never installs. It installs nothing and runs nothing the plan marks blocked. Each index is
 written under .repocortex/scip/ and imported; one whose inputs have not changed
 since it was written is imported again without being re-run. --accuracy fast
 skips all of it.`,
@@ -162,9 +167,13 @@ skips all of it.`,
 				ciCfg := cfg
 				ciCfg.Accuracy = mode
 				ciOut = pipeline.RunCompilerIndexers(ctx, reg, run.ID, pipeline.CompilerIndexOptions{
-					Root: cfg.RepoRoot, Config: ciCfg, Logger: g.Log(),
+					Root: cfg.RepoRoot, Config: ciCfg, Logger: g.Log(), AllowRepoBuild: allowBuild,
 				})
 			}
+
+			ciMode := cfg
+			ciMode.Accuracy = mode
+			sugg := suggestedIndexers(ctx, reg, run.ID, ciMode)
 
 			// Counted from the table, after every pass above has written to
 			// it, so the edge figures describe the graph a query will now
@@ -227,10 +236,11 @@ skips all of it.`,
 						"endpoints": infra.Endpoints, "bound": infra.Bound,
 						"ambiguous": infra.Ambiguous, "edges": infra.Edges,
 					},
-					"scip":              scipOut.json(),
-					"go_types":          goTypesJSON(mode, goOut),
-					"compiler_indexers": compilerIndexersJSON(mode, ciOut),
-					"duration_ms":       time.Since(start).Milliseconds(),
+					"scip":               scipOut.json(),
+					"go_types":           goTypesJSON(mode, goOut),
+					"compiler_indexers":  compilerIndexersJSON(mode, ciOut),
+					"suggested_indexers": sugg,
+					"duration_ms":        time.Since(start).Milliseconds(),
 				})
 			}
 			out := cmd.OutOrStdout()
@@ -373,6 +383,7 @@ skips all of it.`,
 			scipOut.render(out)
 			renderGoTypes(out, mode, goOut)
 			renderCompilerIndexers(out, mode, ciOut)
+			renderSuggestedIndexers(out, g.Quiet, sugg)
 			fmt.Fprintf(out, "  Duration:    %dms\n", time.Since(start).Milliseconds())
 			return nil
 		},
@@ -380,6 +391,8 @@ skips all of it.`,
 	cmd.Flags().StringVar(&minConfidence, "min-confidence", "", "drop bindings weaker than: high|medium|low")
 	cmd.Flags().StringVar(&accuracy, "accuracy", "",
 		"override the accuracy mode for this run: fast|auto|exact (fast skips the Go type check)")
+	cmd.Flags().BoolVar(&allowBuild, "allow-repo-build", false,
+		"let the compiler pass run indexers that execute code the repository chooses: Java without Docker (Maven, Gradle), C/C++ (the compilers named in compile_commands.json) and Rust (cargo build scripts and macros)")
 	cmd.Flags().BoolVar(&noSCIP, "no-scip", false, "do not import an index.scip found in the project root or .repocortex/")
 	return cmd
 }

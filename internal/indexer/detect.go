@@ -26,6 +26,12 @@ const (
 	LangTypeScript Language = "typescript"
 	LangJava       Language = "java"
 	LangPython     Language = "python"
+
+	// LangCPP is C and C++ together: scip-clang indexes both from one
+	// compilation database, and the project is the directory holding it.
+	LangCPP Language = "cpp"
+	// LangRust is a Cargo package, indexed by `rust-analyzer scip`.
+	LangRust Language = "rust"
 )
 
 // Project is one buildable unit found in the repository.
@@ -76,6 +82,17 @@ var markerLanguages = map[string]Language{
 	"pyproject.toml":   LangPython,
 	"requirements.txt": LangPython,
 	"setup.py":         LangPython,
+
+	// C and C++ have no manifest of their own. What scip-clang needs is a
+	// compilation database, so that file is the marker that lets it run; a
+	// CMake or Meson project without one is still detected, so that it can be
+	// reported as "cannot run, because there is no compile_commands.json"
+	// together with the command that makes one.
+	"compile_commands.json": LangCPP,
+	"CMakeLists.txt":        LangCPP,
+	"meson.build":           LangCPP,
+
+	"Cargo.toml": LangRust,
 }
 
 // skipDirs are never descended into.
@@ -207,6 +224,7 @@ func Detect(ctx context.Context, repoRoot string) ([]Project, error) {
 			projects = append(projects, Project{Language: lang, Dir: dir, Markers: markers})
 		}
 	}
+	projects = foldNestedCPP(projects)
 	sort.Slice(projects, func(i, j int) bool {
 		if projects[i].Dir != projects[j].Dir {
 			return projects[i].Dir < projects[j].Dir
@@ -214,6 +232,38 @@ func Detect(ctx context.Context, repoRoot string) ([]Project, error) {
 		return projects[i].Language < projects[j].Language
 	})
 	return projects, nil
+}
+
+// foldNestedCPP drops a C or C++ project that has no compilation database of
+// its own and lies beneath another C or C++ project. A CMake tree has a
+// CMakeLists.txt in every subdirectory, and they are one build: reporting each
+// as a project would print the same missing-database advice once per directory.
+// A directory with its own compile_commands.json stays, since that file is what
+// scip-clang is run against.
+func foldNestedCPP(projects []Project) []Project {
+	var cppDirs []string
+	for _, p := range projects {
+		if p.Language == LangCPP {
+			cppDirs = append(cppDirs, p.Dir)
+		}
+	}
+	out := projects[:0:0]
+	for _, p := range projects {
+		if p.Language == LangCPP && !p.hasMarker("compile_commands.json") {
+			nested := false
+			for _, d := range cppDirs {
+				if d != p.Dir && (d == "." || strings.HasPrefix(p.Dir, d+"/")) {
+					nested = true
+					break
+				}
+			}
+			if nested {
+				continue
+			}
+		}
+		out = append(out, p)
+	}
+	return out
 }
 
 // tsSourceExt are the extensions scip-typescript indexes as program input.

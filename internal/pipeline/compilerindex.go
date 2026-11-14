@@ -54,6 +54,9 @@ type CompilerIndexOptions struct {
 	// Timeout bounds one indexer; zero means the smaller of the user's setting
 	// and DefaultCompilerIndexTimeout.
 	Timeout time.Duration
+	// AllowRepoBuild is the user's explicit opt-in to indexers that run the
+	// repository's own build (Java natively, Rust): `resolve --allow-repo-build`.
+	AllowRepoBuild bool
 	// Language, when set, limits the run to indexers of that language: for
 	// tests.
 	Language indexer.Language
@@ -134,7 +137,7 @@ func RunCompilerIndexers(ctx context.Context, reg *registry.Registry, runID int6
 		out.Note = "accuracy fast: no compiler indexer runs"
 		return out
 	}
-	iopts := indexer.Options{Runner: opts.Runner, Logger: opts.Logger}
+	iopts := indexer.Options{Runner: opts.Runner, Logger: opts.Logger, AllowRepoBuild: opts.AllowRepoBuild}
 	if opts.Logger != nil {
 		iopts.Audit = indexer.LogAudit{Logger: opts.Logger}
 	}
@@ -398,6 +401,10 @@ func languageFamily(l indexer.Language) map[string]bool {
 		return map[string]bool{"java": true, "kotlin": true, "scala": true}
 	case indexer.LangGo:
 		return map[string]bool{"go": true}
+	case indexer.LangCPP:
+		return map[string]bool{"c": true, "cpp": true}
+	case indexer.LangRust:
+		return map[string]bool{"rust": true}
 	}
 	return nil
 }
@@ -407,7 +414,10 @@ func languageFamily(l indexer.Language) map[string]bool {
 var buildInputs = map[string]bool{
 	"package.json": true, "package-lock.json": true, "pnpm-lock.yaml": true, "yarn.lock": true,
 	"pyproject.toml": true, "setup.py": true, "setup.cfg": true, "uv.lock": true, "poetry.lock": true,
-	"Pipfile.lock": true, "pom.xml": true, "build.gradle": true, "build.gradle.kts": true,
+	"Pipfile.lock": true, "pom.xml": true,
+	// scip-clang reads the compilation database, so a changed flag or include
+	// path changes what it proves; cargo reads the manifest and lock file.
+	"compile_commands.json": true, "Cargo.toml": true, "Cargo.lock": true, "build.gradle": true, "build.gradle.kts": true,
 }
 
 // maxKeyedInput bounds how much of a build input is read for the key.
@@ -577,6 +587,12 @@ func ownPackages(root string, files []model.File) [][2]string {
 			for _, part := range parts {
 				add("python", part)
 			}
+		case filepath.Base(f.Path) == "Cargo.toml":
+			raw, err := os.ReadFile(filepath.Join(root, filepath.FromSlash(f.Path))) //nolint:gosec // G304: Cargo.toml inside the repository being indexed, read for its package name only
+			if err != nil || len(raw) > maxKeyedInput {
+				continue
+			}
+			add("cargo", cargoPackageName(string(raw)))
 		case filepath.Base(f.Path) == "package.json":
 			raw, err := os.ReadFile(filepath.Join(root, filepath.FromSlash(f.Path))) //nolint:gosec // G304: package.json inside the repository being indexed, read for its "name" only
 			if err != nil || len(raw) > maxKeyedInput {
@@ -591,4 +607,30 @@ func ownPackages(root string, files []model.File) [][2]string {
 		}
 	}
 	return out
+}
+
+// cargoPackageName is the `name` of a Cargo.toml's [package] table, or "".
+// Read for provenance only (see Proof.AddOwn): the SCIP symbols of a Cargo
+// package carry it as their package name.
+func cargoPackageName(manifest string) string {
+	inPackage := false
+	for _, line := range strings.Split(manifest, "\n") {
+		line = strings.TrimSpace(line)
+		if strings.HasPrefix(line, "[") {
+			inPackage = line == "[package]"
+			continue
+		}
+		if !inPackage {
+			continue
+		}
+		key, val, ok := strings.Cut(line, "=")
+		if !ok || strings.TrimSpace(key) != "name" {
+			continue
+		}
+		val = strings.TrimSpace(val)
+		if len(val) >= 2 && (val[0] == '"' || val[0] == '\'') && val[len(val)-1] == val[0] {
+			return val[1 : len(val)-1]
+		}
+	}
+	return ""
 }
