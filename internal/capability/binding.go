@@ -87,6 +87,11 @@ type TargetBinding struct {
 	// that can call it. Zero means not counted.
 	Definitions int64 `json:"definitions_of_name,omitempty"`
 
+	// InstalledCopy is how many of the unbound references sit where the compiler
+	// resolved this repository's own package to an installed copy instead of the
+	// checkout. They are still counted in Ambiguous, Unresolved and Pending.
+	InstalledCopy int64 `json:"seen_against_installed_copy,omitempty"`
+
 	// WithoutEdge counts sites bound to the target that no relationship
 	// records, because the reference sits outside every extracted definition
 	// (module top level, an anonymous function). They are uses of the target
@@ -193,8 +198,14 @@ func (b TargetBinding) unlistedSentence() string {
 		parts = append(parts, fmt.Sprintf("%d bound to it from outside any indexed function "+
 			"(module top level or an anonymous callback), which no caller list records", b.WithoutEdge))
 	}
-	return fmt.Sprintf("%d of the %d reference(s) spelled like this name are not listed as its callers: %s",
+	s := fmt.Sprintf("%d of the %d reference(s) spelled like this name are not listed as its callers: %s",
 		b.Unlisted(), b.References, strings.Join(parts, "; "))
+	if b.InstalledCopy > 0 {
+		s += fmt.Sprintf(". %d of the unbound sit where the compiler resolved this repository's own package to an "+
+			"installed copy, not this checkout, so what it said there may describe another version "+
+			"(index again with this checkout first on the import path to settle them)", b.InstalledCopy)
+	}
+	return s
 }
 
 // ambiguousWhy says why references are ambiguous, in terms that are true of
@@ -244,6 +255,7 @@ func (d Deps) TargetBinding(ctx context.Context, runID int64, tgt Target) (Targe
 		Pending:             nb.Pending,
 		ProvenOther:         nb.ProvenOther,
 		Definitions:         nb.Definitions,
+		InstalledCopy:       nb.InstalledCopy,
 		WithoutEdge:         nb.WithoutEdge,
 	}, nil
 }

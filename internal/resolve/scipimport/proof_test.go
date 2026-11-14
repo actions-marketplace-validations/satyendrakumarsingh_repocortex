@@ -254,3 +254,117 @@ func TestApplyIsRepeatable(t *testing.T) {
 		t.Errorf("a second import changed the result: %+v then %+v", first, second)
 	}
 }
+
+// TestProofMarksWhatTheCompilerSawAgainstAnInstalledCopy: line 13 of use.ts is
+// resolved to a package the repository itself provides that no document defines:
+// the indexer read an installed copy of the repository's own library. The
+// reference stays unbound and counted (it may be a use of the definition or not)
+// and is marked, so an answer can say why.
+func TestProofMarksWhatTheCompilerSawAgainstAnInstalledCopy(t *testing.T) {
+	ctx := context.Background()
+	reg, runID, ids := proofRepo(t)
+	proof := NewProof()
+	proof.AddOwn("npm", "sibling")
+	imp := NewImporter(reg, runID, scip.Options{RepoRoot: "/build/repo"}).Collect(proof)
+	res, err := imp.Import(ctx, scipFile(t, tsDocs()...))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(res.InstalledCopies) != 1 || res.InstalledCopies[0] != "npm sibling" {
+		t.Errorf("InstalledCopies = %v, want [npm sibling]", res.InstalledCopies)
+	}
+	st, _, err := proof.Apply(ctx, reg, runID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if st.InstalledCopy != 1 {
+		t.Errorf("marked %d references as seen against an installed copy, want 1 (line 13)", st.InstalledCopy)
+	}
+	var resolution, source string
+	if err := dbOf(reg).QueryRowContext(ctx, `
+		SELECT resolution, resolution_source FROM symbol_references
+		 WHERE index_run_id = ? AND start_line = 13`, runID).Scan(&resolution, &source); err != nil {
+		t.Fatal(err)
+	}
+	if resolution != "unresolved" || source != registry.ResolutionSourceInstalled {
+		t.Errorf("line 13 is %q by %q, want it still unresolved and marked installed", resolution, source)
+	}
+	b, err := reg.NameBinding(ctx, runID, ids["get"], "get")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if b.InstalledCopy != 1 || b.Unbound() != 3 {
+		t.Errorf("InstalledCopy = %d, Unbound = %d, want 1 and 3 (it is still counted)", b.InstalledCopy, b.Unbound())
+	}
+
+	// A second resolve describes the indexes it has now: the mark is cleared first.
+	if _, _, err := NewProof().Apply(ctx, reg, runID); err != nil {
+		t.Fatal(err)
+	}
+	if err := dbOf(reg).QueryRowContext(ctx, `
+		SELECT resolution_source FROM symbol_references WHERE index_run_id = ? AND start_line = 13`, runID).Scan(&source); err != nil {
+		t.Fatal(err)
+	}
+	if source != "" {
+		t.Errorf("an empty proof left line 13 marked %q", source)
+	}
+}
+
+func TestProofDoesNotCallAStrangersPackageAnInstalledCopy(t *testing.T) {
+	reg, runID, _ := proofRepo(t)
+	proof := NewProof() // sibling is not declared as the repository's own
+	imp := NewImporter(reg, runID, scip.Options{RepoRoot: "/build/repo"}).Collect(proof)
+	res, err := imp.Import(context.Background(), scipFile(t, tsDocs()...))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(res.InstalledCopies) != 0 {
+		t.Errorf("InstalledCopies = %v for a package nobody declared as the repository's own", res.InstalledCopies)
+	}
+}
+
+// TestProofMarksAProjectSpelledSymbolOnlyInADocumentThatReadAnInstalledCopy: the
+// installed copy's modules come back under the PROJECT's own package name, so
+// the symbol at line 11 (`src/gone.ts`/get(), the project's package, defined by
+// no document) is told from a symbol the indexer merely could not place only by
+// the document also naming the installed copy (here sibling, at line 13).
+func TestProofMarksAProjectSpelledSymbolOnlyInADocumentThatReadAnInstalledCopy(t *testing.T) {
+	const projectGhost = "scip-typescript npm proj 1.0.0 `src/gone.ts`/get()."
+	run := func(t *testing.T, withInstalled bool) string {
+		t.Helper()
+		ctx := context.Background()
+		reg, runID, _ := proofRepo(t)
+		docs := tsDocs()
+		use := docs[1]
+		var kept []*scippb.Occurrence
+		for _, o := range use.Occurrences {
+			// tsDocs names the installed copy at line 13; take that out for the
+			// document that never does.
+			if withInstalled || o.GetSymbol() != tsOwnGet {
+				kept = append(kept, o)
+			}
+		}
+		use.Occurrences = append(kept, ref(projectGhost, rng(10, 8, 10, 11))) // line 11
+		proof := NewProof()
+		proof.AddOwn("npm", "sibling")
+		imp := NewImporter(reg, runID, scip.Options{RepoRoot: "/build/repo"}).Collect(proof)
+		if _, err := imp.Import(ctx, scipFile(t, docs...)); err != nil {
+			t.Fatal(err)
+		}
+		if _, _, err := proof.Apply(ctx, reg, runID); err != nil {
+			t.Fatal(err)
+		}
+		var source string
+		if err := dbOf(reg).QueryRowContext(ctx, `
+			SELECT resolution_source FROM symbol_references WHERE index_run_id = ? AND start_line = 11`, runID).Scan(&source); err != nil {
+			t.Fatal(err)
+		}
+		return source
+	}
+	if got := run(t, true); got != registry.ResolutionSourceInstalled {
+		t.Errorf("a document naming the installed copy: line 11 is marked %q, want %q", got, registry.ResolutionSourceInstalled)
+	}
+	if got := run(t, false); got != "" {
+		t.Errorf("a document that never names an installed copy: line 11 is marked %q, want nothing", got)
+	}
+}

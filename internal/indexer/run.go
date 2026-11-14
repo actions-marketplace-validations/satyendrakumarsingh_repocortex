@@ -222,7 +222,7 @@ func (e *Executor) command(inst Installed, p Project, rel, projectDir, repoRoot,
 				"--project-version", "0.0.0",
 			},
 			Dir: projectDir,
-			Env: os.Environ(),
+			Env: pythonEnv(projectDir),
 		}, nil
 
 	case SCIPClang:

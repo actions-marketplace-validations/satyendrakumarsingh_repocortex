@@ -261,3 +261,32 @@ func TestGoEnvDisarmsChecksumOptOuts(t *testing.T) {
 		}
 	}
 }
+
+// scip-python runs with the project's own source directories first on the
+// import path, built only from directory names, and keeps the user's own
+// PYTHONPATH after them.
+func TestPythonEnvPutsTheProjectsSourceFirst(t *testing.T) {
+	root := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(root, "src"), 0o750); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PYTHONPATH", "/user/lib")
+	var got string
+	for _, kv := range pythonEnv(root) {
+		if v, ok := strings.CutPrefix(kv, "PYTHONPATH="); ok {
+			got = v
+		}
+	}
+	want := strings.Join([]string{filepath.Join(root, "src"), root, "/user/lib"}, string(os.PathListSeparator))
+	if got != want {
+		t.Errorf("PYTHONPATH = %q, want %q", got, want)
+	}
+
+	flat := t.TempDir() // no src directory: only the root
+	t.Setenv("PYTHONPATH", "")
+	for _, kv := range pythonEnv(flat) {
+		if v, ok := strings.CutPrefix(kv, "PYTHONPATH="); ok && v != flat {
+			t.Errorf("flat layout PYTHONPATH = %q, want %q", v, flat)
+		}
+	}
+}

@@ -182,3 +182,27 @@ func TestDisplayLanguage(t *testing.T) {
 		}
 	}
 }
+
+// TestUnlistedSentenceSaysWhenTheCompilerReadAnInstalledCopy: references the
+// compiler resolved against an installed copy of this repository's own library
+// stay counted as unbound, and the sentence says why and what to change.
+func TestUnlistedSentenceSaysWhenTheCompilerReadAnInstalledCopy(t *testing.T) {
+	b := capability.TargetBinding{Known: true, Name: "to_info_dict", References: 22, Ambiguous: 6, InstalledCopy: 2}
+	got := b.UnlistedSentence()
+	for _, want := range []string{
+		"6 of the 22 reference(s) spelled like this name are not listed as its callers",
+		"2 of the unbound sit where the compiler resolved this repository's own package to an installed copy",
+		"index again with this checkout first on the import path",
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("sentence %q does not say %q", got, want)
+		}
+	}
+	if b.Unbound() != 6 {
+		t.Errorf("Unbound = %d, want the installed-copy references still counted (6)", b.Unbound())
+	}
+	b.InstalledCopy = 0
+	if strings.Contains(b.UnlistedSentence(), "installed copy") {
+		t.Errorf("sentence mentions an installed copy when none was seen: %q", b.UnlistedSentence())
+	}
+}

@@ -424,3 +424,26 @@ func goEnv(extra ...string) []string {
 	)
 	return envWith(base, extra...)
 }
+
+// pythonEnv is the environment scip-python runs in: the process environment
+// with the project's own source directories first on PYTHONPATH.
+//
+// Without it `import click` in click's tests resolved to a click 8.1.8 in the
+// user's site-packages and not to the checkout, so the compiler spelled the
+// checkout's symbols as another copy's and no call in the tests joined to a
+// definition of the repository (measured on pallets/click: the call
+// TestType().to_info_dict() reached `click.types`/ParamType#to_info_dict
+// instead of the checkout's own). The directories are the two a Python project
+// is laid out in, "src" and the root, chosen by fixed name and by being
+// directories; nothing from the repository's contents reaches the environment.
+func pythonEnv(projectDir string) []string {
+	var dirs []string
+	if fi, err := os.Stat(filepath.Join(projectDir, "src")); err == nil && fi.IsDir() {
+		dirs = append(dirs, filepath.Join(projectDir, "src"))
+	}
+	dirs = append(dirs, projectDir)
+	if cur := os.Getenv("PYTHONPATH"); cur != "" {
+		dirs = append(dirs, cur)
+	}
+	return envWith(os.Environ(), "PYTHONPATH="+strings.Join(dirs, string(os.PathListSeparator)))
+}

@@ -555,10 +555,16 @@ func (run *ingestRun) convert(d *scippb.Document, repoPath string) *FileFacts {
 		}
 		if run.opts.KeepSites {
 			info := run.symbolInfo(sym)
+			local := scippb.IsLocalSymbol(sym)
+			width := 0
+			if rng.End.Line == rng.Start.Line {
+				width = int(rng.End.Character - rng.Start.Character)
+			}
 			facts.Sites = append(facts.Sites, Site{
 				Line: int(rng.Start.Line) + 1, Name: info.name,
 				DstFQN: qualifyFQN(repoPath, sym), Package: info.pkg,
-				Local: scippb.IsLocalSymbol(sym),
+				Local: local, Col: int(rng.Start.Character), Len: width,
+				Declared: local && defs[sym] != nil,
 			})
 		}
 		facts.Relations = append(facts.Relations, Relation{

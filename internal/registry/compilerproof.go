@@ -14,6 +14,15 @@ import (
 // definition that happens to share the name.
 const ResolutionSourceRuledOut = "compiler_other"
 
+// ResolutionSourceInstalled marks an unbound reference at a position where a
+// compiler indexer resolved the repository's OWN package to an installed copy
+// instead of this checkout (pallets/click's tests run against the click in
+// site-packages, a different version). What the compiler said there describes
+// that copy: it neither proves the reference is a use of this repository's
+// definition nor that it is not, so the reference stays unbound and counted. The
+// mark says why, so an answer can tell the reader what to change.
+const ResolutionSourceInstalled = "compiler_installed"
+
 // ClearCompilerProof forgets what an earlier import of compiler indexes
 // recorded for the run: the files it covered and the references it ruled out.
 // An import writes both again, so a second resolve describes the indexes it
@@ -30,7 +39,8 @@ func (r *Registry) ClearCompilerProof(ctx context.Context, runID int64) error {
 	}
 	if _, err := tx.ExecContext(ctx, `
 		UPDATE symbol_references SET resolution_source = ''
-		 WHERE index_run_id = ? AND resolution_source = ?`, runID, ResolutionSourceRuledOut); err != nil {
+		 WHERE index_run_id = ? AND resolution_source IN (?, ?)`, runID,
+		ResolutionSourceRuledOut, ResolutionSourceInstalled); err != nil {
 		return fmt.Errorf("registry: clear ruled-out references: %w", err)
 	}
 	return tx.Commit()
@@ -68,11 +78,17 @@ func (r *Registry) RecordCompilerCoverage(ctx context.Context, runID int64, tool
 // RefSite is one reference row as the proof pass needs it: where it is, what
 // it is spelled as and whether anything bound it.
 type RefSite struct {
-	ID       int64
-	Path     string
-	Line     int
-	Name     string
-	Resolved bool
+	ID   int64
+	Path string
+	Line int
+	// Col is the 0-based column the parser recorded: the start of the call
+	// expression, which for a call with no receiver is the callee's own column.
+	Col int
+	// ReceiverKind is what the call was written against (model.ReceiverBare for
+	// none), as the parser classified it.
+	ReceiverKind string
+	Name         string
+	Resolved     bool
 	// ByCompiler is true when a compiler settled the reference itself.
 	ByCompiler bool
 }
@@ -82,7 +98,7 @@ type RefSite struct {
 // returns.
 func (r *Registry) CoveredReferences(ctx context.Context, runID int64, fn func(RefSite) error) error {
 	rows, err := r.db.QueryContext(ctx, `
-		SELECT sr.id, f.path, sr.start_line, sr.name, sr.resolution = 'resolved', sr.resolution_source = 'compiler'
+		SELECT sr.id, f.path, sr.start_line, sr.start_col, sr.receiver_kind, sr.name, sr.resolution = 'resolved', sr.resolution_source = 'compiler'
 		  FROM compiler_coverage c
 		  JOIN files f ON f.id = c.file_id
 		  JOIN symbol_references sr ON sr.file_id = f.id
@@ -94,7 +110,7 @@ func (r *Registry) CoveredReferences(ctx context.Context, runID int64, fn func(R
 	defer rows.Close()
 	for rows.Next() {
 		var s RefSite
-		if err := rows.Scan(&s.ID, &s.Path, &s.Line, &s.Name, &s.Resolved, &s.ByCompiler); err != nil {
+		if err := rows.Scan(&s.ID, &s.Path, &s.Line, &s.Col, &s.ReceiverKind, &s.Name, &s.Resolved, &s.ByCompiler); err != nil {
 			return fmt.Errorf("registry: references of covered files: scan: %w", err)
 		}
 		if err := fn(s); err != nil {
@@ -152,6 +168,35 @@ func (r *Registry) MarkRuledOut(ctx context.Context, ids []int64) (marked, unbou
 		ids = ids[n:]
 	}
 	return marked, unbound, nil
+}
+
+// MarkInstalledCopy stamps the given unbound references as seen by a compiler
+// against an installed copy of the repository's own package
+// (ResolutionSourceInstalled). A reference that is bound, or that something else
+// already settled, is left alone. It returns how many were stamped.
+func (r *Registry) MarkInstalledCopy(ctx context.Context, ids []int64) (int, error) {
+	const chunk = 500
+	marked := 0
+	for len(ids) > 0 {
+		n := min(chunk, len(ids))
+		ph := strings.TrimSuffix(strings.Repeat("?,", n), ",")
+		args := make([]any, 0, n+1)
+		args = append(args, ResolutionSourceInstalled)
+		for _, id := range ids[:n] {
+			args = append(args, id)
+		}
+		res, err := r.db.ExecContext(ctx, `
+			UPDATE symbol_references SET resolution_source = ?
+			 WHERE resolution <> 'resolved' AND resolution_source = '' AND id IN (`+ph+`)`, args...)
+		if err != nil {
+			return marked, fmt.Errorf("registry: mark references seen against an installed copy: %w", err)
+		}
+		if c, err := res.RowsAffected(); err == nil {
+			marked += int(c)
+		}
+		ids = ids[n:]
+	}
+	return marked, nil
 }
 
 // CheckedLanguage is how much of one language's code a compiler stands
@@ -251,4 +296,29 @@ func (r *Registry) CoveredLanguages(ctx context.Context, runID int64) ([]string,
 		out = append(out, l)
 	}
 	return out, rows.Err()
+}
+
+// SymbolsNamed returns the ids of the definitions the run indexed in the file at
+// path that are spelled name. A compiler definition the index holds no symbol
+// for can be told from one the join merely missed only by this: a missed join
+// leaves an indexed symbol of that name, which no compiler definition accounts
+// for, in that very file.
+func (r *Registry) SymbolsNamed(ctx context.Context, runID int64, path, name string) ([]int64, error) {
+	rows, err := r.db.QueryContext(ctx, `
+		SELECT s.id FROM files f JOIN symbols s ON s.file_id = f.id
+		 WHERE f.index_run_id = ? AND f.path = ? AND s.name = ? AND s.kind <> 'file'`,
+		runID, path, name)
+	if err != nil {
+		return nil, fmt.Errorf("registry: definitions of %q in %s: %w", name, path, err)
+	}
+	defer rows.Close()
+	var ids []int64
+	for rows.Next() {
+		var id int64
+		if err := rows.Scan(&id); err != nil {
+			return nil, fmt.Errorf("registry: definitions of %q in %s: scan: %w", name, path, err)
+		}
+		ids = append(ids, id)
+	}
+	return ids, rows.Err()
 }
