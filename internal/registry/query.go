@@ -119,6 +119,26 @@ type EdgeFilter struct {
 	// cannot pass an out-of-vocabulary rank (a bare 7 means nothing); the
 	// rank is computed once, here, at query time.
 	MinConfidence model.Confidence
+	// Within, when set, keeps only edges whose evidence (the call site) is in
+	// a file under this path: a directory ("src/") or one file. It narrows an
+	// answer to the part of a repository a question is about, so that rows from
+	// sub-projects, benchmarks or fixtures the question excludes neither fill
+	// the page nor weaken its verdict.
+	Within string
+}
+
+// withinSQL is the predicate for EdgeFilter.Within on the edges alias e, and
+// its arguments; empty when no path was given.
+func withinSQL(within string) (string, []any) {
+	w := strings.TrimPrefix(strings.TrimSpace(within), "./")
+	if w == "" {
+		return "", nil
+	}
+	esc := strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`).Replace(w)
+	if strings.HasSuffix(w, "/") {
+		return ` AND e.evidence_file LIKE ? ESCAPE '\'`, []any{esc + "%"}
+	}
+	return ` AND (e.evidence_file = ? OR e.evidence_file LIKE ? ESCAPE '\')`, []any{w, esc + "/%"}
 }
 
 // confidenceRankCase is a SQL CASE expression ranking a confidence column
@@ -195,6 +215,10 @@ func (r *Registry) edgesFor(ctx context.Context, runID, symbolID int64, limit in
 		q += ` AND ` + fmt.Sprintf(confidenceRankCase, "e.confidence") + ` >= ?`
 		args = append(args, rank)
 	}
+	if w, wargs := withinSQL(filter.Within); w != "" {
+		q += w
+		args = append(args, wargs...)
+	}
 
 	q += ` ORDER BY ` + fmt.Sprintf(confidenceRankCase, "e.confidence") + ` DESC,
 		          srcf.path, e.evidence_line
@@ -255,6 +279,10 @@ func (r *Registry) IncomingEdgeCount(ctx context.Context, runID, symbolID int64,
 	if rank := filter.MinConfidence.Rank(); rank > 0 {
 		where += ` AND ` + fmt.Sprintf(confidenceRankCase, "e.confidence") + ` >= ?`
 		args = append(args, rank)
+	}
+	if w, wargs := withinSQL(filter.Within); w != "" {
+		where += w
+		args = append(args, wargs...)
 	}
 
 	var n int

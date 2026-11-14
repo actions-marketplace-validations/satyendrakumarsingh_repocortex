@@ -83,6 +83,14 @@ type relationArgs struct {
 	pageArg
 }
 
+// siteArgs is relationArgs for the two tools whose rows are sites in the
+// code (find_callers, find_references), which can be narrowed by where the
+// site is.
+type siteArgs struct {
+	relationArgs
+	Within string `json:"within,omitempty" jsonschema:"Keep only rows whose call site is in this file or under this directory (e.g. 'src/'). The first line and the verdict then describe those rows alone."`
+}
+
 // minConfidenceArg carries the confidence floor every confidence-bearing tool
 // offers.
 //
@@ -936,11 +944,11 @@ func (s *Server) symbolExcerpt(ctx context.Context, runID int64, sym registry.Sy
 
 // ---------------------------------------------------------------- references
 
-func (s *Server) findReferences(ctx context.Context, req *sdk.CallToolRequest, args relationArgs) (*sdk.CallToolResult, *Response, error) {
+func (s *Server) findReferences(ctx context.Context, req *sdk.CallToolRequest, args siteArgs) (*sdk.CallToolResult, *Response, error) {
 	return s.relationshipQuery(ctx, req, args, false)
 }
 
-func (s *Server) findCallers(ctx context.Context, req *sdk.CallToolRequest, args relationArgs) (*sdk.CallToolResult, *Response, error) {
+func (s *Server) findCallers(ctx context.Context, req *sdk.CallToolRequest, args siteArgs) (*sdk.CallToolResult, *Response, error) {
 	return s.relationshipQuery(ctx, req, args, true)
 }
 
@@ -951,11 +959,11 @@ func (s *Server) findCallers(ctx context.Context, req *sdk.CallToolRequest, args
 // calls the symbol, or that RepoCortex could not resolve the calls that do. An
 // agent told "no callers" will happily delete a method. So an empty result
 // always carries what the index did with the references spelled like the name.
-func (s *Server) relationshipQuery(ctx context.Context, req *sdk.CallToolRequest, args relationArgs, callersOnly bool) (*sdk.CallToolResult, *Response, error) {
+func (s *Server) relationshipQuery(ctx context.Context, req *sdk.CallToolRequest, args siteArgs, callersOnly bool) (*sdk.CallToolResult, *Response, error) {
 	tool, label := "find_references", "reference"
 	var kinds []string
 	q := symbolQuery{Param: "name", PathParam: "path", LineParam: "line",
-		Name: args.Name, Path: args.Path, Line: args.Line}
+		Name: args.Name, Path: args.Path, Line: args.Line, Within: args.Within}
 	if callersOnly {
 		tool, label = "find_callers", "caller"
 		kinds = []string{"CALLS"}
@@ -1002,7 +1010,7 @@ func (s *Server) relationshipQuery(ctx context.Context, req *sdk.CallToolRequest
 		// page.Total counts call sites. "How many callers" is a count of
 		// functions, and a function that calls three times is one of them: the
 		// line said "56 caller(s)" of a method that 18 functions call.
-		filter := registry.EdgeFilter{MinConfidence: minConf, Kinds: kinds}
+		filter := registry.EdgeFilter{MinConfidence: minConf, Kinds: kinds, Within: args.Within}
 		if callers, cerr := s.deps.Registry.IncomingSourceCount(ctx, runID, target.ID, filter); cerr == nil && callers < page.Total {
 			resp.Summary = fmt.Sprintf("%d %s(s) of %s (%s:%d) are recorded, at %d call sites.",
 				callers, label, target.Name, target.FilePath, target.StartLine, page.Total)
@@ -1019,7 +1027,7 @@ func (s *Server) relationshipQuery(ctx context.Context, req *sdk.CallToolRequest
 	// COUNT(*) has no such cap.
 	if callersOnly {
 		notCalls, err := s.deps.Registry.IncomingEdgeCount(ctx, runID, target.ID,
-			registry.EdgeFilter{MinConfidence: minConf}, []string{"CALLS"})
+			registry.EdgeFilter{MinConfidence: minConf, Within: args.Within}, []string{"CALLS"})
 		if err != nil {
 			resp.Notes = append(resp.Notes,
 				"could not determine whether other relationship kinds exist")
@@ -1044,7 +1052,7 @@ func (s *Server) relationshipQuery(ctx context.Context, req *sdk.CallToolRequest
 			// constructed therefore has no callers, which is easily read as
 			// "nothing uses it". Counted apart so the answer can say it is used.
 			constructs, cerr := s.deps.Registry.IncomingEdgeCount(ctx, runID, target.ID,
-				registry.EdgeFilter{MinConfidence: minConf, Kinds: []string{"INSTANTIATES"}}, nil)
+				registry.EdgeFilter{MinConfidence: minConf, Kinds: []string{"INSTANTIATES"}, Within: args.Within}, nil)
 			others := "imports, implementations or plain references"
 			if cerr == nil && constructs > 0 {
 				others = fmt.Sprintf("%d of them construct it (INSTANTIATES), the rest are imports, "+

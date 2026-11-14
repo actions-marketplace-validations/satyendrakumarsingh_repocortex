@@ -186,7 +186,7 @@ func (s *Server) referencesFor(
 	}
 	runID, status, target := sel.RunID, sel.Status, sel.Target
 
-	filter := registry.EdgeFilter{MinConfidence: minConf, Kinds: kinds}
+	filter := registry.EdgeFilter{MinConfidence: minConf, Kinds: kinds, Within: q.Within}
 	incoming, total, ierr := s.deps.Registry.EdgePage(ctx, runID, target.ID, true, page.Limit, page.Offset, filter)
 	if ierr != nil {
 		sc, r, _ := failFrom(ierr, "relationship lookup failed: %v", ierr)
@@ -223,7 +223,7 @@ func (s *Server) referencesFor(
 	var dropped int
 	if minConf != "" && minConf != model.ConfidenceLow {
 		unfiltered, terr := s.deps.Registry.IncomingEdgeCount(ctx, runID, target.ID,
-			registry.EdgeFilter{Kinds: kinds}, nil)
+			registry.EdgeFilter{Kinds: kinds, Within: q.Within}, nil)
 		if terr == nil {
 			dropped = unfiltered - total
 		}

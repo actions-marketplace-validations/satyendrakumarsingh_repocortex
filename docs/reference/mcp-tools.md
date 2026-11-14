@@ -40,8 +40,8 @@ The counts are what `repocortex tool list --profile <name>` prints.
 | `search_code` | minimal (default) | `query` (required), `limit` | Full-text search across indexed source. |
 | `find_symbol` | minimal (default) | `name` (required), `kind`, `min_confidence` | Locate a symbol's definition by name. |
 | `get_symbol` | minimal (default) | `name` (required), `line`, `min_confidence`, `path` | Get a symbol's definition with a bounded source excerpt and its immediate relationships. |
-| `find_references` | minimal (default) | `name` (required), `limit`, `line`, `min_confidence`, `offset`, `path` | Find where a symbol is used. |
-| `find_callers` | minimal (default) | `name` (required), `limit`, `line`, `min_confidence`, `offset`, `path` | Find the functions and methods that call a symbol — the callers, not merely the files mentioning it. |
+| `find_references` | minimal (default) | `name` (required), `limit`, `line`, `min_confidence`, `offset`, `path`, `within` | Find where a symbol is used. |
+| `find_callers` | minimal (default) | `name` (required), `limit`, `line`, `min_confidence`, `offset`, `path`, `within` | Find the functions and methods that call a symbol — the callers, not merely the files mentioning it. |
 | `find_tests` | standard | `symbol` (required), `hub_degree_limit`, `limit`, `line`, `max_depth`, `min_confidence`, `offset`, `path` | Find the tests covering a symbol, and which signal found each one — a proven call edge is far stronger evidence than a matching filename, and the response names which you got. |
 | `analyze_impact` | standard | `symbol` (required), `hub_degree_limit`, `limit`, `line`, `min_confidence`, `offset`, `path` | Before changing a symbol, find out what depends on it. |
 | `get_resolution_coverage` | standard | none | Ask this when a find_callers, find_references or analyze_impact result came back shorter than you expected, BEFORE concluding anything from it. |
@@ -125,6 +125,7 @@ Find where a symbol is used. Every result carries a confidence tier: 'exact' mea
 | `min_confidence` | string | no | Lowest confidence to return: exact, high, medium or low. Default low. Recommended: 'high' for safe automated code changes and blast radius analysis to filter out heuristic false positives. |
 | `offset` | integer | no | Rows to skip. The answer names the next offset when more rows exist. |
 | `path` | string | no | File or directory of the definition, to choose between symbols that share the name. |
+| `within` | string | no | Keep only rows whose call site is in this file or under this directory (e.g. 'src/'). The first line and the verdict then describe those rows alone. |
 
 ### `find_callers`
 
@@ -138,6 +139,7 @@ Find the functions and methods that call a symbol — the callers, not merely th
 | `min_confidence` | string | no | Lowest confidence to return: exact, high, medium or low. Default low. Recommended: 'high' for safe automated code changes and blast radius analysis to filter out heuristic false positives. |
 | `offset` | integer | no | Rows to skip. The answer names the next offset when more rows exist. |
 | `path` | string | no | File or directory of the definition, to choose between symbols that share the name. |
+| `within` | string | no | Keep only rows whose call site is in this file or under this directory (e.g. 'src/'). The first line and the verdict then describe those rows alone. |
 
 ### `find_tests`
 

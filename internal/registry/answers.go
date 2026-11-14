@@ -500,6 +500,10 @@ func (r *Registry) IncomingSourceCount(ctx context.Context, runID, symbolID int6
 		where += ` AND ` + fmt.Sprintf(confidenceRankCase, "e.confidence") + ` >= ?`
 		args = append(args, rank)
 	}
+	if w, wargs := withinSQL(filter.Within); w != "" {
+		where += w
+		args = append(args, wargs...)
+	}
 	var n int
 	if err := r.db.QueryRowContext(ctx, `SELECT COUNT(DISTINCT e.src_id) FROM edges e WHERE `+where, args...).Scan(&n); err != nil {
 		return 0, fmt.Errorf("registry: count sources for symbol %d: %w", symbolID, err)
@@ -539,6 +543,10 @@ func (r *Registry) EdgePage(ctx context.Context, runID, symbolID int64, incoming
 	if rank := filter.MinConfidence.Rank(); rank > 0 {
 		where += ` AND ` + fmt.Sprintf(confidenceRankCase, "e.confidence") + ` >= ?`
 		args = append(args, rank)
+	}
+	if w, wargs := withinSQL(filter.Within); w != "" {
+		where += w
+		args = append(args, wargs...)
 	}
 
 	var total int

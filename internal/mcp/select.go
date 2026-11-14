@@ -76,6 +76,9 @@ func (s *Server) maxPage() int {
 
 // symbolQuery is one request to select a definition.
 type symbolQuery struct {
+	// Within narrows a relationship answer to call sites under a path (see
+	// registry.EdgeFilter.Within). Not used to choose the symbol.
+	Within string
 	// Tool and the three parameter names are what the disambiguation answer
 	// prints, so the example it gives can be pasted back unchanged.
 	Tool      string
