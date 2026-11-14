@@ -503,6 +503,28 @@ search.
 - It says nothing yet about other languages, where the answers are still
   heuristic and round 2's result stands.
 
+### Round 4: TypeScript, a method another class shares by name (2026-11-14)
+
+honojs/hono at commit `f6fbaf0`, indexed by the build of commit `ed27e3e`, which
+runs the installed scip-typescript and imports it (no `node_modules`). The
+question: every call site under `src/` of `HonoRequest.header`, which
+`Context.header` shares by name (`c.req.header(...)` against `c.header(...)`).
+Truth from the TypeScript 5.9.3 compiler API over every file under `src/`: 63
+sites, plus one real call (`src/client/client.test.ts:1152`) the truth program
+does not reach and both arms listed, counted as correct.
+
+| Arm | Correct (of 64) | Wrong | Tokens | Tool calls | Seconds |
+|---|---|---|---|---|---|
+| search only | 64 | 3 | 64,297 | 4 | 21.4 |
+| with RepoCortex | 64 | 0 | 70,175 | 5 | 29.8 |
+
+**Result: more accurate, not cheaper.** Both found every site. The search-only
+agent also listed three lines of a doc comment as calls; the agent with
+RepoCortex made no mistake. It used 9% more tokens and 39% more time: the
+tool's answer was complete and compiler-proven, but the agent still ran a text
+search to check it, and the answer carried 14 rows outside `src/` that it had
+to read and drop. One question, one run per arm.
+
 **Reproducing round 2.** Build the truth program (`cd scripts/bench/agenttruth
 && go build -o agenttruth .`; it is its own module so that the tool does not
 depend on `golang.org/x/tools`), then `agenttruth -dir <clone> list` for
