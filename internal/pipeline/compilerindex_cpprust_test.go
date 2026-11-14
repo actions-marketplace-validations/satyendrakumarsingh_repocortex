@@ -138,7 +138,6 @@ func nativeRepo(t *testing.T, srcPath, lang string, onDisk map[string]string, ex
 		t.Fatal(err)
 	}
 	for _, f := range extraFiles {
-		f := f
 		if _, err := w.AddFile(ctx, &f); err != nil {
 			t.Fatal(err)
 		}
