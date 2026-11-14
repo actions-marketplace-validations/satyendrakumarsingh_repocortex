@@ -120,6 +120,15 @@ func Resolve(
 		return stats, fmt.Errorf("read layout: %w", err)
 	}
 
+	// Code outside every definition (a test file's describe/it callbacks, a
+	// module's top level) gets a synthetic caller of its own before anything is
+	// bound, so that a call written there has a source for its edge. Only files
+	// that still hold a reference to bind get one, and the ones that end up with
+	// no edge are removed again below.
+	if _, err := reg.EnsureFileCallers(ctx, runID); err != nil {
+		return stats, fmt.Errorf("create file callers: %w", err)
+	}
+
 	cands := registry.NewCandidateCache(reg, runID, opts.CandidateBudget, registry.DefaultPerNameLimit)
 	resolver := infer.NewStreaming(cands, infer.Options{
 		MinConfidence: opts.MinConfidence,
@@ -228,6 +237,10 @@ func Resolve(
 		if err := flush(); err != nil {
 			return stats, err
 		}
+	}
+
+	if _, err := reg.PruneFileCallers(ctx, runID); err != nil {
+		return stats, fmt.Errorf("prune file callers: %w", err)
 	}
 
 	// The resolver counted edges it BUILT; report edges that landed. Set after

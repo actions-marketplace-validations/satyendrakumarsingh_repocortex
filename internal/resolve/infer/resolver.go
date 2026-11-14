@@ -454,10 +454,11 @@ func (r *Resolver) ResolveFile(
 
 		// Attribute the call site to the symbol containing it. A reference
 		// outside any indexed symbol (a package-level initialiser, a
-		// top-level statement) yields no edge: the resolution is still
-		// recorded, but there is no meaningful source to hang an edge on and
-		// inventing one would corrupt caller queries.
-		src, ok := enclosing(fr.Symbols, ref.Line)
+		// top-level statement, a callback passed to describe() or it()) is
+		// attributed to the file's synthetic caller, which `resolve` creates
+		// for exactly those files; a file without one yields no edge, and the
+		// resolution is still recorded.
+		src, ok := callerOf(fr, ref.Line)
 		if implementer != "" {
 			// `impl Trait for Type`: the edge starts at Type, which is not
 			// what encloses the line.
@@ -1954,6 +1955,23 @@ func enclosing(symbols []registry.EnclosingSymbol, line int) (int64, bool) {
 		}
 	}
 	return best, found
+}
+
+// callerOf is the symbol an edge written at line starts from: the innermost
+// definition that encloses it, or, for code outside every definition, the
+// file's own synthetic caller (registry.FileCallerKind) when it has one.
+//
+// It is for the SOURCE of an edge only. Anything that asks which class or
+// function a line is written in (the owner of `self`, the scope of a local)
+// keeps using enclosing, because a file is neither.
+func callerOf(fr registry.FileRefs, line int) (int64, bool) {
+	if id, ok := enclosing(fr.Symbols, line); ok {
+		return id, true
+	}
+	if fr.FileCaller != 0 {
+		return fr.FileCaller, true
+	}
+	return 0, false
 }
 
 // edgeKindFor maps a tree-sitter reference kind to a graph edge kind.

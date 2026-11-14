@@ -154,6 +154,11 @@ type FileRefs struct {
 	// reference to the function or method containing it, which is what makes
 	// "who calls this" answerable rather than "which file mentions this".
 	Symbols []EnclosingSymbol
+
+	// FileCaller is the synthetic symbol that stands for this file's code outside
+	// every definition (see FileCallerKind), or 0 when it has none. A reference
+	// no symbol of Symbols encloses is attributed to it.
+	FileCaller int64
 }
 
 // EachFileWithRefs streams files that have unresolved references.
@@ -278,8 +283,17 @@ func (r *Registry) loadFilePage(ctx context.Context, files []fileRow) ([]FileRef
 		if fr.Refs, err = r.refsForFile(ctx, f.id); err != nil {
 			return nil, err
 		}
-		if fr.Symbols, err = r.FileSymbols(ctx, f.id); err != nil {
+		syms, err := r.FileSymbols(ctx, f.id)
+		if err != nil {
 			return nil, err
+		}
+		fr.Symbols = syms[:0]
+		for _, s := range syms {
+			if s.Kind == FileCallerKind {
+				fr.FileCaller = s.ID
+				continue
+			}
+			fr.Symbols = append(fr.Symbols, s)
 		}
 		page = append(page, fr)
 	}
@@ -950,7 +964,8 @@ func (r *Registry) ParsedCallSites(ctx context.Context, runID int64) ([]ParsedCa
 
 // CompilerResolutionStats reports one MarkCompilerResolutions call.
 type CompilerResolutionStats struct {
-	// Bound is references the compiler settled that the resolver had not.
+	// Bound is references the compiler settled: the ones the resolver had not
+	// bound plus the ones it had bound to another definition (Corrected).
 	Bound int64
 	// FromUnresolved and FromAmbiguous split Bound by what the resolver had
 	// concluded. The split is the finding, not bookkeeping: a row the resolver
@@ -962,72 +977,165 @@ type CompilerResolutionStats struct {
 	FromUnresolved int64
 	FromAmbiguous  int64
 	FromPending    int64
+	// Corrected is the references the resolver had bound to one definition and
+	// the compiler, at that very position, bound to another: they were moved.
+	Corrected int64
+}
+
+// compilerSite is one reference as the settlement pass sees it.
+type compilerSite struct {
+	id         int64
+	col        int
+	resolution string
+	source     string
+	bound      int64
+}
+
+// compilerGroup is the references and the compiler occurrences of one
+// (file, line, name).
+type compilerGroup struct {
+	file  int64
+	line  int
+	name  string
+	have  bool
+	refs  map[int64]*compilerSite
+	order []int64
+	occ   map[int]map[int64]struct{}
+}
+
+// compilerDecision is one reference the compiler settled.
+type compilerDecision struct {
+	rid, dst int64
+	from     string
+	moved    bool
+}
+
+// decide pairs the group's references with its occurrences and returns what the
+// compiler settled. See MarkCompilerResolutions for the rule.
+func (g *compilerGroup) decide() []compilerDecision {
+	sites := make([]*compilerSite, 0, len(g.order))
+	for _, id := range g.order {
+		sites = append(sites, g.refs[id])
+	}
+	sort.SliceStable(sites, func(i, j int) bool { return sites[i].col < sites[j].col })
+	occCols := make([]int, 0, len(g.occ))
+	for c := range g.occ {
+		occCols = append(occCols, c)
+	}
+	sort.Ints(occCols)
+	refCols := make([]int, 0, len(sites))
+	for _, s := range sites {
+		if len(refCols) == 0 || refCols[len(refCols)-1] != s.col {
+			refCols = append(refCols, s.col)
+		}
+	}
+	dstAt := func(c int) (int64, bool) {
+		ds := g.occ[c]
+		if len(ds) != 1 {
+			return 0, false
+		}
+		for d := range ds {
+			return d, true
+		}
+		return 0, false
+	}
+
+	var out []compilerDecision
+	paired := len(occCols) == len(refCols)
+	if paired {
+		for k, oc := range occCols {
+			if _, one := dstAt(oc); !one || oc < refCols[k] || (k+1 < len(refCols) && oc >= refCols[k+1]) {
+				paired = false
+				break
+			}
+		}
+	}
+	if paired {
+		byCol := make(map[int]int64, len(refCols))
+		for k, rc := range refCols {
+			byCol[rc], _ = dstAt(occCols[k])
+		}
+		for _, s := range sites {
+			d := byCol[s.col]
+			switch {
+			case s.source == "compiler":
+			case s.resolution != "resolved":
+				out = append(out, compilerDecision{rid: s.id, dst: d, from: s.resolution})
+			case s.bound != d:
+				out = append(out, compilerDecision{rid: s.id, dst: d, from: s.resolution, moved: true})
+			}
+		}
+		return out
+	}
+
+	all := map[int64]struct{}{}
+	for _, ds := range g.occ {
+		for d := range ds {
+			all[d] = struct{}{}
+		}
+	}
+	if len(all) != 1 {
+		return nil
+	}
+	var d int64
+	for d = range all {
+	}
+	for _, s := range sites {
+		if s.resolution != "resolved" {
+			out = append(out, compilerDecision{rid: s.id, dst: d, from: s.resolution})
+		}
+	}
+	return out
 }
 
 // MarkCompilerResolutions binds the references a compiler index settled.
 //
-// THE RULE, and it is deliberately narrower than the edges it is derived from:
-// a reference at (file, line) written as `name` is bound to symbol S when the
-// compiler's facts at that exact position name EXACTLY ONE symbol called
-// `name`, and S is it. Two different symbols called `name` on one line leave
-// the reference alone; so does a line where the compiler resolved something
-// else entirely.
+// THE UNIT IS ONE (file, line, name). The references the parser recorded there
+// and the occurrences the compiler resolved there to a definition spelled like
+// the name are paired off by position, and each reference takes the definition
+// of its occurrence:
+//
+//   - A reference starts at the beginning of its call expression, at or before
+//     the identifier the compiler resolved, so the k-th reference by column and
+//     the k-th occurrence by column are one use when the counts agree and each
+//     occurrence lies between its reference and the next one (the join
+//     scip.PromoteCalls makes for CALLS edges). The pairing is all or nothing
+//     per group: one reference the compiler did not resolve, or one occurrence
+//     the parser did not record, and none is paired.
+//   - A paired reference the resolver left unbound is bound. A paired reference
+//     the resolver BOUND to another definition is moved to the compiler's: the
+//     compiler read the source and the resolver chose by name, and `c.header`
+//     inside a test callback stays HonoRequest.header only until a compiler
+//     says it is Context.header. The resolver's own verdict stays in
+//     prior_resolution, which is what the accuracy report scores it by.
+//   - A group that does not pair is settled as it always was, and only for
+//     references the resolver left unbound: when the compiler put exactly one
+//     definition on the whole (line, name), every unbound reference there is a
+//     use of it. A bound reference in such a group is never touched.
+//   - Two definitions at one column (an overload set) settle nothing there.
 //
 // WHY KEYED BY NAME AND NOT BY LINE. scip.PromoteCalls has to ask "what does
 // the call ON this line reach", so it is restricted to lines the compiler
 // resolved to a single target — on `total = compute(order.subtotal)` there is
 // no single answer. This is a different question. A reference row already says
 // which identifier it is, so `compute` and `subtotal` can each be settled on
-// that same line without either being a guess. Line ambiguity is a property of
-// the question PromoteCalls asks, not of the compiler's evidence.
+// that same line without either being a guess.
 //
 // WHY THE RECEIVER FILTER DOES NOT APPLY HERE EITHER. `svc` in
 // `svc.delete_line(...)` is genuinely a reference to `svc`; what was false was
 // only the claim that it is CALLED. Binding it is correct, and refusing to
 // would discard a fact the compiler actually proved.
 //
-// ROWS THE RESOLVER ALREADY BOUND ARE NOT TOUCHED. They are already resolved,
-// so coverage does not move, and rewriting them would silently replace the
-// resolver's answers underneath the two reports that score them —
-// `repocortex accuracy` and `doctor --resolution-precision`. Correcting a
-// resolver hit that the compiler disagrees with is a separate, larger claim and
-// belongs behind its own measurement, not inside an import.
+// A reference the compiler resolved to something this repository does not
+// define is the other half, and Proof.Apply makes it (see MarkRuledOut): this
+// pass needs an occurrence that resolves INTO the index, that one needs every
+// occurrence on the line to resolve outside it, so the two never disagree about
+// a position.
 //
-// DETERMINISM. The bound target is MIN(dst_id) over a group already constrained
-// to hold exactly one distinct dst_id, so it is the only member rather than a
-// choice — the same construction accuracy.go uses for the same reason. The
-// statement is set-based and has no first-wins rule for a row order to feed,
-// which is why there is no ORDER BY here and one on every read below.
+// DETERMINISM. Groups are read in (file, line, name, reference, column) order
+// and each is decided from its own rows alone.
 func (r *Registry) MarkCompilerResolutions(ctx context.Context, runID int64) (CompilerResolutionStats, error) {
 	var st CompilerResolutionStats
-
-	// The candidate set is driven from edges, the small side. On a real
-	// repository that is ~94k compiler edges against ~514k references, and the
-	// lesson from accuracy.go's 160s query is that the two-orders-of-magnitude
-	// smaller relation belongs on the outside of the join.
-	//
-	// The bound set is MATERIALISED once into a temporary table. It used to be a
-	// CTE referenced by a correlated subquery in the UPDATE, which SQLite
-	// re-evaluates for every row it updates: invisible at a few thousand compiler
-	// edges and 20 of the 32 seconds of a resolve at a hundred thousand.
-	const candidates = `
-		SELECT rid, MIN(dst) AS dst FROM (
-		    SELECT r.id AS rid, e.dst_id AS dst
-		      FROM edges e
-		      JOIN symbols s ON s.id = e.dst_id
-		      JOIN files   f ON f.id = s.file_id
-		      JOIN files   ef ON ef.path = e.evidence_file AND ef.index_run_id = e.index_run_id
-		      JOIN symbol_references r
-		             ON r.file_id = ef.id
-		            AND r.start_line = e.evidence_line
-		            AND r.name = s.name
-		            AND r.index_run_id = e.index_run_id
-		     WHERE e.index_run_id = ?
-		       AND e.source = 'compiler'
-		       AND e.evidence_line > 0
-		       AND r.resolution <> 'resolved')
-		 GROUP BY rid
-		HAVING COUNT(DISTINCT dst) = 1`
 
 	tx, err := r.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -1035,9 +1143,6 @@ func (r *Registry) MarkCompilerResolutions(ctx context.Context, runID int64) (Co
 	}
 	defer func() { _ = tx.Rollback() }()
 
-	// Counted BEFORE the update, and grouped by the resolver's verdict, because
-	// afterwards every one of these rows reads 'resolved' and the split that
-	// makes the number mean something is gone.
 	if _, err := tx.ExecContext(ctx, `DROP TABLE IF EXISTS temp.compiler_bound`); err != nil {
 		return st, fmt.Errorf("registry: mark compiler resolutions: %w", err)
 	}
@@ -1045,44 +1150,96 @@ func (r *Registry) MarkCompilerResolutions(ctx context.Context, runID int64) (Co
 		CREATE TEMP TABLE compiler_bound (rid INTEGER PRIMARY KEY, dst INTEGER NOT NULL) WITHOUT ROWID`); err != nil {
 		return st, fmt.Errorf("registry: mark compiler resolutions: %w", err)
 	}
-	if _, err := tx.ExecContext(ctx, `INSERT INTO temp.compiler_bound `+candidates, runID); err != nil {
-		return st, fmt.Errorf("registry: mark compiler resolutions: bind: %w", err)
-	}
+
+	// Driven from edges, the small side: ~94k compiler edges against ~514k
+	// references on a real repository (accuracy.go's 160 s query is the lesson).
 	rows, err := tx.QueryContext(ctx, `
-		SELECT r.resolution, COUNT(*)
-		  FROM temp.compiler_bound b JOIN symbol_references r ON r.id = b.rid
-		 GROUP BY r.resolution
-		 ORDER BY r.resolution`)
+		SELECT r.file_id, r.start_line, r.name, r.id, r.start_col, r.resolution,
+		       r.resolution_source, COALESCE(r.resolved_symbol_id, 0), e.evidence_col, e.dst_id
+		  FROM edges e
+		  JOIN symbols s ON s.id = e.dst_id
+		  JOIN files  ef ON ef.path = e.evidence_file AND ef.index_run_id = e.index_run_id
+		  JOIN symbol_references r
+		         ON r.file_id = ef.id
+		        AND r.start_line = e.evidence_line
+		        AND r.name = s.name
+		        AND r.index_run_id = e.index_run_id
+		 WHERE e.index_run_id = ? AND e.source = 'compiler' AND e.evidence_line > 0
+		 ORDER BY r.file_id, r.start_line, r.name, r.id, e.evidence_col`, runID)
 	if err != nil {
-		return st, fmt.Errorf("registry: mark compiler resolutions: count: %w", err)
+		return st, fmt.Errorf("registry: mark compiler resolutions: read: %w", err)
+	}
+
+	var (
+		g       compilerGroup
+		decided []compilerDecision
+	)
+	flush := func() {
+		if g.have {
+			decided = append(decided, g.decide()...)
+		}
+		g = compilerGroup{}
 	}
 	for rows.Next() {
-		var kind string
-		var n int64
-		if err := rows.Scan(&kind, &n); err != nil {
+		var file, rid, bound, dst int64
+		var line, col, ecol int
+		var name, resolution, source string
+		if err := rows.Scan(&file, &line, &name, &rid, &col, &resolution, &source, &bound, &ecol, &dst); err != nil {
 			_ = rows.Close()
 			return st, fmt.Errorf("registry: mark compiler resolutions: scan: %w", err)
 		}
-		st.Bound += n
-		switch Resolution(kind) {
-		case ResolutionUnresolved:
-			st.FromUnresolved = n
-		case ResolutionAmbiguous:
-			st.FromAmbiguous = n
-		case ResolutionPending:
-			st.FromPending = n
+		if g.have && (g.file != file || g.line != line || g.name != name) {
+			flush()
 		}
+		if !g.have {
+			g = compilerGroup{file: file, line: line, name: name, have: true,
+				refs: map[int64]*compilerSite{}, occ: map[int]map[int64]struct{}{}}
+		}
+		if _, ok := g.refs[rid]; !ok {
+			g.refs[rid] = &compilerSite{id: rid, col: col, resolution: resolution, source: source, bound: bound}
+			g.order = append(g.order, rid)
+		}
+		if g.occ[ecol] == nil {
+			g.occ[ecol] = map[int64]struct{}{}
+		}
+		g.occ[ecol][dst] = struct{}{}
+	}
+	if err := rows.Err(); err != nil {
+		_ = rows.Close()
+		return st, fmt.Errorf("registry: mark compiler resolutions: read: %w", err)
 	}
 	_ = rows.Close()
-	if err := rows.Err(); err != nil {
-		return st, fmt.Errorf("registry: mark compiler resolutions: %w", err)
-	}
-	if st.Bound == 0 {
+	flush()
+
+	if len(decided) == 0 {
 		if _, err := tx.ExecContext(ctx, `DROP TABLE IF EXISTS temp.compiler_bound`); err != nil {
 			return st, fmt.Errorf("registry: mark compiler resolutions: %w", err)
 		}
 		return st, tx.Commit()
 	}
+
+	ins, err := tx.PrepareContext(ctx, `INSERT OR REPLACE INTO temp.compiler_bound (rid, dst) VALUES (?, ?)`)
+	if err != nil {
+		return st, fmt.Errorf("registry: mark compiler resolutions: %w", err)
+	}
+	for _, d := range decided {
+		if _, err := ins.ExecContext(ctx, d.rid, d.dst); err != nil {
+			_ = ins.Close()
+			return st, fmt.Errorf("registry: mark compiler resolutions: bind: %w", err)
+		}
+		st.Bound++
+		switch {
+		case d.moved:
+			st.Corrected++
+		case Resolution(d.from) == ResolutionUnresolved:
+			st.FromUnresolved++
+		case Resolution(d.from) == ResolutionAmbiguous:
+			st.FromAmbiguous++
+		case Resolution(d.from) == ResolutionPending:
+			st.FromPending++
+		}
+	}
+	_ = ins.Close()
 
 	if _, err := tx.ExecContext(ctx, `
 		UPDATE symbol_references
