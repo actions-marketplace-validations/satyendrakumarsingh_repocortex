@@ -242,6 +242,9 @@ func Resolve(
 	if _, err := reg.PruneFileCallers(ctx, runID); err != nil {
 		return stats, fmt.Errorf("prune file callers: %w", err)
 	}
+	if _, err := reg.PruneImpossibleEdges(ctx, runID); err != nil {
+		return stats, fmt.Errorf("prune impossible edges: %w", err)
+	}
 
 	// The resolver counted edges it BUILT; report edges that landed. Set after
 	// the deferred drain so the total covers both passes.

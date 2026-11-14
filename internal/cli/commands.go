@@ -1474,6 +1474,12 @@ Safe and idempotent; does not rebuild or clear existing indexed data.`,
 			} else {
 				fmt.Fprintf(cmd.OutOrStdout(), "upgraded index schema to v%d (applied migrations: %v)\n", version, applied)
 			}
+			reg := registry.New(db)
+			if run, err := reg.CurrentRun(ctx); err == nil {
+				if n, err := reg.PruneImpossibleEdges(ctx, run.ID); err == nil && n > 0 {
+					fmt.Fprintf(cmd.OutOrStdout(), "pruned %d impossible edge(s) from earlier index schema\n", n)
+				}
+			}
 			return nil
 		},
 	}

@@ -33,6 +33,7 @@ func newResolveCmd(g *Global) *cobra.Command {
 	var noSCIP bool
 	var accuracy string
 	var allowBuild bool
+	var reResolve bool
 
 	cmd := &cobra.Command{
 		Use:   "resolve",
@@ -100,6 +101,16 @@ skips all of it.`,
 			min := model.Confidence(minConfidence)
 			if minConfidence != "" && !min.Valid() {
 				return fmt.Errorf("--min-confidence %q: want exact, high, medium or low", minConfidence)
+			}
+
+			if reResolve {
+				refsReset, edgesDropped, err := reg.ResetHeuristicResolutions(ctx, run.ID)
+				if err != nil {
+					return fmt.Errorf("reset heuristic resolutions: %w", err)
+				}
+				if !g.Quiet {
+					fmt.Fprintf(cmd.OutOrStdout(), "Reset %d heuristic reference(s), dropped %d heuristic edge(s) for re-resolution\n", refsReset, edgesDropped)
+				}
 			}
 
 			// Deployment units join to endpoints in the same pass, and the
@@ -394,6 +405,7 @@ skips all of it.`,
 	cmd.Flags().BoolVar(&allowBuild, "allow-repo-build", false,
 		"let the compiler pass run indexers that execute code the repository chooses: Java without Docker (Maven, Gradle), C/C++ (the compilers named in compile_commands.json) and Rust (cargo build scripts and macros)")
 	cmd.Flags().BoolVar(&noSCIP, "no-scip", false, "do not import an index.scip found in the project root or .repocortex/")
+	cmd.Flags().BoolVar(&reResolve, "re-resolve", false, "reset non-compiler bindings and re-resolve all references")
 	return cmd
 }
 

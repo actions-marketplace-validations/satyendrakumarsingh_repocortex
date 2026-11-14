@@ -49,7 +49,7 @@ func commandGroups() []*cobra.Group {
 func commandGroupOf() map[string]string {
 	return map[string]string{
 		// Set up and keep current.
-		"init": groupSetup, "index": groupSetup, "resolve": groupSetup,
+		"init": groupSetup, "index": groupSetup, "resolve": groupSetup, "migrate": groupSetup,
 		"scip": groupSetup, "indexers": groupSetup, "install": groupSetup,
 		"agent": groupSetup, "hooks": groupSetup, "watch": groupSetup,
 

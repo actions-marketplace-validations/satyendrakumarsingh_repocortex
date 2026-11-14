@@ -214,6 +214,15 @@ func Check(
 		if !ok {
 			continue
 		}
+		// A CALL edge can never denote a configuration key, table, column, dependency line,
+		// field, or deployment unit in any language. These are impossible edges and cannot
+		// represent architectural crossings or violations.
+		if e.Kind == model.EdgeCalls && (dst.kind == model.KindConfiguration || dst.kind == "column" || dst.kind == "table" || dst.kind == "dependency" || dst.kind == "field" || dst.kind == "deployment_unit") {
+			continue
+		}
+		if (e.Kind == model.EdgeExtends || e.Kind == model.EdgeImplements) && dst.kind != model.KindClass && dst.kind != model.KindInterface && dst.kind != model.KindPackage && dst.kind != model.KindTypeAlias {
+			continue
+		}
 		// A symbol outside every component cannot participate in a boundary
 		// crossing: there is no boundary to cross. Counted in Unassigned above
 		// so the gap is visible rather than silently narrowing the check.
