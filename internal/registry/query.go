@@ -38,7 +38,7 @@ func (r *Registry) FindSymbolsByName(ctx context.Context, runID int64, name, kin
 		       s.confidence, s.source, s.exported
 		  FROM symbols s
 		  JOIN files f ON f.id = s.file_id
-		 WHERE s.index_run_id = ? AND s.name = ?`
+		 WHERE s.index_run_id = ? AND s.name = ? AND s.kind <> 'file'`
 	args := []any{runID, name}
 	if kind != "" {
 		q += ` AND s.kind = ?`

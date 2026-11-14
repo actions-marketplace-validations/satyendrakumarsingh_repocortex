@@ -68,38 +68,62 @@ func (r *Registry) WithdrawContradictedCalls(ctx context.Context, runID int64) (
 	// wrong target: a reference on that line spelled like the target and bound
 	// to it moves to the single definition of the name the compiler proved
 	// there. Where the compiler proved more than one, it is left alone.
+	//
+	// Driven from the removed edges, the small side, into a table keyed by
+	// (file, line, wrong target); the references are then found through
+	// idx_refs_file_line. The statement used to be one UPDATE with a correlated
+	// subquery per reference, which is a scan of every reference of the run for
+	// each removed edge once a compiler withdraws hundreds of them. The joins
+	// are CROSS JOINs on purpose, as in structure.go: with no statistics the
+	// planner starts from the large edges table and probes the withdrawn ones,
+	// 18 s on honojs/hono with nothing to withdraw.
+	if _, err := tx.ExecContext(ctx, `DROP TABLE IF EXISTS temp.contradicted_rebind`); err != nil {
+		return 0, 0, fmt.Errorf("registry: withdraw contradicted calls: %w", err)
+	}
+	if _, err := tx.ExecContext(ctx, `
+		CREATE TEMP TABLE contradicted_rebind (
+		       file_id INTEGER NOT NULL, line INTEGER NOT NULL, old INTEGER NOT NULL, new INTEGER NOT NULL,
+		       PRIMARY KEY (file_id, line, old)) WITHOUT ROWID`); err != nil {
+		return 0, 0, fmt.Errorf("registry: withdraw contradicted calls: %w", err)
+	}
+	if _, err := tx.ExecContext(ctx, `
+		INSERT INTO temp.contradicted_rebind (file_id, line, old, new)
+		SELECT hf.id, h.evidence_line, h.dst_id, MIN(x.dst_id)
+		  FROM contradicted_edge c
+		 CROSS JOIN edges h ON h.id = c.id
+		 CROSS JOIN files hf ON hf.index_run_id = h.index_run_id AND hf.path = h.evidence_file
+		 CROSS JOIN symbols hd ON hd.id = h.dst_id
+		 CROSS JOIN edges x INDEXED BY idx_edges_evidence
+		         ON x.index_run_id = h.index_run_id AND x.evidence_file = h.evidence_file
+		        AND x.evidence_line = h.evidence_line AND x.source = 'compiler'
+		        AND x.kind IN ('CALLS','INSTANTIATES')
+		 CROSS JOIN symbols xd ON xd.id = x.dst_id AND xd.name = hd.name
+		 GROUP BY hf.id, h.evidence_line, h.dst_id
+		HAVING COUNT(DISTINCT x.dst_id) = 1`); err != nil {
+		return 0, 0, fmt.Errorf("registry: withdraw contradicted calls: re-bind targets: %w", err)
+	}
 	res, err := tx.ExecContext(ctx, `
-		UPDATE symbol_references SET resolved_symbol_id = (
-		       SELECT MIN(x.dst_id) FROM edges h
-		         JOIN contradicted_edge c ON c.id = h.id
-		         JOIN files hf ON hf.index_run_id = h.index_run_id AND hf.path = h.evidence_file
-		         JOIN symbols hd ON hd.id = h.dst_id
-		         JOIN edges x ON x.index_run_id = h.index_run_id AND x.evidence_file = h.evidence_file
-		              AND x.evidence_line = h.evidence_line AND x.source = 'compiler'
-		              AND x.kind IN ('CALLS','INSTANTIATES')
-		         JOIN symbols xd ON xd.id = x.dst_id AND xd.name = hd.name
-		        WHERE hf.id = symbol_references.file_id
-		          AND h.evidence_line = symbol_references.start_line
-		          AND h.dst_id = symbol_references.resolved_symbol_id
-		       HAVING COUNT(DISTINCT x.dst_id) = 1)
-		 WHERE index_run_id = ? AND resolution = 'resolved'
-		   AND EXISTS (
-		       SELECT 1 FROM edges h
-		         JOIN contradicted_edge c ON c.id = h.id
-		         JOIN files hf ON hf.index_run_id = h.index_run_id AND hf.path = h.evidence_file
-		        WHERE hf.id = symbol_references.file_id
-		          AND h.evidence_line = symbol_references.start_line
-		          AND h.dst_id = symbol_references.resolved_symbol_id
-		          AND (SELECT COUNT(DISTINCT x.dst_id) FROM edges x JOIN symbols xd ON xd.id = x.dst_id
-		                JOIN symbols hd ON hd.id = h.dst_id
-		               WHERE x.index_run_id = h.index_run_id AND x.evidence_file = h.evidence_file
-		                 AND x.evidence_line = h.evidence_line AND x.source = 'compiler'
-		                 AND x.kind IN ('CALLS','INSTANTIATES') AND xd.name = hd.name) = 1)`, runID)
+		UPDATE symbol_references
+		   SET prior_resolution  = CASE WHEN prior_resolution = '' THEN resolution ELSE prior_resolution END,
+		       resolution_source = 'compiler',
+		       resolved_symbol_id = (SELECT rb.new FROM temp.contradicted_rebind rb
+		                              WHERE rb.file_id = symbol_references.file_id
+		                                AND rb.line = symbol_references.start_line
+		                                AND rb.old = symbol_references.resolved_symbol_id)
+		 WHERE id IN (
+		       SELECT r.id FROM temp.contradicted_rebind rb
+		         CROSS JOIN symbol_references r INDEXED BY idx_refs_file_line
+		                ON r.file_id = rb.file_id AND r.start_line = rb.line
+		        WHERE r.index_run_id = ? AND r.resolution = 'resolved'
+		          AND r.resolved_symbol_id = rb.old)`, runID)
 	if err != nil {
 		return 0, 0, fmt.Errorf("registry: withdraw contradicted calls: re-bind: %w", err)
 	}
 	if n, e := res.RowsAffected(); e == nil {
 		rebound = int(n)
+	}
+	if _, err := tx.ExecContext(ctx, `DROP TABLE IF EXISTS temp.contradicted_rebind`); err != nil {
+		return 0, 0, fmt.Errorf("registry: withdraw contradicted calls: %w", err)
 	}
 	res, err = tx.ExecContext(ctx, `DELETE FROM edges WHERE id IN (SELECT id FROM contradicted_edge)`)
 	if err != nil {

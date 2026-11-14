@@ -173,7 +173,7 @@ func (r *Resolver) deferInherited(
 		line:     ref.Line,
 		col:      ref.Col,
 	}
-	d.srcID, d.hasSrc = enclosing(fr.Symbols, ref.Line)
+	d.srcID, d.hasSrc = callerOf(fr, ref.Line)
 	r.deferred = append(r.deferred, d)
 	stats.Deferred++
 }
@@ -223,7 +223,7 @@ func (r *Resolver) deferStatic(
 		fallback:    fallback,
 		hasFallback: hasFallback,
 	}
-	d.srcID, d.hasSrc = enclosing(fr.Symbols, ref.Line)
+	d.srcID, d.hasSrc = callerOf(fr, ref.Line)
 	r.deferred = append(r.deferred, d)
 	stats.Deferred++
 	return true

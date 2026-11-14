@@ -310,6 +310,11 @@ func RunCompilerIndexers(ctx context.Context, reg *registry.Registry, runID int6
 			out.Withdrawn += w
 			out.Rebound = rb
 		}
+		// An edge the compilers withdrew can leave a file's synthetic caller
+		// with nothing to its name.
+		if _, err := reg.PruneFileCallers(ctx, runID); err != nil && out.Err == nil {
+			out.Err = err
+		}
 	}
 	return out
 }

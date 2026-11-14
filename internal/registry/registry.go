@@ -473,7 +473,7 @@ func countRun(ctx context.Context, q queryer, runID int64) (Counts, error) {
 	var c Counts
 	err := q.QueryRowContext(ctx, `
 		SELECT (SELECT count(*) FROM files   WHERE index_run_id = ?),
-		       (SELECT count(*) FROM symbols WHERE index_run_id = ?),
+		       (SELECT count(*) FROM symbols WHERE index_run_id = ? AND kind <> 'file'),
 		       (SELECT count(*) FROM edges   WHERE index_run_id = ?),
 		       (SELECT count(*) FROM files   WHERE index_run_id = ? AND `+model.SQLParseAbandoned("")+`)`,
 		runID, runID, runID, runID).

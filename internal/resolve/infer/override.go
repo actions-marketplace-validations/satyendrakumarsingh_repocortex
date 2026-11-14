@@ -63,7 +63,7 @@ func (r *Resolver) deferOverride(c call, best candidate, members []registry.Symb
 		named:       named,
 		overriders:  others,
 	}
-	d.srcID, d.hasSrc = enclosing(c.fr.Symbols, c.ref.Line)
+	d.srcID, d.hasSrc = callerOf(c.fr, c.ref.Line)
 	r.deferred = append(r.deferred, d)
 	return true
 }

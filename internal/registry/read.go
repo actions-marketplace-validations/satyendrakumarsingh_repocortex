@@ -147,7 +147,7 @@ func (r *Registry) Symbols(ctx context.Context, runID int64) ([]model.Symbol, er
 		       s.start_line, s.start_col, s.end_line, s.end_col,
 		       COALESCE(s.signature,''), COALESCE(s.doc,''), s.exported, s.confidence, s.source
 		  FROM symbols s JOIN files f ON f.id = s.file_id
-		 WHERE s.index_run_id = ?
+		 WHERE s.index_run_id = ? AND s.kind <> 'file'
 		 ORDER BY f.path, s.start_line, s.fqn`, runID)
 	if err != nil {
 		return nil, fmt.Errorf("registry: list symbols: %w", err)
@@ -176,11 +176,17 @@ func (r *Registry) Symbols(ctx context.Context, runID int64) ([]model.Symbol, er
 // Edges lists a run's edges with their provenance intact. An edge is never
 // returned without its confidence and evidence — dropping them at the read
 // boundary would defeat the point of storing them.
+//
+// Edges that start at a file's synthetic top-level caller (FileCallerKind) are
+// left out: the consumers of this list build their nodes from Symbols, which
+// does not hold that symbol, so the edge would have no source to draw. The
+// caller queries read the edges table by destination and do return them.
 func (r *Registry) Edges(ctx context.Context, runID int64) ([]model.Edge, error) {
 	rows, err := r.db.QueryContext(ctx, `
 		SELECT id, src_id, dst_id, kind, confidence,
 		       evidence_file, evidence_line, evidence_col, source, COALESCE(detail,'')
 		  FROM edges WHERE index_run_id = ?
+		   AND NOT EXISTS (SELECT 1 FROM symbols fc WHERE fc.id = edges.src_id AND fc.kind = 'file')
 		 ORDER BY src_id, dst_id, kind, evidence_file, evidence_line`, runID)
 	if err != nil {
 		return nil, fmt.Errorf("registry: list edges: %w", err)

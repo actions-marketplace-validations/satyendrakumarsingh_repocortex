@@ -206,7 +206,7 @@ All figures are read from the registry. Nothing is estimated.`,
 			row := db.QueryRowContext(ctx, `
 				SELECT r.status, COALESCE(r.git_revision,''),
 				       (SELECT count(*) FROM files   WHERE index_run_id = r.id),
-				       (SELECT count(*) FROM symbols WHERE index_run_id = r.id),
+				       (SELECT count(*) FROM symbols WHERE index_run_id = r.id AND kind <> 'file'),
 				       (SELECT count(*) FROM edges   WHERE index_run_id = r.id),
 				       (SELECT count(*) FROM files   WHERE index_run_id = r.id
 				                                       AND detected_by = 'extension_ambiguous'),

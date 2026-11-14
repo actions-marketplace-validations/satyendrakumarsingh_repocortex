@@ -109,7 +109,7 @@ func (r *Registry) SymbolCandidatesByFQN(ctx context.Context, runID int64, fqn s
 }
 
 func (r *Registry) symbolCandidates(ctx context.Context, runID int64, column, value, pathPart string, limit int) ([]SymbolCandidate, int, error) {
-	where := `s.index_run_id = ? AND ` + column + ` = ?`
+	where := `s.index_run_id = ? AND s.kind <> 'file' AND ` + column + ` = ?`
 	args := []any{runID, value}
 	if pathPart != "" {
 		// instr, not LIKE: a path holds '_' and '%' as ordinary characters.

@@ -45,6 +45,13 @@ type SymbolIndex struct {
 	byName map[string][]int64
 	byDir  map[string][]int64
 
+	// definitions is how many symbols are definitions. byID also holds the
+	// synthetic per-file callers (registry.FileCallerKind), which an edge can
+	// start at and a caller list must be able to name, but which are not
+	// definitions: they are in no name, qualified-name or directory lookup and
+	// not in this count.
+	definitions int
+
 	// names is the sorted, de-duplicated key set of byName. Prefix queries
 	// ("everything called TestUpdateStatus*") binary-search it instead of
 	// scanning 100k map keys per query — the naming signal issues several
@@ -70,6 +77,10 @@ func buildSymbolIndex(runID int64, byName map[string][]registry.SymbolIndexEntry
 				FilePath: e.FilePath, Exported: e.Exported,
 			}
 			idx.byID[s.ID] = s
+			if e.Kind == registry.FileCallerKind {
+				continue
+			}
+			idx.definitions++
 			// First writer wins. FQN is unique per repository by contract, but
 			// the schema only enforces uniqueness per (run, fqn, file, line),
 			// so a duplicate is possible and must not panic or reorder
@@ -80,6 +91,9 @@ func buildSymbolIndex(runID int64, byName map[string][]registry.SymbolIndexEntry
 			ids = append(ids, s.ID)
 			dir := s.Dir()
 			idx.byDir[dir] = append(idx.byDir[dir], s.ID)
+		}
+		if len(ids) == 0 {
+			continue
 		}
 		sort.Slice(ids, func(i, j int) bool { return ids[i] < ids[j] })
 		idx.byName[name] = ids
@@ -95,7 +109,7 @@ func buildSymbolIndex(runID int64, byName map[string][]registry.SymbolIndexEntry
 
 // Len reports how many symbols the run contains. Reports quote it so a reader
 // can judge the denominator behind "N callers found".
-func (idx *SymbolIndex) Len() int { return len(idx.byID) }
+func (idx *SymbolIndex) Len() int { return idx.definitions }
 
 // RunID is the run this index was built from.
 func (idx *SymbolIndex) RunID() int64 { return idx.runID }

@@ -324,7 +324,7 @@ const confinedWindowSQL = `
 	SELECT COALESCE(MAX(id), 0), COUNT(*)
 	  FROM (SELECT s.id AS id
 	          FROM symbols s NOT INDEXED
-	         WHERE s.index_run_id = ? AND s.id > ?
+	         WHERE s.index_run_id = ? AND s.id > ? AND s.kind <> 'file'
 	         ORDER BY s.id
 	         LIMIT ?)`
 
@@ -547,7 +547,7 @@ const structureChunk = 400
 func fileStructureSQL(n int) string {
 	return `
 		SELECT f.path, f.language, f.size_bytes,
-		       (SELECT COUNT(*) FROM symbols s WHERE s.file_id = f.id),
+		       (SELECT COUNT(*) FROM symbols s WHERE s.file_id = f.id AND s.kind <> 'file'),
 		       (SELECT COUNT(*)
 		          FROM symbols d
 		          CROSS JOIN edges e INDEXED BY idx_edges_dst

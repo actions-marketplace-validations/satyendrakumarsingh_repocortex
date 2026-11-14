@@ -27,13 +27,18 @@ type EnclosingSymbol struct {
 	// says which class `self` is — and that is the one receiver whose class
 	// needs no inference at all.
 	FQN string
+
+	// Kind is the symbol's kind. A symbol of FileCallerKind is the synthetic
+	// caller of the file's own code, not a definition: FileSymbols returns it
+	// like any other row and loadFilePage moves it to FileRefs.FileCaller.
+	Kind string
 }
 
 // FileSymbols returns a file's symbols ordered by position, for enclosure
 // lookups during resolution.
 func (r *Registry) FileSymbols(ctx context.Context, fileID int64) ([]EnclosingSymbol, error) {
 	rows, err := r.db.QueryContext(ctx, `
-		SELECT id, name, start_line, end_line, fqn
+		SELECT id, name, start_line, end_line, fqn, kind
 		  FROM symbols
 		 WHERE file_id = ?
 		 ORDER BY start_line, end_line DESC`, fileID)
@@ -45,7 +50,7 @@ func (r *Registry) FileSymbols(ctx context.Context, fileID int64) ([]EnclosingSy
 	var out []EnclosingSymbol
 	for rows.Next() {
 		var s EnclosingSymbol
-		if err := rows.Scan(&s.ID, &s.Name, &s.StartLine, &s.EndLine, &s.FQN); err != nil {
+		if err := rows.Scan(&s.ID, &s.Name, &s.StartLine, &s.EndLine, &s.FQN, &s.Kind); err != nil {
 			return nil, err
 		}
 		out = append(out, s)
