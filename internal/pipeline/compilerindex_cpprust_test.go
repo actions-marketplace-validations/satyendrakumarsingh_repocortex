@@ -552,3 +552,47 @@ func TestNativeLanguagesHaveCacheFamilies(t *testing.T) {
 		t.Error("the cache key would ignore the source files of C/C++ or Rust")
 	}
 }
+
+// A src-layout Python project gets a one-line analysis config naming src, a
+// project with its own pyrightconfig.json is left alone, a project with no src
+// directory (or a link called src) gets nothing, and what was written is
+// reported so it can be removed.
+func TestPythonSourceRootsAreConfiguredNotImported(t *testing.T) {
+	root := t.TempDir()
+	mk := func(rel string) string {
+		d := filepath.Join(root, rel)
+		if err := os.MkdirAll(d, 0o750); err != nil {
+			t.Fatal(err)
+		}
+		return d
+	}
+	srcLayout := mk("a")
+	mk("a/src")
+	hasConfig := mk("b")
+	mk("b/src")
+	if err := os.WriteFile(filepath.Join(hasConfig, "pyrightconfig.json"), []byte("{}"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	mk("c") // flat layout
+	linked := mk("d")
+	mk("elsewhere")
+	if err := os.Symlink(filepath.Join(root, "elsewhere"), filepath.Join(linked, "src")); err != nil {
+		t.Skipf("symlinks unavailable: %v", err)
+	}
+	ps := []indexer.Project{
+		{Language: indexer.LangPython, Dir: "a"}, {Language: indexer.LangPython, Dir: "b"},
+		{Language: indexer.LangPython, Dir: "c"}, {Language: indexer.LangPython, Dir: "d"},
+		{Language: indexer.LangTypeScript, Dir: "a"},
+	}
+	wrote := writePythonSourceRoots(root, ps)
+	if len(wrote) != 1 || wrote[0] != filepath.Join(srcLayout, "pyrightconfig.json") {
+		t.Fatalf("wrote %v, want only a/pyrightconfig.json", wrote)
+	}
+	got, err := os.ReadFile(wrote[0])
+	if err != nil || string(got) != pythonRootConfig {
+		t.Errorf("content = %q, %v", got, err)
+	}
+	if b, _ := os.ReadFile(filepath.Join(hasConfig, "pyrightconfig.json")); string(b) != "{}" {
+		t.Errorf("a project's own config was overwritten: %q", b)
+	}
+}

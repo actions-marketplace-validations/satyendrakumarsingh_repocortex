@@ -224,6 +224,7 @@ func RunCompilerIndexers(ctx context.Context, reg *registry.Registry, runID int6
 		// not write does not stay in their repository: note which projects
 		// have none now, and remove what appears.
 		inferred := inferredTsconfigs(opts.Root, toRunProjects(toRun))
+		inferred = append(inferred, writePythonSourceRoots(opts.Root, toRunProjects(toRun))...)
 		defer func() {
 			for _, f := range inferred {
 				_ = os.Remove(f)
@@ -350,6 +351,51 @@ func inferredTsconfigs(root string, projects []indexer.Project) []string {
 		if _, err := os.Lstat(f); errors.Is(err, os.ErrNotExist) {
 			out = append(out, f)
 		}
+	}
+	return out
+}
+
+// pythonRootConfig is the whole of the configuration written for a Python
+// project: a fixed literal naming the one directory a project is laid out in.
+const pythonRootConfig = "{\"extraPaths\": [\"src\"]}\n"
+
+// writePythonSourceRoots tells scip-python's static analysis where a src-layout
+// project's own modules are, and returns the files it wrote so they can be
+// removed after the run.
+//
+// Without it `import click` in click's tests resolved to a click 8.1.8 in the
+// user's site-packages and not to the checkout, so the compiler spelled the
+// checkout's symbols as another copy's and no call in the tests joined to a
+// definition of the repository (pallets/click: 902 calls proven, and the test
+// call TestType().to_info_dict() was never bound to the checkout's method).
+//
+// This is analysis configuration. The repository's code is not run and its
+// text is not read: the file is written only when the project has a directory
+// named src (not a link) and no pyrightconfig.json of its own, and its content
+// is the literal above. Putting src on PYTHONPATH instead was rejected: the
+// indexer starts a Python interpreter, which would import a sitecustomize.py,
+// a .pth file or a file named like a standard-library module from it.
+func writePythonSourceRoots(root string, projects []indexer.Project) []string {
+	var out []string
+	for _, p := range projects {
+		if p.Language != indexer.LangPython {
+			continue
+		}
+		dir := filepath.Join(root, filepath.FromSlash(p.Dir))
+		if fi, err := os.Lstat(filepath.Join(dir, "src")); err != nil || !fi.IsDir() {
+			continue
+		}
+		f := filepath.Join(dir, "pyrightconfig.json")
+		w, err := os.OpenFile(f, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600) //nolint:gosec // a fixed name inside the project being indexed
+		if err != nil {
+			continue // one already exists: the project's own governs
+		}
+		_, werr := w.WriteString(pythonRootConfig)
+		if cerr := w.Close(); werr != nil || cerr != nil {
+			_ = os.Remove(f)
+			continue
+		}
+		out = append(out, f)
 	}
 	return out
 }
