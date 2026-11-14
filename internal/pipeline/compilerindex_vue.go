@@ -69,7 +69,7 @@ func stageVueMirrors(root string, projects []indexer.Project) []string {
 		projDir := filepath.Join(root, filepath.FromSlash(p.Dir))
 		_ = filepath.WalkDir(projDir, func(path string, d fs.DirEntry, err error) error {
 			if err != nil {
-				return nil
+				return nil //nolint:nilerr // unreadable file/dir is skipped in staging
 			}
 			if d.IsDir() {
 				name := d.Name()
@@ -81,16 +81,16 @@ func stageVueMirrors(root string, projects []indexer.Project) []string {
 			if !strings.HasSuffix(d.Name(), ".vue") {
 				return nil
 			}
-			src, err := os.ReadFile(path)
+			src, err := os.ReadFile(path) //nolint:gosec // staging Vue mirrors in project dir
 			if err != nil || len(src) == 0 {
-				return nil
+				return nil //nolint:nilerr // unreadable Vue file is skipped in staging
 			}
 			tsSrc, ok := transformVueToTS(src)
 			if !ok {
 				return nil
 			}
 			mirrorPath := path + ".ts"
-			if err := os.WriteFile(mirrorPath, tsSrc, 0o600); err == nil {
+			if err := os.WriteFile(mirrorPath, tsSrc, 0o600); err == nil { //nolint:gosec // staging Vue mirrors in project dir
 				out = append(out, mirrorPath)
 			}
 			return nil
