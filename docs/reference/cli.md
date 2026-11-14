@@ -251,7 +251,7 @@ which does not exist until every file has been parsed.
 | `--min-confidence high\|medium\|low` | drop bindings weaker than this instead of recording them |
 | `--no-scip` | do not import an `index.scip` found in the project root or `.repocortex/` |
 | `--accuracy fast\|auto\|exact` | override the configured accuracy mode for this run; `fast` skips the Go type check and the compiler indexers below |
-| `--allow-repo-build` | let the compiler pass run indexers that execute the repository's own build: `rust-analyzer` (cargo build scripts and procedural macros) and `scip-java` without Docker. Refused by default |
+| `--allow-repo-build` | let the compiler pass run indexers that execute code the repository chooses: `scip-java` without Docker (Maven, Gradle), `scip-clang` (the compilers and flags in `compile_commands.json`) and `rust-analyzer` (cargo build scripts and procedural macros). Refused by default; only your command line sets it, `resolve` never does |
 
 Resolution itself never produces `exact`; that is reserved for compiler-backed
 data and is enforced in Go, in a SQL `CHECK`, and again at commit time.
@@ -297,12 +297,13 @@ fail `resolve`.
 **C and C++ (`scip-clang`) and Rust (`rust-analyzer scip`).** Both are the
 user's own installs: RepoCortex has no pinned release of either, so there is no
 version and digest to verify, and it never fetches them (`indexers pins` does not
-list them; `indexers install` skips them, saying they are user-installed). A C or C++ project
+list them; `indexers install` skips them, saying they are user-installed). Both run only with `--allow-repo-build`: `scip-clang` runs the compilers and flags
+named in the repository's own `compile_commands.json`, and `cargo` runs its build
+scripts and macros, so the repository would choose what executes. A C or C++ project
 runs only with a `compile_commands.json` beside its `CMakeLists.txt` or
 `meson.build`; without one it is reported as "cannot run, because there is no
 compile_commands.json", with the command that makes one, and nothing is run. A
-Rust project is a single Cargo package, run only with `--allow-repo-build`
-(`cargo` executes the repository's build scripts and macros); a Cargo workspace
+Rust project is a single Cargo package; a Cargo workspace
 is reported as not run, with the `rust-analyzer scip` line to run yourself and
 `scip import`. These two have been exercised against stand-in programs that write
 a hand-made index, never against the real tools, so no accuracy is claimed for
@@ -684,7 +685,7 @@ installing, and an indexer with no recorded digest is never fetched at all.
 |---|---|
 | `--yes` | install without prompting (still verifies digests) |
 | `--out-dir DIR` | write the `.scip` files into `DIR` (created if absent, must be empty) instead of a temporary directory, so a script knows where to find them |
-| `--allow-repo-build` | permit running the repository's own build (Java, Rust); it executes code from the repo. Refused by default; prefer `accuracy.indexers.runner=docker` for Java |
+| `--allow-repo-build` | permit running code the repository chooses (Java's Maven or Gradle build, C/C++ via `compile_commands.json`, Rust's cargo build scripts and macros). Refused by default; prefer `accuracy.indexers.runner=docker` for Java |
 
 `indexers pins` prints one tab-separated line per indexer this build may
 install, with five fields: name, version, channel, the reference it installs,

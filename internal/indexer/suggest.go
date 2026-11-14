@@ -115,9 +115,9 @@ func addsFor(l Language) string {
 	case LangJava:
 		return what + " for Java, Kotlin and Scala"
 	case LangCPP:
-		return what + " for C and C++ (needs a compile_commands.json)"
+		return what + " for C and C++ (needs a compile_commands.json, and --allow-repo-build to run, since it executes the compilers that file names)"
 	case LangRust:
-		return what + " for Rust"
+		return what + " for Rust (needs --allow-repo-build to run, since cargo executes the repository's build scripts)"
 	}
 	return what
 }

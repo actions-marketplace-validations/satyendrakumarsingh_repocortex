@@ -251,7 +251,17 @@ func TestCPPStandInIsPlannedRunCachedAndImported(t *testing.T) {
 	standIn(t, bins, "scip-clang", "scip-clang 0.3.2", "--index-output-path=", fixture, logFile)
 	onlyPath(t, bins)
 
-	opts := CompilerIndexOptions{Root: f.root, Config: allowAll()}
+	// Without the opt-in the installed stand-in is not run: the compilers and
+	// flags in compile_commands.json are the repository's to choose.
+	blocked := RunCompilerIndexers(ctx, f.reg, f.runID, CompilerIndexOptions{Root: f.root, Config: allowAll()})
+	if len(blocked.Steps) != 1 || !strings.Contains(blocked.Steps[0].Skipped, "indexing C/C++ runs the compilers and flags named in the repository's compile_commands.json, which executes code the repository chooses; re-run with --allow-repo-build") {
+		t.Fatalf("without the opt-in: steps = %+v, want one blocked with the opt-in reason", blocked.Steps)
+	}
+	if _, err := os.Stat(logFile); err == nil {
+		t.Fatal("scip-clang ran without --allow-repo-build")
+	}
+
+	opts := CompilerIndexOptions{Root: f.root, Config: allowAll(), AllowRepoBuild: true}
 	out := RunCompilerIndexers(ctx, f.reg, f.runID, opts)
 	if out.Err != nil {
 		t.Fatalf("pass: %v", out.Err)
@@ -352,7 +362,7 @@ func TestCPPWithoutACompilationDatabaseIsReportedNotAttempted(t *testing.T) {
 	standIn(t, bins, "scip-clang", "scip-clang 0.3.2", "--index-output-path=", fixture, logFile)
 	onlyPath(t, bins)
 
-	out := RunCompilerIndexers(context.Background(), f.reg, f.runID, CompilerIndexOptions{Root: f.root, Config: allowAll()})
+	out := RunCompilerIndexers(context.Background(), f.reg, f.runID, CompilerIndexOptions{Root: f.root, Config: allowAll(), AllowRepoBuild: true})
 	if len(out.Steps) != 1 || out.Steps[0].Skipped == "" {
 		t.Fatalf("steps = %+v, want one skipped step", out.Steps)
 	}
@@ -375,7 +385,7 @@ func TestMissingCPPIndexerIsSkippedAndNeverInstalled(t *testing.T) {
 
 	cfg := allowAll()
 	cfg.ProvisionPolicy = config.ProvisionAuto // even a permissive policy installs nothing it cannot verify
-	out := RunCompilerIndexers(context.Background(), f.reg, f.runID, CompilerIndexOptions{Root: f.root, Config: cfg})
+	out := RunCompilerIndexers(context.Background(), f.reg, f.runID, CompilerIndexOptions{Root: f.root, Config: cfg, AllowRepoBuild: true})
 	if len(out.Steps) != 1 || out.Steps[0].Skipped == "" || out.Imported() != 0 {
 		t.Fatalf("steps = %+v, want one skipped step and nothing imported", out.Steps)
 	}

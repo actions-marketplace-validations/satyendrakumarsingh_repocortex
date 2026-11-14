@@ -42,7 +42,7 @@ func TestCPPWithoutCompilationDatabaseCannotRunAndSaysWhy(t *testing.T) {
 	t.Parallel()
 	root := writeRepo(t, map[string]string{"CMakeLists.txt": "project(x)\n", "a.cpp": ""})
 	r := newFakeRunner("scip-clang")
-	plan, err := NewPlanWith(context.Background(), root, nativeCfg(), Options{Runner: r})
+	plan, err := NewPlanWith(context.Background(), root, nativeCfg(), Options{Runner: r, AllowRepoBuild: true})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -64,7 +64,16 @@ func TestCPPWithoutCompilationDatabaseCannotRunAndSaysWhy(t *testing.T) {
 func TestCPPIsRunnableWhenInstalledAndNeverInstalledWhenNot(t *testing.T) {
 	t.Parallel()
 	root := writeRepo(t, map[string]string{"compile_commands.json": "[]"})
-	have, err := NewPlanWith(context.Background(), root, nativeCfg(), Options{Runner: newFakeRunner("scip-clang")})
+	noOptIn, err := NewPlanWith(context.Background(), root, nativeCfg(), Options{Runner: newFakeRunner("scip-clang")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(noOptIn.Runnable()) != 0 || !strings.Contains(noOptIn.Steps[0].Reason,
+		"indexing C/C++ runs the compilers and flags named in the repository's compile_commands.json, which executes code the repository chooses; re-run with --allow-repo-build") {
+		t.Fatalf("an installed scip-clang without the opt-in: %+v, want blocked with that reason", noOptIn.Steps)
+	}
+	have, err := NewPlanWith(context.Background(), root, nativeCfg(),
+		Options{Runner: newFakeRunner("scip-clang"), AllowRepoBuild: true})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -73,7 +82,7 @@ func TestCPPIsRunnableWhenInstalledAndNeverInstalledWhenNot(t *testing.T) {
 	}
 
 	r := newFakeRunner() // not installed, and the policy would allow an install
-	miss, err := NewPlanWith(context.Background(), root, nativeCfg(), Options{Runner: r})
+	miss, err := NewPlanWith(context.Background(), root, nativeCfg(), Options{Runner: r, AllowRepoBuild: true})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -106,7 +115,7 @@ func TestRustNeedsCargoTheBuildOptInAndASinglePackage(t *testing.T) {
 		t.Errorf("without cargo: %q", p.Steps[0].Reason)
 	}
 	p = plan(single, Options{Runner: newFakeRunner("rust-analyzer", "cargo")})
-	if !p.Steps[0].Blocked || !strings.Contains(p.Steps[0].Reason, "--allow-repo-build") {
+	if !p.Steps[0].Blocked || !strings.Contains(p.Steps[0].Reason, "executes code the repository chooses; re-run with --allow-repo-build") {
 		t.Errorf("without the opt-in: %+v", p.Steps[0])
 	}
 	r := newFakeRunner("rust-analyzer", "cargo")

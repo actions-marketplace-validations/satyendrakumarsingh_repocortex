@@ -417,11 +417,23 @@ func planStep(ctx context.Context, p Project, plan Plan, cfg config.Config,
 		return step
 	}
 
+	if p.Language == LangCPP && !opts.AllowRepoBuild {
+		// scip-clang reads the compiler invocations out of the repository's own
+		// compile_commands.json: which compiler, with which flags. That file is
+		// repository-controlled, so what it names is code the repository
+		// chooses, and running it needs the same explicit opt-in as a build.
+		step.Blocked = true
+		step.Reason = "indexing C/C++ runs the compilers and flags named in the repository's " +
+			"compile_commands.json, which executes code the repository chooses; " +
+			"re-run with --allow-repo-build"
+		return step
+	}
+
 	if p.Language == LangRust && !opts.AllowRepoBuild {
 		step.Blocked = true
 		step.Reason = "indexing Rust runs cargo to load the package, which executes the repository's " +
-			"own build scripts and procedural macros (arbitrary code from the repository); " +
-			"re-run with the explicit build opt-in (--allow-repo-build)"
+			"own build scripts and procedural macros, which executes code the repository chooses; " +
+			"re-run with --allow-repo-build"
 		return step
 	}
 

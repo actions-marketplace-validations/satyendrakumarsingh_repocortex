@@ -55,8 +55,9 @@ For the other languages (accuracy auto or exact), resolve runs the compiler
 indexer already installed for each project, as 'repocortex indexers list'
 shows it: scip-typescript, scip-python, scip-clang (C and C++, needs a
 compile_commands.json), rust-analyzer (a single Cargo package) and scip-java
-where the plan allows it. The last two run the repository's own build, so
-they run only with --allow-repo-build. When a language with many files has no
+where the plan allows it. Java without Docker, C/C++ and Rust execute code the
+repository chooses, so they run only with --allow-repo-build, which only your
+command line sets. When a language with many files has no
 indexer installed, resolve says so and prints the command; it never installs. It installs nothing and runs nothing the plan marks blocked. Each index is
 written under .repocortex/scip/ and imported; one whose inputs have not changed
 since it was written is imported again without being re-run. --accuracy fast
@@ -391,7 +392,7 @@ skips all of it.`,
 	cmd.Flags().StringVar(&accuracy, "accuracy", "",
 		"override the accuracy mode for this run: fast|auto|exact (fast skips the Go type check)")
 	cmd.Flags().BoolVar(&allowBuild, "allow-repo-build", false,
-		"let the compiler pass run indexers that execute the repository's own build (Rust: cargo build scripts and macros; Java without docker)")
+		"let the compiler pass run indexers that execute code the repository chooses: Java without Docker (Maven, Gradle), C/C++ (the compilers named in compile_commands.json) and Rust (cargo build scripts and macros)")
 	cmd.Flags().BoolVar(&noSCIP, "no-scip", false, "do not import an index.scip found in the project root or .repocortex/")
 	return cmd
 }
