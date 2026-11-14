@@ -525,6 +525,39 @@ tool's answer was complete and compiler-proven, but the agent still ran a text
 search to check it, and the answer carried 14 rows outside `src/` that it had
 to read and drop. One question, one run per arm.
 
+### Round 5: Python, a method thirteen definitions share (2026-11-14)
+
+pallets/click, indexed and resolved by the build of commit `5dc2afb` with
+scip-python installed. The question: every call site, in source and tests, of
+`ParamType.to_info_dict` (`src/click/types.py:122`), which thirteen
+definitions of the name share and which subclasses override or inherit. Truth
+from jedi's `goto` on every call of the name: 9 sites. Reading found one more
+that jedi misses (`tests/test_info_dict.py:276`, a class defined inside a test
+function that does not override the method), so the truth used is 10.
+
+| Arm | Correct (of 10) | Wrong | Tokens | Tool calls | Seconds |
+|---|---|---|---|---|---|
+| search only | 8 | 0 | 62,507 | 4 | 16.2 |
+| with RepoCortex | 10 | 0 | 63,194 | 5 | 29.2 |
+
+**Result: more complete, not cheaper.** The search-only agent excluded two
+calls made on a value declared `ParamType` (`self.type.to_info_dict()` and
+`ty.to_info_dict()`) because at runtime they may reach an override; by static
+type they reach line 122, which is what the truth counts. The agent with
+RepoCortex counted them. Its tokens were 1% higher and its time 80% higher.
+
+**What the tool's own answer did.** It listed 9 of the 10 sites, all
+compiler-proven, and opened INCOMPLETE: six references in
+`tests/test_info_dict.py`, a file the compiler read, stayed ambiguous, and
+line 276 was among them. The agent resolved them with a grep, which is the
+check this tool exists to make unnecessary.
+
+**Limits.** One question, one run per arm, one repository, one model. The
+truth needed a manual correction, so it is a better measure of agreement
+between the arms than of either one's accuracy. Java was not run: its compiler
+indexer needs Maven, Gradle or Docker, none of which is available on the
+machine used, so a Java run would measure only the heuristic answers.
+
 **Reproducing round 2.** Build the truth program (`cd scripts/bench/agenttruth
 && go build -o agenttruth .`; it is its own module so that the tool does not
 depend on `golang.org/x/tools`), then `agenttruth -dir <clone> list` for

@@ -4506,6 +4506,7 @@ which does not exist until every file has been parsed.
 | `--min-confidence high\|medium\|low` | drop bindings weaker than this instead of recording them |
 | `--no-scip` | do not import an `index.scip` found in the project root or `.repocortex/` |
 | `--accuracy fast\|auto\|exact` | override the configured accuracy mode for this run; `fast` skips the Go type check and the compiler indexers below |
+| `--allow-repo-build` | let the compiler pass run indexers that execute code the repository chooses: `scip-java` without Docker (Maven, Gradle), `scip-clang` (the compilers and flags in `compile_commands.json`) and `rust-analyzer` (cargo build scripts and procedural macros). Refused by default; only your command line sets it, `resolve` never does |
 
 Resolution itself never produces `exact`; that is reserved for compiler-backed
 data and is enforced in Go, in a SQL `CHECK`, and again at commit time.
@@ -4533,8 +4534,8 @@ type check itself: a few seconds for a repository of this size.
 `exact` mode, after the Go type check, `resolve` builds the plan that
 [`indexers list`](#indexers) shows and runs the compiler indexer of each project
 whose indexer is already installed: `scip-typescript` for TypeScript and
-JavaScript, `scip-python` for Python, `scip-java` for Java where the plan allows
-it. The trust rules are the planner's, unchanged. Which indexers may run comes
+JavaScript, `scip-python` for Python, `scip-clang` for C and C++, `rust-analyzer
+scip` for Rust and `scip-java` for Java where the plan allows it. The trust rules are the planner's, unchanged. Which indexers may run comes
 from your user configuration and never from the repository; `resolve` installs
 and downloads nothing, so an indexer that is not installed is reported as not
 run; a step the plan marks blocked (Java without an allowed build) does not run;
@@ -4547,6 +4548,29 @@ file there is imported through the same importer `scip import` uses. A step that
 fails or runs past its limit (the smaller of `accuracy.indexers.timeout` and five
 minutes) is reported on one line with the tool's own first lines and does not
 fail `resolve`.
+
+**C and C++ (`scip-clang`) and Rust (`rust-analyzer scip`).** Both are the
+user's own installs: RepoCortex has no pinned release of either, so there is no
+version and digest to verify, and it never fetches them (`indexers pins` does not
+list them; `indexers install` skips them, saying they are user-installed). Both run only with `--allow-repo-build`: `scip-clang` runs the compilers and flags
+named in the repository's own `compile_commands.json`, and `cargo` runs its build
+scripts and macros, so the repository would choose what executes. A C or C++ project
+runs only with a `compile_commands.json` beside its `CMakeLists.txt` or
+`meson.build`; without one it is reported as "cannot run, because there is no
+compile_commands.json", with the command that makes one, and nothing is run. A
+Rust project is a single Cargo package; a Cargo workspace
+is reported as not run, with the `rust-analyzer scip` line to run yourself and
+`scip import`. These two have been exercised against stand-in programs that write
+a hand-made index, never against the real tools, so no accuracy is claimed for
+them.
+
+**A missing indexer is said, not silent.** After `resolve`, and in `status`, a
+language with at least 10 files that have definitions, whose indexer is not
+installed, gets one `Suggested:` line: the language, what the indexer would add,
+and the command to run (`repocortex indexers install` for the pinned ones, the
+tool's own install line for the rest). It installs nothing. It is not printed
+with `--quiet` or `--accuracy fast`, and the same entries are under
+`suggested_indexers` in `--json` output of both commands.
 
 An index is reused, and the tool not run again, while nothing it reads has
 changed. The key beside each file (`.repocortex/scip/<project>.key`) is a digest of
@@ -4916,7 +4940,7 @@ installing, and an indexer with no recorded digest is never fetched at all.
 |---|---|
 | `--yes` | install without prompting (still verifies digests) |
 | `--out-dir DIR` | write the `.scip` files into `DIR` (created if absent, must be empty) instead of a temporary directory, so a script knows where to find them |
-| `--allow-repo-build` | permit running the repository's own build (Java); it executes code from the repo. Refused by default; prefer `accuracy.indexers.runner=docker` |
+| `--allow-repo-build` | permit running code the repository chooses (Java's Maven or Gradle build, C/C++ via `compile_commands.json`, Rust's cargo build scripts and macros). Refused by default; prefer `accuracy.indexers.runner=docker` for Java |
 
 `indexers pins` prints one tab-separated line per indexer this build may
 install, with five fields: name, version, channel, the reference it installs,
@@ -4930,6 +4954,10 @@ scip-java	0.12.2	docker	sourcegraph/scip-java@sha256:a05564b9...	sha256:a05564b9
 scip-python	0.6.6	npm	@sourcegraph/scip-python@0.6.6	be8e0a1e...
 scip-typescript	0.3.14	npm	@sourcegraph/scip-typescript@0.3.14	92a88678...
 ```
+
+`scip-clang` and `rust-analyzer` are not in this table: they are installed by you,
+not by RepoCortex (see `resolve`), and `indexers list` shows them as `blocked`
+and says, when they are missing, that RepoCortex does not install them and the tool's own install line.
 
 (Digests abbreviated here.) The output depends on nothing but the binary: no
 repository, config or network is read. That makes it a sound CI cache key: the
