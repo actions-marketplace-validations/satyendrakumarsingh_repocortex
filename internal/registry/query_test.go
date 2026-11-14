@@ -25,7 +25,7 @@ func TestQualifiedNameComesFromTheStoredQualifiedName(t *testing.T) {
 // "src" must not match "srcgen/". LIKE wildcards in the path are literal.
 func TestWithinMatchesADirectoryOrAFileAndNothingBeside(t *testing.T) {
 	for _, tc := range []struct {
-		within string
+		within  string
 		wantSQL bool
 		args    []any
 	}{
