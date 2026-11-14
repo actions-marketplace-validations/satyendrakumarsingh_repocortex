@@ -39,7 +39,7 @@ func TestPruneImpossibleEdges(t *testing.T) {
 
 	callerID, err := w.AddSymbol(ctx, &model.Symbol{
 		FileID: fID, Kind: model.KindFunction, Name: "main", FQN: "src/main.ts:main",
-		Range: model.Range{Start: model.Position{Line: 1}, End: model.Position{Line: 10}},
+		Range:      model.Range{Start: model.Position{Line: 1}, End: model.Position{Line: 10}},
 		Confidence: model.ConfidenceHigh, Source: model.SourceSourceCode,
 	})
 	if err != nil {
@@ -48,7 +48,7 @@ func TestPruneImpossibleEdges(t *testing.T) {
 
 	cfgSymID, err := w.AddSymbol(ctx, &model.Symbol{
 		FileID: cfgFID, Kind: model.KindConfiguration, Name: "window", FQN: "config/settings.json:window",
-		Range: model.Range{Start: model.Position{Line: 1}, End: model.Position{Line: 1}},
+		Range:      model.Range{Start: model.Position{Line: 1}, End: model.Position{Line: 1}},
 		Confidence: model.ConfidenceHigh, Source: model.SourceSourceCode,
 	})
 	if err != nil {

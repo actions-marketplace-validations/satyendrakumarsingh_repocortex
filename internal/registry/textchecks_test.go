@@ -232,4 +232,3 @@ func TestUnrecordedMentionsIgnoresJsxClosingTags(t *testing.T) {
 		}
 	}
 }
-

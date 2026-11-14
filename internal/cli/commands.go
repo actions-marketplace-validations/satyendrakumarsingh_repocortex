@@ -1299,12 +1299,12 @@ func verifyGraph(cmd *cobra.Command, dbPath string) []check {
 			name: "implausible table names",
 			desc: "table names containing characters no SQL identifier can hold",
 			sql: `SELECT count(*) FROM table_accesses
-			  WHERE table_name GLOB '*[^A-Za-z0-9_.$]*'`,
+			  WHERE table_name GLOB '*[^A-Za-z0-9_.$ ]*'`,
 			impact: "'repocortex db' lists tables your schema does not have; real tables are still correct",
 			remedy: "ignore those rows, and report the file and line below — a string in that file is being read as SQL",
 			examples: `SELECT f.path || ':' || t.start_line || ' (' || t.table_name || ')'
 			   FROM table_accesses t JOIN files f ON f.id = t.file_id
-			  WHERE t.table_name GLOB '*[^A-Za-z0-9_.$]*' LIMIT 3`,
+			  WHERE t.table_name GLOB '*[^A-Za-z0-9_.$ ]*' LIMIT 3`,
 		},
 		{
 			// A configuration key of pure punctuation came from a comment, not

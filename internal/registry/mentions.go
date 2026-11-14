@@ -283,4 +283,3 @@ func isJsxClosing(line, name string) bool {
 	rest := strings.TrimLeft(line[idx+2+len(name):], " \t")
 	return strings.HasPrefix(rest, ">")
 }
-
