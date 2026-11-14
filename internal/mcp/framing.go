@@ -1161,6 +1161,14 @@ func (r *Response) RenderText() string {
 		// verbatim repository content, because they carry different risks: one
 		// may be wrong, the other may be hostile.
 		b.WriteString("\n=== " + sectionInferred + " ===\n")
+		// A tag every row shares is said once. 64 rows each ending
+		// "[confidence=exact source=compiler]" were 40% of an answer's rows, and
+		// the verdict above them already says the same thing; a mixed answer
+		// still tags each row, since there the tag is what tells them apart.
+		shared := sharedTag(r.Items)
+		if shared != "" {
+			fmt.Fprintf(&b, "all %d rows: %s\n", len(r.Items), shared)
+		}
 		for _, it := range r.Items {
 			fmt.Fprintf(&b, "- %s", it.Kind)
 			if it.Name != "" {
@@ -1172,7 +1180,7 @@ func (r *Response) RenderText() string {
 					fmt.Fprintf(&b, ":%d", it.Line)
 				}
 			}
-			if it.Confidence != "" {
+			if it.Confidence != "" && shared == "" {
 				fmt.Fprintf(&b, "  [confidence=%s", it.Confidence)
 				if it.Source != "" {
 					fmt.Fprintf(&b, " source=%s", it.Source)
@@ -1211,4 +1219,27 @@ func (r *Response) RenderText() string {
 	}
 
 	return b.String()
+}
+
+// sharedTagMinRows is how many rows an answer needs before a tag they all share
+// is said once: for a handful of rows the repeat is cheap and keeps each row
+// readable alone.
+const sharedTagMinRows = 5
+
+// sharedTag is "confidence=X source=Y" when every row has that same pair and
+// there are enough rows to make saying it once worthwhile; empty otherwise.
+func sharedTag(items []Item) string {
+	if len(items) < sharedTagMinRows || items[0].Confidence == "" {
+		return ""
+	}
+	for _, it := range items[1:] {
+		if it.Confidence != items[0].Confidence || it.Source != items[0].Source {
+			return ""
+		}
+	}
+	t := "confidence=" + items[0].Confidence
+	if items[0].Source != "" {
+		t += " source=" + items[0].Source
+	}
+	return "[" + t + "]"
 }

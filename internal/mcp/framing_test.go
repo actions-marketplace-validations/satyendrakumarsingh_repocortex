@@ -276,3 +276,30 @@ func TestBoundExcerptByteTruncationNeverReturnsSomethingLongerThanTheOriginal(t 
 			full, l, got, full)
 	}
 }
+
+// A confidence and source every row shares is said once, above the rows, once
+// there are enough of them; a mixed answer tags each row.
+func TestASharedTagIsSaidOnceAndAMixedAnswerTagsEveryRow(t *testing.T) {
+	row := func(conf, src string) Item {
+		return Item{Kind: "calls", Name: "f", Path: "a.go", Line: 1, Confidence: conf, Source: src}
+	}
+	same := &Response{Summary: "s", Items: []Item{row("exact", "compiler"), row("exact", "compiler"), row("exact", "compiler"), row("exact", "compiler"), row("exact", "compiler")}}
+	out := same.RenderText()
+	if got := strings.Count(out, "[confidence=exact source=compiler]"); got != 1 {
+		t.Errorf("a shared tag appears %d times, want once:\n%s", got, out)
+	}
+	if !strings.Contains(out, "all 5 rows: [confidence=exact source=compiler]") {
+		t.Errorf("the shared tag line is missing:\n%s", out)
+	}
+
+	few := &Response{Summary: "s", Items: []Item{row("exact", "compiler"), row("exact", "compiler")}}
+	if got := strings.Count(few.RenderText(), "[confidence=exact source=compiler]"); got != 2 {
+		t.Errorf("two rows should each carry the tag, got %d", got)
+	}
+
+	mixed := &Response{Summary: "s", Items: []Item{row("exact", "compiler"), row("exact", "compiler"), row("exact", "compiler"), row("exact", "compiler"), row("medium", "source_code")}}
+	mo := mixed.RenderText()
+	if strings.Contains(mo, "all 5 rows") || strings.Count(mo, "[confidence=") != 5 {
+		t.Errorf("a mixed answer must tag every row:\n%s", mo)
+	}
+}
