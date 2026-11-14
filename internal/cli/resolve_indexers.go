@@ -1,13 +1,17 @@
 package cli
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"strings"
 	"time"
 
 	"github.com/satyendrakumarsingh/repocortex/internal/config"
+	"github.com/satyendrakumarsingh/repocortex/internal/indexer"
 	"github.com/satyendrakumarsingh/repocortex/internal/pipeline"
+	"github.com/satyendrakumarsingh/repocortex/internal/registry"
+	"github.com/satyendrakumarsingh/repocortex/internal/resolve/gotypes"
 )
 
 // compilerIndexersJSON is the machine-readable form of the compiler indexer
@@ -142,4 +146,41 @@ func dur(d time.Duration) string {
 		return fmt.Sprintf("%dms", d.Milliseconds())
 	}
 	return fmt.Sprintf("%.1fs", d.Seconds())
+}
+
+// suggestedIndexers names the compiler indexers that are not installed for a
+// language this index has many files in (indexer.SuggestMinFiles or more with
+// definitions). The count comes from the index, only the presence of a binary
+// on PATH is asked of the machine, and nothing is installed. Under accuracy
+// fast it is empty: that mode promises no compiler pass, so a hint to add one
+// would contradict the setting.
+func suggestedIndexers(ctx context.Context, reg *registry.Registry, runID int64, cfg config.Config) []indexer.Suggestion {
+	if cfg.Accuracy == config.AccuracyFast {
+		return []indexer.Suggestion{}
+	}
+	cov, err := reg.CompilerCoverage(ctx, runID, gotypes.Detail)
+	if err != nil {
+		return []indexer.Suggestion{}
+	}
+	langs := make([]indexer.LanguageFiles, 0, len(cov))
+	for _, l := range cov {
+		langs = append(langs, indexer.LanguageFiles{Language: l.Language, Files: l.Files})
+	}
+	out := indexer.Suggest(ctx, nil, cfg, langs)
+	if out == nil {
+		out = []indexer.Suggestion{}
+	}
+	return out
+}
+
+// renderSuggestedIndexers prints one line per suggestion. quiet suppresses it,
+// as it does every other line that is not an answer.
+func renderSuggestedIndexers(out io.Writer, quiet bool, sugg []indexer.Suggestion) {
+	if quiet {
+		return
+	}
+	for _, s := range sugg {
+		fmt.Fprintf(out, "  %-12s %s: %d files with definitions, no %s installed. It would add %s. To get it: %s\n",
+			"Suggested:", s.Language, s.Files, s.Indexer, s.Adds, s.Command)
+	}
 }
