@@ -374,7 +374,22 @@ func (run *ingestRun) visitDocument(ctx context.Context, d *scippb.Document) err
 type symbolInfo struct {
 	name string
 	pkg  string
+	// unnamed is true when the symbol's package fields are empty ("."): an
+	// indexer that does not model packages, scip-clang being the one met so
+	// far, which writes `cxx . . $ ...` for the project's symbols and for the
+	// standard library's alike. Such a symbol belongs to no package that can
+	// be told apart from another, so its package is neither evidence that it
+	// is the repository's own nor that it is not: whether an occurrence leaves
+	// the repository is then decided only by whether the index defines the
+	// symbol.
+	unnamed bool
 }
+
+// unnamedPackage is the Site.Package of a symbol with no package of its own. It
+// is non-empty so the symbol is not read as one whose package could not be
+// parsed (which proves nothing), and it is never registered as a package the
+// repository provides.
+const unnamedPackage = "(unnamed package)"
 
 // maxSymbolInfoCache bounds the per-run memo of parsed symbol strings. The
 // same few thousand symbols are referenced hundreds of thousands of times, so
@@ -393,6 +408,9 @@ func (run *ingestRun) symbolInfo(sym string) symbolInfo {
 		if parsed, err := scippb.ParseSymbol(sym); err == nil {
 			if p := parsed.GetPackage(); p != nil {
 				info.pkg = p.GetManager() + " " + p.GetName()
+			}
+			if info.pkg == " " {
+				info.pkg, info.unnamed = unnamedPackage, true
 			}
 			if ds := parsed.GetDescriptors(); len(ds) > 0 {
 				info.name = ds[len(ds)-1].GetName()
@@ -502,7 +520,7 @@ func (run *ingestRun) convert(d *scippb.Document, repoPath string) *FileFacts {
 		defs[sym] = def
 		next--
 		if run.opts.KeepSites {
-			if info := run.symbolInfo(sym); info.pkg != "" && !hasString(facts.Packages, info.pkg) {
+			if info := run.symbolInfo(sym); info.pkg != "" && !info.unnamed && !hasString(facts.Packages, info.pkg) {
 				facts.Packages = append(facts.Packages, info.pkg)
 			}
 		}
