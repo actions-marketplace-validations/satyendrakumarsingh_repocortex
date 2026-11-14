@@ -516,7 +516,10 @@ see docs/accuracy.md for what the numbers do and do not mean.`,
 			}
 			checks = append(checks, check{Name: "user config", Status: ucStatus, Detail: ucDetail})
 
-			repoCfg := filepath.Join(cfg.RepoRoot, config.RepoConfigName)
+			repoCfg := cfg.RepoConfigFile
+			if repoCfg == "" {
+				repoCfg = filepath.Join(cfg.RepoRoot, config.RepoConfigName)
+			}
 			rcDetail := "none"
 			if _, err := os.Stat(repoCfg); err == nil {
 				rcDetail = repoCfg + " (indexing settings only; cannot grant execution)"
@@ -1436,4 +1439,43 @@ func renderChecks(cmd *cobra.Command, g *Global, checks []check, prec *precision
 		return fmt.Errorf("%d check(s) failed", failed)
 	}
 	return nil
+}
+
+// ---------------------------------------------------------------- migrate
+
+func newMigrateCmd(g *Global) *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "migrate",
+		Short: "Bring an existing index schema up to date with this build",
+		Long: `Applies any unapplied schema migrations to the project's index database.
+Safe and idempotent; does not rebuild or clear existing indexed data.`,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			ctx := cmd.Context()
+			dbPath := g.DBPath()
+			if _, err := os.Stat(dbPath); os.IsNotExist(err) {
+				return fmt.Errorf("no index at %s — run 'repocortex init' first", dbPath)
+			}
+			db, err := store.Open(ctx, store.Options{Path: dbPath})
+			if err != nil {
+				return fmt.Errorf("open index: %w", err)
+			}
+			defer func() { _ = db.Close() }()
+
+			applied, err := store.Migrate(ctx, db.DB, time.Now().Unix)
+			if err != nil {
+				return fmt.Errorf("apply schema: %w", err)
+			}
+			version, err := store.SchemaVersion(ctx, db.DB)
+			if err != nil {
+				return err
+			}
+			if len(applied) == 0 {
+				fmt.Fprintf(cmd.OutOrStdout(), "index is already at latest schema version v%d\n", version)
+			} else {
+				fmt.Fprintf(cmd.OutOrStdout(), "upgraded index schema to v%d (applied migrations: %v)\n", version, applied)
+			}
+			return nil
+		},
+	}
+	return cmd
 }

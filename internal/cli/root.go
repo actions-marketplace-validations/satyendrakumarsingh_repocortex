@@ -47,7 +47,15 @@ func (g *Global) Log() *slog.Logger { return g.log }
 
 // DBPath returns the registry path for the resolved project root.
 func (g *Global) DBPath() string {
-	return filepath.Join(g.cfg.RepoRoot, IndexDir, IndexFile)
+	primary := filepath.Join(g.cfg.RepoRoot, IndexDir, IndexFile)
+	if _, err := os.Stat(primary); err == nil {
+		return primary
+	}
+	alt := filepath.Join(g.cfg.RepoRoot, ".devintel", IndexFile)
+	if _, err := os.Stat(alt); err == nil {
+		return alt
+	}
+	return primary
 }
 
 // NewRoot builds the root command tree.
@@ -105,6 +113,7 @@ a heuristic guess.`,
 		newMoveCmd(g),
 		newBenchCmd(g),
 		newConfigCmd(g),
+		newMigrateCmd(g),
 		newDepsCmd(g),
 		newDBCmd(g),
 		newSearchCmd(g),

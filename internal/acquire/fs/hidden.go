@@ -87,7 +87,7 @@ var sourceDotDirs = map[string]bool{
 }
 
 // neverIndexed are names no configuration can bring into the index.
-var neverIndexed = map[string]bool{".git": true, IndexDirName: true}
+var neverIndexed = map[string]bool{".git": true, IndexDirName: true, ".devintel": true}
 
 // IndexDirName is the directory RepoCortex keeps its own index in. Declared
 // here because the walk must refuse it by name; the CLI owns the path.

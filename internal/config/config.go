@@ -328,6 +328,7 @@ type Config struct {
 	IndexerLanguages           []string
 	IndexerTimeout             time.Duration
 	RepoRoot                   string
+	RepoConfigFile             string
 	UserConfigPresent          bool
 }
 
@@ -400,12 +401,16 @@ func Load(repoRoot string) (Config, error) {
 		}
 	}
 
-	repoConfigFile := filepath.Join(repoRoot, RepoConfigName)
-	if _, err := os.Stat(repoConfigFile); os.IsNotExist(err) {
-		alt := filepath.Join(repoRoot, ".repocortex.yml")
-		if _, err := os.Stat(alt); err == nil {
-			repoConfigFile = alt
+	var repoConfigFile string
+	for _, name := range []string{RepoConfigName, ".cortex.yml", ".devintel.yml"} {
+		p := filepath.Join(repoRoot, name)
+		if _, err := os.Stat(p); err == nil {
+			repoConfigFile = p
+			break
 		}
+	}
+	if repoConfigFile == "" {
+		repoConfigFile = filepath.Join(repoRoot, RepoConfigName)
 	}
 
 	rc, found, err := loadRepoConfig(repoConfigFile)
@@ -413,6 +418,7 @@ func Load(repoRoot string) (Config, error) {
 		return cfg, fmt.Errorf("repo config: %w", err)
 	}
 	if found {
+		cfg.RepoConfigFile = repoConfigFile
 		applyRepo(&cfg, rc)
 	}
 

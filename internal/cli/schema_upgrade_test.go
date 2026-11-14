@@ -202,3 +202,38 @@ func addedColumn(fields []string) (string, bool) {
 	}
 	return "", false
 }
+
+func TestMigrateCommandUpgradesOutdatedIndex(t *testing.T) {
+	root := isolate(t)
+	if err := os.WriteFile(filepath.Join(root, "main.go"),
+		[]byte("package main\n\nfunc A() {}\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	for _, args := range [][]string{{"init"}, {"index"}} {
+		if out, err := run(t, root, args...); err != nil {
+			t.Fatalf("%v: %v\n%s", args, err, out)
+		}
+	}
+	dbPath := filepath.Join(root, ".repocortex", "index.db")
+	dropLatestMigration(t, dbPath)
+
+	// Verify symbol query refuses because of outdated schema
+	if _, err := run(t, root, "symbol", "A"); err == nil {
+		t.Fatal("query succeeded on outdated schema")
+	}
+
+	// Run migrate command to bring index schema up to date
+	out, err := run(t, root, "migrate")
+	if err != nil {
+		t.Fatalf("migrate failed: %v\n%s", err, out)
+	}
+	if !strings.Contains(out, "upgraded index schema") {
+		t.Errorf("migrate output missing expected message: %s", out)
+	}
+
+	// Query should now succeed
+	if out, err = run(t, root, "symbol", "A"); err != nil {
+		t.Fatalf("symbol query failed after migrate: %v\n%s", err, out)
+	}
+}

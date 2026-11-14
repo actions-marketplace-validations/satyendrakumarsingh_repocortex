@@ -96,6 +96,16 @@ CREATE TABLE IF NOT EXISTS schema_migrations (
     applied_unix INTEGER NOT NULL
 )`
 
+// legacyChecksums maps (version -> previous valid checksum) from earlier builds/predecessor names
+// where comments in migration SQL files were polished without altering DDL statements.
+var legacyChecksums = map[int]map[string]bool{
+	5:  {"37c4ca9a9ff6a9d52da4d6f329a7fb4d0a3bab42f55a7a39fe5baf6bebf0ce84": true},
+	9:  {"2e10a1ae6f351c161ca347b0ba62567c40cd173600834a00a433857014dadf7f": true},
+	11: {"2a24bee9b7eab15bb9f07ecfbb9797aed8b261440e85f3a26ca613c1ec792aba": true},
+	12: {"a6f614e1b44f50c07d55184062e93c4626fe88bb9ec4a1e109b608cba5302240": true},
+	13: {"a44477fadd4db9ad17adf527e277367bbb36bff4aa2422f92c975973203d91ee": true},
+}
+
 // Migrate brings db up to the latest schema version.
 //
 // Each migration runs inside its own transaction, so an interrupted run leaves
@@ -142,6 +152,10 @@ func Migrate(ctx context.Context, db *sql.DB, now func() int64) (applied []int, 
 	for _, m := range migrations {
 		if prev, done := existing[m.Version]; done {
 			if prev.checksum != m.Checksum {
+				if leg, ok := legacyChecksums[m.Version]; ok && leg[prev.checksum] {
+					// Known legacy checksum from earlier build; safe to accept.
+					continue
+				}
 				return applied, fmt.Errorf(
 					"migration %04d_%s was modified after being applied (recorded %s, embedded %s); "+
 						"shipped migrations are immutable — add a new migration instead",

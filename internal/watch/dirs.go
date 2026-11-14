@@ -65,6 +65,7 @@ var builtinIgnoredDirs = map[string]struct{}{
 	".git":         {},
 	"node_modules": {},
 	".repocortex":  {},
+	".devintel":    {},
 }
 
 // entry is one path discovered while registering watches.
