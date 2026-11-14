@@ -475,8 +475,13 @@ func (c coverage) caveat(subject string) []string {
 				"an expression, and whatever was reached only through them.")
 		}
 		if s := c.Binding.UnlistedSentence(); s != "" {
-			out = append(out, "INCOMPLETE FOR THIS SYMBOL — "+s+". Any of them may be a use of this "+
-				"definition. Run search_code for the name before concluding anything from what is absent.")
+			if c.Binding.References > 0 {
+				out = append(out, "INCOMPLETE FOR THIS SYMBOL — "+s+". Any of them may be an additional dynamic use of this "+
+					"definition. Proven callers are listed below; inspect with search_code only if dynamic coverage is required.")
+			} else {
+				out = append(out, "INCOMPLETE FOR THIS SYMBOL — "+s+". Any of them may be a use of this "+
+					"definition. Run search_code for the name before concluding anything from what is absent.")
+			}
 		}
 		if c.Structural != "" {
 			out = append(out, "INCOMPLETE FOR THIS TYPE — "+c.Structural)

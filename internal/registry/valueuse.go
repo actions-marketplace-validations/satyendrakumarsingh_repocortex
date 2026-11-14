@@ -130,7 +130,7 @@ func (r *Registry) unrecordedMentions(ctx context.Context, runID int64, name str
 		for _, line := range identifierLinesText(f.content, name) {
 			p := Place{Path: f.path, Line: line.n}
 			if recorded[p] || insideAny(p, defs) || imports[line.n] || !identifierInCode(line.text, name) ||
-				declaresFunction(line.text, name, f.lang, paired) {
+				declaresFunction(line.text, name, f.lang, paired) || isJsxClosing(line.text, name) {
 				continue
 			}
 			places = append(places, p)

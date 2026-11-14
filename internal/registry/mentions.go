@@ -271,3 +271,16 @@ func pairedHeaderPrefix(prefix string) bool {
 	}
 	return !statementWords[fields[len(fields)-1]]
 }
+
+// isJsxClosing reports whether name on line is inside a JSX/TSX closing element
+// (e.g. </Button> or </MainNav>), which is the syntactic close of a rendered
+// component and not a function passed as a value.
+func isJsxClosing(line, name string) bool {
+	idx := strings.Index(line, "</"+name)
+	if idx < 0 {
+		return false
+	}
+	rest := strings.TrimLeft(line[idx+2+len(name):], " \t")
+	return strings.HasPrefix(rest, ">")
+}
+

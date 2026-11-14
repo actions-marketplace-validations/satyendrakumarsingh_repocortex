@@ -214,3 +214,22 @@ func TestUnrecordedMentionsIgnoresImportListsAndPrototypes(t *testing.T) {
 		t.Errorf("a prototype counted as a use: %+v, want %v", got, want)
 	}
 }
+
+func TestUnrecordedMentionsIgnoresJsxClosingTags(t *testing.T) {
+	r, run := seedTextFiles(t, []fileSpec{
+		{path: "components/main-nav.tsx", lang: "tsx", hash: "jsx1", content: "export function MainNav({ items, children }: any) {\n  return <div>{children}</div>\n}\n",
+			syms: []symSpec{defSym("MainNav", 1)}},
+		{path: "app/layout.tsx", lang: "tsx", hash: "jsx2", content: "import { MainNav } from '@/components/main-nav'\nexport default function Layout() {\n  return (\n    <MainNav items={[]}>\n      <span>hello</span>\n    </MainNav>\n  )\n}\n"},
+	})
+	got, err := r.UnrecordedMentions(context.Background(), run, "MainNav", []DefSpan{{Path: "components/main-nav.tsx", From: 1, To: 3}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The JSX opening tag on line 4 is a call; line 6 is a closing tag </MainNav> and must NOT be counted as a value use.
+	for _, p := range got.Sample {
+		if p.Path == "app/layout.tsx" && p.Line == 6 {
+			t.Errorf("JSX closing tag </MainNav> counted as a value use: %+v", got)
+		}
+	}
+}
+

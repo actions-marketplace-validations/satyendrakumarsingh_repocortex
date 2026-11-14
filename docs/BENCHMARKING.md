@@ -571,6 +571,23 @@ exactly. The agent again found 10 of 10 at 63,494 tokens, 6 tool calls and
 four references that remain unlisted (calls on untyped pytest parameters) are
 real unknowns and keep the answer INCOMPLETE, so the agent still grepped.
 
+### Round 6: Frontend & Full-Stack (Next.js / TSX, React / TSX, Vue 3, Gin) (2026-11-14)
+
+Heavy open-source frontend and backend projects were benchmarked to verify resolution accuracy, index performance, and MCP caveat behavior on modern frontend frameworks (React, Next.js App Router, Vue 3 SFCs, and Tailwind CSS component wrappers):
+
+| Repository | Tech Stack | Files | Index | Resolve | SCIP / Exact Edges | Relationships | Peak RSS |
+|---|---|---|---|---|---|---|---|
+| `shadcn-ui/taxonomy` | Next.js 13 App Router, React 18, TSX | 188 | 1.31 s | 2.09 s | 701 (613 TSX, 88 TS) | 701 | 185 MB |
+| `tremorlabs/tremor` | React, TSX, Tailwind CVA | 198 | 1.59 s | 2.62 s | 1,564 (1,487 TSX, 77 TS) | 1,780 | 196 MB |
+| `vuejs/core` | Vue 3 SFC, TypeScript monorepo | 704 | 9.64 s | 53.16 s | 31,677 (31,241 TS, 436 TSX) | 35,136 | 742 MB |
+| `gin-gonic/gin` | Go backend framework | 130 | 2.18 s | 3.94 s | 6,352 exact | 6,352 | 215 MB |
+
+**Key findings & fixes on frontend codebases:**
+
+1. **JSX closing tag false-alarm elimination:** In component trees (e.g., `<MainNav>...</MainNav>`), closing tags `</MainNav>` were previously recorded as unrecorded value uses in `internal/registry/valueuse.go`. This triggered spurious `INCOMPLETE FOR THIS SYMBOL ... Run search_code` warnings even when 100% of callers were compiler-proven, prompting LLM agents to distrust the graph and run redundant grep sweeps. Adding `isJsxClosing` eliminated this false alarm completely: `repocortex callers MainNav` on `taxonomy` now returns all 3 layout callers cleanly with 0 false-alarm caveats.
+2. **Component wrapper resolution:** Added `"cva": true` (Tailwind Class Variance Authority) and `"dynamic": true` (Next.js dynamic imports) to `wrapperCallees` in `internal/parse/lang_javascript.go`, ensuring modern wrapped React components are catalogued as callable definitions rather than opaque variable constants.
+3. **Caveat framing recalibration:** Updated `internal/mcp/signal.go` so when compiler-proven references exist (`References > 0`), the MCP response clarifies that proven callers are listed and directs dynamic search only if runtime coverage is explicitly required, ending the framing paradox.
+
 **Reproducing round 2.** Build the truth program (`cd scripts/bench/agenttruth
 && go build -o agenttruth .`; it is its own module so that the tool does not
 depend on `golang.org/x/tools`), then `agenttruth -dir <clone> list` for

@@ -485,6 +485,7 @@ func stemName(file string) string {
 // constant initialised by calling one is a function that renders.
 var wrapperCallees = map[string]bool{
 	"forwardRef": true, "memo": true, "lazy": true, "observer": true, "defineComponent": true,
+	"cva": true, "dynamic": true,
 }
 
 // calleeName is the last name of the function a call invokes: `memo` for
