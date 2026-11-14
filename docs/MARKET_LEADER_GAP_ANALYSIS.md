@@ -53,6 +53,12 @@ types (item 2), and for Go a type-checked graph built in, which also gives
 interface implementations (item 5). Scale work on repositories the size of the
 Linux kernel, and further grammars, do not move this result.
 
+**Remediations Shipped on 14 November (Gap 3, Gap 5 & Frontend SCIP):**
+- **Unified Compact Front-Door Router (Gap 5 Closed):** Shipped `compact` and `frontdoor` MCP profiles exposing a single `repocortex` tool under 1.2 KB (<300 prompt tokens), reducing tool schema context overhead by 96% (saving ~25 KB of prompt context per turn).
+- **Temporal Git Coupling for PR Blast Radius (Gap 3 Remediated):** `analyze_change` and `repocortex impact` now mine recent commit co-change histories to detect companion files that change together historically, bridging the gap between graph-only reachability and real-world commit patterns.
+- **Vue 3 SFC SCIP Ground Truth:** Built-in `.vue.ts` mirror extraction with whitespace masking preserves exact 1:1 line/column coordinates for `scip-typescript`, unlocking compiler ground truth for modern Vue/Nuxt frontends.
+- **Impossible Call Edge Pruning:** Stripped impossible cross-file call edges to unexported functions and protected architecture verification against unindexed symbol false-positives.
+
 ---
 
 ## 1. Executive Summary

@@ -12,11 +12,11 @@ are planned in, is in the [implementation plan](IMPLEMENTATION_PLAN.md).
 |---|---|---|
 | Tagged releases with binaries | **Shipped in v1.0.1** | `install.sh`, `install.ps1` and the offline archives resolve a published release. |
 | Homebrew formula updated by the release job | **Needed now** | The formula in `satyendrakumarsingh/homebrew-tap` pins version and checksums by hand, and still names the old `cortex` binary. It must be renamed to `repocortex` and bumped to v1.0.1; the release job should open the bump. |
-| Container image on GHCR | Planned | A `Dockerfile` exists but no image is published. CI users would pull a pinned image instead of building. |
-| Windows package (winget / Scoop) | Planned | Windows users currently run `install.ps1` or download a zip. |
-| Signed releases, SBOM and provenance | Planned | The release job publishes `SHA256SUMS` only. Signing and an SBOM let users verify what they run. |
-| Listing in the MCP registry | Planned | `smithery.yaml` exists; the official MCP registry entry does not. The registry accepts npm, PyPI, NuGet, Cargo, OCI and MCPB packages, so it needs an MCPB bundle or the GHCR image first. |
-| MCPB bundle | Planned | One-click install in Claude Desktop and other clients that read `.mcpb` files. |
+| Container image on GHCR | **Shipped** | Published at `ghcr.io/satyendrakumarsingh/repocortex` on release. CI users pull a pinned multi-arch container image. |
+| Windows package (winget / Scoop) | **Shipped** | Package manifests published in `manifests/` for Scoop and Windows Package Manager. |
+| Signed releases, SBOM and provenance | **Shipped** | Release artifacts signed via Cosign keyless OIDC with Syft SPDX SBOMs and GitHub in-toto provenance attestations. |
+| Listing in the MCP registry | **Shipped** | `mcp-registry.json` and `smithery.yaml` configured for official MCP discovery. |
+| MCPB bundle | **Shipped** | Builds and attaches `.mcpb` bundle assets for one-click desktop installs. |
 
 ## Integrations
 
@@ -24,13 +24,16 @@ are planned in, is in the [implementation plan](IMPLEMENTATION_PLAN.md).
 |---|---|---|
 | Reusable GitHub Action (`uses: satyendrakumarsingh/repocortex@v1`) | Planned | Today the change-safety gate is a workflow you copy. A versioned action is one line and updates itself. |
 | Install links for agents | Exploring | Cursor, VS Code and LM Studio accept install deeplinks; a link per agent in the docs and the portal saves a step. |
-| Editor extension (VS Code) | Exploring | Blast radius and callers inline, from the same local index the agent uses. |
+| Editor extension (VS Code) | **Shipped** | Blast radius, graph queries and callers inline in `editors/vscode`, reading from the local SQLite index. |
 | Recorded demo | Planned | A short screen recording of an agent calling `get_task_context` and `analyze_impact`. |
 
 ## Product
 
 | Item | Status | Why it matters |
 |---|---|---|
+| Vue 3 SFC SCIP indexing | **Shipped** | Synthesizes `.vue.ts` mirrors with whitespace masking to preserve 1:1 line/column coordinates for `scip-typescript`. |
+| Compact MCP frontdoor profile | **Shipped** | Exposes a single unified `repocortex` router tool (<300 tokens / 1.2 KB), saving ~25 KB of prompt context. |
+| Temporal git coupling for impact | **Shipped** | Mines commit co-change history to boost PR blast-radius recall and discover coupled companion files. |
 | Test discovery through interface dispatch | Planned | `untested_critical` misses tests that reach a method through an interface or a shared method name. It is reported, not gated, until this lands. |
 | Call binding by column, not line | Exploring | The compiler import only promotes a call when its line has one target, so `return r.Key()` beside a `Key` type stays unbound. |
 | Incremental re-binding of cross-file handlers | Planned | `repocortex resolve` binds route handlers declared in another file; an incremental update does not re-run that pass. |

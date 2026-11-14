@@ -205,6 +205,7 @@ on this build:
 
 | Profile | Tools | Schema per request |
 |---|---|---|
+| `compact` | 1 (`repocortex`) | under 300 tokens (saves ~25 KB of prompt context) |
 | `minimal` (default for `serve`) | 7 | about 2,000 tokens |
 | `standard` | 18 | about 5,000 tokens |
 | `full` | 28 | about 8,400 tokens |
