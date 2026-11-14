@@ -66,7 +66,7 @@ One Go binary. A SQLite file in `.repocortex/`. Nothing leaves your machine.
 | Get started | Use it | Trust it | Reference | Go deeper |
 |---|---|---|---|---|
 | [Why RepoCortex](#why-repocortex) | [What it answers](#what-it-answers) | [How it works](#how-it-works) | [MCP tools](#mcp-tools) | [User guide](docs/USER_GUIDE.md) |
-| [Compared with other tools](#repocortex-compared-with-other-code-graph-tools) | [Protocols](docs/guides/protocols.md) | [Scale testing](docs/operations/scale-testing.md) | [Naming conventions](docs/reference/naming-conventions.md) | [Competitive analysis](docs/COMPETITIVE_ANALYSIS.md) |
+| [Compared with other tools](#repocortex-compared-with-other-code-graph-tools) | [Protocols](docs/guides/protocols.md) | [Scale testing](docs/operations/scale-testing.md) | [Naming conventions](docs/reference/naming-conventions.md) | [Benchmarking](docs/BENCHMARKING.md) |
 | [Who it's for](#who-its-for) | [Recipes](#recipes) | [Confidence tiers](#confidence-tiers) | [Language support](#language-support) | [Portal guide](docs/guides/portal-guide.md) |
 | [Quickstart](#quickstart) | [How an agent uses it](#how-an-agent-uses-it) | [Accuracy](#accuracy) | [Guides and docs](#guides-and-documentation) | [CLI reference](docs/CLI.md) |
 | [Install options](#install-options) | [Blast radius in CI](#blast-radius-in-ci) | [Performance](#performance) | [FAQ](#faq) | [Architecture](docs/DESIGN_AND_ARCHITECTURE.md) |
@@ -160,7 +160,7 @@ CALLS  mergeMCPConfig                                     internal/cli/install.g
 |---|---|
 | **Every protocol** | The same tools are now served as plain HTTP with an OpenAPI document (`/api/v1`) and from the shell (`repocortex tool call`), through one implementation. [Protocols](docs/guides/protocols.md) |
 | **Unused code and hotspots** | `repocortex dead-code` grades what nothing calls and checks it against the source text; `repocortex hotspots` ranks where change concentrates and names files that change together. [What it answers](#what-it-answers) |
-| **A redesigned portal** | `repocortex ui --next`: one page per symbol, with its callers, reach and tests as tabs. [Portal UX plan](docs/design/PORTAL_UX_PLAN.md) |
+| **A redesigned portal** | `repocortex ui --next`: one page per symbol, with its callers, reach and tests as tabs. [Portal guide](docs/guides/portal-guide.md) |
 | **HTTP transport** | `repocortex serve --http` serves MCP over Streamable HTTP, with a token on every request, so ChatGPT, Android Studio and other remote-only clients can connect. [Details](docs/guides/coding-agents.md#remote-mcp-over-http) |
 | **30 agents in one command** | `repocortex install` writes each agent's own config format (JSON, TOML or YAML), keeps everything else in the file, and prints the steps for 10 more. [Coding agents guide](docs/guides/coding-agents.md) |
 | **Agent setup prompt** | Paste one prompt into your coding agent and it installs, indexes and registers RepoCortex for you. [Set up with your AI agent](#set-up-with-your-ai-agent) |
@@ -520,7 +520,7 @@ After the first run, `repocortex index` only re-reads changed files, and `repoco
 | Pull-request gate with SARIF | Yes, free | Not documented | No | Paid tier | Paid tier | GitHub Action |
 | Runs offline from one binary | Yes (Go) | Yes (C) | Needs language servers | Node | Python | Python |
 
-<sub>From each project's own README and documentation on 2026-11-12; star counts, prices and features in this field change monthly. Where the others lead: several offer semantic search, publish reproducible agent benchmarks, and ship tagged releases through many package managers, none of which RepoCortex does yet. The full survey of 40 tools, with sources: <a href="docs/COMPETITIVE_ANALYSIS.md">competitive analysis</a>.</sub>
+<sub>From each project's own README and documentation on 2026-11-12; star counts, prices and features in this field change monthly. Where the others lead: several offer semantic search, publish reproducible agent benchmarks, and ship tagged releases through many package managers, none of which RepoCortex does yet. See the <a href="#repocortex-compared-with-other-code-graph-tools">comparison table</a>.</sub>
 
 ## Blast radius in CI
 
@@ -546,7 +546,7 @@ Details: [docs/operations/ci-cd-gates.md](docs/operations/ci-cd-gates.md).
 
 Screen-by-screen walkthrough with screenshots: **[portal guide](docs/guides/portal-guide.md)**.
 
-A redesigned portal is available to try with `repocortex ui --next`: five sections in place of twenty-three screens, and one page per symbol with its callers, what a change can reach and its tests as tabs. It reads the same tool endpoint agents use. The design and what remains: [portal UX plan](docs/design/PORTAL_UX_PLAN.md).
+A redesigned portal is available to try with `repocortex ui --next`: five sections in place of twenty-three screens, and one page per symbol with its callers, what a change can reach and its tests as tabs. It reads the same tool endpoint agents use. The interface and screens: [portal guide](docs/guides/portal-guide.md).
 
 ## Security and privacy
 
@@ -631,7 +631,7 @@ Threat model: [docs/security.md](docs/security.md). Report a vulnerability: [SEC
 <details>
 <summary><b>How does RepoCortex compare with Serena, codebase-memory-mcp, GitNexus and Graphify?</b></summary>
 
-<br>All of them give an agent structure instead of text search. RepoCortex is the one that marks every relationship with a measured confidence tier, imports compiler indexes for proven edges, ships a pull-request gate, and needs no model. Several of the others offer semantic search and publish agent benchmarks, which RepoCortex does not yet. See the <a href="#repocortex-compared-with-other-code-graph-tools">comparison table</a> and the <a href="docs/COMPETITIVE_ANALYSIS.md">full survey</a>.
+<br>All of them give an agent structure instead of text search. RepoCortex is the one that marks every relationship with a measured confidence tier, imports compiler indexes for proven edges, ships a pull-request gate, and needs no model. Several of the others offer semantic search and publish agent benchmarks, which RepoCortex does not yet. See the <a href="#repocortex-compared-with-other-code-graph-tools">comparison table</a>.
 </details>
 
 <details>
@@ -671,8 +671,8 @@ More: [docs/FAQ.md](docs/FAQ.md).
 | [Protocols](docs/guides/protocols.md) | The same tools over MCP, plain HTTP with OpenAPI, and the shell; profiles, tool cost and the audit log |
 | [Naming conventions](docs/reference/naming-conventions.md) | How tools, commands and flags are named, and the table from each tool to its command |
 | [Scale testing](docs/operations/scale-testing.md) | The size suite, and measurements at 250,000 symbols and 1.26 million relationships |
-| [Competitive analysis](docs/COMPETITIVE_ANALYSIS.md) | 40 open-source and paid tools compared, with what each has that RepoCortex lacked |
-| [Implementation plan](docs/IMPLEMENTATION_PLAN.md) | What is shipped, planned and declined in answer to that analysis |
+| [Benchmarking](docs/BENCHMARKING.md) | How to reproduce accuracy and performance benchmarks |
+| [Non-goals](docs/NON-GOALS.md) | Deliberate architectural refusals and scope boundaries |
 | [Agent integration](docs/agent-integration.md) | The Claude Code plugin, guidance and per-client details |
 | [CLI reference](docs/CLI.md) | Every command and flag, with the exit codes CI can rely on |
 | [Architecture](docs/DESIGN_AND_ARCHITECTURE.md) | Packages, invariants and design decisions |

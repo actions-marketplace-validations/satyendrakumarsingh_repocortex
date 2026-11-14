@@ -2569,7 +2569,7 @@ directory): [sharing one index with a team](../guides/protocols.md#sharing-one-i
 
 `repocortex ui --next` serves the redesigned portal instead: one page per symbol,
 built on the tool endpoint agents use. Loopback only. See the
-[portal UX plan](../design/PORTAL_UX_PLAN.md).
+[portal guide](../guides/portal-guide.md).
 
 **Answers:** a local, read-only web portal over the index — twenty screens
 grouped by what you want to know. Index health stands alone above the

@@ -183,7 +183,7 @@ nothing changed took 1.0 s.
 | A hotspot score of zero for every file with no recorded size | All scores 0 | Size floors at one byte |
 | The unused-code query sorted its page: the planner reached symbols through an index and ordered them by id afterwards, so every page probed every remaining symbol before `LIMIT` applied | 1.69 s at 100,000 symbols with three pages; one more full pass for every 2,000 unreferenced definitions | Symbols are read in key order, so a page is a seek and `LIMIT` stops it: 0.40 to 0.66 s on the same fixture under the same load. Pinned by `TestUnreferencedSymbolsPagesInKeyOrderWithoutSorting` |
 
-Still open, and in the [implementation plan](../IMPLEMENTATION_PLAN.md#phase-2-depth):
+Still open:
 `list_dead_code` and `list_hotspots` take 3 to 5 seconds at this size, because
 each visits every definition or every changed file once; and the symbol index
 holds about 170 MB for 250,000 symbols once loaded.

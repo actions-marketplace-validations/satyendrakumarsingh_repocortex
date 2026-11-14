@@ -3,9 +3,6 @@
 What RepoCortex does not do yet, and what is being worked on. Nothing here has a
 date; items move to the [CHANGELOG](../CHANGELOG.md) when they ship.
 
-How these items were chosen against what other tools offer, and the order they
-are planned in, is in the [implementation plan](IMPLEMENTATION_PLAN.md).
-
 ## Distribution
 
 | Item | Status | Why it matters |

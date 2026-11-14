@@ -5,7 +5,7 @@
 //
 // internal/web is the current portal: twenty-three report screens over its own
 // JSON routes. This one is built differently on purpose (see
-// docs/design/PORTAL_UX_PLAN.md): five sections, a page for each symbol, file,
+// docs/guides/portal-guide.md): five sections, a page for each symbol, file,
 // route and table, and NO routes of its own. Every figure on every page comes
 // from a tool call to the REST surface in internal/restapi, which in turn calls
 // the MCP server in-process. So a page and an agent cannot disagree about an
