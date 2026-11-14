@@ -11,6 +11,11 @@ from an actual run.
 
 ## [Unreleased]
 
+- **Vue 3 SFC SCIP Integration:** Extract `<script>` and `<script setup>` blocks from `.vue` Single File Components with exact line and column offset preservation, enabling `scip-typescript` to produce compiler ground truth occurrences and definitions directly mapped to `.vue` files.
+- **MCP Compact Profile (Front-Door Interface):** Added `compact` (and alias `frontdoor`) MCP profile exposing a single unified `repocortex` tool with action-based dispatch (`context`, `search`, `symbol`, `callers`, `callees`, `references`, `impact`, `tests`, `diff`, `overview`). Reduces agent prompt schema overhead from ~31 KB (28 tools) to < 1.2 KB (1 tool), saving over 25 KB (~7,500 prompt tokens) per request.
+- **Impact Analysis & Temporal Git Coupling:** Enhanced `repocortex impact` and `DiffReport` with commit co-change history analysis (`CoChangedFiles`). Evaluates the 200 most recent commits to surface companion files (tests, configurations, sibling modules) that historically change together with modified files.
+- **Impossible Call Edge Pruning & Architecture Isolation:** Added `PruneImpossibleEdges` to automatically retract impossible call edges to non-callable entities (configuration keys, database columns, tables, dependencies, deployment units), eliminating architecture boundary false-positives. Added `--re-resolve` to recompute graph resolution from clean state.
+
 Everything since v1.0.1. Several changes below need an action when you upgrade; they are listed first. How well the language work holds up is measured in the [verification record of 13 November](docs/verification/2026-11-13/README.md); the headline figures, the good and the bad, are under "Measured" at the end of this section.
 
 ### Upgrading from v1.0.1

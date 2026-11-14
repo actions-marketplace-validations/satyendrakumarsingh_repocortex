@@ -102,7 +102,7 @@ Plus the sibling validation errors:
 ```
 accuracy.indexers.provision "x": want never, prompt or auto
 accuracy.indexers.runner "x": want native or docker
-mcp.profile "x": want minimal, standard or full
+mcp.profile "x": want minimal, standard, full, compact or frontdoor
 context.max_graph_depth 50: want 1..10 (unbounded traversal is a DoS on large repos)
 context.max_files 0: must be >= 1
 ```

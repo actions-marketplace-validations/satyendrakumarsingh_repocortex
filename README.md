@@ -400,8 +400,9 @@ Every tool's schema costs the agent context on every request, so the default pro
 | `list_dead_code` · `list_hotspots` | Definitions nothing calls, graded; where change concentrates and what changes together | full |
 | `list_knowledge_risks` · `list_communities` | Where few people hold the recent history; which files form a group by how they refer to each other | full |
 | `get_session_stats` | What this session's tool calls cost: calls, answer sizes and an estimate in tokens. Usage, not a claimed saving | full |
+| `repocortex` | Unified compact front door: routes `action` (context, search, symbol, callers, callees, references, impact, tests, diff, overview) | compact / frontdoor |
 
-`minimal` exposes 7 tools (about 2,000 tokens of schema per request), `standard` 18 (about 5,000) and `full` 28 (about 8,400). `repocortex tool list` prints the cost of each. Every tool has one name of the form `<verb>_<noun>`, using the verbs other MCP servers use (`get`, `list`, `find`, `search`); see [naming conventions](docs/reference/naming-conventions.md).
+`compact` exposes 1 unified front door (under 300 tokens of schema, saving ~25 KB of prompt context), `minimal` exposes 7 tools (about 2,000 tokens of schema per request), `standard` 18 (about 5,000) and `full` 28 (about 8,400). `repocortex tool list` prints the cost of each. Every tool has one name of the form `<verb>_<noun>`, using the verbs other MCP servers use (`get`, `list`, `find`, `search`); see [naming conventions](docs/reference/naming-conventions.md).
 
 ## How it works
 

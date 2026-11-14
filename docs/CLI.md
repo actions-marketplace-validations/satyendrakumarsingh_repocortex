@@ -2505,9 +2505,9 @@ segment (`/mcp/<token>`). See the
 [coding agents guide](guides/coding-agents.md#remote-mcp-over-http).
 
 The tool set is governed by `mcp.profile` in `.repocortex.yml` — `minimal`
-(default), `standard`, `full`. The default is deliberately small: every tool's
+(default), `standard`, `full`, or `compact` (single front door). The default is deliberately small: every tool's
 schema is injected into the agent's context on every request, so a large surface
-spends the very context this tool exists to save.
+spends the very context this tool exists to save. Using `compact` exposes a single unified `repocortex` tool, saving over 25 KB of agent prompt context.
 
 ```
 $ repocortex serve --list-tools

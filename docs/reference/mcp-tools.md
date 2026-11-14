@@ -20,11 +20,12 @@ Every tool's schema is sent to the agent on every request, so the default profil
 
 ```yaml
 mcp:
-  profile: standard   # minimal (default), standard or full
+  profile: standard   # minimal (default), standard, full, or compact
 ```
 
 | Profile | Tools |
 |---|---|
+| `compact` | 1: `repocortex` (front-door interface saving ~25 KB of prompt context; actions: context, search, symbol, callers, callees, references, impact, tests, diff, overview) |
 | `minimal` (default) | 7: `get_task_context`, `get_project_overview`, `search_code`, `find_symbol`, `get_symbol`, `find_references`, `find_callers` |
 | `standard` | 18: the 7 above and `find_tests`, `analyze_impact`, `get_resolution_coverage`, `plan_rename`, `list_api_endpoints`, `list_db_tables`, `get_config_key`, `get_file_outline`, `minimize_diff`, `plan_change`, `list_blindspots` |
 | `full` | 28: the 18 above and `analyze_change`, `find_owners`, `find_callees`, `find_implementations`, `trace_call_path`, `list_dead_code`, `list_hotspots`, `list_knowledge_risks`, `list_communities`, `get_session_stats` |
