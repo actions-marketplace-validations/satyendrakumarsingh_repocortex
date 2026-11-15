@@ -365,6 +365,7 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: portal-e2e-traces
+          retention-days: 3
           path: |
             internal/web/e2e/test-results/
             internal/web/e2e/results.json
