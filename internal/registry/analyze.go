@@ -31,6 +31,14 @@ func (r *Registry) Analyze(ctx context.Context) error {
 	// Optimize FTS5 index segments to merge b-trees and compact storage.
 	_, _ = r.db.ExecContext(ctx, `INSERT INTO files_fts(files_fts) VALUES('optimize')`)
 
+	// Automatically reclaim empty freelist pages if fragmentation exceeds 4 MiB.
+	var freelist, pageSize int64
+	_ = r.db.QueryRowContext(ctx, `PRAGMA freelist_count`).Scan(&freelist)
+	_ = r.db.QueryRowContext(ctx, `PRAGMA page_size`).Scan(&pageSize)
+	if freelist*pageSize > 4<<20 {
+		_, _ = r.db.ExecContext(ctx, `VACUUM`)
+	}
+
 	// 400 is SQLite's own documented recommendation for bounded ANALYZE.
 	if _, err := r.db.ExecContext(ctx, `PRAGMA analysis_limit=400`); err != nil {
 		return fmt.Errorf("registry: set analysis limit: %w", err)
