@@ -2571,7 +2571,7 @@ directory): [sharing one index with a team](../guides/protocols.md#sharing-one-i
 built on the tool endpoint agents use. Loopback only. See the
 [portal guide](../guides/portal-guide.md).
 
-**Answers:** a local, read-only web portal over the index — twenty screens
+**Answers:** a local, read-only web portal over the index — 23 screens
 grouped by what you want to know. Index health stands alone above the
 groups; then five groups, named the way a reader would ask the question:
 
@@ -2579,13 +2579,14 @@ groups; then five groups, named the way a reader would ask the question:
   symbol, Shape of the code.
 - **Before you change something** — What could break (blast radius for one
   symbol), Task brief (the compiled task contract), Check a change (the
-  verify report against that contract), Who knows this code, What changed.
+  verify report against that contract), Who knows this code, What changed,
+  Plan a change.
 - **How it runs** — APIs and what they touch (the cross-stack view from a
   frontend component through the route, handler and tables it reaches),
-  Database tables, Settings and secrets, What actually ran, Across
-  repositories.
+  Database tables, Settings and secrets, What actually ran, Events and async,
+  Across repositories.
 - **Quality** — Test coverage, Architecture rules (governance),
-  Dependencies, How accurate is this index.
+  Dependencies, How accurate is this index, Code blindspots.
 - **For your AI agent** — Connect an agent, Retrieval quality.
 
 Every screen opens with its answer in one plain sentence. Evidence and the

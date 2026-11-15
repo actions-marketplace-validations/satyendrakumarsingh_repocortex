@@ -9,11 +9,12 @@ Entries explain *why* a change was made and what failure mode it addressed,
 matching the standard the commit history sets. Every measurement quoted here came
 from an actual run.
 
-## [Unreleased]
+## [1.2.0] - 2026-11-15
 
-- **Reusable GitHub Action (`action.yml`):** Added a composite action at the repository root allowing any project to run change safety, PR impact, blindspots, and SARIF export with a single line (`uses: satyendrakumarsingh/repocortex@v1`).
+- **Reusable GitHub Action (`action.yml`):** Added a composite action at the repository root allowing any project to run change safety, PR impact, blindspots, and SARIF export with a single line (`uses: satyendrakumarsingh/repocortex@v1.2.0` or `@v1`).
 - **1-Click Agent Deeplinks (`repocortex install --links`):** Added protocol handlers and 1-click install links for Cursor (`cursor://`), VS Code (`vscode://`), Windsurf, and LM Studio.
 - **Declarative Graph Querying (`search_graph`):** Added safe, read-only SQL querying against the SQLite index database (`symbols`, `edges`, `files`, `references`, `http_routes`, `data_access`) via MCP full profile (`search_graph`), CLI (`repocortex query`) and compact frontdoor (`action: "query"`).
+- **Portal & Documentation Parity:** Updated UI screen count across all CLI descriptions, user manuals, and documentation to accurately reflect all 23 screens on the navigation rail.
 
 ## [1.1.0] - 2026-11-15
 

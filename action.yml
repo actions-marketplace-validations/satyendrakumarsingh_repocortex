@@ -8,9 +8,9 @@ branding:
 
 inputs:
   version:
-    description: 'RepoCortex release version to use (e.g. v1.1.0 or latest)'
+    description: 'RepoCortex release version to use (e.g. v1.2.0 or latest)'
     required: false
-    default: 'v1.1.0'
+    default: 'v1.2.0'
   fail-on:
     description: 'Lowest blindspot or architecture severity that fails the check (high | medium | low | none)'
     required: false

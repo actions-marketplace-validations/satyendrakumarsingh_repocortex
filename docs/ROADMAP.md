@@ -55,6 +55,5 @@ Found while writing the [CLI output guide](guides/cli-output-guide.md) and the [
 | Portal: Plan a refactor | Caller lines show `:undefined`, the example chips name symbols from another codebase, and `?sym=` is ignored. |
 | Portal: What changed | The empty state suggests `?from=`/`?to=`, but the page reads `dfrom`/`dto`. |
 | Portal: Test coverage vs Code blindspots | Test coverage shows symbols with no proven test while Code blindspots shows "Untested critical 0". |
-| `repocortex ui --help`, CLI reference | Still say twenty screens; the rail has 23. |
 
 Suggestions and votes: [open a discussion](https://github.com/satyendrakumarsingh/repocortex/discussions).

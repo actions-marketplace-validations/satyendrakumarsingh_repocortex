@@ -61,14 +61,15 @@ func newUICmd(g *Global) *cobra.Command {
 		Short: "Serve a local, read-only portal over the index",
 		Long: `Starts a local web portal that visualises the indexed repository.
 
-Twenty screens, grouped by what you're trying to find out. Index health opens
+Twenty-three screens, grouped by what you're trying to find out. Index health opens
 on its own, above everything else. Then: Understand the code (map of the
 code, find a symbol, shape of the code); Before you change something (what
-could break, task brief, check a change, who knows this code, what changed);
-How it runs (APIs and what they touch, database tables, settings and secrets,
-what actually ran, across repositories); Quality (test coverage, architecture
-rules, dependencies, how accurate is this index); and For your AI agent
-(connect an agent, retrieval quality).
+could break, task brief, check a change, who knows this code, what changed,
+plan a change); How it runs (APIs and what they touch, database tables,
+settings and secrets, what actually ran, events and async, across repositories);
+Quality (test coverage, architecture rules, dependencies, how accurate is this
+index, code blindspots); and For your AI agent (connect an agent, retrieval
+quality).
 
 The portal is READ-ONLY. It opens the index read-only, exposes only GET routes,
 and never writes. --allow-refresh is the single, opt-in exception: it adds one

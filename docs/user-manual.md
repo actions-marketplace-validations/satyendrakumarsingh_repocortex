@@ -1435,7 +1435,7 @@ repocortex ui --port 0               # pick a free port
 repocortex ui --allow-refresh        # let the page rebuild the index (opt-in)
 ```
 
-A local web portal over the index, with twenty screens grouped by what you
+A local web portal over the index, with 23 screens grouped by what you
 want to know. Index health stands alone above the groups, carrying the same
 weight as a group's first entry. Then five groups, named the way a reader
 would ask the question:
@@ -1445,13 +1445,13 @@ would ask the question:
 - **Before you change something** — What could break (blast radius for one
   symbol), Task brief (the compiled task contract), Check a change (the
   verify report that marks a completed change against that contract), Who
-  knows this code, What changed.
+  knows this code, What changed, Plan a change.
 - **How it runs** — APIs and what they touch (the cross-stack view from a
   frontend component through the route it calls, the handler that answers
   it and the tables that handler reaches), Database tables, Settings and
-  secrets, What actually ran, Across repositories.
+  secrets, What actually ran, Events and async, Across repositories.
 - **Quality** — Test coverage, Architecture rules (governance), Dependencies,
-  How accurate is this index.
+  How accurate is this index, Code blindspots.
 - **For your AI agent** — Connect an agent, Retrieval quality.
 
 Every screen opens with its answer in one plain sentence, built from the same

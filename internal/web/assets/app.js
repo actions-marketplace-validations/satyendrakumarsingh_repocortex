@@ -3337,7 +3337,7 @@ function roundRect(ctx, x, y, w, h, r) {
 // ================================================================ SHELL
 
 /*
-  THE TWENTY SCREENS, BY ID.
+  THE 23 SCREENS, BY ID.
 
   These ids are the product's stable vocabulary: deep links, LOADERS and the
   section elements in the shell all use them. The rail itself — its groups, in
@@ -3553,7 +3553,7 @@ const PROV = {
 /*
   The provenance payload is fetched after the first paint and again after a
   refresh, and it is never awaited on the boot path: a portal whose provenance
-  endpoint is unreachable must still render twenty screens, and a disclosure
+  endpoint is unreachable must still render 23 screens, and a disclosure
   nobody has opened does not earn a round trip in front of the first frame.
 */
 async function loadIndexState() {
