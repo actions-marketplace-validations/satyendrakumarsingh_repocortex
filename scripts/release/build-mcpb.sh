@@ -39,18 +39,26 @@ for tool in jq zip unzip tar; do
 done
 
 ver="${1#v}"
+# The bundle manifest requires a semantic version, which "canary-<sha>" is not.
+case "$ver" in
+  [0-9]*.[0-9]*.[0-9]*) ;;
+  *)
+    # If a major floating tag like '1' is passed, resolve to the current semver tag at HEAD
+    resolved="$(git tag --points-at HEAD "v*.*.*" 2>/dev/null | head -n1 || git describe --tags --match="v[0-9]*.[0-9]*.[0-9]*" 2>/dev/null || echo "")"
+    if [[ "${resolved#v}" =~ ^[0-9]+\.[0-9]+\.[0-9]+ ]]; then
+      ver="${resolved#v}"
+    else
+      echo "error: '$ver' is not a release version (want e.g. v1.2.3)" >&2
+      exit 2
+    fi
+    ;;
+esac
 tag="v${ver}"
 dist="$(cd "$2" && pwd)"
 mkdir -p "$3"
 out="$(cd "$3" && pwd)"
 root="$(cd "$(dirname "$0")/../.." && pwd)"
 manifest="$root/packaging/mcpb/manifest.json"
-
-# The bundle manifest requires a semantic version, which "canary-<sha>" is not.
-case "$ver" in
-  [0-9]*.[0-9]*.[0-9]*) ;;
-  *) echo "error: '$ver' is not a release version (want e.g. v1.2.3)" >&2; exit 2 ;;
-esac
 
 if command -v sha256sum >/dev/null 2>&1; then
   sha256() { sha256sum "$@"; }

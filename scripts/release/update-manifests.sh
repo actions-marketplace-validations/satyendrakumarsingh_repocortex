@@ -52,12 +52,20 @@ for tool in jq sed awk; do
 done
 
 ver="${1#v}"
-tag="v${ver}"
 shift
 case "$ver" in
   [0-9]*.[0-9]*.[0-9]*) ;;
-  *) echo "error: '$ver' is not a release version (want e.g. v1.2.3)" >&2; exit 2 ;;
+  *)
+    resolved="$(git tag --points-at HEAD "v*.*.*" 2>/dev/null | head -n1 || git describe --tags --match="v[0-9]*.[0-9]*.[0-9]*" 2>/dev/null || echo "")"
+    if [[ "${resolved#v}" =~ ^[0-9]+\.[0-9]+\.[0-9]+ ]]; then
+      ver="${resolved#v}"
+    else
+      echo "error: '$ver' is not a release version (want e.g. v1.2.3)" >&2
+      exit 2
+    fi
+    ;;
 esac
+tag="v${ver}"
 
 root="${REPO_ROOT:-$(cd "$(dirname "$0")/../.." && pwd)}"
 base="https://github.com/${REPO}/releases/download/${tag}"
