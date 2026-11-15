@@ -60,18 +60,24 @@ Includes an ASCII directory tree, token counts, and automated secret redaction.
 				Redact:       !noRedact,
 			}
 
-			res, err := export.GeneratePack(ctx, s.reg, s.runID, opts)
-			if err != nil {
-				return fmt.Errorf("pack: %w", err)
-			}
-
 			if g.JSON && fmtChoice != export.PackFormatJSON {
+				res, err := export.GeneratePack(ctx, s.reg, s.runID, opts)
+				if err != nil {
+					return fmt.Errorf("pack: %w", err)
+				}
 				return emitJSON(cmd.OutOrStdout(), res)
 			}
 
 			if outPath != "" {
-				if err := os.WriteFile(outPath, []byte(res.Content), 0o644); err != nil {
-					return fmt.Errorf("pack: write %s: %w", outPath, err)
+				f, err := os.Create(outPath)
+				if err != nil {
+					return fmt.Errorf("pack: create %s: %w", outPath, err)
+				}
+				defer f.Close()
+
+				res, err := export.StreamPack(ctx, s.reg, s.runID, opts, f)
+				if err != nil {
+					return fmt.Errorf("pack: stream to %s: %w", outPath, err)
 				}
 				fmt.Fprintf(cmd.OutOrStdout(), "Packed %d files (~%d tokens) to %s\n",
 					res.FileCount, res.EstimatedTokens, outPath)
@@ -81,7 +87,10 @@ Includes an ASCII directory tree, token counts, and automated secret redaction.
 				return nil
 			}
 
-			fmt.Fprint(cmd.OutOrStdout(), res.Content)
+			_, err = export.StreamPack(ctx, s.reg, s.runID, opts, cmd.OutOrStdout())
+			if err != nil {
+				return fmt.Errorf("pack: stream: %w", err)
+			}
 			return nil
 		},
 	}

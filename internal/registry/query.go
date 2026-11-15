@@ -315,6 +315,24 @@ func (r *Registry) LanguageCounts(ctx context.Context, runID int64) (map[string]
 	return out, rows.Err()
 }
 
+// FileContent returns the complete indexed text of a file without line slicing.
+//
+// Like FileExcerpt, it reads from the indexed FTS copy rather than disk to
+// ensure reproducibility and avoid arbitrary filesystem access.
+func (r *Registry) FileContent(ctx context.Context, runID int64, path string) (string, error) {
+	var content string
+	err := r.db.QueryRowContext(ctx, `
+		SELECT files_fts.content
+		  FROM files_fts
+		  JOIN files_fts_map m ON m.fts_rowid = files_fts.rowid
+		  JOIN files f ON f.id = m.file_id
+		 WHERE f.index_run_id = ? AND f.path = ?`, runID, path).Scan(&content)
+	if err != nil {
+		return "", fmt.Errorf("registry: content for %s: %w", path, err)
+	}
+	return content, nil
+}
+
 // FileExcerpt returns a bounded window of a file's indexed text.
 //
 // Reads from the FTS copy rather than the filesystem, on purpose: the index is

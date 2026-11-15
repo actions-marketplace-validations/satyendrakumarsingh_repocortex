@@ -69,7 +69,11 @@ func NewCSRGraph(runID int64, records []EdgeRecord) (*CSRGraph, error) {
 		return nil, err
 	}
 	idToNode := make(map[int64]int32, len(records))
-	var nodeToID []int64
+	initCap := len(records)
+	if initCap > 65536 {
+		initCap = 65536
+	}
+	nodeToID := make([]int64, 0, initCap)
 
 	nodeOf := func(id int64) int32 {
 		if idx, ok := idToNode[id]; ok {
@@ -176,10 +180,10 @@ func (g *Graph) LoadCSR(ctx context.Context, runID int64) (*CSRGraph, error) {
 	}
 	defer rows.Close()
 
-	idToNode := make(map[int64]int32)
-	var nodeToID []int64
-	var outDegree []int32
-	var inDegree []int32
+	idToNode := make(map[int64]int32, 4096)
+	nodeToID := make([]int64, 0, 4096)
+	outDegree := make([]int32, 0, 4096)
+	inDegree := make([]int32, 0, 4096)
 	var edgeCount int
 
 	nodeOf := func(id int64) (int32, error) {

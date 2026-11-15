@@ -99,4 +99,34 @@ func TestGeneratePack(t *testing.T) {
 	if !strings.Contains(resMD.Content, "# Codebase Context Pack") {
 		t.Errorf("expected Markdown header, got:\n%s", resMD.Content)
 	}
+
+	// 3. JSON pack
+	resJSON, err := GeneratePack(ctx, reg, run.ID, PackOptions{
+		Format:      PackFormatJSON,
+		IncludeTree: true,
+		Redact:      true,
+	})
+	if err != nil {
+		t.Fatalf("GeneratePack JSON: %v", err)
+	}
+	if !strings.Contains(resJSON.Content, "\"files\"") || !strings.Contains(resJSON.Content, "src/auth.go") {
+		t.Errorf("expected valid JSON pack, got:\n%s", resJSON.Content)
+	}
+
+	// 4. StreamPack to io.Writer directly
+	var buf strings.Builder
+	resStream, err := StreamPack(ctx, reg, run.ID, PackOptions{
+		Format:      PackFormatXML,
+		IncludeTree: true,
+		Redact:      true,
+	}, &buf)
+	if err != nil {
+		t.Fatalf("StreamPack: %v", err)
+	}
+	if resStream.FileCount != 1 || resStream.RedactedCount != 1 {
+		t.Errorf("unexpected StreamPack result: %+v", resStream)
+	}
+	if buf.String() != resXML.Content {
+		t.Errorf("StreamPack and GeneratePack XML divergence:\nStream:\n%s\nGen:\n%s", buf.String(), resXML.Content)
+	}
 }

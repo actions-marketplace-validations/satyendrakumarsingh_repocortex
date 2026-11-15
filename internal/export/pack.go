@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -40,6 +41,18 @@ type PackResult struct {
 
 // GeneratePack bundles codebase files into an AI-ready XML, Markdown, or JSON prompt pack.
 func GeneratePack(ctx context.Context, reg *regpkg.Registry, runID int64, opts PackOptions) (*PackResult, error) {
+	var sb strings.Builder
+	res, err := StreamPack(ctx, reg, runID, opts, &sb)
+	if err != nil {
+		return nil, err
+	}
+	res.Content = sb.String()
+	return res, nil
+}
+
+// StreamPack bundles codebase files and writes the output directly to w,
+// avoiding buffering the entire codebase representation in heap memory.
+func StreamPack(ctx context.Context, reg *regpkg.Registry, runID int64, opts PackOptions, w io.Writer) (*PackResult, error) {
 	files, err := reg.Files(ctx, runID)
 	if err != nil {
 		return nil, fmt.Errorf("read files from run %d: %w", runID, err)
@@ -74,90 +87,188 @@ func GeneratePack(ctx context.Context, reg *regpkg.Registry, runID int64, opts P
 	}
 	tree := BuildASCIITree(paths)
 
-	type fileItem struct {
-		Path    string `json:"path"`
-		Content string `json:"content"`
-	}
-
-	var packedFiles []fileItem
 	var totalBytes int64
+	var fileCount int
 	totalRedacted := 0
 
-	for _, f := range eligible {
-		// Read full file content through registry excerpt
-		content, err := reg.FileExcerpt(ctx, runID, f.Path, 1, 20000)
-		if err != nil {
-			continue
-		}
-		if opts.Redact {
-			clean, findings := security.Redact(content)
-			content = clean
-			totalRedacted += len(findings)
-		}
-		packedFiles = append(packedFiles, fileItem{
-			Path:    f.Path,
-			Content: content,
-		})
-		totalBytes += int64(len(content))
-	}
-
-	var outContent string
 	switch opts.Format {
 	case PackFormatJSON:
-		payload := map[string]any{
-			"tree":             tree,
-			"files":            packedFiles,
-			"file_count":       len(packedFiles),
-			"total_bytes":      totalBytes,
-			"estimated_tokens": int(totalBytes / 4),
-			"redacted_count":   totalRedacted,
+		if _, err := io.WriteString(w, "{\n  \"tree\": "); err != nil {
+			return nil, err
 		}
-		bytes, _ := json.MarshalIndent(payload, "", "  ")
-		outContent = string(bytes)
+		treeJSON, _ := json.Marshal(tree)
+		if _, err := w.Write(treeJSON); err != nil {
+			return nil, err
+		}
+		if _, err := io.WriteString(w, ",\n  \"files\": [\n"); err != nil {
+			return nil, err
+		}
+
+		first := true
+		for _, f := range eligible {
+			content, err := reg.FileContent(ctx, runID, f.Path)
+			if err != nil {
+				// Fallback to excerpt if FileContent fails
+				content, err = reg.FileExcerpt(ctx, runID, f.Path, 1, 100000)
+				if err != nil {
+					continue
+				}
+			}
+			if opts.Redact {
+				clean, findings := security.Redact(content)
+				content = clean
+				totalRedacted += len(findings)
+			}
+
+			if !first {
+				if _, err := io.WriteString(w, ",\n"); err != nil {
+					return nil, err
+				}
+			}
+			first = false
+
+			fileItemBytes, err := json.Marshal(map[string]string{
+				"path":    f.Path,
+				"content": content,
+			})
+			if err != nil {
+				return nil, err
+			}
+			if _, err := io.WriteString(w, "    "); err != nil {
+				return nil, err
+			}
+			if _, err := w.Write(fileItemBytes); err != nil {
+				return nil, err
+			}
+
+			fileCount++
+			totalBytes += int64(len(content))
+		}
+
+		footer := fmt.Sprintf("\n  ],\n  \"file_count\": %d,\n  \"total_bytes\": %d,\n  \"estimated_tokens\": %d,\n  \"redacted_count\": %d\n}\n",
+			fileCount, totalBytes, int(totalBytes/4), totalRedacted)
+		if _, err := io.WriteString(w, footer); err != nil {
+			return nil, err
+		}
 
 	case PackFormatMarkdown:
-		var sb strings.Builder
-		sb.WriteString("# Codebase Context Pack\n\n")
+		if _, err := io.WriteString(w, "# Codebase Context Pack\n\n"); err != nil {
+			return nil, err
+		}
 		if opts.IncludeTree {
-			sb.WriteString("## Directory Structure\n\n```text\n")
-			sb.WriteString(tree)
-			sb.WriteString("\n```\n\n")
+			if _, err := io.WriteString(w, "## Directory Structure\n\n```text\n"); err != nil {
+				return nil, err
+			}
+			if _, err := io.WriteString(w, tree); err != nil {
+				return nil, err
+			}
+			if _, err := io.WriteString(w, "\n```\n\n"); err != nil {
+				return nil, err
+			}
 		}
-		sb.WriteString("## Files\n\n")
-		for _, pf := range packedFiles {
-			sb.WriteString(fmt.Sprintf("### %s\n\n", pf.Path))
-			ext := strings.TrimPrefix(filepath.Ext(pf.Path), ".")
-			sb.WriteString(fmt.Sprintf("```%s\n%s\n```\n\n", ext, pf.Content))
+		if _, err := io.WriteString(w, "## Files\n\n"); err != nil {
+			return nil, err
 		}
-		outContent = sb.String()
+
+		for _, f := range eligible {
+			content, err := reg.FileContent(ctx, runID, f.Path)
+			if err != nil {
+				content, err = reg.FileExcerpt(ctx, runID, f.Path, 1, 100000)
+				if err != nil {
+					continue
+				}
+			}
+			if opts.Redact {
+				clean, findings := security.Redact(content)
+				content = clean
+				totalRedacted += len(findings)
+			}
+
+			header := fmt.Sprintf("### %s\n\n", f.Path)
+			if _, err := io.WriteString(w, header); err != nil {
+				return nil, err
+			}
+			ext := strings.TrimPrefix(filepath.Ext(f.Path), ".")
+			codeOpen := fmt.Sprintf("```%s\n", ext)
+			if _, err := io.WriteString(w, codeOpen); err != nil {
+				return nil, err
+			}
+			if _, err := io.WriteString(w, content); err != nil {
+				return nil, err
+			}
+			if !strings.HasSuffix(content, "\n") {
+				if _, err := io.WriteString(w, "\n"); err != nil {
+					return nil, err
+				}
+			}
+			if _, err := io.WriteString(w, "```\n\n"); err != nil {
+				return nil, err
+			}
+
+			fileCount++
+			totalBytes += int64(len(content))
+		}
 
 	default: // XML
-		var sb strings.Builder
-		sb.WriteString("<repocortex_pack>\n")
+		if _, err := io.WriteString(w, "<repocortex_pack>\n"); err != nil {
+			return nil, err
+		}
 		if opts.IncludeTree {
-			sb.WriteString("  <directory_structure>\n")
+			if _, err := io.WriteString(w, "  <directory_structure>\n"); err != nil {
+				return nil, err
+			}
 			for _, line := range strings.Split(tree, "\n") {
-				sb.WriteString("    " + line + "\n")
+				if _, err := fmt.Fprintf(w, "    %s\n", line); err != nil {
+					return nil, err
+				}
 			}
-			sb.WriteString("  </directory_structure>\n")
-		}
-		sb.WriteString("  <files>\n")
-		for _, pf := range packedFiles {
-			sb.WriteString(fmt.Sprintf("    <file path=%q>\n", pf.Path))
-			sb.WriteString(pf.Content)
-			if !strings.HasSuffix(pf.Content, "\n") {
-				sb.WriteString("\n")
+			if _, err := io.WriteString(w, "  </directory_structure>\n"); err != nil {
+				return nil, err
 			}
-			sb.WriteString("    </file>\n")
 		}
-		sb.WriteString("  </files>\n")
-		sb.WriteString("</repocortex_pack>\n")
-		outContent = sb.String()
+		if _, err := io.WriteString(w, "  <files>\n"); err != nil {
+			return nil, err
+		}
+
+		for _, f := range eligible {
+			content, err := reg.FileContent(ctx, runID, f.Path)
+			if err != nil {
+				content, err = reg.FileExcerpt(ctx, runID, f.Path, 1, 100000)
+				if err != nil {
+					continue
+				}
+			}
+			if opts.Redact {
+				clean, findings := security.Redact(content)
+				content = clean
+				totalRedacted += len(findings)
+			}
+
+			if _, err := fmt.Fprintf(w, "    <file path=%q>\n", f.Path); err != nil {
+				return nil, err
+			}
+			if _, err := io.WriteString(w, content); err != nil {
+				return nil, err
+			}
+			if !strings.HasSuffix(content, "\n") {
+				if _, err := io.WriteString(w, "\n"); err != nil {
+					return nil, err
+				}
+			}
+			if _, err := io.WriteString(w, "    </file>\n"); err != nil {
+				return nil, err
+			}
+
+			fileCount++
+			totalBytes += int64(len(content))
+		}
+		if _, err := io.WriteString(w, "  </files>\n</repocortex_pack>\n"); err != nil {
+			return nil, err
+		}
 	}
 
 	return &PackResult{
-		Content:         outContent,
-		FileCount:       len(packedFiles),
+		FileCount:       fileCount,
 		TotalBytes:      totalBytes,
 		EstimatedTokens: int(totalBytes / 4),
 		Tree:            tree,
