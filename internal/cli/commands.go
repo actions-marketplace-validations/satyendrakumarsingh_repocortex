@@ -561,7 +561,7 @@ see docs/accuracy.md for what the numbers do and do not mean.`,
 						if fi, err := os.Stat(dbPath); err == nil {
 							beforeSize = fi.Size()
 						}
-						_, vErr := rw.DB.ExecContext(ctx, "VACUUM")
+						_, vErr := rw.ExecContext(ctx, "VACUUM")
 						_ = rw.Close()
 						if vErr != nil {
 							checks = append(checks, check{Name: "vacuum", Status: "fail", Detail: vErr.Error()})
