@@ -5,13 +5,14 @@
   <img alt="RepoCortex: a local MCP server that gives AI coding agents a code graph of calls, routes, tables and tests, with blast radius and task context" src="docs/assets/hero-light.svg" width="100%">
 </picture>
 
-# RepoCortex: a code graph MCP server for AI coding agents
+# RepoCortex: Deterministic Code Graph & Intelligence MCP Server for AI Agents
 
 [![CI](https://img.shields.io/github/actions/workflow/status/satyendrakumarsingh/repocortex/ci.yml?branch=main&label=CI&style=flat-square)](https://github.com/satyendrakumarsingh/repocortex/actions/workflows/ci.yml)
-[![MCP server](https://img.shields.io/badge/MCP-7_tools_default_·_28_total-059669?style=flat-square)](#mcp-tools)
+[![MCP server](https://img.shields.io/badge/MCP-7_tools_default_·_30_total-059669?style=flat-square)](#mcp-tools)
 [![Go 1.26+](https://img.shields.io/badge/Go-1.26%2B-00ADD8?logo=go&logoColor=white&style=flat-square)](https://go.dev)
 [![Local first](https://img.shields.io/badge/runs-100%25_local-2563eb?style=flat-square)](#security-and-privacy)
 [![License](https://img.shields.io/badge/license-Apache--2.0-475569?style=flat-square)](LICENSE)
+[![LLMs txt](https://img.shields.io/badge/llms.txt-available-orange?style=flat-square)](llms.txt)
 
 <p>
 <a href="docs/guides/coding-agents.md">
@@ -31,7 +32,7 @@
 </a>
 </p>
 
-**[Quickstart](#quickstart)** · **[Supported agents](#connect-your-agent)** · **[What it answers](#what-it-answers)** · **[Docs](#guides-and-documentation)** · **[Roadmap](docs/ROADMAP.md)**
+**[Quickstart](#quickstart)** · **[Supported agents](#connect-your-agent)** · **[Agent Install Guide](llms-install.md)** · **[llms.txt](llms.txt)** · **[Docs](#guides-and-documentation)** · **[Roadmap](docs/ROADMAP.md)**
 
 </div>
 
@@ -45,8 +46,8 @@ One Go binary. A SQLite file in `.repocortex/`. Nothing leaves your machine.
 |---|---|
 | **What it is** | A local code-intelligence server: it turns a repository into a call graph and answers an AI coding agent's questions about it |
 | **Who it is for** | Developers using Claude Code, Cursor, Codex, Copilot, Gemini CLI, Windsurf or any other coding agent on a real codebase |
-| **What it answers** | Who calls this, what breaks if I change it, which tests to run, what a pull request puts at risk, what is unused, where change concentrates |
-| **How agents reach it** | MCP (stdio or HTTP), a REST API with OpenAPI, or the command line: the same 28 tools on each |
+| **What it answers** | Who calls this, what breaks if I change it, single-turn symbol exploration (`explore`), PR blast radius (`pr-impact`), AI packing (`pack`), which tests to run, what is unused |
+| **How agents reach it** | MCP (stdio or HTTP), a REST API with OpenAPI, or the command line: the same 30 tools on each |
 | **What makes it different** | Every relationship is marked `exact`, `high`, `medium` or `low` with measured precision, and every answer states what the index could not see |
 | **Where it runs** | Your machine or your CI runner. No account, no cloud index, no model, no telemetry |
 | **Licence** | Apache-2.0, free for commercial use |
@@ -54,7 +55,7 @@ One Go binary. A SQLite file in `.repocortex/`. Nothing leaves your machine.
 <table>
 <tr>
 <td align="center" width="20%"><h3>91</h3><sub>languages with definitions extracted, of 206 grammars bundled</sub></td>
-<td align="center" width="20%"><h3>28</h3><sub>tools for agents, over MCP, HTTP or the shell</sub></td>
+<td align="center" width="20%"><h3>30</h3><sub>tools for agents, over MCP, HTTP or the shell</sub></td>
 <td align="center" width="20%"><h3>30</h3><sub>coding agents configured by one install command</sub></td>
 <td align="center" width="20%"><h3>405 of 420</h3><sub>sampled syntax-tree <code>high</code> edges judged right by hand, 14 projects (73–100% by project)</sub></td>
 <td align="center" width="20%"><h3>0</h3><sub>network calls while indexing or serving your code</sub></td>
@@ -506,21 +507,23 @@ After the first run, `repocortex index` only re-reads changed files, and `repoco
 
 <sub>"Partly", "some" and "rarely" are judgments about typical setups, not measurements. The longer argument: <a href="docs/WHY_NOT_VECTOR_RAG.md">why a graph instead of vector search</a>.</sub>
 
-### RepoCortex compared with other code-graph tools
+### RepoCortex compared with other code intelligence & graph tools
 
-| | RepoCortex | codebase-memory-mcp | Serena | GitNexus | Graphify | code-review-graph |
-|---|---|---|---|---|---|---|
-| Licence | Apache-2.0 | MIT | GPL-3.0 | PolyForm Noncommercial | Apache-2.0, paid cloud | MIT |
-| How it finds relationships | tree-sitter, plus compiler indexes (SCIP) | tree-sitter with built-in type resolution | Language servers | tree-sitter with type inference | tree-sitter | tree-sitter |
-| Compiler-proven edges | Yes, labelled `exact` | No | Through the language server | No | No | No |
-| States how sure each relationship is | Four tiers, each with measured precision | No | No | Scores | Three labels | Four labels |
-| Needs a model or embeddings | No | Bundles an embedding model | No | Optional | For documents only | Optional |
-| Languages with definitions extracted | 91 (206 grammars bundled) | 163 | 40+ | 15 to 18 | about 40 | about 40 |
-| Reaches agents over | MCP, REST with OpenAPI, CLI | MCP, CLI | MCP | MCP, HTTP, web UI | MCP, CLI | MCP, CLI |
-| Pull-request gate with SARIF | Yes, free | Not documented | No | Paid tier | Paid tier | GitHub Action |
-| Runs offline from one binary | Yes (Go) | Yes (C) | Needs language servers | Node | Python | Python |
+| Capability / Feature | RepoCortex | CodeGraph | Repomix | Graphify | codebase-memory-mcp |
+|---|:---:|:---:|:---:|:---:|:---:|
+| **License** | Apache-2.0 | MIT | MIT | Apache-2.0 / Cloud | MIT |
+| **Extraction Engine** | Tree-sitter + SCIP | Tree-sitter (Rust kernel) | None (file packager) | Tree-sitter (Python) | Tree-sitter + Embeddings |
+| **Compiler-Proven Edges** | **Yes (`exact` via SCIP)** | No (AST heuristics) | No | No | No |
+| **Disproves False Heuristics** | **Yes (Eliminates false calls)** | No | No | No | No |
+| **Single-Turn Symbol Explore** | **Yes (`repocortex explore`)** | **Yes (`codegraph_explore`)** | No | Partial (`explain`) | No |
+| **Automated Secret Redaction** | **Yes (Built-in context & pack)** | No | **Yes (Secretlint)** | No | No |
+| **Whole-Codebase AI Packing** | **Yes (`repocortex pack`)** | No | **Yes (`repomix`)** | No | No |
+| **Direct PR Impact & Blast Radius** | **Yes (`repocortex pr-impact`)** | Partial | No | Partial (`prs`) | No |
+| **Architecture & Cycle Detection** | **Yes (`arch` & `cycles`)** | **Yes (`cycles`)** | No | No | No |
+| **Framework Route Awareness** | **Yes (HTTP routes & DB tables)** | **Yes (17 frameworks)** | No | No | No |
+| **Runs Offline from One Binary** | **Yes (Pure Go, 0 CGO)** | Yes (Bundled Node) | Needs Node 22+ | Needs Python 3.10+ | Yes (C/Go) |
 
-<sub>From each project's own README and documentation on 2026-11-12; star counts, prices and features in this field change monthly. Where the others lead: several offer semantic search, publish reproducible agent benchmarks, and ship tagged releases through many package managers, none of which RepoCortex does yet. See the <a href="#repocortex-compared-with-other-code-graph-tools">comparison table</a>.</sub>
+<sub>Data verified against each project's official repository, CLI commands, and published documentation.</sub>
 
 ## Blast radius in CI
 

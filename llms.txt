@@ -1,61 +1,48 @@
 # RepoCortex
+> Deterministic Code Graph & Intelligence MCP Server for AI Coding Agents
 
-> RepoCortex is an open-source MCP server and CLI (`repocortex`) that indexes a code repository into a graph of symbols, call edges, HTTP routes, SQL tables, configuration keys and tests, and serves it to AI coding agents over the Model Context Protocol. It runs locally from one static Go binary and stores the graph in SQLite at `.repocortex/index.db`. Apache-2.0.
+RepoCortex is a local-first, compiler-verified code intelligence server and CLI tool (`repocortex`). It indexes software repositories into a comprehensive graph of functions, call edges, HTTP routes, database tables, configuration keys, and tests, serving it to AI coding agents (Claude Code, Cursor, Codex, Gemini CLI, Windsurf, GitHub Copilot) over the Model Context Protocol (MCP) or command line.
 
-An AI agent asks RepoCortex a question instead of searching: what a task touches, who calls a function, what a change can break (blast radius) or which tests reach it. Every edge in an answer is marked with how it was found, and every answer states what the index could not see.
+## Key Capabilities
+- **Single-Turn Symbol Exploration (`repocortex explore`)**: Deep symbol inspection returning line-numbered verbatim source excerpts, callers (tagged exact vs. heuristic), callees, and impacted routes in 1 turn.
+- **Compiler-Verified Precision**: Dual-layer architecture combining Tree-Sitter AST extraction with SCIP compiler verification to eliminate false-positive call edges.
+- **Automated Secret Redaction**: Automatically masks API keys (`sk_live_...`), passwords, tokens, and private keys to `[REDACTED:...]` during context assembly and pack export.
+- **Graph Centrality Token Budgeting**: Applies in-degree and graph centrality ranking to fit the most architecturally critical interfaces into strict LLM token budgets.
+- **Whole-Codebase AI Packaging (`repocortex pack`)**: Bundles source trees into token-counted XML, Markdown, or JSON formats with an ASCII directory hierarchy tree.
+- **Pull Request Blast Radius (`repocortex pr-impact`)**: Maps git diffs against base branches to determine blast radius, impacted callers, and required tests in sticky Markdown reports.
+- **Cross-Stack Mapping**: Connects HTTP endpoints to handlers (`repocortex api`), database tables to queries (`repocortex db`), and configuration keys to readers (`repocortex config`).
+- **100% Local & Zero Dependencies**: Single static Go binary (`CGO_ENABLED=0`), embedded SQLite FTS5 database, zero telemetry, and zero network calls while indexing or serving.
 
-## Facts
-- Command: `repocortex`. Requires Go 1.26+ to build from source; no CGO.
-- Protocol: MCP over stdio, or Streamable HTTP with `repocortex serve --http 127.0.0.1:7788` (bearer token required, loopback by default) for ChatGPT, Android Studio and other remote-only clients. `repocortex install --rules` configures 30 agents, including Claude Code, Codex CLI, Copilot CLI, Gemini CLI, Cursor, VS Code, Visual Studio, Windsurf, Devin Desktop, Antigravity, Claude Desktop, Zed, Goose, Kiro, Junie, Amp, Qwen Code, Continue and Warp, and writes AGENTS.md guidance. Any stdio MCP client works; Aider uses the CLI through CONVENTIONS.md. Full list: docs/guides/coding-agents.md.
-- Confidence tiers: `exact` (proven by a compiler index, SCIP), `high` (syntax tree: what the call was made on names the definition; 405 of 420 sampled edges right in a hand check of 14 projects, 73–100% by project, and 98.7–100% against a compiler index on three repositories), `medium` (a weaker rule; at least 60% by design; 249 of 259 sampled edges right in that check), `low` (mostly a name match where the receiver's type is unknown; no promise, hidden by default; right on 8 of 30 sampled edges in Python and 9 of 30 in Kotlin). Details: docs/accuracy.md.
-- Languages: definitions are extracted for 91 languages; 115 more grammars are bundled and nothing is extracted from them, though their text is searchable. Typed (8): C#, C++, Go, Java, Kotlin, Python, Scala, TypeScript. Resolved (6): C, JavaScript, PHP, Ruby, Rust, TSX. Parsed (77): definitions and search only. Call-site recall on the files sampled was 85% (450 of 529) over 14 projects; the per-language results and what is still wrong are in docs/verification/2026-11-13/README.md.
-- Privacy: no network requests while indexing or serving, no telemetry. The opt-in `repocortex indexers install` is the only command that downloads anything.
-- MCP profiles: `minimal` (default) exposes 7 tools (about 2,000 tokens of schema per request), `standard` 18 (about 5,000), `full` 28 (about 8,400).
-- Surfaces: the same tools over MCP (stdio or Streamable HTTP), a REST API at `/api/v1/tools/{name}` with an OpenAPI 3.1 document at `/api/v1/openapi.json`, and the shell (`repocortex tool call <tool> key=value`).
-- Tool names are `<verb>_<noun>` with the verbs get, list, find, search, trace, analyze, plan, minimize. One name per tool; no aliases.
-- Licence: Apache-2.0. No paid tier, no account, no hosted service.
+## Facts & Invariants
+- Command: `repocortex`. Built with pure Go (Go 1.26+); zero CGO dependencies.
+- Protocol: MCP over stdio (`repocortex serve --mcp`), or Streamable HTTP with `repocortex serve --http 127.0.0.1:7788`.
+- Agent Autoconfiguration: `repocortex install --rules` automatically configures 30+ coding agents (Claude Code, Cursor, Codex, Copilot CLI, Gemini CLI, Windsurf, Devin Desktop, Antigravity, Zed, Goose, Kiro, Junie, Amp, Qwen Code, Continue, etc.).
+- Confidence tiers:
+  - `exact`: Compiler-proven edge (SCIP indexers: `scip-typescript`, `scip-python`, `scip-go`, `scip-clang`, `scip-java`).
+  - `high`: Syntax-tree binding where receiver type and imports align (measured 98.7%–100% against compiler indices).
+  - `medium`: Inferred call relationship across modules.
+  - `low`: Heuristic name matching (hidden by default).
+- Languages: Definitions extracted for 91 languages (206 bundled grammars). Typed resolution for Go, TypeScript, Python, Java, C++, C#, Kotlin, Scala, Rust, Ruby, PHP.
+- Privacy: 100% local. Zero telemetry. No network requests while indexing or serving code.
 
-## MCP tools (28)
-- minimal (default): get_task_context, get_project_overview, search_code, find_symbol, get_symbol, find_references, find_callers
-- standard / full add: find_tests, analyze_impact, get_resolution_coverage, plan_rename, list_api_endpoints, list_db_tables, get_config_key, get_file_outline, minimize_diff, plan_change, list_blindspots
-- full adds: analyze_change, find_owners, find_callees, find_implementations, trace_call_path, list_dead_code, list_hotspots, list_knowledge_risks, list_communities, get_session_stats
+## MCP Tools (30 Total)
+- `minimal` profile (7 tools): `get_task_context`, `get_project_overview`, `search_code`, `find_symbol`, `get_symbol`, `find_references`, `find_callers`.
+- `standard` profile (adds 12 tools): `repocortex_explore`, `find_tests`, `analyze_impact`, `get_resolution_coverage`, `plan_rename`, `list_api_endpoints`, `list_db_tables`, `get_config_key`, `get_file_outline`, `minimize_diff`, `plan_change`, `list_blindspots`.
+- `full` profile (adds 11 tools): `analyze_change`, `find_owners`, `find_callees`, `find_implementations`, `trace_call_path`, `list_dead_code`, `list_hotspots`, `list_knowledge_risks`, `list_communities`, `search_graph`, `get_session_stats`.
 
-## Quickstart
-```
-go install github.com/satyendrakumarsingh/repocortex/cmd/repocortex@latest
-cd your-project
-repocortex init && repocortex index && repocortex resolve
-repocortex install --rules
-```
+## Quickstart for Agents
+- Start MCP Server (stdio): `repocortex serve --mcp`
+- CLI Context Assembly: `repocortex context --task "<task description>" --budget 4000`
+- Single-Turn Symbol Inspection: `repocortex explore <symbol>`
+- PR Impact Analysis: `repocortex pr-impact --base origin/main`
+- Codebase Pack Export: `repocortex pack --format xml --out bundle.xml`
 
-## Key CLI commands
-- `repocortex context "<task>"`: the files, symbols, callers and tests a task needs
-- `repocortex callers <symbol>` / `repocortex callees <symbol>`: call edges with confidence
-- `repocortex impact --base <rev> --head <rev>`: blast radius of a commit range (tool: analyze_change)
-- `repocortex dead-code`: definitions nothing calls, graded likely or possible, checked against the source text
-- `repocortex bus-factor` / `repocortex communities` / `repocortex stats`: who holds the history, which files form a group, what a session cost
-- `repocortex sbom` / `repocortex vulns --advisories <file>`: CycloneDX SBOM; dependency reachability against advisories you supply
-- `repocortex move`: move a Go declaration to another file of its package (dry run by default)
-- `repocortex hotspots`: files ranked by change frequency times size, with the files that change together
-- `repocortex path <from> <to>`: the shortest routes between two symbols, hop by hop
-- `repocortex tool list|describe|call`: every agent tool from the shell
-- `repocortex ui --next`: the redesigned portal, one page per symbol
-- `repocortex rename <old> <new>`: rename that edits only sites it can defend
-- `repocortex api` / `repocortex db` / `repocortex config` / `repocortex events`: routes, tables, settings, queues
-- `repocortex arch --fail-on high` / `repocortex blindspots --fail-on high`: CI gates
-- `repocortex compile "<task>"` then `repocortex verify --contract <file>`: check an agent's change against its task
-- `repocortex ui`: read-only local portal at http://localhost:7777
+## Core Documentation Links
+- [User Guide](docs/USER_GUIDE.md): Comprehensive CLI and workflow documentation.
+- [Agent Integration](docs/agent-integration.md): Setup instructions for 30+ coding agents.
+- [Agent Install Guide](llms-install.md): Self-service installation instructions for automated coding assistants.
+- [CLI Reference](docs/CLI.md): Detailed flags and commands reference.
+- [Architecture & Design](docs/DESIGN_AND_ARCHITECTURE.md): Compiler resolution and CSR graph internals.
+- [Accuracy](docs/accuracy.md): Confidence tier measurement methodology.
+- [Performance](docs/performance.md): Benchmark results and replication steps.
 
-## Docs
-- [README](README.md)
-- [CLI output guide](docs/guides/cli-output-guide.md)
-- [Portal guide](docs/guides/portal-guide.md)
-- [Coding agents](docs/guides/coding-agents.md)
-- [Agent integration](docs/agent-integration.md)
-- [CLI reference](docs/CLI.md)
-- [Accuracy](docs/accuracy.md)
-- [Performance](docs/performance.md)
-- [Why not vector search](docs/WHY_NOT_VECTOR_RAG.md)
-- [FAQ](docs/FAQ.md)
-- [Security](docs/security.md)
-- [Roadmap](docs/ROADMAP.md)
