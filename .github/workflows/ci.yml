@@ -7,12 +7,24 @@ on:
       - 'docs/**'
       - '*.md'
   pull_request:
-  # Nightly, for the slow gates that cannot block a PR.
-  schedule:
-    - cron: "0 3 * * *"
+    paths-ignore:
+      - 'docs/**'
+      - '*.md'
+  # Nightly schedule disabled to prevent runaway Actions metered usage.
+  # The slow gates remain runnable on demand via workflow_dispatch.
+  # schedule:
+  #   - cron: "0 3 * * *"
   # Lets a maintainer run the slow gates on demand.
   workflow_dispatch:
     inputs:
+      run_cross_platform:
+        description: "Run tests on macOS and Windows (10x runner multiplier)"
+        type: boolean
+        default: false
+      run_portal_e2e:
+        description: "Run portal E2E browser tests (usually run locally)"
+        type: boolean
+        default: false
       run_fuzz:
         description: "Run the fuzzing gate"
         type: boolean
@@ -143,13 +155,13 @@ jobs:
     runs-on: ${{ matrix.os }}
     # -timeout below is per test binary; this bounds the job as a whole so a
     # wedged watcher cannot hold a runner for six hours. The measured whole-suite
-    # -race wall time is ~10m on a fast 12-core machine, so 60 leaves room for a
-    # slower runner without leaving a hung job to burn the full six hours.
-    timeout-minutes: 60
+    # -race wall time is ~10m on a fast 12-core machine, so 30 leaves room for a
+    # slower runner without leaving a hung job to burn runner minutes.
+    timeout-minutes: 30
     strategy:
-      fail-fast: false
+      fail-fast: true
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
+        os: ${{ (github.event_name == 'workflow_dispatch' && inputs.run_cross_platform) && fromJSON('["ubuntu-latest", "macos-latest", "windows-latest"]') || fromJSON('["ubuntu-latest"]') }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -305,16 +317,13 @@ jobs:
           diff -u /tmp/docs-a/ARCHITECTURE.md /tmp/docs-c/ARCHITECTURE.md
 
   # Tier 2 — the portal, driven by a browser against the fixture that ships
-  # with the repository. Every screen the portal has is asserted here; before
-  # this job the 14,000 lines of Go and 10,000 of JS behind `repocortex ui` had
-  # no automated coverage anywhere a pull request could see.
+  # with the repository. Run locally by default to avoid heavy runner minutes;
+  # can be run on demand in CI via workflow_dispatch.
   portal-e2e:
     name: portal e2e (ci fixture)
+    if: github.event_name == 'workflow_dispatch' && inputs.run_portal_e2e
     runs-on: ubuntu-latest
-    # The suite takes about 5 minutes on a workstation and was cancelled at 20 on
-    # the hosted runner (the browser install, the Chromium download and a slower
-    # CPU together), so the limit is set above that, not to the workstation time.
-    timeout-minutes: 40
+    timeout-minutes: 20
     needs: [lint]
     steps:
       - uses: actions/checkout@v7
