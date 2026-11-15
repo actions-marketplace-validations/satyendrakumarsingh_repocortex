@@ -9,6 +9,14 @@ Entries explain *why* a change was made and what failure mode it addressed,
 matching the standard the commit history sets. Every measurement quoted here came
 from an actual run.
 
+## [1.3.0] - 2026-11-15
+
+- **Streaming Prompt Pack Export (`repocortex pack`):** Added `StreamPack` streaming architecture supporting XML, Markdown, and JSON prompt packaging with constant $O(1)$ memory chunking, full file streaming without 20,000-line limits, and automated credential redaction.
+- **Architectural Exploration MCP Tool (`repocortex_explore`):** Added the 30th MCP tool providing bounded hierarchical exploration of codebase directories, architectural modules, public APIs, and exported symbols with automated token budgeting.
+- **Compiler-Backed Monorepo Gaps & Prefix Routing:** Fixed monorepo boundary queries, query router path prefix matching, and database freelist page auto-reclaiming on post-commit runs.
+- **CSR Graph Index Allocation Optimizations:** Added slice capacity and degree buffer pre-allocations in Compressed Sparse Row in-memory graph index to eliminate GC thrashing during multi-hundred-thousand edge traversals.
+- **AEO, SEO & GEO Optimization & Agent Self-Service:** Added `llms.txt` and `llms-install.md` self-service installation and capability discovery standards for autonomous coding agents (Claude Code, Cursor, Codex, Windsurf, Cline).
+
 ## [1.2.0] - 2026-11-15
 
 - **Reusable GitHub Action (`action.yml`):** Added a composite action at the repository root allowing any project to run change safety, PR impact, blindspots, and SARIF export with a single line (`uses: satyendrakumarsingh/repocortex@v1.2.0` or `@v1`).
