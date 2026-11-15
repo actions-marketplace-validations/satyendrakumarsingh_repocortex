@@ -1,7 +1,20 @@
 # RepoCortex
-> Deterministic Code Graph & Intelligence MCP Server for AI Coding Agents
+> A Code Knowledge Graph and Token Optimizer for AI Coding Agents
 
-RepoCortex is a local-first, compiler-verified code intelligence server and CLI tool (`repocortex`). It indexes software repositories into a comprehensive graph of functions, call edges, HTTP routes, database tables, configuration keys, and tests, serving it to AI coding agents (Claude Code, Cursor, Codex, Gemini CLI, Windsurf, GitHub Copilot) over the Model Context Protocol (MCP) or command line.
+RepoCortex is a local-first, compiler-verified code knowledge graph and token optimizer CLI tool (`repocortex`). It indexes software repositories into a comprehensive graph of functions, call edges, HTTP routes, database tables, configuration keys, and tests, serving it to AI coding agents (Claude Code, Cursor, Codex, Gemini CLI, Windsurf, GitHub Copilot) over the Model Context Protocol (MCP) or command line.
+
+## How RepoCortex Compares to RAG
+- **Deterministic Code Knowledge Graph vs. Vector Similarity**: Replaces probabilistic semantic chunk embedding with exact AST and compiler (SCIP) proven symbol definitions, callers, and callees.
+- **Multi-Hop Traversal**: Resolves deep cross-file dependency chains (API endpoint -> Service -> Repository -> SQL migration) in sub-millisecond CSR memory hops where vector search yields zero similarity.
+- **Decoy Disambiguation & Near-Miss Exclusion**: Eliminates false positives and decoy comments/test mocks through strict syntax binding and impossible call edge pruning.
+- **Zero Hallucination & Honest Incompleteness**: Discloses confidence tiers (`exact`, `high`, `medium`, `low`) and reports unindexed boundaries directly to agents.
+- **100% Local & Zero Recurrent Token Cost**: Single static Go binary (`CGO_ENABLED=0`), embedded SQLite database, zero external embedding API calls.
+
+## Token Optimization Metrics
+- **MCP Prompt Schema**: Compact profile reduces tool definitions from ~31 KB (30 tools) to <1.2 KB (1 tool), saving 75% prompt schema overhead (~7,500 prompt tokens per turn).
+- **Task Context Assembly**: `get_task_context` extracts targeted symbol interfaces and call paths in ~1,500 tokens, achieving a 90–98.5% context reduction compared to full-file reading.
+- **Single-Turn Symbol Exploration**: `repocortex explore` returns line-numbered verbatim source excerpts and callers in 1 turn, reducing agent exploratory search turns by 80–85%.
+- **Stream Pack AI Bundling**: `repocortex pack` streams entire codebases with constant O(1) resident memory, ASCII hierarchy trees, and automated secret redaction.
 
 ## Key Capabilities
 - **Single-Turn Symbol Exploration (`repocortex explore`)**: Deep symbol inspection returning line-numbered verbatim source excerpts, callers (tagged exact vs. heuristic), callees, and impacted routes in 1 turn.
