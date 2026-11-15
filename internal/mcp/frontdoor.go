@@ -51,11 +51,11 @@ func (s *Server) repocortexFrontdoor(ctx context.Context, req *sdk.CallToolReque
 			name = args.Query
 		}
 		return s.exploreSymbol(ctx, req, exploreArgs{
-			Name:          name,
-			Path:          args.Path,
-			Line:          args.Line,
-			MinConfidence: args.MinConfidence,
-			Limit:         args.Limit,
+			Name:             name,
+			Path:             args.Path,
+			Line:             args.Line,
+			minConfidenceArg: minConfidenceArg{MinConfidence: args.MinConfidence},
+			Limit:            args.Limit,
 		})
 
 	case "context", "task", "task_context", "get_task_context":

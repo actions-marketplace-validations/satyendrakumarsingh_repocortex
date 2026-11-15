@@ -14,21 +14,21 @@ import (
 )
 
 type exploreArgs struct {
-	Name          string `json:"name" jsonschema:"Symbol name to explore."`
-	Path          string `json:"path,omitempty" jsonschema:"File path to disambiguate symbol."`
-	Line          int    `json:"line,omitempty" jsonschema:"1-based line number for precise symbol selection."`
-	MinConfidence string `json:"min_confidence,omitempty" jsonschema:"Confidence floor: exact, high, medium, or low."`
-	Limit         int    `json:"limit,omitempty" jsonschema:"Maximum callers/callees to return (default 10)."`
+	Name string `json:"name" jsonschema:"Symbol name to explore."`
+	Path string `json:"path,omitempty" jsonschema:"File path to disambiguate symbol."`
+	Line int    `json:"line,omitempty" jsonschema:"1-based line number for precise symbol selection."`
+	minConfidenceArg
+	Limit int `json:"limit,omitempty" jsonschema:"Maximum callers/callees to return (default 10)."`
 }
 
 func (s *Server) registerExplore(allowed map[string]bool) {
 	descs := toolDescriptions()
-	desc, ok := descs["repocortex_explore"]
+	desc, ok := descs["explore_symbol"]
 	if !ok {
 		desc = "Deep-dive on a symbol in one call: returns its definition with verbatim line-numbered source excerpt, upstream callers (with confidence tiers: 'exact' vs 'heuristic'), downstream callees, blast-radius impact summary, and linked HTTP routes. An empty callers result is ambiguous — confirm with search_code before assuming a symbol is dead."
 	}
 	addTool(s, allowed, &sdk.Tool{
-		Name:        "repocortex_explore",
+		Name:        "explore_symbol",
 		Description: desc,
 	}, s.exploreTool)
 }
@@ -59,7 +59,7 @@ func (s *Server) exploreSymbol(ctx context.Context, req *sdk.CallToolRequest, ar
 	}
 
 	q := symbolQuery{
-		Tool:       "repocortex_explore",
+		Tool:       "explore_symbol",
 		Param:      "name",
 		PathParam:  "path",
 		LineParam:  "line",

@@ -47,6 +47,7 @@ var hubPruneSurface = map[string]bool{
 	"get_file_outline":        false,
 	"minimize_diff":           false,
 	"list_blindspots":         false,
+	"explore_symbol":          false,
 }
 
 // seedHubGraph builds the smallest graph in which hub pruning changes an

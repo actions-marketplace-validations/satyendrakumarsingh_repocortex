@@ -395,10 +395,10 @@ func TestEveryToolAnswerStaysBoundedAtScale(t *testing.T) {
 		"list_hotspots":           {"include_tests": true},
 		// The widest call it accepts: every confidence counted, so every
 		// edge in the fixture becomes part of a link.
-		"list_communities":   {"min_confidence": "low"},
-		"search_graph":       {"query": "SELECT count(*) FROM symbols"},
-		"get_session_stats":  {},
-		"repocortex_explore": {"target": ordinary},
+		"list_communities":  {"min_confidence": "low"},
+		"search_graph":      {"query": "SELECT count(*) FROM symbols"},
+		"get_session_stats": {},
+		"explore_symbol":    {"name": ordinary},
 	}
 
 	tools, err := inv.Tools(ctx)

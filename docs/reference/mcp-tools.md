@@ -27,8 +27,8 @@ mcp:
 |---|---|
 | `compact` | 1: `repocortex` (front-door interface saving ~25 KB of prompt context; actions: context, search, symbol, callers, callees, references, impact, tests, diff, overview, query) |
 | `minimal` (default) | 7: `get_task_context`, `get_project_overview`, `search_code`, `find_symbol`, `get_symbol`, `find_references`, `find_callers` |
-| `standard` | 18: the 7 above and `find_tests`, `analyze_impact`, `get_resolution_coverage`, `plan_rename`, `list_api_endpoints`, `list_db_tables`, `get_config_key`, `get_file_outline`, `minimize_diff`, `plan_change`, `list_blindspots` |
-| `full` | 29: the 18 above and `analyze_change`, `find_owners`, `find_callees`, `find_implementations`, `trace_call_path`, `list_dead_code`, `list_hotspots`, `list_knowledge_risks`, `list_communities`, `search_graph`, `get_session_stats` |
+| `standard` | 19: the 7 above and `find_tests`, `analyze_impact`, `get_resolution_coverage`, `plan_rename`, `list_api_endpoints`, `list_db_tables`, `get_config_key`, `get_file_outline`, `minimize_diff`, `plan_change`, `list_blindspots`, `explore_symbol` |
+| `full` | 30: the 19 above and `analyze_change`, `find_owners`, `find_callees`, `find_implementations`, `trace_call_path`, `list_dead_code`, `list_hotspots`, `list_knowledge_risks`, `list_communities`, `search_graph`, `get_session_stats` |
 
 The counts are what `repocortex tool list --profile <name>` prints.
 
@@ -54,6 +54,7 @@ The counts are what `repocortex tool list --profile <name>` prints.
 | `minimize_diff` | standard | `diff` (required) | Compress unified git diffs into structured, token-efficient representations. |
 | `plan_change` | standard | `symbol` (required), `hub_degree_limit`, `limit`, `line`, `min_confidence`, `offset`, `path` | Generate an ordered change plan for a symbol: the direct callers the index bound, a risk level, the test files found to cover it, and the steps in order. |
 | `list_blindspots` | standard | none | Audit the repository for code intelligence blindspots and hidden risks. |
+| `explore_symbol` | standard | `name` (required), `limit`, `line`, `min_confidence`, `path` | Deep-dive on a symbol in one call: returns its definition with verbatim line-numbered source excerpt, upstream callers, downstream callees, blast-radius impact summary, and linked HTTP routes. |
 | `analyze_change` | full | `base` (required), `head`, `min_confidence` | Find out what a range of commits puts at risk: the symbols the change touched, everything those can reach, and the tests among them. |
 | `find_owners` | full | `symbol` (required), `limit`, `line`, `path` | Find who has recent context on the code a change would touch: the people who have lately changed the symbols a change to this one can reach, ranked by how much of that code they have worked on. |
 | `find_callees` | full | `name` (required), `limit`, `line`, `min_confidence`, `offset`, `path` | List what a symbol calls: the definitions inside this repository that its body invokes, each with the file and line of the call and how the binding was established (exact, high, medium or low). |
@@ -251,6 +252,18 @@ Generate an ordered change plan for a symbol: the direct callers the index bound
 Audit the repository for code intelligence blindspots and hidden risks. Detects unresolved external and internal calls, untested critical functions with high fan-in, unmapped HTTP endpoints, orphan database tables, missing config declarations, and unparsed files. Use this to audit codebase health and find coverage gaps.
 
 No parameters.
+
+### `explore_symbol`
+
+Deep-dive on a symbol in one call: returns its definition with verbatim line-numbered source excerpt, upstream callers (with confidence tiers: 'exact' vs 'heuristic'), downstream callees, blast-radius impact summary, and linked HTTP routes. An empty callers result is ambiguous — confirm with search_code before assuming a symbol is dead.
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `name` | string | yes | Symbol name to explore. |
+| `limit` | integer | no | Maximum callers/callees to return (default 10). |
+| `line` | integer | no | 1-based line number for precise symbol selection. |
+| `min_confidence` | string | no | Lowest confidence to return: exact, high, medium or low. Default low. Recommended: 'high' for safe automated code changes and blast radius analysis to filter out heuristic false positives. |
+| `path` | string | no | File path to disambiguate symbol. |
 
 ### `analyze_change`
 

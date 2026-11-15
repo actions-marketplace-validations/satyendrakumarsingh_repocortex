@@ -36,6 +36,7 @@ var minConfidenceSurface = map[string]bool{
 	"find_tests":       true,
 	"analyze_impact":   true,
 	"plan_change":      true,
+	"explore_symbol":   true,
 
 	// Not confidence-bearing:
 	//   get_project_overview / get_resolution_coverage — counts and rates about
@@ -83,6 +84,7 @@ var minimalArgsFor = map[string]map[string]any{
 	"analyze_impact":  {"symbol": "auth.Login"},
 	"find_tests":      {"symbol": "auth.Login"},
 	"plan_change":     {"symbol": "auth.Login"},
+	"explore_symbol":  {"name": "Login", "path": "auth/Login.java"},
 	"list_blindspots": {},
 }
 

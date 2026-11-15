@@ -318,7 +318,7 @@ func toolDescriptions() map[string]string {
 			"is bounded and may be truncated; the response says so explicitly when it is, so check " +
 			"that flag rather than assuming you have the full body.",
 
-		"repocortex_explore": "Deep-dive on a symbol in a single call. Returns its definition with a " +
+		"explore_symbol": "Deep-dive on a symbol in a single call. Returns its definition with a " +
 			"bounded verbatim source excerpt, upstream callers (each carrying a confidence tier: " +
 			"'exact' means a compiler proved the binding, 'high', 'medium', 'low' are inferred), " +
 			"downstream callees, blast-radius impact reach, and linked HTTP routes. An empty callers " +

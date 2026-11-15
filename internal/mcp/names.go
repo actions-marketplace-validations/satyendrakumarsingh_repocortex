@@ -30,6 +30,8 @@ import "strings"
 //	analyze_  a computed judgement (risk, reach) rather than a list of facts.
 //	plan_     an ordered set of edits. Never writes; the caller applies it.
 //	minimize_ a transformation of text the caller supplies.
+//	explore_  a single-turn composite inspection of a symbol's definition,
+//	          callers, callees, and impact.
 //
 // THERE ARE NO ALIASES. A tool has one name. Before a first release nobody
 // depends on an old one, and a second name for a tool is a second thing for a
@@ -39,7 +41,7 @@ import "strings"
 // toolVerbs is the closed list of leading verbs. Adding a verb is a design
 // decision about a new kind of answer, so it happens here, with a line in the
 // comment above, not in passing at a registration site.
-var toolVerbs = []string{"get", "list", "find", "search", "trace", "analyze", "plan", "minimize"}
+var toolVerbs = []string{"get", "list", "find", "search", "trace", "analyze", "plan", "minimize", "explore"}
 
 // ToolVerbs returns the permitted leading verbs, for the naming test and for
 // documentation that must not restate the list by hand.

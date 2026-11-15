@@ -119,6 +119,7 @@ func callsForEveryTool(target, path string) map[string]map[string]any {
 		"get_symbol":              {"name": target},
 		"find_references":         {"name": target},
 		"find_callers":            {"name": target},
+		"explore_symbol":          {"name": target},
 		"find_callees":            {"name": target},
 		"find_implementations":    {"name": target},
 		"trace_call_path":         {"from": target, "to": target},

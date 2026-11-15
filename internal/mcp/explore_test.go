@@ -13,18 +13,18 @@ func TestExploreTool(t *testing.T) {
 	fs := newFullServer(t, seedChain, withProfile(config.MCPFull))
 	ctx := context.Background()
 
-	// 1. Explore via standalone repocortex_explore tool
+	// 1. Explore via standalone explore_symbol tool
 	res, err := fs.sess.CallTool(ctx, &sdk.CallToolParams{
-		Name: "repocortex_explore",
+		Name: "explore_symbol",
 		Arguments: map[string]any{
 			"name": "middle",
 		},
 	})
 	if err != nil {
-		t.Fatalf("call repocortex_explore: %v", err)
+		t.Fatalf("call explore_symbol: %v", err)
 	}
 	if len(res.Content) == 0 {
-		t.Fatal("empty response from repocortex_explore")
+		t.Fatal("empty response from explore_symbol")
 	}
 	tc, ok := res.Content[0].(*sdk.TextContent)
 	if !ok {
