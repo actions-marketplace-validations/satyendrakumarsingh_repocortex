@@ -69,11 +69,11 @@ Includes an ASCII directory tree, token counts, and automated secret redaction.
 			}
 
 			if outPath != "" {
-				f, err := os.Create(outPath)
+				f, err := os.Create(outPath) //nolint:gosec // G304: the output path is the user-supplied --out flag
 				if err != nil {
 					return fmt.Errorf("pack: create %s: %w", outPath, err)
 				}
-				defer f.Close()
+				defer func() { _ = f.Close() }()
 
 				res, err := export.StreamPack(ctx, s.reg, s.runID, opts, f)
 				if err != nil {
