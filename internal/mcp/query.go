@@ -47,9 +47,9 @@ func (s *Server) searchGraph(ctx context.Context, req *sdk.CallToolRequest, args
 
 	// Render Markdown table representation
 	var b strings.Builder
-	b.WriteString(fmt.Sprintf("Query returned %d row(s)", res.TotalRows))
+	fmt.Fprintf(&b, "Query returned %d row(s)", res.TotalRows)
 	if res.Truncated {
-		b.WriteString(fmt.Sprintf(" (capped at limit %d)", limit))
+		fmt.Fprintf(&b, " (capped at limit %d)", limit)
 	}
 	b.WriteString(":\n\n")
 
