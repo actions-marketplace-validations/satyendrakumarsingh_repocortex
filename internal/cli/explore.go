@@ -145,7 +145,7 @@ associated HTTP routes.
 					}
 					fmt.Fprintf(tw, "  [%s]\t%s\t%s:%d\n", c.Confidence, callerName, c.EvidenceFile, c.EvidenceLine)
 				}
-				tw.Flush()
+				_ = tw.Flush()
 			}
 			fmt.Fprintln(w)
 
@@ -157,7 +157,7 @@ associated HTTP routes.
 				for _, c := range callees {
 					fmt.Fprintf(tw, "  [%s]\t%s\t%s:%d\n", c.Confidence, c.DstName, c.EvidenceFile, c.EvidenceLine)
 				}
-				tw.Flush()
+				_ = tw.Flush()
 			}
 
 			return nil
