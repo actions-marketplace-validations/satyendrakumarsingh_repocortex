@@ -1,16 +1,16 @@
 name: 'RepoCortex Change-Safety Action'
-description: 'Deterministic code intelligence and change safety for pull requests: architecture verification, impact analysis, code blindspots, PR reports, and SARIF.'
+description: 'Code graph, PR blast radius, architecture checks and SARIF reports for pull requests. Local and deterministic.'
 author: 'Satyendra Singh'
 
 branding:
-  icon: 'shield-check'
+    icon: 'shield'
   color: 'blue'
 
 inputs:
   version:
-    description: 'RepoCortex release version to use (e.g. v1.3.0 or latest)'
+        description: 'RepoCortex release version to use (e.g. v1.3.1 or latest)'
     required: false
-    default: 'v1.3.0'
+        default: 'v1.3.1'
   fail-on:
     description: 'Lowest blindspot or architecture severity that fails the check (high | medium | low | none)'
     required: false
