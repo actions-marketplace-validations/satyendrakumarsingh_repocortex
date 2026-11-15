@@ -544,6 +544,7 @@ version re-parses every file and rewrites them.
 |---|---|
 | `--verify-index` | run the graph invariant gate: dangling edges, orphaned symbols, edges claiming compiler certainty without compiler evidence |
 | `--resolution-precision` | adjudicate the heuristic resolver against compiler facts already imported into this index |
+| `--vacuum` | reclaim freelist pages and defragment index database |
 
 `--resolution-precision` needs a run holding both heuristic and compiler edges,
 so import a SCIP index first. It reports precision, never recall, and it reports
@@ -2637,6 +2638,8 @@ each config file.
 | `--list` | list every supported agent, whether it is detected, its config file, and the manual step for agents set up by hand |
 | `--create` | also write configs for agents that are not detected |
 | `--rules` | add guidance to `AGENTS.md` (created if missing) and to agent instruction files that already exist; `CONVENTIONS.md` for Aider |
+| `--only CLIENT` | restrict configuration to specific clients (repeatable, e.g. `--only claude-code`) |
+| `--no-agents-md` | skip creating or updating `AGENTS.md` when `--rules` is specified |
 
 Covers 30 agents automatically, including Claude Code, Codex CLI, Copilot CLI,
 Gemini CLI, Cursor, VS Code, Windsurf, Antigravity, Zed, Goose and Kiro. A file

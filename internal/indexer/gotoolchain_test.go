@@ -195,3 +195,57 @@ func TestRunRejectsAnIndexWithNoDocuments(t *testing.T) {
 		t.Errorf("IndexPath = %q, want empty so no caller tries to import it", ex.IndexPath)
 	}
 }
+
+func TestRunRejectsEmptyZeroByteIndex(t *testing.T) {
+	t.Parallel()
+	repo := writeRepo(t, map[string]string{"pyproject.toml": "[project]\nname = \"demo\"\n"})
+	out := t.TempDir()
+
+	r := newFakeRunner("python3")
+	r.present["scip-python"] = true
+	r.handle("scip-python", func(c Command) (Result, error) {
+		if o := flagValue(c.Args, "--output"); o != "" {
+			if err := os.WriteFile(o, []byte{}, 0o600); err != nil {
+				return Result{}, err
+			}
+		}
+		return Result{ExitCode: 0}, nil
+	})
+
+	e := &Executor{Runner: r}
+	ex, err := e.Run(context.Background(),
+		Installed{Indexer: SCIPPython, Path: fakeBin("scip-python")},
+		Project{Language: LangPython, Dir: "."}, repo, out)
+	if err == nil {
+		t.Fatal("Run reported success for a 0-byte index")
+	}
+	if !strings.Contains(err.Error(), "empty (0-byte) index") {
+		t.Errorf("error = %v, want it to report an empty (0-byte) index", err)
+	}
+	if ex.IndexPath != "" {
+		t.Errorf("IndexPath = %q, want empty", ex.IndexPath)
+	}
+}
+
+func TestRunDiagnosesExit137AsOOM(t *testing.T) {
+	t.Parallel()
+	repo := writeRepo(t, map[string]string{"pyproject.toml": "[project]\nname = \"demo\"\n"})
+	out := t.TempDir()
+
+	r := newFakeRunner("python3")
+	r.present["scip-python"] = true
+	r.handle("scip-python", func(c Command) (Result, error) {
+		return Result{ExitCode: 137, Stderr: []byte("Killed\n")}, nil
+	})
+
+	e := &Executor{Runner: r}
+	ex, err := e.Run(context.Background(),
+		Installed{Indexer: SCIPPython, Path: fakeBin("scip-python")},
+		Project{Language: LangPython, Dir: "."}, repo, out)
+	if err == nil {
+		t.Fatal("Run reported success for exit 137")
+	}
+	if !strings.Contains(ex.Diagnostic, "Out-Of-Memory / SIGKILL (exit 137)") {
+		t.Errorf("diagnostic = %q, want mention of OOM / SIGKILL", ex.Diagnostic)
+	}
+}

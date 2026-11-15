@@ -93,12 +93,14 @@ that nothing exists. If the index is missing, run ` + "`repocortex index`" + ` t
 ` + cliGuidanceClose + "\n"
 
 // injectAgentGuidance writes the guidance block into AGENTS.md (created when
-// missing) and into every agent-specific instruction file the repository
+// missing, unless noAgentsMD is true) and into every agent-specific instruction file the repository
 // already has. Files that already carry the block are left alone.
-func injectAgentGuidance(cmd *cobra.Command, root string, dryRun bool) error {
+func injectAgentGuidance(cmd *cobra.Command, root string, dryRun, noAgentsMD bool) error {
 	out := cmd.OutOrStdout()
-	if err := ensureBlock(out, root, guidanceCreate, agentGuidance, agentGuidanceOpen, true, dryRun); err != nil {
-		return err
+	if !noAgentsMD {
+		if err := ensureBlock(out, root, guidanceCreate, agentGuidance, agentGuidanceOpen, true, dryRun); err != nil {
+			return err
+		}
 	}
 	for _, name := range guidanceUpdate {
 		if err := ensureBlock(out, root, name, agentGuidance, agentGuidanceOpen, false, dryRun); err != nil {
@@ -165,15 +167,42 @@ type installResult struct {
 	Note   string
 }
 
+// matchClient checks if client name matches any of the filter strings in only.
+func matchClient(name string, only []string) bool {
+	if len(only) == 0 {
+		return true
+	}
+	norm := func(s string) string {
+		var b strings.Builder
+		for _, r := range strings.ToLower(s) {
+			if (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') {
+				b.WriteRune(r)
+			}
+		}
+		return b.String()
+	}
+	nName := norm(name)
+	for _, o := range only {
+		nO := norm(o)
+		if nO != "" && (strings.Contains(nName, nO) || strings.Contains(nO, nName)) {
+			return true
+		}
+	}
+	return false
+}
+
 // installClients writes RepoCortex into every detected client (every client
-// with createAll). It never stops at one client's problem: a file it cannot
+// with createAll, or matching only). It never stops at one client's problem: a file it cannot
 // merge is reported as a manual step and the rest still install.
-func installClients(home, root string, spec agentServerSpec, createAll, dryRun bool) ([]installResult, error) {
+func installClients(home, root string, spec agentServerSpec, createAll, dryRun bool, only []string) ([]installResult, error) {
 	clients := mcpClients(home, root)
 	sort.Slice(clients, func(i, j int) bool { return clients[i].Name < clients[j].Name })
 
 	var results []installResult
 	for _, c := range clients {
+		if !matchClient(c.Name, only) {
+			continue
+		}
 		if c.OnlyIfExists {
 			if _, err := os.Stat(c.Path); err != nil {
 				continue
@@ -270,11 +299,13 @@ func printClientList(w io.Writer, home, root string, spec agentServerSpec) {
 
 func newInstallCmd(g *Global) *cobra.Command {
 	var (
-		dryRun    bool
-		createAll bool
-		withRules bool
-		list      bool
-		links     bool
+		dryRun      bool
+		createAll   bool
+		withRules   bool
+		list        bool
+		links       bool
+		onlyClients []string
+		noAgentsMD  bool
 	)
 	cmd := &cobra.Command{
 		Use:   "install",
@@ -294,9 +325,11 @@ exists. Pass --create to write every client's file regardless. A file RepoCortex
 cannot merge safely (for example JSON with comments) is reported with the manual
 step and left untouched.
 
+Pass --only <name> to restrict configuration to specific clients (e.g. --only claude-code).
+
 Pass --rules to add guidance to AGENTS.md and to any agent instruction file the
 project already has (CLAUDE.md, GEMINI.md, .cursorrules, ...), so the agent asks
-RepoCortex before it searches.`,
+RepoCortex before it searches. Pass --no-agents-md to skip creating AGENTS.md.`,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			home, err := os.UserHomeDir()
 			if err != nil {
@@ -306,7 +339,11 @@ RepoCortex before it searches.`,
 			spec := agentServerSpec{
 				Name:    agentMCPName,
 				Command: "repocortex",
-				Args:    []string{"--project", root, "serve"},
+				Args: []string{
+					"--project", root,
+					"serve",
+					"--audit-log", filepath.Join(root, IndexDir, "audit.jsonl"),
+				},
 			}
 			out := cmd.OutOrStdout()
 
@@ -319,14 +356,14 @@ RepoCortex before it searches.`,
 				return nil
 			}
 
-			results, err := installClients(home, root, spec, createAll, dryRun)
+			results, err := installClients(home, root, spec, createAll, dryRun, onlyClients)
 			written := printInstallResults(out, results, dryRun)
 			if err != nil {
 				return err
 			}
 
 			if withRules {
-				if err := injectAgentGuidance(cmd, root, dryRun); err != nil {
+				if err := injectAgentGuidance(cmd, root, dryRun, noAgentsMD); err != nil {
 					return err
 				}
 			}
@@ -351,5 +388,7 @@ RepoCortex before it searches.`,
 	cmd.Flags().BoolVar(&withRules, "rules", false, "add agent guidance to AGENTS.md and to existing agent instruction files")
 	cmd.Flags().BoolVar(&list, "list", false, "list every supported agent, whether it is detected, and manual steps for the rest")
 	cmd.Flags().BoolVar(&links, "links", false, "display 1-click install deep links for Cursor, VS Code, Windsurf and LM Studio")
+	cmd.Flags().StringSliceVar(&onlyClients, "only", nil, "install only for specific clients (e.g. --only claude-code, --only cursor)")
+	cmd.Flags().BoolVar(&noAgentsMD, "no-agents-md", false, "skip creating or updating AGENTS.md when --rules is specified")
 	return cmd
 }

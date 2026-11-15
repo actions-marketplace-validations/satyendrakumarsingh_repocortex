@@ -136,6 +136,8 @@ func TestRequiredToolsPerProject(t *testing.T) {
 		// Under docker the host needs nothing but docker: that is the reason to
 		// prefer it.
 		{Project{Language: LangJava, Markers: []string{"pom.xml"}}, RunnerDocker, []Tool{ToolDocker}},
+		{Project{Language: LangTypeScript}, RunnerDocker, []Tool{ToolDocker}},
+		{Project{Language: LangPython}, RunnerDocker, []Tool{ToolDocker}},
 	}
 	for _, tc := range cases {
 		if got := RequiredTools(tc.project, tc.runner); !reflect.DeepEqual(got, tc.want) {

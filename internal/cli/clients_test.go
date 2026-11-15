@@ -183,7 +183,7 @@ func TestInstallClientsWritesEveryClientAndIsIdempotent(t *testing.T) {
 	home := isolateHome(t)
 	root := t.TempDir()
 
-	results, err := installClients(home, root, testSpec, true, false)
+	results, err := installClients(home, root, testSpec, true, false, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -206,7 +206,7 @@ func TestInstallClientsWritesEveryClientAndIsIdempotent(t *testing.T) {
 		t.Errorf("created %d client configs, want every supported client (25 or more)", created)
 	}
 
-	again, err := installClients(home, root, testSpec, true, false)
+	again, err := installClients(home, root, testSpec, true, false, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -235,7 +235,7 @@ func TestInstallClientsSkipsUndetectedAndSurvivesABadFile(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	results, err := installClients(home, root, testSpec, false, false)
+	results, err := installClients(home, root, testSpec, false, false, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -263,7 +263,7 @@ func TestInstallClientsSkipsUndetectedAndSurvivesABadFile(t *testing.T) {
 func TestInstallDryRunWritesNothing(t *testing.T) {
 	home := isolateHome(t)
 	root := t.TempDir()
-	if _, err := installClients(home, root, testSpec, true, true); err != nil {
+	if _, err := installClients(home, root, testSpec, true, true, nil); err != nil {
 		t.Fatal(err)
 	}
 	entries, err := os.ReadDir(home)
@@ -301,7 +301,7 @@ func TestRulesUpdateExistingAgentFilesAndWriteCLIGuidanceForAider(t *testing.T) 
 	cmd := &cobra.Command{}
 	var out bytes.Buffer
 	cmd.SetOut(&out)
-	if err := injectAgentGuidance(cmd, root, false); err != nil {
+	if err := injectAgentGuidance(cmd, root, false, false); err != nil {
 		t.Fatal(err)
 	}
 	for _, name := range []string{"AGENTS.md", "CLAUDE.md", "GEMINI.md"} {

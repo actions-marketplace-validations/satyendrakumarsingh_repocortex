@@ -178,3 +178,52 @@ func TestDockerJavaCommandGivesTheJVMAHomeThatResolves(t *testing.T) {
 		t.Errorf("JDK_JAVA_OPTIONS=%q does not carry %q, so the JVM's home and the shell's HOME disagree", jvmOpts, want)
 	}
 }
+
+func TestDockerNodeCommandForPythonAndTypeScript(t *testing.T) {
+	e := &Executor{
+		Runner:     &fakeRunner{present: map[string]bool{"docker": true}},
+		RunnerKind: RunnerDocker,
+		NodeHeapMB: 8192,
+	}
+
+	// Python subproject in a monorepo
+	pyCmd, err := e.dockerNodeCommand(
+		Installed{Indexer: SCIPPython, Image: "node@sha256:abc"},
+		Project{Language: LangPython, Dir: "backend/python/svc", Markers: []string{"pyproject.toml"}},
+		"backend/python/svc", "/repo", "/tmp/out", "/tmp/out/python.scip")
+	if err != nil {
+		t.Fatalf("dockerNodeCommand for python: %v", err)
+	}
+	pyJoined := strings.Join(pyCmd.Args, " ")
+	if !strings.Contains(pyJoined, "-v /repo:/work") {
+		t.Errorf("missing /work mount: %s", pyJoined)
+	}
+	if !strings.Contains(pyJoined, "-v /tmp/out:/out") {
+		t.Errorf("missing /out mount: %s", pyJoined)
+	}
+	if !strings.Contains(pyJoined, "-w /work/backend/python/svc") {
+		t.Errorf("missing /work/backend/python/svc working dir: %s", pyJoined)
+	}
+	if !strings.Contains(pyJoined, "NODE_OPTIONS=--max-old-space-size=8192") {
+		t.Errorf("missing NODE_OPTIONS: %s", pyJoined)
+	}
+	if !strings.Contains(pyJoined, "--path-prefix backend/python/svc") {
+		t.Errorf("missing --path-prefix for python monorepo: %s", pyJoined)
+	}
+	if !strings.Contains(pyJoined, "--environment []") {
+		t.Errorf("missing --environment [] for python container run: %s", pyJoined)
+	}
+
+	// TypeScript project without tsconfig
+	tsCmd, err := e.dockerNodeCommand(
+		Installed{Indexer: SCIPTypeScript, Image: "node@sha256:abc"},
+		Project{Language: LangTypeScript, Dir: "frontend", Markers: []string{"package.json"}},
+		"frontend", "/repo", "/tmp/out", "/tmp/out/ts.scip")
+	if err != nil {
+		t.Fatalf("dockerNodeCommand for ts: %v", err)
+	}
+	tsJoined := strings.Join(tsCmd.Args, " ")
+	if !strings.Contains(tsJoined, "--infer-tsconfig") {
+		t.Errorf("missing --infer-tsconfig for ts project: %s", tsJoined)
+	}
+}

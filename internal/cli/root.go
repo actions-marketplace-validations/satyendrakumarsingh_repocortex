@@ -51,8 +51,16 @@ func (g *Global) DBPath() string {
 	if _, err := os.Stat(primary); err == nil {
 		return primary
 	}
+	// If a repository config file (.repocortex.yml) is present, strictly use .repocortex/.
+	repoCfg := filepath.Join(g.cfg.RepoRoot, config.RepoConfigName)
+	if _, err := os.Stat(repoCfg); err == nil {
+		return primary
+	}
 	alt := filepath.Join(g.cfg.RepoRoot, ".devintel", IndexFile)
 	if _, err := os.Stat(alt); err == nil {
+		if g.log != nil {
+			g.log.Warn("using legacy .devintel index as fallback; run 'repocortex init' to migrate to .repocortex/", "path", alt)
+		}
 		return alt
 	}
 	return primary

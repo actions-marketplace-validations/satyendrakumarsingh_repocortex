@@ -23,6 +23,7 @@ cannot use it yet.
 repocortex install --list      # every supported agent, which are detected here, and the file each uses
 repocortex install --dry-run   # what would change, without writing
 repocortex install --rules     # write the configs and the guidance files
+repocortex install --only claude-code --rules --no-agents-md # configure specific agent only
 ```
 
 An agent is detected when its config file, its config directory or its command

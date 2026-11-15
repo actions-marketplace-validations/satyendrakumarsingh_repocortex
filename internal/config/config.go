@@ -260,10 +260,12 @@ type UserConfig struct {
 	Accuracy struct {
 		Mode     AccuracyMode `yaml:"mode"`
 		Indexers struct {
-			Provision ProvisionPolicy `yaml:"provision"`
-			Runner    string          `yaml:"runner"` // native | docker
-			Languages []string        `yaml:"languages"`
-			Timeout   string          `yaml:"timeout"`
+			Provision   ProvisionPolicy `yaml:"provision"`
+			Runner      string          `yaml:"runner"` // native | docker
+			Languages   []string        `yaml:"languages"`
+			Timeout     string          `yaml:"timeout"`
+			MaxParallel int             `yaml:"max_parallel"`
+			NodeHeapMB  int             `yaml:"node_heap_mb"`
 
 			// MountLocalArtifacts lets a containerised build read and write the
 			// invoking user's local artifact cache (~/.m2).
@@ -329,6 +331,8 @@ type Config struct {
 	IndexerMountLocalArtifacts bool
 	IndexerLanguages           []string
 	IndexerTimeout             time.Duration
+	IndexerMaxParallel         int
+	IndexerNodeHeapMB          int
 	RepoRoot                   string
 	RepoConfigFile             string
 	UserConfigPresent          bool
@@ -529,6 +533,12 @@ func applyUser(cfg *Config, uc UserConfig) {
 		if d, err := time.ParseDuration(uc.Accuracy.Indexers.Timeout); err == nil {
 			cfg.IndexerTimeout = d
 		}
+	}
+	if uc.Accuracy.Indexers.MaxParallel > 0 {
+		cfg.IndexerMaxParallel = uc.Accuracy.Indexers.MaxParallel
+	}
+	if uc.Accuracy.Indexers.NodeHeapMB > 0 {
+		cfg.IndexerNodeHeapMB = uc.Accuracy.Indexers.NodeHeapMB
 	}
 }
 

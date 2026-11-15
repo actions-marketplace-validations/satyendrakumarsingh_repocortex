@@ -134,6 +134,9 @@ type Plan struct {
 	Toolchain Toolchain
 	Steps     []Step
 
+	NodeHeapMB  int
+	MaxParallel int
+
 	// MountLocalArtifacts carries the user's opt-in to giving a containerised
 	// build the host's artifact cache (~/.m2). USER config only: a repository
 	// must never be able to ask for its own build to be handed the developer's
@@ -293,6 +296,8 @@ func NewPlanWith(ctx context.Context, repoRoot string, cfg config.Config, opts O
 		Runner:              cfg.IndexerRunner,
 		Timeout:             cfg.IndexerTimeout,
 		MountLocalArtifacts: cfg.IndexerMountLocalArtifacts,
+		NodeHeapMB:          cfg.IndexerNodeHeapMB,
+		MaxParallel:         cfg.IndexerMaxParallel,
 	}
 	if plan.Runner == "" {
 		plan.Runner = RunnerNative
@@ -615,6 +620,7 @@ func Execute(ctx context.Context, plan Plan, opts Options) (res Results, err err
 		Timeout:             plan.Timeout,
 		RunnerKind:          plan.Runner,
 		MountLocalArtifacts: plan.MountLocalArtifacts,
+		NodeHeapMB:          plan.NodeHeapMB,
 	}
 
 	for _, s := range runnable {

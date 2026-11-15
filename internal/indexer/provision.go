@@ -165,6 +165,9 @@ var pins = []Pin{
 		Channel:       ChannelNPM,
 		NPMPackage:    "@sourcegraph/scip-typescript",
 		TarballSHA256: "92a88678bcc021e7ff2afd0ab2684c1094344796840e582578aa4595020cc3f5",
+		Image:         "node",
+		ImageDigest:   "sha256:e13726ca604184d7a91fcacab1fc09eefd642dc28e79ac34e85540dd93b78cfb",
+		DockerEntry:   []string{"npx", "-y", "@sourcegraph/scip-typescript@0.3.14"},
 	},
 	{
 		Indexer:       SCIPPython,
@@ -175,6 +178,9 @@ var pins = []Pin{
 		Channel:       ChannelNPM,
 		NPMPackage:    "@sourcegraph/scip-python",
 		TarballSHA256: "be8e0a1ec180423c60e9f2c2672c208f49a35ab690ac0f8f1259e4223dbd6e42",
+		Image:         "node",
+		ImageDigest:   "sha256:e13726ca604184d7a91fcacab1fc09eefd642dc28e79ac34e85540dd93b78cfb",
+		DockerEntry:   []string{"npx", "-y", "@sourcegraph/scip-python@0.6.6"},
 	},
 	{
 		// scip-java runs as a build-tool plugin, so "installing" it natively
@@ -455,7 +461,7 @@ type Provisioner struct {
 // This is what makes `Plan` free of side effects and what implements "if a tool
 // is already on PATH, use it and record the version rather than installing".
 func (p *Provisioner) Available(ctx context.Context, pin Pin) (Installed, bool) {
-	if p.RunnerKind == RunnerDocker && pin.Channel == ChannelDocker {
+	if p.RunnerKind == RunnerDocker && (pin.Channel == ChannelDocker || pin.Image != "") {
 		return p.dockerAvailable(ctx, pin)
 	}
 	// Under the native runner a container-channel indexer can still be USED if
@@ -534,16 +540,32 @@ func (p *Provisioner) Ensure(ctx context.Context, pin Pin) (Installed, error) {
 			WithField("indexer", string(pin.Indexer))
 	}
 
+	mutates := pin.Channel != ChannelDocker
+	if p.RunnerKind == RunnerDocker {
+		mutates = false
+	}
+	ref := pin.Ref()
+	reqChannel := pin.Channel
+	if p.RunnerKind == RunnerDocker && pin.Image != "" {
+		reqChannel = ChannelDocker
+		if pin.ImageDigest != "" {
+			ref = pin.Image + "@" + pin.ImageDigest
+		}
+	}
 	req := ProvisionRequest{
 		Indexer:  pin.Indexer,
 		Language: pin.Language,
 		Version:  pin.Version,
-		Channel:  pin.Channel,
-		Ref:      pin.Ref(),
-		Mutates:  pin.Channel != ChannelDocker,
+		Channel:  reqChannel,
+		Ref:      ref,
+		Mutates:  mutates,
 	}
 	if err := p.consent(ctx, req); err != nil {
 		return Installed{}, err
+	}
+
+	if p.RunnerKind == RunnerDocker && pin.Image != "" {
+		return p.dockerPull(ctx, pin)
 	}
 
 	switch pin.Channel {

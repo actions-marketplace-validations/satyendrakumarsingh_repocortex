@@ -333,6 +333,10 @@ func (r *Registry) CommitRun(ctx context.Context, runID int64, opts ...CommitOpt
 	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("registry: commit run %d: commit: %w", runID, err)
 	}
+
+	// Update query-planner statistics and compact FTS index post-commit.
+	_ = r.Analyze(ctx)
+
 	return nil
 }
 

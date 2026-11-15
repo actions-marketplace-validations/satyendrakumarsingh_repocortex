@@ -258,8 +258,11 @@ func itoa(n int) string {
 //     to prefer it: the host is never mutated and the repository's build system
 //     runs inside a container instead of on the developer's machine.
 func RequiredTools(p Project, runner string) []Tool {
-	if runner == RunnerDocker && p.Language == LangJava {
-		return []Tool{ToolDocker}
+	if runner == RunnerDocker {
+		switch p.Language {
+		case LangJava, LangTypeScript, LangPython:
+			return []Tool{ToolDocker}
+		}
 	}
 	switch p.Language {
 	case LangGo:

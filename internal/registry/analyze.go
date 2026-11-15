@@ -28,6 +28,9 @@ import (
 // right, which is all the planner needs — the difference between "this index
 // matches 1% of rows" and "99%" is what drives the decision, not precision.
 func (r *Registry) Analyze(ctx context.Context) error {
+	// Optimize FTS5 index segments to merge b-trees and compact storage.
+	_, _ = r.db.ExecContext(ctx, `INSERT INTO files_fts(files_fts) VALUES('optimize')`)
+
 	// 400 is SQLite's own documented recommendation for bounded ANALYZE.
 	if _, err := r.db.ExecContext(ctx, `PRAGMA analysis_limit=400`); err != nil {
 		return fmt.Errorf("registry: set analysis limit: %w", err)

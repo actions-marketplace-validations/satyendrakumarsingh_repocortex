@@ -96,7 +96,7 @@ func TestInjectAgentGuidance(t *testing.T) {
 	cmd.SetOut(&out)
 
 	// Creates AGENTS.md, which most agents read, when no file exists
-	if err := injectAgentGuidance(cmd, root, false); err != nil {
+	if err := injectAgentGuidance(cmd, root, false, false); err != nil {
 		t.Fatalf("injectAgentGuidance: %v", err)
 	}
 	content, err := os.ReadFile(filepath.Join(root, "AGENTS.md"))
@@ -115,10 +115,32 @@ func TestInjectAgentGuidance(t *testing.T) {
 
 	// Re-running does not duplicate
 	out.Reset()
-	if err := injectAgentGuidance(cmd, root, false); err != nil {
+	if err := injectAgentGuidance(cmd, root, false, false); err != nil {
 		t.Fatalf("re-inject guidance: %v", err)
 	}
 	if !strings.Contains(out.String(), "already present") {
 		t.Errorf("expected 'already present', got %s", out.String())
+	}
+
+	// noAgentsMD skips creating AGENTS.md
+	root2 := t.TempDir()
+	out.Reset()
+	if err := injectAgentGuidance(cmd, root2, false, true); err != nil {
+		t.Fatalf("injectAgentGuidance with noAgentsMD: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(root2, "AGENTS.md")); err == nil {
+		t.Error("AGENTS.md was created when noAgentsMD was true")
+	}
+}
+
+func TestInstallOnlyClientFilter(t *testing.T) {
+	if !matchClient("Claude Code", []string{"claude-code"}) {
+		t.Error("expected match for Claude Code with claude-code")
+	}
+	if !matchClient("VS Code (Copilot)", []string{"vscode"}) {
+		t.Error("expected match for VS Code with vscode")
+	}
+	if matchClient("Cursor", []string{"claude-code"}) {
+		t.Error("did not expect match for Cursor with claude-code")
 	}
 }

@@ -47,17 +47,22 @@ This does not index anything; run "repocortex index" afterwards.`,
 			ctx := cmd.Context()
 			cfg := g.Config()
 			dir := filepath.Join(cfg.RepoRoot, IndexDir)
-			dbPath := g.DBPath()
+			primary := filepath.Join(dir, IndexFile)
+			alt := filepath.Join(cfg.RepoRoot, ".devintel", IndexFile)
 
-			if _, err := os.Stat(dbPath); err == nil && !force {
-				return fmt.Errorf("index already exists at %s (use --force to recreate)", dbPath)
+			if _, err := os.Stat(primary); err == nil && !force {
+				return fmt.Errorf("index already exists at %s (use --force to recreate)", primary)
 			} else if err == nil && force {
-				if err := os.Remove(dbPath); err != nil {
+				if err := os.Remove(primary); err != nil {
 					return fmt.Errorf("remove existing index: %w", err)
 				}
-				_ = os.Remove(dbPath + "-wal")
-				_ = os.Remove(dbPath + "-shm")
-				g.Log().Warn("removed existing index", "path", dbPath)
+				_ = os.Remove(primary + "-wal")
+				_ = os.Remove(primary + "-shm")
+				g.Log().Warn("removed existing index", "path", primary)
+			}
+
+			if _, err := os.Stat(alt); err == nil {
+				fmt.Fprintf(cmd.ErrOrStderr(), "warning: found legacy index at %s. Initializing fresh index at %s (safe to delete .devintel/ once migrated).\n", alt, primary)
 			}
 
 			// 0o750 — see internal/store: the index maps private source.
@@ -70,7 +75,7 @@ This does not index anything; run "repocortex index" afterwards.`,
 				return err
 			}
 
-			db, err := store.Open(ctx, store.Options{Path: dbPath})
+			db, err := store.Open(ctx, store.Options{Path: primary})
 			if err != nil {
 				return err
 			}
@@ -91,7 +96,7 @@ This does not index anything; run "repocortex index" afterwards.`,
 			if g.JSON {
 				return emitJSON(cmd.OutOrStdout(), map[string]any{
 					"project":            cfg.ProjectName,
-					"index_path":         dbPath,
+					"index_path":         primary,
 					"schema_version":     version,
 					"migrations_applied": applied,
 					"accuracy_mode":      cfg.Accuracy,
@@ -99,7 +104,7 @@ This does not index anything; run "repocortex index" afterwards.`,
 			}
 			out := cmd.OutOrStdout()
 			_, _ = fmt.Fprintf(out, "Initialized RepoCortex for %q\n", cfg.ProjectName)
-			_, _ = fmt.Fprintf(out, "  Index:          %s\n", dbPath)
+			_, _ = fmt.Fprintf(out, "  Index:          %s\n", primary)
 			_, _ = fmt.Fprintf(out, "  Schema version: %d (%d migration(s) applied)\n", version, len(applied))
 			_, _ = fmt.Fprintf(out, "  Accuracy mode:  %s\n", cfg.Accuracy)
 			_, _ = fmt.Fprintf(out, "\nNext: repocortex index\n")
@@ -453,6 +458,7 @@ func humanBytes(n int64) string {
 func newDoctorCmd(g *Global) *cobra.Command {
 	var verifyIndex bool
 	var precision bool
+	var vacuum bool
 	cmd := &cobra.Command{
 		Use:   "doctor",
 		Short: "Diagnose the environment and verify index integrity",
@@ -513,6 +519,8 @@ see docs/accuracy.md for what the numbers do and do not mean.`,
 			ucStatus, ucDetail := "ok", "using defaults (no user config)"
 			if cfg.UserConfigPresent {
 				ucDetail = userPath
+			} else if userPath != "" {
+				ucDetail = fmt.Sprintf("absent (%s) — using defaults", userPath)
 			}
 			checks = append(checks, check{Name: "user config", Status: ucStatus, Detail: ucDetail})
 
@@ -544,6 +552,51 @@ see docs/accuracy.md for what the numbers do and do not mean.`,
 						return err
 					}
 				}
+				if vacuum {
+					rw, err := store.Open(ctx, store.Options{Path: dbPath})
+					if err != nil {
+						checks = append(checks, check{Name: "vacuum", Status: "fail", Detail: err.Error()})
+					} else {
+						var beforeSize int64
+						if fi, err := os.Stat(dbPath); err == nil {
+							beforeSize = fi.Size()
+						}
+						_, vErr := rw.DB.ExecContext(ctx, "VACUUM")
+						_ = rw.Close()
+						if vErr != nil {
+							checks = append(checks, check{Name: "vacuum", Status: "fail", Detail: vErr.Error()})
+						} else {
+							var afterSize int64
+							if fi, err := os.Stat(dbPath); err == nil {
+								afterSize = fi.Size()
+							}
+							saved := beforeSize - afterSize
+							detail := fmt.Sprintf("reclaimed %s (now %s)", humanBytes(saved), humanBytes(afterSize))
+							if saved <= 0 {
+								detail = fmt.Sprintf("already compact (%s)", humanBytes(afterSize))
+							}
+							checks = append(checks, check{Name: "vacuum", Status: "ok", Detail: detail})
+						}
+					}
+				} else {
+					dbRO, err := store.Open(ctx, store.Options{Path: dbPath, ReadOnly: true})
+					if err == nil {
+						var freelist, pageSize int64
+						_ = dbRO.DB.QueryRowContext(ctx, "PRAGMA freelist_count").Scan(&freelist)
+						_ = dbRO.DB.QueryRowContext(ctx, "PRAGMA page_size").Scan(&pageSize)
+						_ = dbRO.Close()
+						if freelist > 0 {
+							fragBytes := freelist * pageSize
+							if fragBytes > 2<<20 {
+								checks = append(checks, check{
+									Name:   "storage",
+									Status: "warn",
+									Detail: fmt.Sprintf("%s in %d freelist pages — run 'repocortex doctor --vacuum' to reclaim", humanBytes(fragBytes), freelist),
+								})
+							}
+						}
+					}
+				}
 			}
 
 			return renderChecks(cmd, g, checks, prec)
@@ -552,6 +605,7 @@ see docs/accuracy.md for what the numbers do and do not mean.`,
 	cmd.Flags().BoolVar(&verifyIndex, "verify-index", false, "run graph invariant checks")
 	cmd.Flags().BoolVar(&precision, "resolution-precision", false,
 		"measure the heuristic resolver against imported compiler facts")
+	cmd.Flags().BoolVar(&vacuum, "vacuum", false, "reclaim freelist pages and defragment index database")
 	return cmd
 }
 

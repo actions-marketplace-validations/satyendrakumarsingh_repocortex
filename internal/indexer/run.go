@@ -53,6 +53,9 @@ type Executor struct {
 
 	// RunnerKind is "native" or "docker".
 	RunnerKind string
+
+	// NodeHeapMB configures maximum old space size in MB for Node-based indexers (scip-python, scip-typescript).
+	NodeHeapMB int
 }
 
 // OutputDir creates the one directory this package writes to.
@@ -120,6 +123,14 @@ func (e *Executor) Run(ctx context.Context, inst Installed, p Project, repoRoot,
 	}
 	if res.ExitCode != 0 {
 		ex.Diagnostic = res.Diagnostic()
+		if res.ExitCode == 137 {
+			diag := "process terminated by Out-Of-Memory / SIGKILL (exit 137); consider increasing accuracy.indexers.node_heap_mb"
+			if ex.Diagnostic != "" {
+				ex.Diagnostic = diag + "\n" + ex.Diagnostic
+			} else {
+				ex.Diagnostic = diag
+			}
+		}
 		// KindUnsupported: the tool ran and could not index this project. In
 		// `auto` the caller degrades to heuristics; in `exact` it must fail.
 		// Either way it is not a RepoCortex bug and not retryable.
@@ -138,6 +149,13 @@ func (e *Executor) Run(ctx context.Context, inst Installed, p Project, repoRoot,
 		ex.Diagnostic = res.Diagnostic()
 		return ex, errs.Wrap(errs.KindUnsupported, "indexer.Run",
 			fmt.Errorf("%s reported success but wrote no index for %s", inst.Indexer, p)).
+			WithField("language", string(p.Language)).
+			WithField("project_dir", p.Dir)
+	}
+	if info.Size() == 0 {
+		ex.Diagnostic = res.Diagnostic()
+		return ex, errs.Wrap(errs.KindUnsupported, "indexer.Run",
+			fmt.Errorf("%s reported success but wrote an empty (0-byte) index for %s", inst.Indexer, p)).
 			WithField("language", string(p.Language)).
 			WithField("project_dir", p.Dir)
 	}
@@ -201,28 +219,49 @@ func (e *Executor) command(inst Installed, p Project, rel, projectDir, repoRoot,
 		}, nil
 
 	case SCIPTypeScript:
+		if e.RunnerKind == RunnerDocker {
+			return e.dockerNodeCommand(inst, p, rel, repoRoot, outDir, indexPath)
+		}
 		args := []string{"index", "--output", indexPath}
 		if !p.hasMarker("tsconfig.json") {
 			// Decided by a file NAME, never by its contents.
 			args = append(args, "--infer-tsconfig")
 		}
-		return Command{Path: inst.Path, Args: args, Dir: projectDir, Env: os.Environ()}, nil
+		env := os.Environ()
+		if e.NodeHeapMB > 0 {
+			env = append(env, fmt.Sprintf("NODE_OPTIONS=--max-old-space-size=%d", e.NodeHeapMB))
+		}
+		return Command{Path: inst.Path, Args: args, Dir: projectDir, Env: env}, nil
 
 	case SCIPPython:
+		if e.RunnerKind == RunnerDocker {
+			return e.dockerNodeCommand(inst, p, rel, repoRoot, outDir, indexPath)
+		}
+		args := []string{
+			"index", "--output", indexPath,
+			// Fixed literals. scip-python wants a project name and version,
+			// and the tempting sources for them — package.json's "name",
+			// pyproject.toml's [project], .repocortex.yml's project.name — are
+			// all attacker-controlled strings that would land in an argv. The
+			// name only labels the index, so a constant costs nothing.
+			"--project-name", "repocortex-repository",
+			"--project-version", "0.0.0",
+		}
+		if rel != "" {
+			args = append(args, "--path-prefix", rel)
+		}
+		if !hasPip(e.Runner) {
+			args = append(args, "--environment", "[]")
+		}
+		env := os.Environ()
+		if e.NodeHeapMB > 0 {
+			env = append(env, fmt.Sprintf("NODE_OPTIONS=--max-old-space-size=%d", e.NodeHeapMB))
+		}
 		return Command{
 			Path: inst.Path,
-			Args: []string{
-				"index", "--output", indexPath,
-				// Fixed literals. scip-python wants a project name and version,
-				// and the tempting sources for them — package.json's "name",
-				// pyproject.toml's [project], .repocortex.yml's project.name — are
-				// all attacker-controlled strings that would land in an argv. The
-				// name only labels the index, so a constant costs nothing.
-				"--project-name", "repocortex-repository",
-				"--project-version", "0.0.0",
-			},
-			Dir: projectDir,
-			Env: os.Environ(),
+			Args: args,
+			Dir:  projectDir,
+			Env:  env,
 		}, nil
 
 	case SCIPClang:
@@ -396,4 +435,73 @@ func currentUser() string {
 func dirExists(path string) bool {
 	fi, err := os.Stat(path)
 	return err == nil && fi.IsDir()
+}
+
+// dockerNodeCommand builds the container invocation for Node-based indexers (scip-python, scip-typescript).
+func (e *Executor) dockerNodeCommand(inst Installed, p Project, rel, repoRoot, outDir, indexPath string) (Command, error) {
+	docker, err := e.Runner.LookPath(string(ToolDocker))
+	if err != nil {
+		return Command{}, errs.Wrap(errs.KindUnsupported, "indexer.Run",
+			fmt.Errorf("runner is docker but docker is unavailable: %w", err))
+	}
+	if inst.Image == "" {
+		return Command{}, errs.New(errs.KindInvalid, "indexer.Run",
+			"docker runner requires a pinned image digest")
+	}
+
+	const workMount, outMount = "/work", "/out"
+	workdir := workMount
+	if rel != "" {
+		workdir = workMount + "/" + rel
+	}
+
+	args := []string{
+		"run", "--rm",
+		"-v", repoRoot + ":" + workMount,
+		"-v", outDir + ":" + outMount,
+		"-w", workdir,
+	}
+	if uid := currentUser(); uid != "" {
+		args = append(args, "-u", uid)
+		args = append(args, "-e", "HOME="+outMount)
+	}
+	if e.NodeHeapMB > 0 {
+		args = append(args, "-e", fmt.Sprintf("NODE_OPTIONS=--max-old-space-size=%d", e.NodeHeapMB))
+	}
+
+	args = append(args, inst.Image)
+	args = append(args, inst.DockerEntryOr("npx")...)
+
+	outIndex := outMount + "/" + filepath.Base(indexPath)
+	switch p.Language {
+	case LangTypeScript:
+		args = append(args, "index", "--output", outIndex)
+		if !p.hasMarker("tsconfig.json") {
+			args = append(args, "--infer-tsconfig")
+		}
+	case LangPython:
+		args = append(args, "index", "--output", outIndex,
+			"--project-name", "repocortex-repository",
+			"--project-version", "0.0.0",
+		)
+		if rel != "" {
+			args = append(args, "--path-prefix", rel)
+		}
+		args = append(args, "--environment", "[]")
+	}
+
+	return Command{Path: docker, Args: args, Env: os.Environ()}, nil
+}
+
+func hasPip(r Runner) bool {
+	if r == nil {
+		return false
+	}
+	if _, err := r.LookPath("pip"); err == nil {
+		return true
+	}
+	if _, err := r.LookPath("pip3"); err == nil {
+		return true
+	}
+	return false
 }

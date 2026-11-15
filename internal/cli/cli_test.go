@@ -231,6 +231,21 @@ func TestUnknownProjectRootIsRejected(t *testing.T) {
 	}
 }
 
+func TestDoctorVacuum(t *testing.T) {
+	root := t.TempDir()
+	initOut, err := run(t, root, "init")
+	if err != nil {
+		t.Fatalf("init: %v\n%s", err, initOut)
+	}
+	out, err := run(t, root, "doctor", "--vacuum")
+	if err != nil {
+		t.Fatalf("doctor --vacuum: %v\n%s", err, out)
+	}
+	if !strings.Contains(out, "vacuum") || !strings.Contains(out, "ok") {
+		t.Errorf("expected vacuum ok in output, got:\n%s", out)
+	}
+}
+
 func seed(t *testing.T, db *store.DB, ctx context.Context) {
 	t.Helper()
 	for _, s := range []string{
