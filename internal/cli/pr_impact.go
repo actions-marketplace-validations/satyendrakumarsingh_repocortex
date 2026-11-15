@@ -84,7 +84,7 @@ dashboard in GitHub-ready Markdown or JSON.
 			})
 
 			if outPath != "" {
-				if err := os.WriteFile(outPath, []byte(md), 0o644); err != nil {
+				if err := os.WriteFile(outPath, []byte(md), 0o600); err != nil {
 					return fmt.Errorf("pr-impact: write %s: %w", outPath, err)
 				}
 				fmt.Fprintf(cmd.OutOrStdout(), "PR impact report written to %s\n", outPath)
