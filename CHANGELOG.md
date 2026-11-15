@@ -9,7 +9,7 @@ Entries explain *why* a change was made and what failure mode it addressed,
 matching the standard the commit history sets. Every measurement quoted here came
 from an actual run.
 
-## [Unreleased]
+## [1.1.0] - 2026-11-15
 
 - **Vue 3 SFC SCIP Integration:** Extract `<script>` and `<script setup>` blocks from `.vue` Single File Components with exact line and column offset preservation, enabling `scip-typescript` to produce compiler ground truth occurrences and definitions directly mapped to `.vue` files.
 - **MCP Compact Profile (Front-Door Interface):** Added `compact` (and alias `frontdoor`) MCP profile exposing a single unified `repocortex` tool with action-based dispatch (`context`, `search`, `symbol`, `callers`, `callees`, `references`, `impact`, `tests`, `diff`, `overview`). Reduces agent prompt schema overhead from ~31 KB (28 tools) to < 1.2 KB (1 tool), saving over 25 KB (~7,500 prompt tokens) per request.
