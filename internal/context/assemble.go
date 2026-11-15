@@ -9,6 +9,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
+	"github.com/satyendrakumarsingh/repocortex/internal/security"
 	"github.com/satyendrakumarsingh/repocortex/pkg/model"
 )
 
@@ -536,6 +537,13 @@ func (b *builder) finishSignals(seeds []seed) {
 				c.affinity = a
 			}
 		}
+		if c.members > 0 {
+			cent := float64(c.members) / 5.0
+			if cent > 1.0 {
+				cent = 1.0
+			}
+			c.centrality = cent
+		}
 		if span > 0 && id > 0 {
 			if f, ok := b.cat.files[b.cat.symbols[id].FileID]; ok {
 				c.recency = float64(f.ModTimeUnix-b.cat.minMod) / float64(span)
@@ -851,7 +859,8 @@ func (b *builder) addExcerpts(ctx context.Context, items []Item, chosen []*candi
 		if excerpt == "" {
 			continue
 		}
-		items[i].Excerpt = excerpt
+		clean, _ := security.Redact(excerpt)
+		items[i].Excerpt = clean
 		remaining -= itemLines(items[i])
 	}
 }

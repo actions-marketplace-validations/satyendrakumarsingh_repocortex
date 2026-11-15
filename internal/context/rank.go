@@ -50,6 +50,7 @@ type Weights struct {
 	Lexical         float64
 	TestRelation    float64
 	DataAccess      float64
+	Centrality      float64
 	ModuleAffinity  float64
 	Recency         float64
 
@@ -242,6 +243,7 @@ func DefaultTuning() Tuning {
 			Lexical:         0.9,
 			TestRelation:    1.2,
 			DataAccess:      1.0,
+			Centrality:      0.4,
 			ModuleAffinity:  0.5,
 			Recency:         0.3,
 			ConfidenceShare: 0.6,
@@ -331,6 +333,7 @@ type candidate struct {
 	tables     []tableRef
 	tableOwner string
 	affinity   float64
+	centrality float64
 	recency    float64
 	members    int
 
@@ -440,7 +443,7 @@ func (c *candidate) computeScore(w Weights) {
 		c.score = 0
 		return
 	}
-	c.score = base + w.ModuleAffinity*c.affinity + w.Recency*c.recency
+	c.score = base + w.Centrality*c.centrality + w.ModuleAffinity*c.affinity + w.Recency*c.recency
 }
 
 // admit decides whether a candidate belongs in the pack at all.

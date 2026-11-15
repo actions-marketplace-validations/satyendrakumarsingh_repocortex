@@ -20,7 +20,7 @@ func TestWeightOrderingIsTheProduct(t *testing.T) {
 		t.Error("graph proximity must outrank lexical similarity, or text decoys win")
 	case !(w.TestRelation > w.Lexical), !(w.DataAccess > w.Lexical):
 		t.Error("structural relationships must outrank text matches")
-	case !(w.Lexical > w.ModuleAffinity), !(w.ModuleAffinity > w.Recency):
+	case !(w.Lexical > w.ModuleAffinity), !(w.ModuleAffinity > w.Centrality), !(w.Centrality > w.Recency):
 		t.Error("modifiers must stay below every admitting signal")
 	}
 }
@@ -31,7 +31,7 @@ func TestWeightOrderingIsTheProduct(t *testing.T) {
 func TestModifiersCannotAdmitAnything(t *testing.T) {
 	w := DefaultTuning().Weights
 
-	c := &candidate{affinity: 1, recency: 1}
+	c := &candidate{affinity: 1, recency: 1, centrality: 1}
 	c.computeScore(w)
 	if c.score != 0 {
 		t.Errorf("score = %.3f for a candidate with only modifier signals, want 0", c.score)

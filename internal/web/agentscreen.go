@@ -312,5 +312,11 @@ func mcpCatalogue() []MCPToolInfo {
 			Description: "Lists what the index could not see: unbound calls, unmapped endpoints, unparsed files.",
 			Benefit:     "Tells an agent where an empty answer is not proof.",
 		},
+		{
+			Name:        "repocortex_explore",
+			Category:    "Navigation",
+			Description: "Returns complete symbol details, line-numbered source excerpts, callers, callees, and impacted routes in a single turn.",
+			Benefit:     "Collapses 4 exploratory tool calls into 1 turn, saving agent context and preventing hallucinated call graphs.",
+		},
 	}
 }

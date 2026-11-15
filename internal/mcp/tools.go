@@ -318,6 +318,12 @@ func toolDescriptions() map[string]string {
 			"is bounded and may be truncated; the response says so explicitly when it is, so check " +
 			"that flag rather than assuming you have the full body.",
 
+		"repocortex_explore": "Deep-dive on a symbol in a single call. Returns its definition with a " +
+			"bounded verbatim source excerpt, upstream callers (each carrying a confidence tier: " +
+			"'exact' means a compiler proved the binding, 'high', 'medium', 'low' are inferred), " +
+			"downstream callees, blast-radius impact reach, and linked HTTP routes. An empty callers " +
+			"result is ambiguous and does not prove absence of callers; confirm with search_code.",
+
 		"find_references": "Find where a symbol is used. Every result carries a confidence tier: " +
 			"'exact' means a compiler proved the binding, 'high' and 'medium' and 'low' mean RepoCortex " +
 			"inferred it and may be wrong. Pass min_confidence='high' when a wrong result costs more " +
@@ -555,6 +561,8 @@ func (s *Server) registerTools() error {
 		Name:        "get_symbol",
 		Description: descs["get_symbol"],
 	}, s.getSymbol)
+
+	s.registerExplore(allowed)
 
 	addTool(s, allowed, &sdk.Tool{
 		Name:        "find_references",

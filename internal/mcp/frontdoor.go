@@ -9,7 +9,7 @@ import (
 )
 
 type frontdoorArgs struct {
-	Action string `json:"action" jsonschema:"The code intelligence action to execute: 'context' (task-oriented context pack), 'search' (code search), 'symbol' (find/get symbol definitions), 'callers' (find upstream callers), 'callees' (find downstream callees), 'references' (find usage references), 'impact' (blast-radius impact analysis), 'tests' (find tests covering a symbol), 'diff' (compress git diff), 'overview' (project overview), 'query' (read-only declarative graph query)."`
+	Action string `json:"action" jsonschema:"The code intelligence action to execute: 'explore' (single-turn deep dive on a symbol with code, callers, callees, blast-radius and routes), 'context' (task-oriented context pack), 'search' (code search), 'symbol' (find/get symbol definitions), 'callers' (find upstream callers), 'callees' (find downstream callees), 'references' (find usage references), 'impact' (blast-radius impact analysis), 'tests' (find tests covering a symbol), 'diff' (compress git diff), 'overview' (project overview), 'query' (read-only declarative graph query)."`
 
 	Query string `json:"query,omitempty" jsonschema:"Search query or natural language task description."`
 	Name  string `json:"name,omitempty" jsonschema:"Symbol name to look up or analyze."`
@@ -45,6 +45,19 @@ func (s *Server) repocortexFrontdoor(ctx context.Context, req *sdk.CallToolReque
 	}
 
 	switch action {
+	case "explore", "inspect":
+		name := args.Name
+		if name == "" {
+			name = args.Query
+		}
+		return s.exploreSymbol(ctx, req, exploreArgs{
+			Name:          name,
+			Path:          args.Path,
+			Line:          args.Line,
+			MinConfidence: args.MinConfidence,
+			Limit:         args.Limit,
+		})
+
 	case "context", "task", "task_context", "get_task_context":
 		if s.deps.Graph == nil {
 			return failWith("unsupported",

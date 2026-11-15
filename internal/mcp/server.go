@@ -293,6 +293,7 @@ func profileLists() (minimal, standard []string) {
 		"minimize_diff",
 		"plan_change",
 		"list_blindspots",
+		"repocortex_explore",
 	)
 
 	return minimal, standard

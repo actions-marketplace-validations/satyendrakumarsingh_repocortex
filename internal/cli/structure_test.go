@@ -908,6 +908,7 @@ func TestEveryAgentToolHasACommand(t *testing.T) {
 		"list_communities":        "communities",
 		"search_graph":            "query",
 		"get_session_stats":       "stats",
+		"repocortex_explore":      "explore",
 	}
 	root := NewRoot()
 	commands := map[string]bool{}

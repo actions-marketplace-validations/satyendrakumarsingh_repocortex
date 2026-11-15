@@ -54,7 +54,7 @@ func commandGroupOf() map[string]string {
 		"agent": groupSetup, "hooks": groupSetup, "watch": groupSetup,
 
 		// Ask the graph.
-		"context": groupAsk, "search": groupAsk, "symbol": groupAsk,
+		"context": groupAsk, "search": groupAsk, "symbol": groupAsk, "explore": groupAsk,
 		"references": groupAsk, "callers": groupAsk, "callees": groupAsk,
 		"implementations": groupAsk, "path": groupAsk, "tests": groupAsk,
 		"outline": groupAsk, "api": groupAsk, "db": groupAsk,
@@ -62,7 +62,7 @@ func commandGroupOf() map[string]string {
 		"communities": groupAsk, "query": groupAsk,
 
 		// Before and after a change.
-		"impact": groupChange, "plan-change": groupChange, "rename": groupChange,
+		"impact": groupChange, "pr-impact": groupChange, "plan-change": groupChange, "rename": groupChange,
 		"move":   groupChange,
 		"owners": groupChange, "compile": groupChange, "verify": groupChange,
 		"diff": groupChange, "minimize-diff": groupChange,
@@ -75,7 +75,7 @@ func commandGroupOf() map[string]string {
 
 		// Serve agents and integrate.
 		"serve": groupServe, "tool": groupServe, "stats": groupServe, "ui": groupServe,
-		"system": groupServe, "trace": groupServe, "export": groupServe,
+		"system": groupServe, "trace": groupServe, "export": groupServe, "pack": groupServe,
 		"docs": groupServe, "report": groupServe, "sbom": groupServe,
 	}
 }
