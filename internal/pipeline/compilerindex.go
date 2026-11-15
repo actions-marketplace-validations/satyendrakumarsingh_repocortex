@@ -294,9 +294,13 @@ func RunCompilerIndexers(ctx context.Context, reg *registry.Registry, runID int6
 			break
 		}
 		start := time.Now()
-		imp := scipimport.NewImporter(reg, runID, scip.Options{
+		impOpts := scip.Options{
 			RepoRoot: opts.Root, MaxBytes: scip.DefaultMaxBytes,
-		}).Collect(proof).ShareTables(shared)
+		}
+		if cs.Dir != "" && cs.Dir != "." {
+			impOpts.PathPrefix = cs.Dir
+		}
+		imp := scipimport.NewImporter(reg, runID, impOpts).Collect(proof).ShareTables(shared)
 		res, err := imp.Import(ctx, filepath.Join(opts.Root, filepath.FromSlash(cs.Output)))
 		cs.ImportTime = time.Since(start)
 		cs.Import = res

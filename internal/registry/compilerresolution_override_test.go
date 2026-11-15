@@ -58,10 +58,10 @@ func TestCompilerMovesAReferenceTheResolverBoundElsewhere(t *testing.T) {
 	}
 }
 
-// TestCompilerLeavesAgreeingBindingsAlone: a reference the resolver bound to the
-// definition the compiler also names is not rewritten, so the accuracy report
-// still sees the resolver's own answer as its own.
-func TestCompilerLeavesAgreeingBindingsAlone(t *testing.T) {
+// TestCompilerConfirmsAgreeingBindingsWithCompilerProvenance: a reference the resolver
+// bound to the definition the compiler also names is confirmed with resolution_source='compiler',
+// so get_resolution_coverage and resolution stats count it as compiler-proven.
+func TestCompilerConfirmsAgreeingBindingsWithCompilerProvenance(t *testing.T) {
 	f := newCRFixture(t)
 	f.bindRef(t, "Save", 100, 4, "Save")
 	f.addCompilerEdgeAt(t, 100, 9, "Save")
@@ -70,11 +70,11 @@ func TestCompilerLeavesAgreeingBindingsAlone(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if st.Bound != 0 {
-		t.Fatalf("stats %+v, want nothing settled", st)
+	if st.Confirmed != 1 || st.Bound != 0 {
+		t.Fatalf("stats %+v, want 1 confirmed and 0 newly bound", st)
 	}
-	if r := f.refs(t)["Save@100"]; r.source != "" || r.prior != "" {
-		t.Errorf("an agreeing binding was stamped: %+v", r)
+	if r := f.refs(t)["Save@100"]; r.source != "compiler" || r.resolution != "resolved" {
+		t.Errorf("agreeing binding was not marked compiler-proven: %+v", r)
 	}
 }
 

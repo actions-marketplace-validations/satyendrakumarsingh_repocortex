@@ -142,15 +142,6 @@ func (r *Registry) MarkRuledOut(ctx context.Context, ids []int64) (marked, unbou
 			args = append(args, id)
 		}
 		res, err := r.db.ExecContext(ctx, `
-			UPDATE symbol_references SET resolution_source = ?
-			 WHERE resolution <> 'resolved' AND id IN (`+ph+`)`, args...)
-		if err != nil {
-			return marked, unbound, fmt.Errorf("registry: mark references ruled out: %w", err)
-		}
-		if c, err := res.RowsAffected(); err == nil {
-			marked += int(c)
-		}
-		res, err = r.db.ExecContext(ctx, `
 			UPDATE symbol_references
 			   SET prior_resolution   = CASE WHEN prior_resolution = '' THEN resolution
 			                                 ELSE prior_resolution END,
@@ -164,6 +155,19 @@ func (r *Registry) MarkRuledOut(ctx context.Context, ids []int64) (marked, unbou
 		if c, err := res.RowsAffected(); err == nil {
 			marked += int(c)
 			unbound += int(c)
+		}
+		res, err = r.db.ExecContext(ctx, `
+			UPDATE symbol_references
+			   SET prior_resolution   = CASE WHEN prior_resolution = '' THEN resolution
+			                                 ELSE prior_resolution END,
+			       resolution         = 'unresolved',
+			       resolution_source  = ?
+			 WHERE resolution <> 'resolved' AND resolution_source = '' AND id IN (`+ph+`)`, args...)
+		if err != nil {
+			return marked, unbound, fmt.Errorf("registry: mark references ruled out: %w", err)
+		}
+		if c, err := res.RowsAffected(); err == nil {
+			marked += int(c)
 		}
 		ids = ids[n:]
 	}

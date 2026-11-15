@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"time"
 
 	"github.com/satyendrakumarsingh/repocortex/internal/errs"
@@ -247,13 +248,25 @@ func (e *Executor) command(inst Installed, p Project, rel, projectDir, repoRoot,
 			"--project-name", "repocortex-repository",
 			"--project-version", "0.0.0",
 		}
-		if rel != "" {
-			args = append(args, "--path-prefix", rel)
+		env := os.Environ()
+		hasVenvPip := false
+		if venv := findPythonVenv(projectDir, repoRoot); venv != "" {
+			env = setEnv(env, "VIRTUAL_ENV", venv)
+			binDir := filepath.Join(venv, "bin")
+			if fi, err := os.Stat(binDir); err != nil || !fi.IsDir() {
+				binDir = filepath.Join(venv, "Scripts")
+			}
+			env = prependEnv(env, "PATH", binDir, filepath.ListSeparator)
+			if exists(filepath.Join(binDir, "pip")) || exists(filepath.Join(binDir, "pip3")) || exists(filepath.Join(binDir, "pip.exe")) {
+				hasVenvPip = true
+			}
 		}
-		if !hasPip(e.Runner) {
+		if pyPath := findPythonPath(projectDir, repoRoot); pyPath != "" {
+			env = prependEnv(env, "PYTHONPATH", pyPath, filepath.ListSeparator)
+		}
+		if !hasVenvPip && !hasPip(e.Runner) {
 			args = append(args, "--environment", "[]")
 		}
-		env := os.Environ()
 		if e.NodeHeapMB > 0 {
 			env = append(env, fmt.Sprintf("NODE_OPTIONS=--max-old-space-size=%d", e.NodeHeapMB))
 		}
@@ -484,13 +497,135 @@ func (e *Executor) dockerNodeCommand(inst Installed, p Project, rel, repoRoot, o
 			"--project-name", "repocortex-repository",
 			"--project-version", "0.0.0",
 		)
-		if rel != "" {
-			args = append(args, "--path-prefix", rel)
-		}
 		args = append(args, "--environment", "[]")
 	}
 
 	return Command{Path: docker, Args: args, Env: os.Environ()}, nil
+}
+
+// findPythonVenv locates a virtual environment for projectDir, checking
+// projectDir/.venv, projectDir/venv, sibling services in monorepos, and repoRoot.
+func findPythonVenv(projectDir, repoRoot string) string {
+	candidates := []string{
+		filepath.Join(projectDir, ".venv"),
+		filepath.Join(projectDir, "venv"),
+	}
+	for _, c := range candidates {
+		if isVenv(c) {
+			return c
+		}
+	}
+
+	// Sibling services in monorepos (e.g. backend/python/*/.venv)
+	parent := filepath.Dir(projectDir)
+	if parent != "" && parent != "." && parent != repoRoot {
+		if entries, err := os.ReadDir(parent); err == nil {
+			for _, e := range entries {
+				if e.IsDir() {
+					p := filepath.Join(parent, e.Name(), ".venv")
+					if isVenv(p) {
+						return p
+					}
+					p2 := filepath.Join(parent, e.Name(), "venv")
+					if isVenv(p2) {
+						return p2
+					}
+				}
+			}
+		}
+	}
+
+	// Repository root fallback
+	if repoRoot != "" && repoRoot != projectDir {
+		for _, name := range []string{".venv", "venv"} {
+			p := filepath.Join(repoRoot, name)
+			if isVenv(p) {
+				return p
+			}
+		}
+	}
+	return ""
+}
+
+func isVenv(dir string) bool {
+	fi, err := os.Stat(dir)
+	if err != nil || !fi.IsDir() {
+		return false
+	}
+	bin := filepath.Join(dir, "bin")
+	scripts := filepath.Join(dir, "Scripts")
+	return exists(bin) || exists(scripts)
+}
+
+// findPythonPath locates shared service or library directories to add to PYTHONPATH.
+func findPythonPath(projectDir, repoRoot string) string {
+	var paths []string
+	addIfDir := func(p string) {
+		if fi, err := os.Stat(p); err == nil && fi.IsDir() {
+			paths = append(paths, p)
+		}
+	}
+
+	// Check sibling directories in monorepo
+	parent := filepath.Dir(projectDir)
+	if parent != "" && parent != "." && parent != repoRoot {
+		if entries, err := os.ReadDir(parent); err == nil {
+			for _, e := range entries {
+				if !e.IsDir() {
+					continue
+				}
+				name := strings.ToLower(e.Name())
+				if strings.HasPrefix(name, "shared") || strings.HasPrefix(name, "common") || strings.HasPrefix(name, "lib") {
+					full := filepath.Join(parent, e.Name())
+					if full != projectDir {
+						addIfDir(full)
+					}
+				}
+			}
+		}
+	}
+
+	// Check repoRoot
+	if repoRoot != "" && repoRoot != projectDir {
+		for _, name := range []string{"shared", "common", "lib", "shared-service"} {
+			full := filepath.Join(repoRoot, name)
+			if full != projectDir {
+				addIfDir(full)
+			}
+		}
+	}
+
+	if len(paths) == 0 {
+		return ""
+	}
+	return strings.Join(paths, string(filepath.ListSeparator))
+}
+
+func prependEnv(env []string, key, val string, sep rune) []string {
+	prefix := key + "="
+	for i, entry := range env {
+		if strings.HasPrefix(entry, prefix) {
+			old := strings.TrimPrefix(entry, prefix)
+			if old == "" {
+				env[i] = prefix + val
+			} else {
+				env[i] = prefix + val + string(sep) + old
+			}
+			return env
+		}
+	}
+	return append(env, prefix+val)
+}
+
+func setEnv(env []string, key, val string) []string {
+	prefix := key + "="
+	for i, entry := range env {
+		if strings.HasPrefix(entry, prefix) {
+			env[i] = prefix + val
+			return env
+		}
+	}
+	return append(env, prefix+val)
 }
 
 func hasPip(r Runner) bool {

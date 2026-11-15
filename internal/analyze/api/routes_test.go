@@ -141,6 +141,27 @@ def flask_default():
 	assertRoute(t, routes, "GET /flask-default", "flask_default")
 }
 
+func TestExtractFastAPIMultilineDecorator(t *testing.T) {
+	src := `from fastapi import APIRouter
+
+router = APIRouter()
+
+@router.patch(
+    "/{task_id}/device-model",
+    response_model=TaskResponse,
+    summary="Change the device model of an open installation task",
+    dependencies=[Depends(require_roles(_ROLES))],
+)
+async def change_task_device_model(
+    task_id: int,
+    body: DeviceModelChangeIn,
+):
+    pass
+`
+	routes := Extract("task_device_model.py", []byte(src))
+	assertRoute(t, routes, "PATCH /{task_id}/device-model", "change_task_device_model")
+}
+
 func TestExtractExpress(t *testing.T) {
 	src := `const app = express();
 

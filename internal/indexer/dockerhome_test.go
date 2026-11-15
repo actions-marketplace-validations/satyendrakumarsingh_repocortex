@@ -207,8 +207,8 @@ func TestDockerNodeCommandForPythonAndTypeScript(t *testing.T) {
 	if !strings.Contains(pyJoined, "NODE_OPTIONS=--max-old-space-size=8192") {
 		t.Errorf("missing NODE_OPTIONS: %s", pyJoined)
 	}
-	if !strings.Contains(pyJoined, "--path-prefix backend/python/svc") {
-		t.Errorf("missing --path-prefix for python monorepo: %s", pyJoined)
+	if strings.Contains(pyJoined, "--path-prefix") {
+		t.Errorf("scip-python does not support --path-prefix: %s", pyJoined)
 	}
 	if !strings.Contains(pyJoined, "--environment []") {
 		t.Errorf("missing --environment [] for python container run: %s", pyJoined)
