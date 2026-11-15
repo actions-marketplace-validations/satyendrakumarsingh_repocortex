@@ -1,0 +1,161 @@
+name: 'RepoCortex Change-Safety Action'
+description: 'Deterministic code intelligence and change safety for pull requests: architecture verification, impact analysis, code blindspots, PR reports, and SARIF.'
+author: 'Satyendra Singh'
+
+branding:
+  icon: 'shield-check'
+  color: 'blue'
+
+inputs:
+  version:
+    description: 'RepoCortex release version to use (e.g. v1.1.0 or latest)'
+    required: false
+    default: 'v1.1.0'
+  fail-on:
+    description: 'Lowest blindspot or architecture severity that fails the check (high | medium | low | none)'
+    required: false
+    default: 'high'
+  accuracy:
+    description: 'Accuracy mode: auto (install and import SCIP compiler facts) or fast (heuristic only)'
+    required: false
+    default: 'auto'
+  comment-pr:
+    description: 'Whether to post or update the sticky pull request report comment'
+    required: false
+    default: 'true'
+  github-token:
+    description: 'GitHub token for PR comment updates and API calls'
+    required: false
+    default: ${{ github.token }}
+  sarif-out:
+    description: 'Path where the SARIF 2.1.0 report will be written'
+    required: false
+    default: 'repocortex-out/repocortex.sarif'
+  pr-report-out:
+    description: 'Path where the PR markdown report will be written'
+    required: false
+    default: 'repocortex-out/pr-report.md'
+
+outputs:
+  sarif-path:
+    description: 'Path to the generated SARIF report file'
+    value: ${{ inputs.sarif-out }}
+  pr-report-path:
+    description: 'Path to the generated PR report file'
+    value: ${{ inputs.pr-report-out }}
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Ensure RepoCortex Binary
+      shell: bash
+      env:
+        VERSION: ${{ inputs.version }}
+      run: |
+        if command -v repocortex >/dev/null 2>&1; then
+          echo "Using existing repocortex binary: $(command -v repocortex)"
+          repocortex version || true
+        else
+          mkdir -p "${RUNNER_TEMP}/bin"
+          "${{ github.action_path }}/install.sh" --dir "${RUNNER_TEMP}/bin" --version "$VERSION"
+          echo "${RUNNER_TEMP}/bin" >> "$GITHUB_PATH"
+          export PATH="${RUNNER_TEMP}/bin:$PATH"
+          repocortex version || true
+        fi
+
+    - name: Index and Resolve Code Graph
+      shell: bash
+      run: |
+        mkdir -p repocortex-out
+        repocortex init
+        repocortex index
+        repocortex resolve
+
+    - name: Import Compiler Facts (SCIP)
+      if: inputs.accuracy == 'auto'
+      shell: bash
+      run: |
+        mkdir -p repocortex-out/scip
+        { repocortex indexers install --yes --out-dir repocortex-out/scip 2>&1 \
+            || echo "::warning::compiler indexers unavailable; graph edges remain heuristic"; } \
+          | tee repocortex-out/indexers.txt
+        imported=0
+        for f in repocortex-out/scip/*.scip; do
+          [ -f "$f" ] || continue
+          if repocortex scip import "$f"; then
+            imported=$((imported + 1))
+          else
+            echo "::warning::scip import of $(basename "$f") failed; edges remain heuristic"
+          fi
+        done
+        echo "Imported $imported compiler SCIP indexes"
+
+    - name: Verify Index Integrity
+      shell: bash
+      run: repocortex doctor --verify-index
+
+    - name: Collect Architectural and Blindspot Findings
+      shell: bash
+      run: |
+        mkdir -p repocortex-out
+        repocortex --json arch > repocortex-out/arch.json
+        repocortex --json blindspots > repocortex-out/missed.json
+
+    - name: Compute Pull Request Impact
+      if: github.event_name == 'pull_request'
+      shell: bash
+      run: |
+        if [ -n "${{ github.base_ref }}" ]; then
+          git fetch origin "${{ github.base_ref }}" --depth=1 || true
+          repocortex --json impact --base "origin/${{ github.base_ref }}" --head HEAD > repocortex-out/impact.json || true
+        fi
+
+    - name: Render PR and SARIF Reports
+      shell: bash
+      env:
+        SARIF_OUT: ${{ inputs.sarif-out }}
+        PR_OUT: ${{ inputs.pr-report-out }}
+      run: |
+        mkdir -p "$(dirname "$SARIF_OUT")" "$(dirname "$PR_OUT")"
+        repocortex report sarif --arch repocortex-out/arch.json --blindspots repocortex-out/missed.json --out "$SARIF_OUT"
+        if [ -f repocortex-out/impact.json ]; then
+          repocortex report pr --impact repocortex-out/impact.json --arch repocortex-out/arch.json --blindspots repocortex-out/missed.json --out "$PR_OUT"
+        else
+          repocortex report pr --arch repocortex-out/arch.json --blindspots repocortex-out/missed.json --out "$PR_OUT"
+        fi
+        if [ -f "$PR_OUT" ]; then
+          cat "$PR_OUT" >> "$GITHUB_STEP_SUMMARY"
+        fi
+
+    - name: Post or Update Sticky PR Comment
+      if: inputs.comment-pr == 'true' && github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.github-token }}
+        REPO: ${{ github.repository }}
+        PR: ${{ github.event.pull_request.number }}
+        PR_OUT: ${{ inputs.pr-report-out }}
+      run: |
+        if command -v gh >/dev/null 2>&1 && [ -f "$PR_OUT" ]; then
+          id=$(gh api "repos/$REPO/issues/$PR/comments" --paginate \
+            --jq '.[] | select(.body | contains("<!-- repocortex:pr-report -->")) | .id' | head -n 1)
+          if [ -n "$id" ]; then
+            gh api -X PATCH "repos/$REPO/issues/comments/$id" -F body=@"$PR_OUT"
+          else
+            gh api -X POST "repos/$REPO/issues/$PR/comments" -F body=@"$PR_OUT"
+          fi
+        fi
+
+    - name: Enforce Architecture Rules
+      if: inputs.fail-on != 'none'
+      shell: bash
+      env:
+        FAIL_ON: ${{ inputs.fail-on }}
+      run: repocortex arch --fail-on "$FAIL_ON"
+
+    - name: Audit Code Blindspots
+      if: inputs.fail-on != 'none'
+      shell: bash
+      env:
+        FAIL_ON: ${{ inputs.fail-on }}
+      run: repocortex blindspots --fail-on "$FAIL_ON"

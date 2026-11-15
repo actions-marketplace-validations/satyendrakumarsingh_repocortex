@@ -9,6 +9,12 @@ Entries explain *why* a change was made and what failure mode it addressed,
 matching the standard the commit history sets. Every measurement quoted here came
 from an actual run.
 
+## [Unreleased]
+
+- **Reusable GitHub Action (`action.yml`):** Added a composite action at the repository root allowing any project to run change safety, PR impact, blindspots, and SARIF export with a single line (`uses: satyendrakumarsingh/repocortex@v1`).
+- **1-Click Agent Deeplinks (`repocortex install --links`):** Added protocol handlers and 1-click install links for Cursor (`cursor://`), VS Code (`vscode://`), Windsurf, and LM Studio.
+- **Declarative Graph Querying (`search_graph`):** Added safe, read-only SQL querying against the SQLite index database (`symbols`, `edges`, `files`, `references`, `http_routes`, `data_access`) via MCP full profile (`search_graph`), CLI (`repocortex query`) and compact frontdoor (`action: "query"`).
+
 ## [1.1.0] - 2026-11-15
 
 - **Vue 3 SFC SCIP Integration:** Extract `<script>` and `<script setup>` blocks from `.vue` Single File Components with exact line and column offset preservation, enabling `scip-typescript` to produce compiler ground truth occurrences and definitions directly mapped to `.vue` files.

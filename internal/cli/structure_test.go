@@ -906,6 +906,7 @@ func TestEveryAgentToolHasACommand(t *testing.T) {
 		"list_dead_code":          "dead-code",
 		"list_hotspots":           "hotspots",
 		"list_communities":        "communities",
+		"search_graph":            "query",
 		"get_session_stats":       "stats",
 	}
 	root := NewRoot()

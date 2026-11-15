@@ -396,6 +396,7 @@ func TestEveryToolAnswerStaysBoundedAtScale(t *testing.T) {
 		// The widest call it accepts: every confidence counted, so every
 		// edge in the fixture becomes part of a link.
 		"list_communities":  {"min_confidence": "low"},
+		"search_graph":      {"query": "SELECT count(*) FROM symbols"},
 		"get_session_stats": {},
 	}
 

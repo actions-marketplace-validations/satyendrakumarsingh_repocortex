@@ -274,6 +274,7 @@ func newInstallCmd(g *Global) *cobra.Command {
 		createAll bool
 		withRules bool
 		list      bool
+		links     bool
 	)
 	cmd := &cobra.Command{
 		Use:   "install",
@@ -313,6 +314,10 @@ RepoCortex before it searches.`,
 				printClientList(out, home, root, spec)
 				return nil
 			}
+			if links {
+				printInstallLinks(out, root)
+				return nil
+			}
 
 			results, err := installClients(home, root, spec, createAll, dryRun)
 			written := printInstallResults(out, results, dryRun)
@@ -345,5 +350,6 @@ RepoCortex before it searches.`,
 	cmd.Flags().BoolVar(&createAll, "create", false, "write every supported client's config, even where the client was not detected")
 	cmd.Flags().BoolVar(&withRules, "rules", false, "add agent guidance to AGENTS.md and to existing agent instruction files")
 	cmd.Flags().BoolVar(&list, "list", false, "list every supported agent, whether it is detected, and manual steps for the rest")
+	cmd.Flags().BoolVar(&links, "links", false, "display 1-click install deep links for Cursor, VS Code, Windsurf and LM Studio")
 	return cmd
 }

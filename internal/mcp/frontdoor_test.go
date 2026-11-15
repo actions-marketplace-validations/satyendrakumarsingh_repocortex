@@ -62,7 +62,26 @@ func TestFrontdoorCompactProfile(t *testing.T) {
 		t.Fatal("empty response from diff")
 	}
 
-	// 4. Invalid action gives friendly error
+	// 4. Query action
+	res, err = fs.sess.CallTool(ctx, &sdk.CallToolParams{
+		Name: "repocortex",
+		Arguments: map[string]any{
+			"action": "query",
+			"query":  "SELECT count(*) as total_symbols FROM symbols",
+		},
+	})
+	if err != nil {
+		t.Fatalf("call query: %v", err)
+	}
+	if len(res.Content) == 0 {
+		t.Fatal("empty response from query")
+	}
+	qText := res.Content[0].(*sdk.TextContent).Text
+	if !strings.Contains(qText, "total_symbols") {
+		t.Errorf("expected table with total_symbols, got: %s", qText)
+	}
+
+	// 5. Invalid action gives friendly error
 	res, err = fs.sess.CallTool(ctx, &sdk.CallToolParams{
 		Name: "repocortex",
 		Arguments: map[string]any{

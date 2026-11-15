@@ -233,6 +233,7 @@ func newServer(deps Deps, share *Server) (*Server, error) {
 	s.registerKnowledge(allowed)
 	s.registerCommunities(allowed)
 	s.registerSessionStats(allowed)
+	s.registerSearchGraph(allowed)
 	s.registerPrompts()
 	s.registerFrontdoor(allowed)
 
@@ -322,6 +323,7 @@ func fullOnlyTools() []string {
 		"list_dead_code",
 		"list_hotspots",
 		"list_communities",
+		"search_graph",
 		// Full-only on purpose: a tool that reports what a session cost must
 		// not add its own definition to every session that never asks. See
 		// registerSessionStats.

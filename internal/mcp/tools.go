@@ -521,10 +521,14 @@ func toolDescriptions() map[string]string {
 			"index could not bind; the response says how many those are. No communities found is not " +
 			"proof the files are unrelated.",
 
+		"search_graph": "Execute a guarded, read-only SQL query against the repository's code graph " +
+			"(tables: symbols, edges, files, references, http_routes, data_access). Enables custom " +
+			"topological filtering and multi-hop queries without multi-roundtrip MCP calls.",
+
 		"repocortex": "Compact front-door code intelligence interface. Executes targeted code intelligence actions " +
-			"(context, search, symbol, callers, callees, references, impact, tests, diff, overview) through a single unified schema, " +
+			"(context, search, symbol, callers, callees, references, impact, tests, diff, overview, query) through a single unified schema, " +
 			"saving over 25 KB of agent token context. Use action='context' for task-oriented context packing, 'search' for regex/code " +
-			"search, 'symbol' for definitions, 'callers'/'callees'/'references' for graph traversal, and 'impact'/'tests' for blast-radius analysis.",
+			"search, 'symbol' for definitions, 'callers'/'callees'/'references' for graph traversal, 'impact'/'tests' for blast-radius analysis, and 'query' for declarative graph queries.",
 	}
 }
 

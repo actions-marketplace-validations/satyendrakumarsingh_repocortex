@@ -139,6 +139,7 @@ func callsForEveryTool(target, path string) map[string]map[string]any {
 		"list_hotspots":           {},
 		"list_knowledge_risks":    {},
 		"list_communities":        {},
+		"search_graph":            {"query": "SELECT count(*) FROM symbols"},
 		"get_session_stats":       {},
 	}
 }

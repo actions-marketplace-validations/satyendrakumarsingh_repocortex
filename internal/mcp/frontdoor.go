@@ -9,7 +9,7 @@ import (
 )
 
 type frontdoorArgs struct {
-	Action string `json:"action" jsonschema:"The code intelligence action to execute: 'context' (task-oriented context pack), 'search' (code search), 'symbol' (find/get symbol definitions), 'callers' (find upstream callers), 'callees' (find downstream callees), 'references' (find usage references), 'impact' (blast-radius impact analysis), 'tests' (find tests covering a symbol), 'diff' (compress git diff), 'overview' (project overview)."`
+	Action string `json:"action" jsonschema:"The code intelligence action to execute: 'context' (task-oriented context pack), 'search' (code search), 'symbol' (find/get symbol definitions), 'callers' (find upstream callers), 'callees' (find downstream callees), 'references' (find usage references), 'impact' (blast-radius impact analysis), 'tests' (find tests covering a symbol), 'diff' (compress git diff), 'overview' (project overview), 'query' (read-only declarative graph query)."`
 
 	Query string `json:"query,omitempty" jsonschema:"Search query or natural language task description."`
 	Name  string `json:"name,omitempty" jsonschema:"Symbol name to look up or analyze."`
@@ -40,7 +40,7 @@ func (s *Server) repocortexFrontdoor(ctx context.Context, req *sdk.CallToolReque
 	action := strings.ToLower(strings.TrimSpace(args.Action))
 	if action == "" {
 		return failWith("invalid_argument",
-			"Specify an action: 'context', 'search', 'symbol', 'callers', 'callees', 'references', 'impact', 'tests', 'diff', or 'overview'.",
+			"Specify an action: 'context', 'search', 'symbol', 'callers', 'callees', 'references', 'impact', 'tests', 'diff', 'overview', or 'query'.",
 			"action is required")
 	}
 
@@ -181,9 +181,19 @@ func (s *Server) repocortexFrontdoor(ctx context.Context, req *sdk.CallToolReque
 	case "overview", "project_overview", "get_project_overview":
 		return s.getProjectOverview(ctx, req, emptyArgs{})
 
+	case "query", "sql", "graph_query", "query_graph", "search_graph":
+		q := args.Query
+		if q == "" {
+			q = args.Name
+		}
+		return s.searchGraph(ctx, req, searchGraphArgs{
+			Query: q,
+			Limit: args.Limit,
+		})
+
 	default:
 		return failWith("invalid_argument",
-			fmt.Sprintf("Unknown action %q. Supported actions: 'context', 'search', 'symbol', 'callers', 'callees', 'references', 'impact', 'tests', 'diff', 'overview'.", action),
+			fmt.Sprintf("Unknown action %q. Supported actions: 'context', 'search', 'symbol', 'callers', 'callees', 'references', 'impact', 'tests', 'diff', 'overview', 'query'.", action),
 			"unknown action: %s", action)
 	}
 }

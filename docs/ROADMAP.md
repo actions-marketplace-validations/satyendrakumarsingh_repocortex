@@ -19,8 +19,8 @@ date; items move to the [CHANGELOG](../CHANGELOG.md) when they ship.
 
 | Item | Status | Why it matters |
 |---|---|---|
-| Reusable GitHub Action (`uses: satyendrakumarsingh/repocortex@v1`) | Planned | Today the change-safety gate is a workflow you copy. A versioned action is one line and updates itself. |
-| Install links for agents | Exploring | Cursor, VS Code and LM Studio accept install deeplinks; a link per agent in the docs and the portal saves a step. |
+| Reusable GitHub Action (`uses: satyendrakumarsingh/repocortex@v1`) | **Shipped** | Composite action in `action.yml` runs index, SCIP import, PR impact, SARIF and sticky comments in one step. |
+| Install links for agents | **Shipped** | `repocortex install --links` prints 1-click deep-links for Cursor (`cursor://`), VS Code (`vscode://`), Windsurf and LM Studio. |
 | Editor extension (VS Code) | **Shipped** | Blast radius, graph queries and callers inline in `editors/vscode`, reading from the local SQLite index. |
 | Recorded demo | Planned | A short screen recording of an agent calling `get_task_context` and `analyze_impact`. |
 
@@ -32,7 +32,8 @@ date; items move to the [CHANGELOG](../CHANGELOG.md) when they ship.
 | Compact MCP frontdoor profile | **Shipped** | Exposes a single unified `repocortex` router tool (<300 tokens / 1.2 KB), saving ~25 KB of prompt context. |
 | Temporal git coupling for impact | **Shipped** | Mines commit co-change history to boost PR blast-radius recall and discover coupled companion files. |
 | Test discovery through interface dispatch | Planned | `untested_critical` misses tests that reach a method through an interface or a shared method name. It is reported, not gated, until this lands. |
-| Call binding by column, not line | Exploring | The compiler import only promotes a call when its line has one target, so `return r.Key()` beside a `Key` type stays unbound. |
+| Declarative graph query (`search_graph`) | **Shipped** | Guarded read-only SQL graph query tool via MCP (`search_graph`), CLI (`repocortex query`) and compact frontdoor (`action: query`), matching GitNexus and codebase-memory-mcp. |
+| Call binding by column and name | **Shipped** | `PromoteCalls` pairs compiler occurrences with parser call columns via `pairsOneToOne` and `(line, name)` grouping. |
 | Incremental re-binding of cross-file handlers | Planned | `repocortex resolve` binds route handlers declared in another file; an incremental update does not re-run that pass. |
 | Deeper resolution for more languages | Exploring | Eight languages are `typed` (C#, C++, Go, Java, Kotlin, Python, Scala, TypeScript), six are `resolved` (C, JavaScript, PHP, Ruby, Rust, TSX), 77 are `parsed` (definitions and search only) and 115 are text only. Python was promoted on a measurement against `scip-python` over four repositories ([accuracy.md](accuracy.md)); the others are typed by an arity query and were read by hand on one project each ([verification](verification/2026-11-13/README.md)), where their `low` tier measured poorly. Rust is next and its tier has no compiler-index measurement. See `repocortex languages`. |
 

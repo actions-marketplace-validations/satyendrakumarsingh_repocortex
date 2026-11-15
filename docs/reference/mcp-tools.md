@@ -25,10 +25,10 @@ mcp:
 
 | Profile | Tools |
 |---|---|
-| `compact` | 1: `repocortex` (front-door interface saving ~25 KB of prompt context; actions: context, search, symbol, callers, callees, references, impact, tests, diff, overview) |
+| `compact` | 1: `repocortex` (front-door interface saving ~25 KB of prompt context; actions: context, search, symbol, callers, callees, references, impact, tests, diff, overview, query) |
 | `minimal` (default) | 7: `get_task_context`, `get_project_overview`, `search_code`, `find_symbol`, `get_symbol`, `find_references`, `find_callers` |
 | `standard` | 18: the 7 above and `find_tests`, `analyze_impact`, `get_resolution_coverage`, `plan_rename`, `list_api_endpoints`, `list_db_tables`, `get_config_key`, `get_file_outline`, `minimize_diff`, `plan_change`, `list_blindspots` |
-| `full` | 28: the 18 above and `analyze_change`, `find_owners`, `find_callees`, `find_implementations`, `trace_call_path`, `list_dead_code`, `list_hotspots`, `list_knowledge_risks`, `list_communities`, `get_session_stats` |
+| `full` | 29: the 18 above and `analyze_change`, `find_owners`, `find_callees`, `find_implementations`, `trace_call_path`, `list_dead_code`, `list_hotspots`, `list_knowledge_risks`, `list_communities`, `search_graph`, `get_session_stats` |
 
 The counts are what `repocortex tool list --profile <name>` prints.
 
@@ -63,6 +63,7 @@ The counts are what `repocortex tool list --profile <name>` prints.
 | `list_hotspots` | full | `commits`, `include_tests`, `limit`, `path` | Rank files by how often they change against how much code they hold, from recent git history, and list for each the files that are usually committed with it. |
 | `list_knowledge_risks` | full | `commits`, `depth`, `files`, `limit`, `min_commits`, `path` | Rank directories by how few people made their recent commits: bus factor, the largest contributor's share and how long ago they last changed it. |
 | `list_communities` | full | `limit`, `members`, `min_confidence`, `path` | Group files by how they refer to each other: one row per community, then its most-referenced files. |
+| `search_graph` | full | `query` (required), `limit` | Execute a guarded, read-only SQL query against the repository's code graph (tables: symbols, edges, files, references, http_routes, data_access). |
 | `get_session_stats` | full | none | Report what the current session has used: calls, failures, answer sizes, time, and the cost of the tool definitions. |
 
 ## Parameters
@@ -416,6 +417,15 @@ partitioned: the answer is empty, marked truncated, and asks for a `path`.
 
 The partition is deterministic label propagation over the file graph; no model
 and no randomness is involved. Command: `repocortex communities`.
+
+### `search_graph`
+
+Execute a guarded, read-only SQL query against the repository's code graph (tables: `symbols`, `edges`, `files`, `references`, `http_routes`, `data_access`). Enables custom topological filtering and multi-hop queries without multi-roundtrip MCP calls.
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `query` | string | yes | A read-only SQL query (SELECT or WITH) against index tables: symbols, edges, files, references, http_routes, data_access. |
+| `limit` | integer | no | Maximum rows to return (default: 50, maximum: 200). |
 
 ### `get_session_stats`
 
