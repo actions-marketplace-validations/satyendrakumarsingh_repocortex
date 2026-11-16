@@ -200,8 +200,10 @@ func languageOf(path string) string {
 // ---------------------------------------------------------------- Spring
 
 var (
+	springClassStart = regexp.MustCompile(`@RequestMapping\b`)
 	// @RequestMapping("/payment") or @RequestMapping(value = "/payment", method = RequestMethod.POST)
 	springClassMapping = regexp.MustCompile(`@RequestMapping\s*\(([^)]*)\)`)
+	springVerbStart    = regexp.MustCompile(`@(Get|Post|Put|Patch|Delete|Request)Mapping\b`)
 	// @GetMapping("/callback"), @PostMapping(value = "/callback")
 	springVerbMapping = regexp.MustCompile(`@(Get|Post|Put|Patch|Delete|Request)Mapping\s*(?:\(([^)]*)\))?`)
 	// The method declaration following an annotation.
@@ -221,15 +223,20 @@ func extractSpring(lines []string) []Route {
 	var classPrefix string
 	sawClassAnnotation := false
 
-	for i, line := range lines {
+	for i := 0; i < len(lines); i++ {
+		line := lines[i]
 		trimmed := strings.TrimSpace(line)
+		if strings.HasPrefix(trimmed, "//") || strings.HasPrefix(trimmed, "/*") || strings.HasPrefix(trimmed, "*") {
+			continue
+		}
 
 		// A class-level mapping is one that precedes a class declaration. The
 		// simplest reliable signal is that no method mapping has been seen yet
 		// and the next non-blank line declares a class.
-		if !sawClassAnnotation && strings.Contains(trimmed, "@RequestMapping") {
-			if declaresClassSoon(lines, i) {
-				if m := springClassMapping.FindStringSubmatch(trimmed); m != nil {
+		if !sawClassAnnotation && springClassStart.MatchString(trimmed) {
+			fullText, endLine := readBalancedParen(lines, i, 15)
+			if declaresClassSoon(lines, endLine) {
+				if m := springClassMapping.FindStringSubmatch(fullText); m != nil {
 					classPrefix = firstQuoted(m[1])
 					sawClassAnnotation = true
 					continue
@@ -237,7 +244,18 @@ func extractSpring(lines []string) []Route {
 			}
 		}
 
-		m := springVerbMapping.FindStringSubmatch(trimmed)
+		sm := springVerbStart.FindStringSubmatch(trimmed)
+		if sm == nil {
+			continue
+		}
+
+		fullText := trimmed
+		endLine := i
+		if strings.Contains(trimmed, "(") {
+			fullText, endLine = readBalancedParen(lines, i, 15)
+		}
+
+		m := springVerbMapping.FindStringSubmatch(fullText)
 		if m == nil {
 			continue
 		}
@@ -263,7 +281,7 @@ func extractSpring(lines []string) []Route {
 			Line:       i + 1,
 			Confidence: model.ConfidenceHigh,
 		}
-		r.Handler = handlerAfter(lines, i, javaMethodDecl)
+		r.Handler = handlerAfter(lines, endLine, javaMethodDecl)
 		out = append(out, r)
 	}
 	return out
@@ -377,28 +395,8 @@ func extractPython(lines []string) []Route {
 		verb := strings.ToUpper(m[1])
 		framework := FrameworkFastAPI
 
-		// Accumulate decorator lines until balanced parentheses.
-		var decText strings.Builder
-		endLine := i
-		depth := 0
-		for j := i; j < len(lines) && j < i+25; j++ {
-			lineText := lines[j]
-			decText.WriteString(lineText)
-			decText.WriteString(" ")
-			for _, r := range lineText {
-				if r == '(' {
-					depth++
-				} else if r == ')' {
-					depth--
-				}
-			}
-			if depth <= 0 {
-				endLine = j
-				break
-			}
-		}
+		fullDec, endLine := readBalancedParen(lines, i, 25)
 
-		fullDec := decText.String()
 		routePath := firstQuoted(fullDec)
 		if routePath == "" {
 			continue
@@ -541,8 +539,11 @@ func extractDjango(lines []string) []Route {
 
 // ---------------------------------------------------------------- Express
 
-var expressRoute = regexp.MustCompile(
-	`\b(?:app|router)\s*\.\s*(get|post|put|patch|delete|all)\s*\(\s*['"` + "`" + `]([^'"` + "`" + `]*)['"` + "`" + `]\s*,\s*([\w.]+)?`)
+var (
+	expressRouteStart = regexp.MustCompile(`\b(?:app|router)\s*\.\s*(get|post|put|patch|delete|all)\s*\(`)
+	expressPath       = regexp.MustCompile(`\b(?:app|router)\s*\.\s*(?:get|post|put|patch|delete|all)\s*\(\s*['"` + "`" + `]([^'"` + "`" + `]*)['"` + "`" + `]\s*,`)
+	expressIdent      = regexp.MustCompile(`^[a-zA-Z_$][\w.$]*$`)
+)
 
 func extractExpress(lines []string) []Route {
 	var out []Route
@@ -551,23 +552,51 @@ func extractExpress(lines []string) []Route {
 		if strings.HasPrefix(trimmed, "//") || strings.HasPrefix(trimmed, "*") {
 			continue
 		}
-		m := expressRoute.FindStringSubmatch(trimmed)
-		if m == nil {
+		sm := expressRouteStart.FindStringSubmatch(trimmed)
+		if sm == nil {
 			continue
 		}
-		verb := strings.ToUpper(m[1])
+		verb := strings.ToUpper(sm[1])
 		if verb == "ALL" {
 			verb = "" // every method; reported as ANY
 		} else if !httpMethods[verb] {
 			continue
 		}
+
+		fullCall, _ := readBalancedParen(lines, i, 25)
+		pm := expressPath.FindStringSubmatch(fullCall)
+		if pm == nil {
+			continue
+		}
+		path := pm[1]
+		handler := expressHandlerFrom(fullCall[len(pm[0]):])
+
 		out = append(out, Route{
-			Method: verb, Path: m[2], Handler: lastIdent(m[3]),
+			Method: verb, Path: path, Handler: handler,
 			Framework: FrameworkExpress, Line: i + 1,
 			Confidence: model.ConfidenceHigh,
 		})
 	}
 	return out
+}
+
+func expressHandlerFrom(rest string) string {
+	rest = strings.TrimSpace(rest)
+	if idx := strings.LastIndex(rest, ")"); idx >= 0 {
+		rest = rest[:idx]
+	}
+	parts := strings.Split(rest, ",")
+	for i := len(parts) - 1; i >= 0; i-- {
+		part := strings.TrimSpace(parts[i])
+		if part == "" {
+			continue
+		}
+		if expressIdent.MatchString(part) {
+			return lastIdent(part)
+		}
+		break
+	}
+	return ""
 }
 
 // ---------------------------------------------------------------- NestJS
@@ -582,6 +611,7 @@ var (
 	// nestController does not read (an array of prefixes, an object wrapped
 	// across lines). It exists only to detect that miss.
 	nestControllerAny = regexp.MustCompile(`^@Controller\s*\(`)
+	nestVerbStart     = regexp.MustCompile(`^@(Get|Post|Put|Patch|Delete|All)\b`)
 	// @Get(':id') / @Post() / @Delete('x') / @All(). The argument is
 	// mandatory, same reasoning as nestController: a shape this does not
 	// read (an array, a template expression) simply does not match, and the
@@ -669,23 +699,32 @@ func extractNest(lines []string) []Route {
 	inController := false
 	for i, line := range lines {
 		trimmed := strings.TrimSpace(line)
-		if m := nestController.FindStringSubmatch(trimmed); m != nil {
-			prefix = m[1]
-			if prefix == "" {
-				prefix = m[2]
+		if strings.HasPrefix(trimmed, "@Controller") {
+			if m := nestController.FindStringSubmatch(trimmed); m != nil {
+				prefix = m[1]
+				if prefix == "" {
+					prefix = m[2]
+				}
+				pending = true
+				continue
 			}
-			pending = true
-			continue
-		}
-		// An @Controller( call whose argument is a shape this scan does not
-		// read — an array of prefixes, an object wrapped across lines — is
-		// not a route this package can compose a correct path for. A route
-		// with a guessed prefix is a route that does not exist, so the
-		// section is treated as not-a-controller rather than as prefix "".
-		if nestControllerAny.MatchString(trimmed) {
-			pending = false
-			inController = false
-			continue
+			// Multi-line string argument: @Controller(\n 'users'\n)
+			if strings.Contains(trimmed, "(") && !strings.Contains(trimmed, "{") && !strings.Contains(trimmed, "[") {
+				fullDec, _ := readBalancedParen(lines, i, 10)
+				if m := nestController.FindStringSubmatch(fullDec); m != nil {
+					prefix = m[1]
+					if prefix == "" {
+						prefix = m[2]
+					}
+					pending = true
+					continue
+				}
+			}
+			if nestControllerAny.MatchString(trimmed) {
+				pending = false
+				inController = false
+				continue
+			}
 		}
 		if tsClassDecl.MatchString(trimmed) {
 			inController, pending = pending, false
@@ -694,7 +733,15 @@ func extractNest(lines []string) []Route {
 		if !inController {
 			continue
 		}
-		m := nestVerb.FindStringSubmatch(trimmed)
+		if !nestVerbStart.MatchString(trimmed) {
+			continue
+		}
+		fullDec := trimmed
+		endLine := i
+		if strings.Contains(trimmed, "(") {
+			fullDec, endLine = readBalancedParen(lines, i, 15)
+		}
+		m := nestVerb.FindStringSubmatch(strings.TrimSpace(fullDec))
 		if m == nil {
 			// A verb decorator whose argument this scan does not read (an
 			// array, a template expression) is skipped the same way: no
@@ -712,11 +759,14 @@ func extractNest(lines []string) []Route {
 		// Try the rest of this line first; only fall back to scanning ahead
 		// when nothing follows the decorator's own closing paren.
 		handler := ""
-		rest := strings.TrimLeft(trimmed[len(m[0]):], ") \t")
-		if mm := tsMethodDecl.FindStringSubmatch(rest); mm != nil {
-			handler = mm[1]
-		} else {
-			handler = nestHandlerAfter(lines, i)
+		if endLine == i {
+			rest := strings.TrimLeft(trimmed[len(m[0]):], ") \t")
+			if mm := tsMethodDecl.FindStringSubmatch(rest); mm != nil {
+				handler = mm[1]
+			}
+		}
+		if handler == "" {
+			handler = nestHandlerAfter(lines, endLine)
 		}
 		out = append(out, Route{
 			Method:     verb,
@@ -792,4 +842,43 @@ func lastIdent(s string) string {
 		return s[i+1:]
 	}
 	return s
+}
+
+// readBalancedParen reads lines starting at from until all opened parentheses '('
+// are balanced by ')', or until maxLookahead lines have been consumed.
+// It returns the combined text and the 0-based index of the line where the
+// parentheses closed (or from if none were opened or lookahead was reached).
+func readBalancedParen(lines []string, from int, maxLookahead int) (string, int) {
+	if from < 0 || from >= len(lines) {
+		return "", from
+	}
+	var b strings.Builder
+	depth := 0
+	opened := false
+	endLine := from
+	limit := from + maxLookahead
+	if limit > len(lines) {
+		limit = len(lines)
+	}
+	for j := from; j < limit; j++ {
+		line := lines[j]
+		if j == from {
+			line = strings.TrimSpace(line)
+		}
+		b.WriteString(line)
+		b.WriteString(" ")
+		for _, r := range line {
+			if r == '(' {
+				depth++
+				opened = true
+			} else if r == ')' {
+				depth--
+			}
+		}
+		if opened && depth <= 0 {
+			endLine = j
+			break
+		}
+	}
+	return b.String(), endLine
 }

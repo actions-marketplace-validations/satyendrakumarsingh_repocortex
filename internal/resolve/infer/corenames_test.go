@@ -31,6 +31,11 @@ func TestCoreMembersOfPHPAndKotlin(t *testing.T) {
 		{"kotlin", "utf8", false}, // okio's own
 		{"java", "toLong", false}, // Java has longValue; the Kotlin list is Kotlin's
 		{"scala", "assertSame", false},
+		{"python", "execute", true},
+		{"python", "json", true},
+		{"python", "commit", true},
+		{"python", "scalars", true},
+		{"python", "custom_business_logic", false},
 	} {
 		spec := LanguageSpec{Name: tc.lang}
 		if got := spec.isCoreMember(tc.name); got != tc.want {

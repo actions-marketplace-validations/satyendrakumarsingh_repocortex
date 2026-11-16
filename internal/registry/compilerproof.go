@@ -190,7 +190,11 @@ func (r *Registry) MarkInstalledCopy(ctx context.Context, ids []int64) (int, err
 			args = append(args, id)
 		}
 		res, err := r.db.ExecContext(ctx, `
-			UPDATE symbol_references SET resolution_source = ?
+			UPDATE symbol_references
+			   SET prior_resolution   = CASE WHEN prior_resolution = '' THEN resolution
+			                                 ELSE prior_resolution END,
+			       resolution         = 'unresolved',
+			       resolution_source  = ?
 			 WHERE resolution <> 'resolved' AND resolution_source = '' AND id IN (`+ph+`)`, args...)
 		if err != nil {
 			return marked, fmt.Errorf("registry: mark references seen against an installed copy: %w", err)

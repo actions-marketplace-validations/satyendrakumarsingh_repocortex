@@ -174,7 +174,10 @@ func buildCoreMembers() map[string]map[string]struct{} {
 		notify notify_all is_set cancel submit shutdown put put_nowait get_nowait
 		task_done qsize search group groups span findall finditer fullmatch dumps loads
 		dump load readouterr raises setattr setenv delenv delattr chdir
-		setUp tearDown setUpClass tearDownClass skipTest subTest addCleanup fail`)
+		setUp tearDown setUpClass tearDownClass skipTest subTest addCleanup fail
+		json execute executemany commit rollback cursor fetchone fetchall fetchmany
+		scalars scalar scalar_one scalar_one_or_none where select post patch
+		add_column drop_column`)
 
 	// PHP: the language's own interfaces and classes, then the two things
 	// nearly every PHP repository calls into without declaring: PSR-7/17/18

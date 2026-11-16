@@ -60,6 +60,30 @@ public class C {
 	}
 }
 
+func TestExtractSpringMultiline(t *testing.T) {
+	src := `@RestController
+@RequestMapping(
+    value = "/payment",
+    produces = "application/json"
+)
+public class PaymentController {
+    @PostMapping(
+        value = "/device-model",
+        consumes = "application/json"
+    )
+    public ResponseEntity<Void> changeModel(
+        @RequestBody ModelRequest req
+    ) {
+        return ResponseEntity.ok().build();
+    }
+}`
+	routes := Extract("PaymentController.java", []byte(src))
+	assertRoute(t, routes, "POST /payment/device-model", "changeModel")
+	if len(routes) != 1 {
+		t.Errorf("got %d routes, want 1: %v", len(routes), signatures(routes))
+	}
+}
+
 func TestExtractGo(t *testing.T) {
 	src := `package main
 
@@ -181,6 +205,30 @@ app.all('/any', anyHandler);
 		if strings.Contains(r.Path, "commented") {
 			t.Error("commented-out route reported")
 		}
+	}
+}
+
+func TestExtractExpressMultiline(t *testing.T) {
+	src := `const express = require('express');
+const app = express();
+
+app.post(
+    '/api/v1/orders',
+    authMiddleware,
+    orderHandler
+);
+
+router.patch(
+    "/tasks/:task_id/device-model",
+    validateTask,
+    changeDeviceModel
+);
+`
+	routes := Extract("routes.js", []byte(src))
+	assertRoute(t, routes, "POST /api/v1/orders", "orderHandler")
+	assertRoute(t, routes, "PATCH /tasks/:task_id/device-model", "changeDeviceModel")
+	if len(routes) != 2 {
+		t.Errorf("got %d routes, want 2: %v", len(routes), signatures(routes))
 	}
 }
 
@@ -496,6 +544,28 @@ export class UsersController {
 		if r.Confidence != model.ConfidenceHigh {
 			t.Errorf("%s: confidence = %v, want high", r.Signature(), r.Confidence)
 		}
+	}
+}
+
+func TestExtractNestMultiline(t *testing.T) {
+	src := `import { Controller, Patch, Param, Body } from '@nestjs/common';
+
+@Controller(
+    'tasks'
+)
+export class TasksController {
+    @Patch(
+        ':task_id/device-model'
+    )
+    changeDeviceModel(
+        @Param('task_id') taskId: string,
+        @Body() body: any,
+    ) {}
+}`
+	routes := Extract("tasks.controller.ts", []byte(src))
+	assertRoute(t, routes, "PATCH /tasks/:task_id/device-model", "changeDeviceModel")
+	if len(routes) != 1 {
+		t.Errorf("got %d routes, want 1: %v", len(routes), signatures(routes))
 	}
 }
 

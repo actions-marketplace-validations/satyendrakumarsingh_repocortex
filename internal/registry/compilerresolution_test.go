@@ -336,3 +336,43 @@ func TestBindingRateExcludesOnlyWhatItAlsoReports(t *testing.T) {
 		t.Errorf("BindingRate() with nothing bindable = %v, want 0", got)
 	}
 }
+
+func TestMarkInstalledCopyMovesAmbiguousToUnresolved(t *testing.T) {
+	f := newCRFixture(t)
+	rows, err := f.reg.db.QueryContext(context.Background(),
+		`SELECT id FROM symbol_references WHERE index_run_id = ? AND start_line = 102`, f.runID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rows.Close()
+	var ids []int64
+	for rows.Next() {
+		var id int64
+		if err := rows.Scan(&id); err != nil {
+			t.Fatal(err)
+		}
+		ids = append(ids, id)
+	}
+	if len(ids) == 0 {
+		t.Fatal("expected references at line 102")
+	}
+
+	marked, err := f.reg.MarkInstalledCopy(context.Background(), ids)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if marked != len(ids) {
+		t.Fatalf("marked %d, want %d", marked, len(ids))
+	}
+
+	r := f.refs(t)["Save@102"]
+	if r.resolution != "unresolved" {
+		t.Errorf("resolution is %q, want unresolved", r.resolution)
+	}
+	if r.prior != "ambiguous" {
+		t.Errorf("prior_resolution is %q, want ambiguous", r.prior)
+	}
+	if r.source != ResolutionSourceInstalled {
+		t.Errorf("resolution_source is %q, want %q", r.source, ResolutionSourceInstalled)
+	}
+}
