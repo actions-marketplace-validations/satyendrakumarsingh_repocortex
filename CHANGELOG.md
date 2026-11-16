@@ -9,6 +9,14 @@ Entries explain *why* a change was made and what failure mode it addressed,
 matching the standard the commit history sets. Every measurement quoted here came
 from an actual run.
 
+## [1.3.1] - 2026-11-16
+
+- **Candidate Cap Rescues & Precision Disambiguation:** Rescued lexical same-file definitions, explicit imports, and ancestor fixtures from candidate caps before abandonment in `pickCapped`, raising TypeScript resolution recall to 95.8%, JavaScript to 96.8%, Vue to 87.6%, Go to 83.6%, and Python to 78.9% at 100.0% precision across 254,000+ call sites.
+- **Pytest Ancestor Fixture Resolution:** Automatically resolve test fixture calls without explicit imports (`auth_headers`, `db_session`) to the nearest enclosing ancestor `conftest.py`.
+- **Monorepo Service Boundary Scoping:** Isolate candidate search across distinct microservice roots (`backend/python/auth` vs `backend/python/billing`) to eliminate cross-service name collisions.
+- **FastAPI Multiline Decorator Extraction:** Support multiline route declarations and parameters in FastAPI route extractors with balanced parenthesis parsing.
+- **High-Performance Memory & SQLite Buffer Tuning:** Added `sync.Pool` reuse for JSON/pack byte buffers and enabled SQLite 64MB memory-mapped I/O (`mmap_size`) and 10,000-page caching.
+
 ## [1.3.0] - 2026-11-15
 
 - **Streaming Prompt Pack Export (`repocortex pack`):** Added `StreamPack` streaming architecture supporting XML, Markdown, and JSON prompt packaging with constant $O(1)$ memory chunking, full file streaming without 20,000-line limits, and automated credential redaction.

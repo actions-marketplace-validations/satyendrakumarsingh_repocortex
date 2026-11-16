@@ -378,7 +378,6 @@ func extractGo(lines []string) []Route {
 
 var (
 	// @app.get("/path"), @router.post("/path"), @app.route("/path", methods=["POST"])
-	pyDecorator      = regexp.MustCompile(`^@\s*[\w.]+\.\s*(get|post|put|patch|delete|route)\b`)
 	pyDecoratorStart = regexp.MustCompile(`^@\s*[\w.]+\.\s*(get|post|put|patch|delete|route)\s*\(`)
 	pyMethodsArg     = regexp.MustCompile(`methods\s*=\s*\[([^\]]*)\]`)
 	pyFuncDecl       = regexp.MustCompile(`^\s*(?:async\s+)?def\s+(\w+)\s*\(`)
@@ -868,10 +867,11 @@ func readBalancedParen(lines []string, from int, maxLookahead int) (string, int)
 		b.WriteString(line)
 		b.WriteString(" ")
 		for _, r := range line {
-			if r == '(' {
+			switch r {
+			case '(':
 				depth++
 				opened = true
-			} else if r == ')' {
+			case ')':
 				depth--
 			}
 		}
