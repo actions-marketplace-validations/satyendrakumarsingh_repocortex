@@ -654,6 +654,13 @@ func hashFile(name string, limit int64) (sum string, binary bool, err error) {
 	return hashFileHead(name, limit, nil)
 }
 
+// readBufPool recycles the 32 KB streaming read buffers used during file hashing
+// to avoid allocating a fresh 32 KB slice on every indexed file.
+var readBufPool = sync.Pool{New: func() any {
+	b := make([]byte, 32*1024)
+	return &b
+}}
+
 // hashFileHead is hashFile that also copies the first langdetect.HeadBytes of
 // the file into head, when head is not nil.
 //
@@ -668,7 +675,9 @@ func hashFileHead(name string, limit int64, head *[]byte) (sum string, binary bo
 	defer func() { _ = f.Close() }()
 
 	h := sha256.New()
-	buf := make([]byte, 32*1024)
+	bufPtr := readBufPool.Get().(*[]byte) //nolint:errcheck,forcetypeassert // pool only holds *[]byte
+	defer readBufPool.Put(bufPtr)
+	buf := *bufPtr
 	var total, sniffed int64
 
 	for {

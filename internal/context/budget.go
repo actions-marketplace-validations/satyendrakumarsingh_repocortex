@@ -53,6 +53,42 @@ type Budget struct {
 // config.Config has no equivalent field, so this constant is the only source.
 const DefaultMaxTokensEstimate = 8000
 
+// BudgetProfile names a pre-calibrated context budget profile.
+type BudgetProfile string
+
+const (
+	// ProfileCompact is calibrated for fast subagent loops and tightly scoped tasks (~2,000 tokens).
+	ProfileCompact BudgetProfile = "compact"
+	// ProfileStandard is the default balanced budget for coding agents (~8,000 tokens).
+	ProfileStandard BudgetProfile = "standard"
+	// ProfileDeep is for complex multi-module refactoring and architectural changes (~32,000 tokens).
+	ProfileDeep BudgetProfile = "deep"
+)
+
+// BudgetForProfile returns a pre-configured Budget tuned for the given profile.
+func BudgetForProfile(profile BudgetProfile) Budget {
+	b := DefaultBudget()
+	switch profile {
+	case ProfileCompact:
+		b.MaxTokensEstimate = 2000
+		b.MaxFiles = 8
+		b.MaxSymbols = 20
+		b.MaxLines = 150
+		b.MaxGraphDepth = 2
+		b.HubDegreeLimit = 32
+	case ProfileDeep:
+		b.MaxTokensEstimate = 32000
+		b.MaxFiles = 50
+		b.MaxSymbols = 120
+		b.MaxLines = 800
+		b.MaxGraphDepth = 4
+		b.HubDegreeLimit = 128
+	default: // ProfileStandard
+		b.MaxTokensEstimate = DefaultMaxTokensEstimate
+	}
+	return b
+}
+
 // DefaultBudget returns the budget implied by config.Defaults.
 func DefaultBudget() Budget { return BudgetFrom(config.Defaults()) }
 

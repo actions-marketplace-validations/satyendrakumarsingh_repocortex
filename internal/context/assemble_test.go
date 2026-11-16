@@ -19,6 +19,23 @@ func TestEmptyTaskIsRejected(t *testing.T) {
 	}
 }
 
+func TestBudgetProfiles(t *testing.T) {
+	compact := BudgetForProfile(ProfileCompact)
+	if compact.MaxTokensEstimate != 2000 || compact.MaxFiles != 8 {
+		t.Errorf("compact profile unexpected: %+v", compact)
+	}
+
+	standard := BudgetForProfile(ProfileStandard)
+	if standard.MaxTokensEstimate != 8000 {
+		t.Errorf("standard profile unexpected: %+v", standard)
+	}
+
+	deep := BudgetForProfile(ProfileDeep)
+	if deep.MaxTokensEstimate != 32000 || deep.MaxFiles != 50 {
+		t.Errorf("deep profile unexpected: %+v", deep)
+	}
+}
+
 // TestRankingIsDeterministic is a gate, not a nicety. An agent that gets a
 // different answer on a retry cannot cache, cannot test, and cannot trust the
 // engine — and the usual cause is Go map iteration order leaking into a result,

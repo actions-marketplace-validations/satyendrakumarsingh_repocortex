@@ -17,8 +17,9 @@
 #     several minutes of grammar compilation. See --cgo-parser.
 #
 # Usage:
-#   scripts/ci-local.sh [--quick] [--soak] [--fuzz] [--cgo-parser] [--list]
+#   scripts/ci-local.sh [--smoke] [--quick] [--soak] [--fuzz] [--cgo-parser] [--list]
 #
+#   --smoke       Fast check (<5s): gofmt, go vet, and go test -short ./internal/...
 #   --quick       Skip the slow matrix: the five-target cross-compile, the
 #                 CGO_ENABLED=0 test run, and govulncheck. Keeps every gate
 #                 that can fail on a one-line change.
@@ -43,6 +44,7 @@ GOLANGCI_LINT_VERSION="v2.15.0"
 TEST_TIMEOUT="20m"
 
 QUICK=0
+SMOKE=0
 RUN_SOAK=0
 RUN_FUZZ=0
 RUN_CGO_PARSER=0
@@ -50,6 +52,7 @@ LIST_ONLY=0
 
 for arg in "$@"; do
   case "$arg" in
+    --smoke)      SMOKE=1 ;;
     --quick)      QUICK=1 ;;
     --soak)       RUN_SOAK=1 ;;
     --fuzz)       RUN_FUZZ=1 ;;
@@ -93,6 +96,26 @@ on_failure() {
   exit "$code"
 }
 trap on_failure ERR
+
+if [ "$SMOKE" = "1" ]; then
+  banner "gofmt" "lint"
+  bad=$(gofmt -l .)
+  if [ -n "$bad" ]; then
+    printf '%sgofmt found unformatted files:%s\n%s\n' "$C_RED" "$C_RESET" "$bad" >&2
+    exit 1
+  fi
+  printf '  all files formatted\n'
+
+  banner "go vet ./..." "lint"
+  go vet ./...
+
+  banner "go test -short ./internal/..." "test"
+  go test -short ./internal/...
+
+  elapsed=$(( $(date +%s) - started_at ))
+  printf '\n%s✓ smoke test passed%s in %ds\n' "$C_GREEN$C_BOLD" "$C_RESET" "$elapsed"
+  exit 0
+fi
 
 if [ "$LIST_ONLY" = "1" ]; then
   cat <<'EOF'

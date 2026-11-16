@@ -119,6 +119,7 @@ func connectionPragmas(opts Options) []string {
 		"synchronous(NORMAL)",
 		"temp_store(MEMORY)",
 		"cache_size(-64000)",
+		"mmap_size(268435456)",
 	}
 }
 
