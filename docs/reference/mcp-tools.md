@@ -28,7 +28,7 @@ mcp:
 | `compact` | 1: `repocortex` (front-door interface saving ~25 KB of prompt context; actions: context, search, symbol, callers, callees, references, impact, tests, diff, overview, query) |
 | `minimal` (default) | 7: `get_task_context`, `get_project_overview`, `search_code`, `find_symbol`, `get_symbol`, `find_references`, `find_callers` |
 | `standard` | 19: the 7 above and `find_tests`, `analyze_impact`, `get_resolution_coverage`, `plan_rename`, `list_api_endpoints`, `list_db_tables`, `get_config_key`, `get_file_outline`, `minimize_diff`, `plan_change`, `list_blindspots`, `explore_symbol` |
-| `full` | 30: the 19 above and `analyze_change`, `find_owners`, `find_callees`, `find_implementations`, `trace_call_path`, `list_dead_code`, `list_hotspots`, `list_knowledge_risks`, `list_communities`, `search_graph`, `get_session_stats` |
+| `full` | 31: the 19 above and `analyze_change`, `analyze_patch`, `find_owners`, `find_callees`, `find_implementations`, `trace_call_path`, `list_dead_code`, `list_hotspots`, `list_knowledge_risks`, `list_communities`, `search_graph`, `get_session_stats` |
 
 The counts are what `repocortex tool list --profile <name>` prints.
 
@@ -56,6 +56,7 @@ The counts are what `repocortex tool list --profile <name>` prints.
 | `list_blindspots` | standard | none | Audit the repository for code intelligence blindspots and hidden risks. |
 | `explore_symbol` | standard | `name` (required), `limit`, `line`, `min_confidence`, `path` | Deep-dive on a symbol in one call: returns its definition with verbatim line-numbered source excerpt, upstream callers, downstream callees, blast-radius impact summary, and linked HTTP routes. |
 | `analyze_change` | full | `base` (required), `head`, `min_confidence` | Find out what a range of commits puts at risk: the symbols the change touched, everything those can reach, and the tests among them. |
+| `analyze_patch` | full | `content` (required), `path` (required) | Speculatively test proposed file changes in memory before editing files on disk. |
 | `find_owners` | full | `symbol` (required), `limit`, `line`, `path` | Find who has recent context on the code a change would touch: the people who have lately changed the symbols a change to this one can reach, ranked by how much of that code they have worked on. |
 | `find_callees` | full | `name` (required), `limit`, `line`, `min_confidence`, `offset`, `path` | List what a symbol calls: the definitions inside this repository that its body invokes, each with the file and line of the call and how the binding was established (exact, high, medium or low). |
 | `find_implementations` | full | `name` (required), `direct_only`, `limit`, `line`, `min_confidence`, `offset`, `path` | List a type's hierarchy in both directions: what implements or extends it, directly or through other subtypes, and what it implements or extends itself. |
@@ -274,6 +275,15 @@ Find out what a range of commits puts at risk: the symbols the change touched, e
 | `base` | string | yes | The revision the change starts from: a branch, tag or commit, e.g. 'main' or 'origin/main'. |
 | `head` | string | no | The revision the change ends at. Default 'HEAD'. |
 | `min_confidence` | string | no | Lowest confidence to follow: exact, high, medium or low. Default medium. Use 'high' when the result will gate a merge. |
+
+### `analyze_patch`
+
+Speculatively test proposed file changes in memory before editing files on disk. Parses proposed code in memory, compares definitions with the index graph, and immediately identifies all upstream callers across the repo that would be broken by altered or deleted signatures.
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `content` | string | yes | The proposed full file content to dry-run speculatively in memory. |
+| `path` | string | yes | File path of the file being modified, e.g. 'internal/service.go'. |
 
 ### `find_owners`
 

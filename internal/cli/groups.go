@@ -71,7 +71,7 @@ func commandGroupOf() map[string]string {
 		"status": groupHealth, "doctor": groupHealth, "languages": groupHealth,
 		"blindspots": groupHealth, "dead-code": groupHealth, "hotspots": groupHealth,
 		"bus-factor": groupHealth, "arch": groupHealth, "accuracy": groupHealth, "bench": groupHealth,
-		"vulns": groupHealth,
+		"vulns": groupHealth, "coverage": groupHealth,
 
 		// Serve agents and integrate.
 		"serve": groupServe, "tool": groupServe, "stats": groupServe, "ui": groupServe,
@@ -83,7 +83,7 @@ func commandGroupOf() map[string]string {
 // ungroupedCommands are deliberately left under "Additional Commands":
 // housekeeping a reader does not need in order to understand the product.
 func ungroupedCommands() map[string]bool {
-	return map[string]bool{"version": true, "licenses": true, "help": true, "completion": true}
+	return map[string]bool{"version": true, "licenses": true, "help": true, "completion": true, "auto-index": true}
 }
 
 // applyCommandGroups registers the groups and assigns each command to its own.

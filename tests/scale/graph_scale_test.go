@@ -389,6 +389,7 @@ func TestEveryToolAnswerStaysBoundedAtScale(t *testing.T) {
 		"list_db_tables":          {},
 		"get_config_key":          {"key": "DATABASE_URL"},
 		"get_file_outline":        {"path": "pkg0/file0.go"},
+		"analyze_patch":           {"patch": "diff --git a/pkg0/file0.go b/pkg0/file0.go\n--- a/pkg0/file0.go\n+++ b/pkg0/file0.go\n@@ -1 +1 @@\n-old\n+new\n"},
 		"minimize_diff":           {"diff": "diff --git a/x.go b/x.go\n--- a/x.go\n+++ b/x.go\n@@ -1 +1 @@\n-old\n+new\n"},
 		"list_blindspots":         {},
 		"list_dead_code":          {"include_exported": true},

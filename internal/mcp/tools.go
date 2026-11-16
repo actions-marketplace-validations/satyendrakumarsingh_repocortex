@@ -366,6 +366,11 @@ func toolDescriptions() map[string]string {
 			"BOUND: treat an empty or short result as 'nothing found', never as proof that changing " +
 			"the symbol is safe.",
 
+		"analyze_patch": "Speculatively test proposed file changes in memory before editing files on disk. " +
+			"Parses proposed code in memory, compares definitions with the index graph, and immediately " +
+			"identifies all upstream callers across the repo that would be broken by altered or deleted " +
+			"signatures.",
+
 		"find_tests": "Find the tests covering a symbol, and which signal found each one — a proven " +
 			"call edge is far stronger evidence than a matching filename, and the response names which " +
 			"you got. Use before changing behaviour, to know what to run. A symbol reported as " +
@@ -655,7 +660,11 @@ func (s *Server) getProjectOverview(ctx context.Context, req *sdk.CallToolReques
 			}
 		}
 		if liveCount > 0 {
-			resp.Notes = append(resp.Notes, fmt.Sprintf("Exposed HTTP APIs: %d live endpoints (e.g. %s). Call 'list_api_endpoints' for full catalog.", liveCount, strings.Join(samples, ", ")))
+			hint := "Call 'list_api_endpoints' for full catalog."
+			if !s.hasTool("list_api_endpoints") && s.hasTool("repocortex") {
+				hint = "Call repocortex {action: \"endpoints\"} for full catalog."
+			}
+			resp.Notes = append(resp.Notes, fmt.Sprintf("Exposed HTTP APIs: %d live endpoints (e.g. %s). %s", liveCount, strings.Join(samples, ", "), hint))
 		}
 	}
 
@@ -666,10 +675,18 @@ func (s *Server) getProjectOverview(ctx context.Context, req *sdk.CallToolReques
 				samples = append(samples, t.Table)
 			}
 		}
-		resp.Notes = append(resp.Notes, fmt.Sprintf("Database Footprint: %d tables referenced (e.g. %s). Call 'list_db_tables' for the access graph.", len(tbls), strings.Join(samples, ", ")))
+		hint := "Call 'list_db_tables' for the access graph."
+		if !s.hasTool("list_db_tables") && s.hasTool("repocortex") {
+			hint = "Call repocortex {action: \"tables\"} for the access graph."
+		}
+		resp.Notes = append(resp.Notes, fmt.Sprintf("Database Footprint: %d tables referenced (e.g. %s). %s", len(tbls), strings.Join(samples, ", "), hint))
 	}
 
-	resp.Notes = append(resp.Notes, "Agent Guidance: Use 'analyze_impact' to evaluate refactoring impact; use 'find_symbol' to resolve declarations; use 'find_callers' to trace upstream callers.")
+	guidance := "Agent Guidance: Use 'analyze_impact' to evaluate refactoring impact; use 'find_symbol' to resolve declarations; use 'find_callers' to trace upstream callers."
+	if !s.hasTool("analyze_impact") && s.hasTool("repocortex") {
+		guidance = "Agent Guidance: Use repocortex {action: 'impact'} to evaluate refactoring impact; use repocortex {action: 'symbol'} to resolve declarations; use repocortex {action: 'callers'} to trace upstream callers."
+	}
+	resp.Notes = append(resp.Notes, guidance)
 
 	// State the resolution rate plainly. An agent that believes the call graph
 	// is complete will trust an empty find_callers result as proof that nothing

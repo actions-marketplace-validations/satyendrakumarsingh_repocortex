@@ -388,6 +388,41 @@ func TestUnexportedCrossFileIsRefused(t *testing.T) {
 	}
 }
 
+func TestSameFileRescueReceiverGuard(t *testing.T) {
+	// 30 candidates named "save" across the repository to exceed MaxCandidates (25).
+	var entries []registry.SymbolIndexEntry
+	for i := int64(1); i <= 30; i++ {
+		filePath := "pkg/other.py"
+		if i == 1 {
+			filePath = "pkg/main.py" // in the same calling file
+		}
+		entries = append(entries, sym(i, "save", "pkg.Model.save", filePath, i, true))
+	}
+	idx := index(entries...)
+	r := New(idx, Options{})
+
+	// Reference has an external receiver `user.save()`.
+	// It should NOT be rescued to the same-file function simply because it's in the same file.
+	fr := registry.FileRefs{
+		FileID: 1, Path: "pkg/main.py",
+		Symbols: enclose(100, "Main"),
+		Refs: []registry.Reference{{
+			ID:       1,
+			Name:     "save",
+			Receiver: "user",
+			Kind:     "reference.call",
+			Line:     10,
+		}},
+	}
+	edges, _, st := resolveOne(t, r, fr)
+	if len(edges) > 0 && edges[0].DstID == 1 {
+		t.Fatalf("user.save() mistakenly bound to same-file candidate: %+v", edges)
+	}
+	if st.CapExceeded == 0 {
+		t.Fatalf("expected candidate cap exceeded, got %d", st.CapExceeded)
+	}
+}
+
 func BenchmarkResolveFile(b *testing.B) {
 	var entries []registry.SymbolIndexEntry
 	for i := int64(1); i <= 5000; i++ {

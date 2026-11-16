@@ -36,19 +36,26 @@ const (
 
 var managedHookNames = []string{"post-commit", "post-merge", "post-checkout"}
 
-// hookBody is the managed block. It re-indexes and re-resolves in the
-// background and swallows every failure, because a hook that can fail a commit
-// is a hook people delete.
-func hookBody(binary string) string {
+// hookBody generates the managed block for a specific git hook.
+// It executes serialized background auto-index, folding overlapping runs
+// and logging to .repocortex/logs/auto-index.log.
+func hookBody(binary string, hookName ...string) string {
+	name := postCommitName
+	if len(hookName) > 0 && hookName[0] != "" {
+		name = hookName[0]
+	}
 	var b strings.Builder
 	b.WriteString(hookBegin + "\n")
 	b.WriteString("# Re-indexes this repository after commits, merges and branch switches so the graph,\n")
 	b.WriteString("# the portal and any connected agent describe the code you just updated.\n")
-	b.WriteString("# Runs detached and never fails: a stale index is a problem,\n")
-	b.WriteString("# a blocked git operation is a worse one.\n")
-	b.WriteString("if command -v " + shellQuote(binary) + " >/dev/null 2>&1; then\n")
-	b.WriteString("  (" + shellQuote(binary) + " index --quiet >/dev/null 2>&1 && \\\n")
-	b.WriteString("   " + shellQuote(binary) + " resolve --quiet >/dev/null 2>&1) &\n")
+	b.WriteString("# Runs serialized background auto-index and never fails a git operation.\n")
+	if name == "post-checkout" {
+		b.WriteString("# Only run on branch switches ($3 == 1), not on single-file checkouts ($3 == 0).\n")
+		b.WriteString("if [ \"$3\" = \"1\" ] && command -v " + shellQuote(binary) + " >/dev/null 2>&1; then\n")
+	} else {
+		b.WriteString("if command -v " + shellQuote(binary) + " >/dev/null 2>&1; then\n")
+	}
+	b.WriteString("  (" + shellQuote(binary) + " auto-index >/dev/null 2>&1) &\n")
 	b.WriteString("fi\n")
 	b.WriteString(hookEnd + "\n")
 	return b.String()
@@ -64,13 +71,13 @@ func shellQuote(s string) string {
 func newHooksCmd(g *Global) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "hooks",
-		Short: "Keep the index current by re-indexing on every commit",
-		Long: "Installs a Git post-commit hook that re-indexes this repository after each\n" +
-			"commit, so the portal and any connected agent describe the code you just\n" +
-			"wrote rather than the code you wrote on Tuesday.\n\n" +
-			"The hook is written inside marked delimiters. An existing post-commit hook is\n" +
-			"appended to, never replaced, and 'hooks uninstall' removes exactly the marked\n" +
-			"block. The hook runs detached and cannot fail a commit.",
+		Short: "Keep the index current by re-indexing on commits, merges and branch checkouts",
+		Long: "Installs Git hooks (post-commit, post-merge, and post-checkout) that re-index\n" +
+			"this repository after each commit, merge, or branch switch, so the portal\n" +
+			"and any connected agent describe the code you just updated.\n\n" +
+			"Hooks are written inside marked delimiters. Existing hooks are preserved,\n" +
+			"and 'hooks uninstall' removes exactly the marked block. The hooks run\n" +
+			"serialized in the background and cannot fail a git operation.",
 	}
 	cmd.AddCommand(newHooksInstallCmd(g), newHooksUninstallCmd(g), newHooksStatusCmd(g))
 	return cmd
@@ -80,11 +87,11 @@ func newHooksInstallCmd(g *Global) *cobra.Command {
 	var binary string
 	cmd := &cobra.Command{
 		Use:   "install",
-		Short: "Write the post-commit hook into this repository",
+		Short: "Write managed hooks (post-commit, post-merge, post-checkout) into this repository",
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			root := g.Config().RepoRoot
 			if binary == "" {
-				binary = resolveOwnBinary()
+				binary = resolveOwnBinary(root)
 			}
 			st, err := InstallCommitHook(root, binary)
 			if err != nil {
@@ -95,11 +102,14 @@ func newHooksInstallCmd(g *Global) *cobra.Command {
 			case st.AlreadyCurrent:
 				fmt.Fprintf(out, "Already installed — %s\n", st.Path)
 			case st.Appended:
-				fmt.Fprintf(out, "Appended RepoCortex's block to your existing hook\n  %s\n", st.Path)
+				fmt.Fprintf(out, "Appended RepoCortex's block to existing hooks in %s\n", filepath.Dir(st.Path))
 			default:
-				fmt.Fprintf(out, "Installed post-commit hook\n  %s\n", st.Path)
+				fmt.Fprintf(out, "Installed managed hooks (post-commit, post-merge, post-checkout)\n  %s\n", filepath.Dir(st.Path))
 			}
-			fmt.Fprintf(out, "  Runs: %s index && %s resolve  (detached, never fails a commit)\n", binary, binary)
+			if st.AuxiliaryPath != "" {
+				fmt.Fprintf(out, "  Notice: Non-shell hook detected; created auxiliary script: %s\n", st.AuxiliaryPath)
+			}
+			fmt.Fprintf(out, "  Runs: %s auto-index (serialized background pass, logs to .repocortex/logs/auto-index.log)\n", binary)
 			return nil
 		},
 	}
@@ -111,17 +121,17 @@ func newHooksInstallCmd(g *Global) *cobra.Command {
 func newHooksUninstallCmd(g *Global) *cobra.Command {
 	return &cobra.Command{
 		Use:   "uninstall",
-		Short: "Remove the post-commit hook block RepoCortex wrote",
+		Short: "Remove the hook blocks RepoCortex wrote",
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			removed, err := UninstallCommitHook(g.Config().RepoRoot)
 			if err != nil {
 				return err
 			}
 			if !removed {
-				fmt.Fprintln(cmd.OutOrStdout(), "Nothing to remove — no RepoCortex block in this repository's post-commit hook.")
+				fmt.Fprintln(cmd.OutOrStdout(), "Nothing to remove — no RepoCortex block in this repository's hooks.")
 				return nil
 			}
-			fmt.Fprintln(cmd.OutOrStdout(), "Removed RepoCortex's block. Anything else in that hook is untouched.")
+			fmt.Fprintln(cmd.OutOrStdout(), "Removed RepoCortex's block. Anything else in those hooks is untouched.")
 			return nil
 		},
 	}
@@ -130,30 +140,48 @@ func newHooksUninstallCmd(g *Global) *cobra.Command {
 func newHooksStatusCmd(g *Global) *cobra.Command {
 	return &cobra.Command{
 		Use:   "status",
-		Short: "Report whether the post-commit hook is installed",
+		Short: "Report status of all managed Git hooks",
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			st := CommitHookStatus(g.Config().RepoRoot)
+			rep := AllHooksStatus(g.Config().RepoRoot)
 			out := cmd.OutOrStdout()
-			if st.Installed {
-				fmt.Fprintf(out, "post-commit: installed  (%s)\n", st.Path)
-				fmt.Fprintln(out, "The index is rebuilt after every commit on this machine.")
-				return nil
+			fmt.Fprintf(out, "post-commit:   %s\n", formatHookState(rep.PostCommit))
+			fmt.Fprintf(out, "post-merge:    %s\n", formatHookState(rep.PostMerge))
+			fmt.Fprintf(out, "post-checkout: %s\n", formatHookState(rep.PostCheckout))
+			if rep.PostCommit.Installed && rep.PostMerge.Installed && rep.PostCheckout.Installed {
+				fmt.Fprintln(out, "The index is automatically kept current on commits, merges and branch switches.")
+			} else {
+				fmt.Fprintln(out, "Install all managed hooks with: repocortex hooks install")
 			}
-			fmt.Fprintln(out, "post-commit: not installed")
-			fmt.Fprintln(out, "The index is only as current as the last 'repocortex index'.")
-			fmt.Fprintln(out, "Install it with: repocortex hooks install")
 			return nil
 		},
 	}
+}
+
+func formatHookState(st HookState) string {
+	if st.Installed {
+		if st.AuxiliaryPath != "" {
+			return fmt.Sprintf("installed auxiliary (%s)", st.AuxiliaryPath)
+		}
+		return fmt.Sprintf("installed (%s)", st.Path)
+	}
+	return "not installed"
 }
 
 // HookState reports what an install actually did. Callers print it; the portal
 // renders it.
 type HookState struct {
 	Path           string `json:"path"`
+	AuxiliaryPath  string `json:"auxiliary_path,omitempty"`
 	Installed      bool   `json:"installed"`
 	Appended       bool   `json:"appended,omitempty"`
 	AlreadyCurrent bool   `json:"already_current,omitempty"`
+}
+
+// HooksReport reports status across all managed hooks.
+type HooksReport struct {
+	PostCommit   HookState `json:"post_commit"`
+	PostMerge    HookState `json:"post_merge"`
+	PostCheckout HookState `json:"post_checkout"`
 }
 
 // hooksDir resolves where Git expects hooks for this repository, honouring
@@ -193,6 +221,48 @@ func hooksDir(root string) (string, error) {
 	return filepath.Join(gitDir, "hooks"), nil
 }
 
+// isShellShebang reports whether the first line names a POSIX-compatible shell.
+func isShellShebang(firstLine string) bool {
+	firstLine = strings.TrimSpace(firstLine)
+	if !strings.HasPrefix(firstLine, "#!") {
+		return true // default to shell when shebang is omitted
+	}
+	lower := strings.ToLower(firstLine)
+	return strings.Contains(lower, "sh") || strings.Contains(lower, "bash") || strings.Contains(lower, "zsh")
+}
+
+// hasTerminalExit reports whether the script ends in a top-level exit statement.
+func hasTerminalExit(text string) bool {
+	lines := strings.Split(text, "\n")
+	for i := len(lines) - 1; i >= 0; i-- {
+		trimmed := strings.TrimSpace(lines[i])
+		if trimmed == "" || strings.HasPrefix(trimmed, "#") {
+			continue
+		}
+		if strings.HasPrefix(trimmed, "exit ") || trimmed == "exit" {
+			return true
+		}
+		break
+	}
+	return false
+}
+
+// insertBeforeTerminalExit inserts content before the final top-level exit command.
+func insertBeforeTerminalExit(text, block string) string {
+	lines := strings.Split(text, "\n")
+	for i := len(lines) - 1; i >= 0; i-- {
+		trimmed := strings.TrimSpace(lines[i])
+		if trimmed == "" || strings.HasPrefix(trimmed, "#") {
+			continue
+		}
+		if strings.HasPrefix(trimmed, "exit ") || trimmed == "exit" {
+			return strings.Join(lines[:i], "\n") + "\n" + block + "\n" + strings.Join(lines[i:], "\n")
+		}
+		break
+	}
+	return ensureTrailingNewline(text) + block
+}
+
 // InstallCommitHook writes (or updates) the managed block in post-commit,
 // post-merge (on git pull/merge), and post-checkout (on branch switch).
 func InstallCommitHook(root, binary string) (HookState, error) {
@@ -203,10 +273,11 @@ func InstallCommitHook(root, binary string) (HookState, error) {
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return HookState{}, fmt.Errorf("hooks: create %s: %w", dir, err)
 	}
-	block := hookBody(binary)
+
 	var primary HookState
 	for _, name := range managedHookNames {
-		st, err := installSingleHook(filepath.Join(dir, name), block)
+		block := hookBody(binary, name)
+		st, err := installSingleHook(filepath.Join(dir, name), name, block)
 		if err != nil {
 			return HookState{}, err
 		}
@@ -217,7 +288,7 @@ func InstallCommitHook(root, binary string) (HookState, error) {
 	return primary, nil
 }
 
-func installSingleHook(path, block string) (HookState, error) {
+func installSingleHook(path, name, block string) (HookState, error) {
 	existing, err := os.ReadFile(path)
 	switch {
 	case errors.Is(err, fs.ErrNotExist):
@@ -231,17 +302,39 @@ func installSingleHook(path, block string) (HookState, error) {
 	}
 
 	text := string(existing)
+
+	// Check shebang: if non-shell (e.g. Python, Node), do NOT append shell syntax.
+	// Write an auxiliary hook instead to prevent syntax errors.
+	lines := strings.Split(text, "\n")
+	if len(lines) > 0 && !isShellShebang(lines[0]) {
+		auxPath := path + "-repocortex"
+		auxContent := "#!/bin/sh\n" + block
+		if err := os.WriteFile(auxPath, []byte(auxContent), 0o755); err != nil {
+			return HookState{}, fmt.Errorf("hooks: write auxiliary %s: %w", auxPath, err)
+		}
+		return HookState{Path: path, AuxiliaryPath: auxPath, Installed: true}, nil
+	}
+
 	if stripped, had := stripBlock(text); had {
 		if stripped+block == text || strings.Contains(text, block) {
 			return HookState{Path: path, Installed: true, AlreadyCurrent: true}, nil
 		}
-		// A block from an older version: replace it rather than stack a second.
-		if err := writeHook(path, ensureTrailingNewline(stripped)+block); err != nil {
+		// A block from an older version: replace it
+		newContent := ensureTrailingNewline(stripped) + block
+		if hasTerminalExit(stripped) {
+			newContent = insertBeforeTerminalExit(stripped, block)
+		}
+		if err := writeHook(path, newContent); err != nil {
 			return HookState{}, err
 		}
 		return HookState{Path: path, Installed: true, Appended: true}, nil
 	}
-	if err := writeHook(path, ensureTrailingNewline(text)+block); err != nil {
+
+	newContent := ensureTrailingNewline(text) + block
+	if hasTerminalExit(text) {
+		newContent = insertBeforeTerminalExit(text, block)
+	}
+	if err := writeHook(path, newContent); err != nil {
 		return HookState{}, err
 	}
 	return HookState{Path: path, Installed: true, Appended: true}, nil
@@ -266,7 +359,7 @@ func ensureTrailingNewline(s string) string {
 	return s + "\n"
 }
 
-// stripBlock removes the managed block and reports whether one was present.
+// stripBlock removes any managed RepoCortex block and reports whether one was present.
 func stripBlock(text string) (string, bool) {
 	start := strings.Index(text, hookBegin)
 	if start < 0 {
@@ -274,8 +367,7 @@ func stripBlock(text string) (string, bool) {
 	}
 	end := strings.Index(text[start:], hookEnd)
 	if end < 0 {
-		// Truncated block — treat everything from the marker on as ours, which
-		// is the only reading that leaves the file valid.
+		// Truncated block — treat everything from the marker on as ours.
 		return strings.TrimRight(text[:start], "\n") + "\n", true
 	}
 	end += start + len(hookEnd)
@@ -307,6 +399,9 @@ func UninstallCommitHook(root string) (bool, error) {
 }
 
 func uninstallSingleHook(path string) (bool, error) {
+	// Also clean auxiliary script if present
+	_ = os.Remove(path + "-repocortex")
+
 	data, err := os.ReadFile(path)
 	if errors.Is(err, fs.ErrNotExist) {
 		return false, nil
@@ -331,27 +426,55 @@ func uninstallSingleHook(path string) (bool, error) {
 	return true, nil
 }
 
-// CommitHookStatus reports installation without touching anything. It never
-// returns an error: "not installed" is the right answer for a directory that is
-// not a repository, and a status call must not fail a portal request.
+// CommitHookStatus reports primary post-commit installation status.
 func CommitHookStatus(root string) HookState {
+	return checkHook(root, postCommitName)
+}
+
+// AllHooksStatus reports status across post-commit, post-merge, and post-checkout.
+func AllHooksStatus(root string) HooksReport {
+	return HooksReport{
+		PostCommit:   checkHook(root, "post-commit"),
+		PostMerge:    checkHook(root, "post-merge"),
+		PostCheckout: checkHook(root, "post-checkout"),
+	}
+}
+
+func checkHook(root, name string) HookState {
 	dir, err := hooksDir(root)
 	if err != nil {
 		return HookState{}
 	}
-	path := filepath.Join(dir, postCommitName)
+	path := filepath.Join(dir, name)
 	data, err := os.ReadFile(path)
 	if err != nil {
+		auxPath := path + "-repocortex"
+		if auxData, errAux := os.ReadFile(auxPath); errAux == nil && strings.Contains(string(auxData), "# >>> repocortex") {
+			return HookState{Path: path, AuxiliaryPath: auxPath, Installed: true}
+		}
 		return HookState{Path: path}
 	}
-	return HookState{Path: path, Installed: strings.Contains(string(data), hookBegin)}
+	str := string(data)
+	installed := strings.Contains(str, "# >>> repocortex")
+	auxPath := path + "-repocortex"
+	if !installed {
+		if auxData, errAux := os.ReadFile(auxPath); errAux == nil && strings.Contains(string(auxData), "# >>> repocortex") {
+			return HookState{Path: path, AuxiliaryPath: auxPath, Installed: true}
+		}
+	}
+	return HookState{Path: path, Installed: installed}
 }
 
-// resolveOwnBinary names the executable to call from the hook. An absolute path
-// is preferred: a hook runs under Git's environment, whose PATH is not the
-// interactive shell's, and "repocortex: command not found" in a background job is
-// invisible.
-func resolveOwnBinary() string {
+// resolveOwnBinary names the executable to call from the hook.
+// If the hook directory is inside the workspace work tree (e.g. .husky),
+// we return "repocortex" so that committed hooks do not leak absolute machine paths.
+func resolveOwnBinary(root string) string {
+	dir, err := hooksDir(root)
+	if err == nil {
+		if rel, err := filepath.Rel(root, dir); err == nil && !strings.HasPrefix(rel, "..") {
+			return "repocortex"
+		}
+	}
 	if exe, err := os.Executable(); err == nil {
 		if resolved, err := filepath.EvalSymlinks(exe); err == nil {
 			return resolved

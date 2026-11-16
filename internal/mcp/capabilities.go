@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/satyendrakumarsingh/repocortex/internal/capability"
+	"github.com/satyendrakumarsingh/repocortex/internal/capability/dryrun"
 	"github.com/satyendrakumarsingh/repocortex/internal/capability/impact"
 	"github.com/satyendrakumarsingh/repocortex/internal/capability/missed"
 	"github.com/satyendrakumarsingh/repocortex/internal/capability/planchange"
@@ -103,6 +104,50 @@ func (s *Server) registerCapabilities(allowed map[string]bool) {
 		Name:        "list_blindspots",
 		Description: descs["list_blindspots"],
 	}, s.detectBlindspots)
+
+	addTool(s, allowed, &sdk.Tool{
+		Name:        "analyze_patch",
+		Description: descs["analyze_patch"],
+	}, s.analyzePatch)
+}
+
+type patchAnalysisArgs struct {
+	Path    string `json:"path" jsonschema:"File path of the file being modified, e.g. 'internal/service.go'."`
+	Content string `json:"content" jsonschema:"The proposed full file content to dry-run speculatively in memory."`
+}
+
+func (s *Server) analyzePatch(ctx stdctx.Context, req *sdk.CallToolRequest, args patchAnalysisArgs) (*sdk.CallToolResult, *Response, error) {
+	if strings.TrimSpace(args.Path) == "" {
+		return failWith("invalid_argument", "Pass path and content, then call analyze_patch again.", "path must not be empty")
+	}
+	if strings.TrimSpace(args.Content) == "" {
+		return failWith("invalid_argument", "Pass non-empty content to dry-run, then call analyze_patch again.", "content must not be empty")
+	}
+	runID, status, err := s.currentRun(ctx)
+	if err != nil {
+		return s.noRun(ctx, req, err)
+	}
+
+	rep, err := dryrun.AnalyzePatch(ctx, s.deps.Registry, s.deps.Graph, runID, args.Path, args.Content)
+	if err != nil {
+		return failFrom(err, "dryrun: %v", err)
+	}
+
+	resp := &Response{
+		IndexRevision: runID,
+		IndexStatus:   status,
+		Summary:       rep.Summary,
+	}
+	for _, c := range rep.BrokenCallers {
+		resp.Items = append(resp.Items, Item{
+			Kind: string(model.KindFunction),
+			Name: c.CallerName,
+			Path: c.CallerPath,
+			Line: c.CallerLine,
+			Why:  fmt.Sprintf("broken caller: target %s: %s", c.TargetName, c.Reason),
+		})
+	}
+	return s.reply(ctx, req, resp)
 }
 
 func (s *Server) impactAnalysis(ctx stdctx.Context, req *sdk.CallToolRequest, args impactArgs) (*sdk.CallToolResult, *Response, error) {

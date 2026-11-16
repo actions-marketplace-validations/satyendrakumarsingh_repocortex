@@ -175,6 +175,32 @@ func withPath(routes []Route) []Route {
 	return kept
 }
 
+func joinRoutePath(prefix, subpath string) string {
+	prefix = strings.TrimSpace(prefix)
+	subpath = strings.TrimSpace(subpath)
+	if prefix == "" {
+		if !strings.HasPrefix(subpath, "/") && subpath != "" {
+			return "/" + subpath
+		}
+		return subpath
+	}
+	if !strings.HasPrefix(prefix, "/") {
+		prefix = "/" + prefix
+	}
+	prefix = strings.TrimSuffix(prefix, "/")
+	if subpath == "" || subpath == "/" {
+		return prefix
+	}
+	if !strings.HasPrefix(subpath, "/") {
+		subpath = "/" + subpath
+	}
+	res := prefix + subpath
+	if res == "" {
+		return "/"
+	}
+	return res
+}
+
 func languageOf(path string) string {
 	switch {
 	case strings.HasSuffix(path, ".java"):
@@ -310,25 +336,39 @@ var (
 	// mux.HandleFunc("GET /api/health", h). The optional host and the path
 	// follow the method, separated by a space.
 	goPatternMethod = regexp.MustCompile(`^([A-Z]+)\s+(\S*)$`)
+	goGroupDecl     = regexp.MustCompile(`\b(\w+)\s*(?::=|=)\s*(\w+)\.Group\s*\(\s*"([^"]*)"`)
 	// r.Get("/path", handler) — chi, gin, echo, fiber all share this shape.
-	goRouterVerb = regexp.MustCompile(`\.\s*(Get|Post|Put|Patch|Delete|GET|POST|PUT|PATCH|DELETE)\s*\(\s*"([^"]*)"\s*,\s*([\w.]+)?`)
+	goRouterVerb = regexp.MustCompile(`(?:^|[^\w.])(\w+)\s*\.\s*(Get|Post|Put|Patch|Delete|GET|POST|PUT|PATCH|DELETE)\s*\(\s*"([^"]*)"\s*,\s*([\w.]+)?`)
 	// mux.Handle("/path", ...).Methods("POST") — gorilla/mux.
 	goMuxMethods = regexp.MustCompile(`\.Methods\s*\(\s*"([A-Z]+)"`)
 )
 
 func extractGo(lines []string) []Route {
 	var out []Route
+	groupPrefixes := make(map[string]string)
 	for i, line := range lines {
 		trimmed := strings.TrimSpace(line)
 		if strings.HasPrefix(trimmed, "//") {
 			continue
 		}
 
+		if gm := goGroupDecl.FindStringSubmatch(trimmed); gm != nil {
+			newVar := gm[1]
+			parentVar := gm[2]
+			pfx := gm[3]
+			groupPrefixes[newVar] = joinRoutePath(groupPrefixes[parentVar], pfx)
+		}
+
 		if m := goRouterVerb.FindStringSubmatch(trimmed); m != nil {
-			verb := strings.ToUpper(m[1])
+			receiver := m[1]
+			verb := strings.ToUpper(m[2])
+			routePath := m[3]
+			if pfx, ok := groupPrefixes[receiver]; ok && pfx != "" {
+				routePath = joinRoutePath(pfx, routePath)
+			}
 			if httpMethods[verb] {
 				out = append(out, Route{
-					Method: verb, Path: m[2], Handler: lastIdent(m[3]),
+					Method: verb, Path: routePath, Handler: lastIdent(m[4]),
 					Framework: FrameworkGoChi, Line: i + 1,
 					Confidence: model.ConfidenceHigh,
 				})
@@ -378,25 +418,48 @@ func extractGo(lines []string) []Route {
 
 var (
 	// @app.get("/path"), @router.post("/path"), @app.route("/path", methods=["POST"])
-	pyDecoratorStart = regexp.MustCompile(`^@\s*[\w.]+\.\s*(get|post|put|patch|delete|route)\s*\(`)
+	pyDecoratorStart = regexp.MustCompile(`^@\s*([\w.]+)\.\s*(get|post|put|patch|delete|route)\s*\(`)
+	pyRouterDecl     = regexp.MustCompile(`\b(\w+)\s*=\s*(?:fastapi\.)?APIRouter\([^)]*prefix\s*=\s*['"]([^'"]*)['"]`)
+	pyIncludeRouter  = regexp.MustCompile(`\b(\w+)\.include_router\(\s*(\w+)[^)]*prefix\s*=\s*['"]([^'"]*)['"]`)
 	pyMethodsArg     = regexp.MustCompile(`methods\s*=\s*\[([^\]]*)\]`)
 	pyFuncDecl       = regexp.MustCompile(`^\s*(?:async\s+)?def\s+(\w+)\s*\(`)
 )
 
 func extractPython(lines []string) []Route {
 	var out []Route
+	routerPrefixes := make(map[string]string)
+	for _, l := range lines {
+		t := strings.TrimSpace(l)
+		if rm := pyRouterDecl.FindStringSubmatch(t); rm != nil {
+			routerPrefixes[rm[1]] = joinRoutePath(routerPrefixes[rm[1]], rm[2])
+		}
+		if im := pyIncludeRouter.FindStringSubmatch(t); im != nil {
+			parent := im[1]
+			child := im[2]
+			pfx := im[3]
+			routerPrefixes[child] = joinRoutePath(joinRoutePath(routerPrefixes[parent], pfx), routerPrefixes[child])
+		}
+	}
+
 	for i := 0; i < len(lines); i++ {
 		trimmed := strings.TrimSpace(lines[i])
 		m := pyDecoratorStart.FindStringSubmatch(trimmed)
 		if m == nil {
 			continue
 		}
-		verb := strings.ToUpper(m[1])
+		receiver := m[1]
+		verb := strings.ToUpper(m[2])
 		framework := FrameworkFastAPI
 
 		fullDec, endLine := readBalancedParen(lines, i, 25)
 
+		hasQuoted := quotedString.MatchString(fullDec)
 		routePath := firstQuoted(fullDec)
+		if pfx, ok := routerPrefixes[receiver]; ok && pfx != "" {
+			routePath = joinRoutePath(pfx, routePath)
+		} else if routePath == "" && !hasQuoted {
+			continue
+		}
 		if routePath == "" {
 			continue
 		}
@@ -539,13 +602,34 @@ func extractDjango(lines []string) []Route {
 // ---------------------------------------------------------------- Express
 
 var (
-	expressRouteStart = regexp.MustCompile(`\b(?:app|router)\s*\.\s*(get|post|put|patch|delete|all)\s*\(`)
-	expressPath       = regexp.MustCompile(`\b(?:app|router)\s*\.\s*(?:get|post|put|patch|delete|all)\s*\(\s*['"` + "`" + `]([^'"` + "`" + `]*)['"` + "`" + `]\s*,`)
+	expressRouteStart = regexp.MustCompile(`\b([a-zA-Z_$][\w$]*)\s*\.\s*(get|post|put|patch|delete|all)\s*\(`)
+	expressPath       = regexp.MustCompile(`\b[a-zA-Z_$][\w$]*\s*\.\s*(?:get|post|put|patch|delete|all)\s*\(\s*['"` + "`" + `]([^'"` + "`" + `]*)['"` + "`" + `]\s*,`)
+	expressMount      = regexp.MustCompile(`\b([a-zA-Z_$][\w$]*)\s*\.\s*use\s*\(\s*['"` + "`" + `]([^'"` + "`" + `]*)['"` + "`" + `]\s*,\s*([a-zA-Z_$][\w$]*)\s*\)`)
 	expressIdent      = regexp.MustCompile(`^[a-zA-Z_$][\w.$]*$`)
 )
 
+var expressNoiseReceivers = map[string]bool{
+	"console": true, "res": true, "req": true, "logger": true,
+	"Math": true, "JSON": true, "Object": true, "Array": true,
+	"Promise": true, "window": true, "document": true, "process": true,
+}
+
 func extractExpress(lines []string) []Route {
 	var out []Route
+	mountPrefixes := make(map[string]string)
+	for _, l := range lines {
+		t := strings.TrimSpace(l)
+		if strings.HasPrefix(t, "//") || strings.HasPrefix(t, "*") {
+			continue
+		}
+		if mm := expressMount.FindStringSubmatch(t); mm != nil {
+			parent := mm[1]
+			pfx := mm[2]
+			child := mm[3]
+			mountPrefixes[child] = joinRoutePath(mountPrefixes[parent], pfx)
+		}
+	}
+
 	for i, line := range lines {
 		trimmed := strings.TrimSpace(line)
 		if strings.HasPrefix(trimmed, "//") || strings.HasPrefix(trimmed, "*") {
@@ -555,7 +639,11 @@ func extractExpress(lines []string) []Route {
 		if sm == nil {
 			continue
 		}
-		verb := strings.ToUpper(sm[1])
+		receiver := sm[1]
+		if expressNoiseReceivers[receiver] {
+			continue
+		}
+		verb := strings.ToUpper(sm[2])
 		if verb == "ALL" {
 			verb = "" // every method; reported as ANY
 		} else if !httpMethods[verb] {
@@ -568,6 +656,9 @@ func extractExpress(lines []string) []Route {
 			continue
 		}
 		path := pm[1]
+		if pfx, ok := mountPrefixes[receiver]; ok && pfx != "" {
+			path = joinRoutePath(pfx, path)
+		}
 		handler := expressHandlerFrom(fullCall[len(pm[0]):])
 
 		out = append(out, Route{

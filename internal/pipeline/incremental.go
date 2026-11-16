@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/satyendrakumarsingh/repocortex/internal/acquire/fs"
@@ -232,6 +233,9 @@ type IncrementalOptions struct {
 	// references un-resolved by their replacement) immediately after indexing,
 	// restoring call edges across the graph.
 	Resolve bool
+	// Root is the repository root directory. When provided and Go files were
+	// changed, CheckGoTypes runs in-process to preserve exact compiler edges.
+	Root string
 }
 
 // Incremental re-indexes only what changed, in place, on the committed run.
@@ -351,9 +355,19 @@ func Incremental(
 	if err := reg.RestatFiles(ctx, runID, touched); err != nil {
 		return stats, err
 	}
+	hasGoChanges := false
+	for _, ch := range changes {
+		if strings.HasSuffix(ch.Path, ".go") {
+			hasGoChanges = true
+			break
+		}
+	}
 	if opts.Resolve && (stats.Added > 0 || stats.Modified > 0 || stats.Deleted > 0) {
 		if _, err := Resolve(ctx, reg, runID, ResolveOptions{}); err != nil {
 			return stats, fmt.Errorf("incremental resolve: %w", err)
+		}
+		if hasGoChanges && opts.Root != "" {
+			_ = CheckGoTypes(ctx, reg, runID, GoTypesOptions{Root: opts.Root})
 		}
 	}
 	return stats, nil
@@ -367,6 +381,8 @@ type RefreshOptions struct {
 	// DiffOptions.
 	Rehash  bool
 	Parsers parse.Registry
+	// Root is the repository root directory, passed to Incremental.
+	Root string
 	// Now is the wall clock, injectable for tests. It must be the clock file
 	// times are stamped by, which is why it is not the registry's.
 	Now func() time.Time
@@ -403,7 +419,7 @@ func Refresh(
 		return IncrementalStats{}, fmt.Errorf("diff working tree: %w", err)
 	}
 	stats, err := Incremental(ctx, reg, runID, walker, changes, IncrementalOptions{
-		Parsers: opts.Parsers, Resolve: true,
+		Parsers: opts.Parsers, Resolve: true, Root: opts.Root,
 	})
 	if err != nil {
 		return stats, err

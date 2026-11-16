@@ -503,6 +503,7 @@ func refreshIndex(
 	stats, err := pipeline.Refresh(ctx, reg, current.ID, walker, pipeline.RefreshOptions{
 		RunningAs: Version,
 		Rehash:    rehash,
+		Root:      repoRoot,
 	})
 	if err != nil {
 		return stats, err

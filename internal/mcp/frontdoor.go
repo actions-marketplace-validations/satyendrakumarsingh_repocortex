@@ -16,9 +16,10 @@ type frontdoorArgs struct {
 	Path  string `json:"path,omitempty" jsonschema:"File path to disambiguate or scope the query."`
 	Line  int    `json:"line,omitempty" jsonschema:"1-based line number for precise symbol selection."`
 
-	Diff   string `json:"diff,omitempty" jsonschema:"Unified git diff text for impact or diff compression."`
-	Within string `json:"within,omitempty" jsonschema:"Path filter for call sites in callers or references (e.g. 'src/')."`
-	Kind   string `json:"kind,omitempty" jsonschema:"Optional symbol kind filter: class, interface, function, method, field, constant."`
+	Diff    string `json:"diff,omitempty" jsonschema:"Unified git diff text for impact or diff compression."`
+	Content string `json:"content,omitempty" jsonschema:"Proposed file content for speculative dryrun patch analysis."`
+	Within  string `json:"within,omitempty" jsonschema:"Path filter for call sites in callers or references (e.g. 'src/')."`
+	Kind    string `json:"kind,omitempty" jsonschema:"Optional symbol kind filter: class, interface, function, method, field, constant."`
 
 	MinConfidence string `json:"min_confidence,omitempty" jsonschema:"Confidence floor: exact, high, medium, or low."`
 	Limit         int    `json:"limit,omitempty" jsonschema:"Maximum items to return."`
@@ -40,7 +41,7 @@ func (s *Server) repocortexFrontdoor(ctx context.Context, req *sdk.CallToolReque
 	action := strings.ToLower(strings.TrimSpace(args.Action))
 	if action == "" {
 		return failWith("invalid_argument",
-			"Specify an action: 'context', 'search', 'symbol', 'callers', 'callees', 'references', 'impact', 'tests', 'diff', 'overview', or 'query'.",
+			"Specify an action: 'explore', 'context', 'search', 'symbol', 'callers', 'callees', 'references', 'impact', 'tests', 'diff', 'overview', 'query', 'outline', 'endpoints', 'tables', 'blindspots', 'plan_change', 'rename', 'config', or 'analyze_patch'.",
 			"action is required")
 	}
 
@@ -204,9 +205,76 @@ func (s *Server) repocortexFrontdoor(ctx context.Context, req *sdk.CallToolReque
 			Limit: args.Limit,
 		})
 
+	case "outline", "get_file_outline":
+		return s.getFileOutline(ctx, req, fileOutlineArgs{
+			Path: args.Path,
+		})
+
+	case "endpoints", "list_api_endpoints", "api_endpoints":
+		return s.findAPIEndpoints(ctx, req, apiEndpointArgs{
+			Method: args.Kind, // can pass method e.g. GET
+		})
+
+	case "tables", "list_db_tables", "db_tables", "database":
+		tbl := args.Name
+		if tbl == "" {
+			tbl = args.Query
+		}
+		return s.findDBAccess(ctx, req, dbAccessArgs{
+			Table: tbl,
+		})
+
+	case "blindspots", "list_blindspots", "untested":
+		return s.detectBlindspots(ctx, req, emptyArgs{})
+
+	case "plan_change", "change_plan":
+		name := args.Name
+		if name == "" {
+			name = args.Query
+		}
+		return s.planChange(ctx, req, targetArgs{
+			Symbol:           name,
+			Path:             args.Path,
+			lineArg:          lineArg{Line: args.Line},
+			minConfidenceArg: minConfidenceArg{MinConfidence: args.MinConfidence},
+			pageArg:          pageArg{Limit: args.Limit, Offset: args.Offset},
+		})
+
+	case "rename", "plan_rename":
+		name := args.Name
+		if name == "" {
+			name = args.Query
+		}
+		return s.planRename(ctx, req, renameArgs{
+			Name:             name,
+			NewName:          args.Query,
+			Path:             args.Path,
+			lineArg:          lineArg{Line: args.Line},
+			minConfidenceArg: minConfidenceArg{MinConfidence: args.MinConfidence},
+		})
+
+	case "config", "get_config_key", "config_key":
+		key := args.Name
+		if key == "" {
+			key = args.Query
+		}
+		return s.getConfigKey(ctx, req, configKeyArgs{
+			Key: key,
+		})
+
+	case "analyze_patch", "patch", "dryrun":
+		content := args.Content
+		if content == "" {
+			content = args.Diff
+		}
+		return s.analyzePatch(ctx, req, patchAnalysisArgs{
+			Path:    args.Path,
+			Content: content,
+		})
+
 	default:
 		return failWith("invalid_argument",
-			fmt.Sprintf("Unknown action %q. Supported actions: 'context', 'search', 'symbol', 'callers', 'callees', 'references', 'impact', 'tests', 'diff', 'overview', 'query'.", action),
+			fmt.Sprintf("Unknown action %q. Supported actions: 'explore', 'context', 'search', 'symbol', 'callers', 'callees', 'references', 'impact', 'tests', 'diff', 'overview', 'query', 'outline', 'endpoints', 'tables', 'blindspots', 'plan_change', 'rename', 'config', 'analyze_patch'.", action),
 			"unknown action: %s", action)
 	}
 }

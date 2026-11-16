@@ -120,3 +120,48 @@ func TestGoTypesDoesNothingWithoutGo(t *testing.T) {
 		t.Fatalf("ran=%v err=%v on a repository with no Go", out.Ran, out.Err)
 	}
 }
+
+// TestIncrementalRefreshPreservesExactGoTypesEdges verifies that an incremental
+// refresh does not downgrade compiler-proven exact edges to heuristic ones (Finding A1).
+func TestIncrementalRefreshPreservesExactGoTypesEdges(t *testing.T) {
+	h := newHarness(t, goTypesFiles)
+	ctx := context.Background()
+
+	if _, err := Resolve(ctx, h.reg, h.runID, ResolveOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	out := CheckGoTypes(ctx, h.reg, h.runID, GoTypesOptions{Root: h.root})
+	if out.Err != nil || !out.Ran {
+		t.Fatalf("initial go types failed: %v", out.Err)
+	}
+	if out.Check.Goroot == "" {
+		t.Skip("no GOROOT can be found without running anything")
+	}
+	if rows := h.edgesInto("Run"); !hasExact(rows, "Caller") {
+		t.Fatalf("initial edge is not exact: %+v", rows)
+	}
+
+	// Make an edit to a file
+	h.write("p/d.go", "package p\n\ntype Deeper struct{}\nfunc (Deeper) Run() string { return \"d\" }\n// comment\n")
+
+	changes, err := Diff(ctx, h.reg, h.runID, h.walker, harnessBuild)
+	if err != nil {
+		t.Fatalf("diff: %v", err)
+	}
+	t.Logf("changes count: %d, changes: %+v", len(changes), changes)
+	stats, err := Incremental(ctx, h.reg, h.runID, h.walker, changes, IncrementalOptions{
+		Root:    h.root,
+		Resolve: true,
+	})
+	if err != nil {
+		t.Fatalf("incremental: %v", err)
+	}
+	if stats.Modified == 0 {
+		t.Fatalf("expected at least 1 modified file, got %+v", stats)
+	}
+
+	// Verify that exact edge was preserved/re-proven by the incremental pass
+	if rows := h.edgesInto("Run"); !hasExact(rows, "Caller") {
+		t.Fatalf("exact compiler edge was lost after incremental refresh: %+v", rows)
+	}
+}

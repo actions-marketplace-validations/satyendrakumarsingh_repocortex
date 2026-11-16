@@ -156,6 +156,7 @@ type Server struct {
 type runMeta struct {
 	gitRevision string
 	startedUnix int64
+	exactShare  float64
 }
 
 // New builds an MCP server exposing the tools allowed by the configured
@@ -316,6 +317,7 @@ func ProfileTools() (minimal, standard []string) {
 func fullOnlyTools() []string {
 	return []string{
 		"analyze_change",
+		"analyze_patch",
 		"find_owners",
 		"list_knowledge_risks",
 		"find_callees",
@@ -454,24 +456,30 @@ func (s *Server) currentRun(ctx context.Context) (int64, string, error) {
 		}
 		return 0, "absent", fmt.Errorf("read the committed index: %w", err)
 	}
-	s.rememberRunMeta(run.ID, run.GitRevision, run.StartedUnix)
+	var exactShare float64
+	if s.deps.Registry != nil {
+		if rs, err := s.deps.Registry.ResolutionStats(ctx, run.ID); err == nil && rs.Resolved > 0 {
+			exactShare = float64(rs.ByCompiler) / float64(rs.Resolved)
+		}
+	}
+	s.rememberRunMeta(run.ID, run.GitRevision, run.StartedUnix, exactShare)
 	return run.ID, string(run.Status), nil
 }
 
-// rememberRunMeta caches a committed run's git revision and start time,
+// rememberRunMeta caches a committed run's git revision, start time, and exact share,
 // keyed by run ID, for reply() to build Provenance from without a second
 // registry read.
 //
 // Bounded to the current run plus the previous one: a long-lived server
 // across many reindexes must not grow this map without bound (CLAUDE.md
 // §4.4), and nothing past the current run is ever looked up again.
-func (s *Server) rememberRunMeta(runID int64, gitRevision string, startedUnix int64) {
+func (s *Server) rememberRunMeta(runID int64, gitRevision string, startedUnix int64, exactShare float64) {
 	s.runMetaMu.Lock()
 	defer s.runMetaMu.Unlock()
 	if _, exists := s.runMeta[runID]; !exists {
 		s.runMetaOrder = append(s.runMetaOrder, runID)
 	}
-	s.runMeta[runID] = runMeta{gitRevision: gitRevision, startedUnix: startedUnix}
+	s.runMeta[runID] = runMeta{gitRevision: gitRevision, startedUnix: startedUnix, exactShare: exactShare}
 	for len(s.runMetaOrder) > 2 {
 		oldest := s.runMetaOrder[0]
 		s.runMetaOrder = s.runMetaOrder[1:]
@@ -603,6 +611,8 @@ func (s *Server) reply(ctx context.Context, req *sdk.CallToolRequest, r *Respons
 func (s *Server) provenanceFor(ctx context.Context, runID int64) *Provenance {
 	var builtAtSHA string
 	var ageSeconds int64
+	var resolvedAt string
+	var exactShare float64
 	if runID != 0 {
 		s.runMetaMu.RLock()
 		meta, ok := s.runMeta[runID]
@@ -614,10 +624,15 @@ func (s *Server) provenanceFor(ctx context.Context, runID int64) *Provenance {
 				if ageSeconds < 0 {
 					ageSeconds = 0
 				}
+				resolvedAt = time.Unix(meta.startedUnix, 0).UTC().Format(time.RFC3339)
 			}
+			exactShare = meta.exactShare
 		}
 	}
-	return ProvenanceFor(builtAtSHA, s.headSHA(ctx), ageSeconds)
+	p := ProvenanceFor(builtAtSHA, s.headSHA(ctx), ageSeconds)
+	p.LastResolvedAt = resolvedAt
+	p.ExactShare = exactShare
+	return p
 }
 
 // headSHA returns the repository's current HEAD, read fresh via go-git

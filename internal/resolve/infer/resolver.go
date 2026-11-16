@@ -931,9 +931,13 @@ func (r *Resolver) pickCapped(
 		// or service boundary constraints the candidates directly.
 		stats.CapExceeded++
 		var narrowed []registry.SymbolIndexEntry
-		for _, c := range cands {
-			if c.FileID == fr.FileID {
-				narrowed = append(narrowed, c)
+		// Same-file rescue is valid for bare calls or instance self-calls, but MUST NOT
+		// bind method calls on external receivers (e.g. user.save()) to a module-level function.
+		if ref.Receiver == "" || spec.isSelfName(ref.Receiver) {
+			for _, c := range cands {
+				if c.FileID == fr.FileID {
+					narrowed = append(narrowed, c)
+				}
 			}
 		}
 		if len(narrowed) == 0 || len(narrowed) > spec.MaxCandidates {

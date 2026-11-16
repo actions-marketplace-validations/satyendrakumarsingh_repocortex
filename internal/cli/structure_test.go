@@ -909,6 +909,7 @@ func TestEveryAgentToolHasACommand(t *testing.T) {
 		"search_graph":            "query",
 		"get_session_stats":       "stats",
 		"explore_symbol":          "explore",
+		"analyze_patch":           "diff",
 	}
 	root := NewRoot()
 	commands := map[string]bool{}

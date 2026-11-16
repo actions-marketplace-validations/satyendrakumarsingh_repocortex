@@ -81,7 +81,18 @@ func TestFrontdoorCompactProfile(t *testing.T) {
 		t.Errorf("expected table with total_symbols, got: %s", qText)
 	}
 
-	// 5. Invalid action gives friendly error
+	// 5. Blindspots action
+	_, err = fs.sess.CallTool(ctx, &sdk.CallToolParams{
+		Name: "repocortex",
+		Arguments: map[string]any{
+			"action": "blindspots",
+		},
+	})
+	if err != nil {
+		t.Fatalf("call blindspots: %v", err)
+	}
+
+	// 6. Invalid action gives friendly error
 	res, err = fs.sess.CallTool(ctx, &sdk.CallToolParams{
 		Name: "repocortex",
 		Arguments: map[string]any{
@@ -92,7 +103,7 @@ func TestFrontdoorCompactProfile(t *testing.T) {
 		t.Fatalf("call invalid action: %v", err)
 	}
 	text := res.Content[0].(*sdk.TextContent).Text
-	if !strings.Contains(text, "fly_to_moon") || !strings.Contains(text, "Supported actions") {
+	if !strings.Contains(text, "fly_to_moon") || !strings.Contains(text, "endpoints") || !strings.Contains(text, "blindspots") {
 		t.Errorf("expected helpful error for invalid action, got: %s", text)
 	}
 }

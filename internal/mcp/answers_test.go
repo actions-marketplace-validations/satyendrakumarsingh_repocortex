@@ -126,6 +126,7 @@ func callsForEveryTool(target, path string) map[string]map[string]any {
 		"find_tests":              {"symbol": target},
 		"analyze_impact":          {"symbol": target},
 		"analyze_change":          {"base": "HEAD"},
+		"analyze_patch":           {"path": path, "content": "package p\nfunc F() {}\n"},
 		"find_owners":             {"symbol": target},
 		"get_resolution_coverage": {},
 		"plan_rename":             {"name": target, "new_name": target + "Renamed"},

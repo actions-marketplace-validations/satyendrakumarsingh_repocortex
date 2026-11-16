@@ -405,6 +405,29 @@ func TestRecentCommitsRespectsLimit(t *testing.T) {
 	}
 }
 
+func TestExtractAntiRegressionConstraints(t *testing.T) {
+	msg := `refactor: overhaul pool worker
+
+FIX: prevent data race in connection pool worker loop
+WORKAROUND: issue #42 upstream deadlock on close
+DO NOT REMOVE: required for backward compatibility with v1 clients
+Random note that is not a constraint.
+`
+	got := extractAntiRegressionConstraints(msg)
+	if len(got) != 3 {
+		t.Fatalf("expected 3 constraints, got %d: %v", len(got), got)
+	}
+	if !strings.Contains(got[0], "data race") {
+		t.Errorf("constraint 0: %q", got[0])
+	}
+	if !strings.Contains(got[1], "upstream deadlock") {
+		t.Errorf("constraint 1: %q", got[1])
+	}
+	if !strings.Contains(got[2], "backward compatibility") {
+		t.Errorf("constraint 2: %q", got[2])
+	}
+}
+
 func TestRecentCommitsRefusesUnboundedWalk(t *testing.T) {
 	t.Parallel()
 

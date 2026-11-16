@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"regexp"
 	"sort"
 	"strings"
 
@@ -29,6 +30,10 @@ type Commit struct {
 
 	// Subject is the first line of the message, trimmed.
 	Subject string `json:"subject"`
+
+	// Constraints holds high-entropy defensive phrases extracted from commit
+	// bodies (e.g. "FIX: race in pool", "WORKAROUND: issue #123", "DO NOT REMOVE").
+	Constraints []string `json:"constraints,omitempty"`
 
 	// Paths are the repo-relative paths this commit touched, sorted. Populated
 	// by RecentCommits and left nil by RecentCommitsMeta. Also nil for a
@@ -152,6 +157,7 @@ func (r *Repo) recentCommits(ctx context.Context, limit int, withPaths bool) (ou
 			AuthorEmail:     c.Author.Email,
 			When:            c.Author.When.Unix(),
 			Subject:         subject(c.Message),
+			Constraints:     extractAntiRegressionConstraints(c.Message),
 			ShallowBoundary: cut.boundary(c),
 		}
 		// A boundary commit whose first parent is missing has nothing to be
@@ -345,4 +351,35 @@ func subject(msg string) string {
 		msg = msg[:i]
 	}
 	return strings.TrimSpace(msg)
+}
+
+var antiRegressionRegex = regexp.MustCompile(`(?i)\b(FIX(?:ED)?|RACE|WORKAROUND|DO NOT REMOVE|HACK|REGRESSION|BUG|HOTFIX|PREVENT|AVOID)\s*[:\-]\s*(.+)`)
+
+func extractAntiRegressionConstraints(msg string) []string {
+	lines := strings.Split(msg, "\n")
+	if len(lines) <= 1 {
+		return nil
+	}
+	var constraints []string
+	seen := make(map[string]bool)
+	for _, l := range lines[1:] {
+		t := strings.TrimSpace(l)
+		if t == "" {
+			continue
+		}
+		if m := antiRegressionRegex.FindStringSubmatch(t); m != nil {
+			c := strings.TrimSpace(m[0])
+			if len(c) > 120 {
+				c = c[:117] + "..."
+			}
+			if !seen[c] {
+				seen[c] = true
+				constraints = append(constraints, c)
+				if len(constraints) >= 5 {
+					break
+				}
+			}
+		}
+	}
+	return constraints
 }

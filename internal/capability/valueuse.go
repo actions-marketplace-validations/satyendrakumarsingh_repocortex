@@ -251,7 +251,16 @@ func (d Deps) ValueUse(ctx context.Context, runID int64, tgt Target, idx *Symbol
 	// expired is whether err is this check's own deadline and not the caller's
 	// cancellation: the first returns what was found, the second is an error.
 	expired := func(err error) bool {
-		return errors.Is(err, context.DeadlineExceeded) && parent.Err() == nil
+		if parent.Err() != nil {
+			return false
+		}
+		if errors.Is(err, context.DeadlineExceeded) || errors.Is(ctx.Err(), context.DeadlineExceeded) {
+			return true
+		}
+		if err != nil && (strings.Contains(err.Error(), "interrupted") || strings.Contains(err.Error(), "context deadline exceeded")) {
+			return true
+		}
+		return false
 	}
 
 	check := func(id int64, name, path string, line int, onPath bool) error {
@@ -325,6 +334,10 @@ func (d Deps) ValueUse(ctx context.Context, runID int64, tgt Target, idx *Symbol
 	}
 	counts, err := reader.IncomingEdgeCounts(ctx, runID, ids)
 	if err != nil {
+		if expired(err) {
+			out.OutOfTime = true
+			return out, nil
+		}
 		return out, err
 	}
 	checked := 0

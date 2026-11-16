@@ -282,3 +282,97 @@ func TestInstallCommitHookInstallsPostMergeAndCheckout(t *testing.T) {
 		}
 	}
 }
+
+func TestHookInstallationSafetyNonShell(t *testing.T) {
+	t.Parallel()
+	root := newRepo(t)
+	postCheckout := filepath.Join(root, ".git", "hooks", "post-checkout")
+	pyContent := "#!/usr/bin/env python3\nprint('running python checkout hook')\n"
+	if err := os.WriteFile(postCheckout, []byte(pyContent), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := InstallCommitHook(root, "repocortex")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Python hook must remain untouched
+	content, err := os.ReadFile(postCheckout)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(content) != pyContent {
+		t.Fatalf("Python hook was corrupted with shell syntax:\n%s", string(content))
+	}
+
+	// Auxiliary script must be installed
+	auxPath := postCheckout + "-repocortex"
+	auxContent, err := os.ReadFile(auxPath)
+	if err != nil {
+		t.Fatalf("auxiliary hook not created: %v", err)
+	}
+	if !strings.Contains(string(auxContent), "auto-index") {
+		t.Fatalf("auxiliary hook missing auto-index: %s", string(auxContent))
+	}
+}
+
+func TestHookInstallationSafetyTerminalExit(t *testing.T) {
+	t.Parallel()
+	root := newRepo(t)
+	postMerge := filepath.Join(root, ".git", "hooks", "post-merge")
+	shContent := "#!/bin/sh\necho 'merging'\nexit 0\n"
+	if err := os.WriteFile(postMerge, []byte(shContent), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := InstallCommitHook(root, "repocortex")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	content, err := os.ReadFile(postMerge)
+	if err != nil {
+		t.Fatal(err)
+	}
+	str := string(content)
+	exitIdx := strings.Index(str, "exit 0")
+	blockIdx := strings.Index(str, hookBegin)
+	if blockIdx > exitIdx {
+		t.Fatalf("managed block was placed after exit 0, making it unreachable:\n%s", str)
+	}
+}
+
+func TestPostCheckoutBranchGuard(t *testing.T) {
+	t.Parallel()
+	root := newRepo(t)
+	_, err := InstallCommitHook(root, "repocortex")
+	if err != nil {
+		t.Fatal(err)
+	}
+	postCheckout := filepath.Join(root, ".git", "hooks", "post-checkout")
+	content, err := os.ReadFile(postCheckout)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(content), `"$3" = "1"`) {
+		t.Fatalf("post-checkout hook missing $3 = 1 branch guard:\n%s", string(content))
+	}
+}
+
+func TestAllHooksStatus(t *testing.T) {
+	t.Parallel()
+	root := newRepo(t)
+	rep := AllHooksStatus(root)
+	if rep.PostCommit.Installed || rep.PostMerge.Installed || rep.PostCheckout.Installed {
+		t.Fatalf("expected uninstalled hooks in new repo, got %+v", rep)
+	}
+
+	if _, err := InstallCommitHook(root, "repocortex"); err != nil {
+		t.Fatal(err)
+	}
+	rep = AllHooksStatus(root)
+	if !rep.PostCommit.Installed || !rep.PostMerge.Installed || !rep.PostCheckout.Installed {
+		t.Fatalf("expected all hooks installed, got %+v", rep)
+	}
+}

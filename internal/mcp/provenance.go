@@ -30,6 +30,12 @@ type Provenance struct {
 	// AgeSeconds is how long ago the index was built.
 	AgeSeconds int64 `json:"age_seconds"`
 
+	// LastResolvedAt is the RFC3339 timestamp when references were resolved.
+	LastResolvedAt string `json:"last_resolve_at,omitempty"`
+
+	// ExactShare is the fraction of resolved references proven by a compiler (0.0 to 1.0).
+	ExactShare float64 `json:"exact_share,omitempty"`
+
 	// Caveat is always set. It states what the comparison above does not cover.
 	Caveat string `json:"caveat"`
 }

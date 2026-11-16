@@ -728,3 +728,58 @@ export class UsersController {
 	assertRoute(t, routes, "GET /users/:id", "findOne")
 	assertRoute(t, routes, "POST /users", "create")
 }
+
+func TestExtractGoGinGroupPrefixes(t *testing.T) {
+	src := `package main
+
+import "github.com/gin-gonic/gin"
+
+func SetupRouter() *gin.Engine {
+	r := gin.Default()
+	v1 := r.Group("/api/v1")
+	v1.GET("/users", listUsers)
+	v1.POST("/users", createUser)
+
+	admin := v1.Group("/admin")
+	admin.DELETE("/users/:id", deleteUser)
+	return r
+}`
+	routes := Extract("routes.go", []byte(src))
+	assertRoute(t, routes, "GET /api/v1/users", "listUsers")
+	assertRoute(t, routes, "POST /api/v1/users", "createUser")
+	assertRoute(t, routes, "DELETE /api/v1/admin/users/:id", "deleteUser")
+}
+
+func TestExtractFastAPIRouterPrefixes(t *testing.T) {
+	src := `from fastapi import FastAPI, APIRouter
+
+app = FastAPI()
+users_router = APIRouter(prefix="/users")
+
+@users_router.get("/{user_id}")
+async def get_user(user_id: int):
+    return {"id": user_id}
+
+@users_router.post("")
+def create_user(data: dict):
+    return data
+`
+	routes := Extract("api.py", []byte(src))
+	assertRoute(t, routes, "GET /users/{user_id}", "get_user")
+	assertRoute(t, routes, "POST /users", "create_user")
+}
+
+func TestExtractExpressMountPrefixes(t *testing.T) {
+	src := `const express = require('express');
+const app = express();
+const userRouter = express.Router();
+
+userRouter.get('/profile', getProfile);
+userRouter.post('/settings', updateSettings);
+
+app.use('/api/v2', userRouter);
+`
+	routes := Extract("server.js", []byte(src))
+	assertRoute(t, routes, "GET /api/v2/profile", "getProfile")
+	assertRoute(t, routes, "POST /api/v2/settings", "updateSettings")
+}
