@@ -600,3 +600,53 @@ func TestImportSetSeparatesMembersFromModules(t *testing.T) {
 		t.Errorf("leadingDots(./sibling) = %d, want 0", n)
 	}
 }
+
+func TestSubprojectOf(t *testing.T) {
+	cases := []struct {
+		path string
+		want string
+	}{
+		{"backend/python/auth/main.py", "backend/python/auth"},
+		{"backend/go/gateway/main.go", "backend/go/gateway"},
+		{"backend/api.py", "backend/api.py"}, // less than 3 parts: backend/api.py
+		{"services/payment/service.py", "services/payment"},
+		{"packages/ui/button.tsx", "packages/ui"},
+		{"apps/web/page.tsx", "apps/web"},
+		{"modules/shared/util.py", "modules/shared"},
+		{"single_service/main.py", ""},
+		{"main.py", ""},
+	}
+	for _, tc := range cases {
+		got := subprojectOf(tc.path)
+		if got != tc.want {
+			t.Errorf("subprojectOf(%q) = %q, want %q", tc.path, got, tc.want)
+		}
+	}
+}
+
+func TestSubprojectCandidateIsolation(t *testing.T) {
+	authCaller := "backend/python/auth/handler.py"
+	idx := index(
+		pyFunc(1, "backend/python/auth/token.py", "process_token"),
+		pyFunc(2, "backend/python/billing/token.py", "process_token"),
+	)
+	fr := registry.FileRefs{
+		FileID:  fileIDOf(authCaller),
+		Path:    authCaller,
+		Symbols: scopeAt(authCaller, "handle_request"),
+		Refs: []registry.Reference{
+			pyCall(10, "process_token", "", 15),
+		},
+	}
+	edges := resolvePython(t, idx, nil, fr)
+	edge, ok := edges[15]
+	if !ok {
+		t.Fatalf("expected edge for process_token call, got none: %+v", edges)
+	}
+	if edge.DstID != 1 {
+		t.Fatalf("expected target to be auth token (ID 1), got %d", edge.DstID)
+	}
+	if edge.Confidence != model.ConfidenceLow {
+		t.Fatalf("expected confidence low, got %s", edge.Confidence)
+	}
+}

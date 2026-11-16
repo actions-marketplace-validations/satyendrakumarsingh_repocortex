@@ -2,6 +2,7 @@ package infer
 
 import (
 	"fmt"
+	"path/filepath"
 	"strings"
 
 	"github.com/satyendrakumarsingh/repocortex/internal/registry"
@@ -627,7 +628,37 @@ func (r *Resolver) pickByName(
 	if len(cands) == 1 && cands[0].Exported && !r.specs.IsGenericName(ref.Name) {
 		return candidate{cands[0], model.ConfidenceLow, "unique name in repository, no import evidence"}, true
 	}
+	if proj := subprojectOf(fr.Path); proj != "" && !r.specs.IsGenericName(ref.Name) {
+		var sameProj []registry.SymbolIndexEntry
+		for _, c := range cands {
+			if subprojectOf(c.FilePath) == proj && c.Exported {
+				sameProj = append(sameProj, c)
+			}
+		}
+		if len(sameProj) == 1 {
+			return candidate{sameProj[0], model.ConfidenceLow, "unique name in service subproject"}, true
+		}
+	}
 	return candidate{}, false
+}
+
+// subprojectOf returns the top-level service or package prefix for a file path in a monorepo,
+// or "" if the path does not belong to a recognized multi-project structure.
+func subprojectOf(p string) string {
+	clean := filepath.ToSlash(p)
+	parts := strings.Split(clean, "/")
+	if len(parts) >= 2 {
+		switch parts[0] {
+		case "services", "packages", "apps", "frontend", "modules":
+			return parts[0] + "/" + parts[1]
+		case "backend":
+			if len(parts) >= 3 {
+				return parts[0] + "/" + parts[1] + "/" + parts[2]
+			}
+			return parts[0] + "/" + parts[1]
+		}
+	}
+	return ""
 }
 
 // nameOnly reports a binding made on a name alone, one confidence level below
