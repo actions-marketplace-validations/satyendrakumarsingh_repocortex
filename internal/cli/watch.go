@@ -136,19 +136,33 @@ func runWatch(cmd *cobra.Command, g *Global, debounce time.Duration) error {
 			cfg.ProjectName, w.WatchedDirs(), current.ID, time.Since(started).Round(10*time.Millisecond))
 	}
 
+	var stoppedPrinted bool
+	printStopped := func() {
+		if !g.JSON && !stoppedPrinted {
+			stoppedPrinted = true
+			_, _ = fmt.Fprintln(cmd.OutOrStdout(), "\nStopped.")
+		}
+	}
+	defer func() {
+		if ctx.Err() != nil {
+			printStopped()
+		}
+	}()
+
 	for {
 		select {
 		case <-ctx.Done():
 			// SIGINT/SIGTERM. Nothing to flush: every incremental pass has
 			// already committed per file, so stopping here cannot lose or
 			// corrupt work.
-			if !g.JSON {
-				_, _ = fmt.Fprintln(cmd.OutOrStdout(), "\nStopped.")
-			}
+			printStopped()
 			return nil
 
 		case err, ok := <-w.Errors():
 			if !ok {
+				if ctx.Err() != nil {
+					printStopped()
+				}
 				return nil
 			}
 			// A watcher error is usually a lost watch descriptor or a
@@ -159,6 +173,9 @@ func runWatch(cmd *cobra.Command, g *Global, debounce time.Duration) error {
 
 		case batch, ok := <-w.Changes():
 			if !ok {
+				if ctx.Err() != nil {
+					printStopped()
+				}
 				return nil
 			}
 			if len(batch) == 0 {
@@ -173,6 +190,7 @@ func runWatch(cmd *cobra.Command, g *Global, debounce time.Duration) error {
 			stats, err := refreshIndex(ctx, reg, current, walker, cfg.RepoRoot, false)
 			if err != nil {
 				if ctx.Err() != nil {
+					printStopped()
 					return nil
 				}
 				log.Error("incremental update failed; index left unchanged", "error", err)

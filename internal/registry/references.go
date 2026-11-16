@@ -980,6 +980,9 @@ type CompilerResolutionStats struct {
 	// Corrected is the references the resolver had bound to one definition and
 	// the compiler, at that very position, bound to another: they were moved.
 	Corrected int64
+	// Confirmed is the references the resolver had bound to this definition and
+	// the compiler confirmed at this position, giving them compiler provenance.
+	Confirmed int64
 }
 
 // compilerSite is one reference as the settlement pass sees it.
@@ -1005,9 +1008,10 @@ type compilerGroup struct {
 
 // compilerDecision is one reference the compiler settled.
 type compilerDecision struct {
-	rid, dst int64
-	from     string
-	moved    bool
+	rid, dst  int64
+	from      string
+	moved     bool
+	confirmed bool
 }
 
 // decide pairs the group's references with its occurrences and returns what the
@@ -1063,6 +1067,8 @@ func (g *compilerGroup) decide() []compilerDecision {
 				out = append(out, compilerDecision{rid: s.id, dst: d, from: s.resolution})
 			case s.bound != d:
 				out = append(out, compilerDecision{rid: s.id, dst: d, from: s.resolution, moved: true})
+			default:
+				out = append(out, compilerDecision{rid: s.id, dst: d, from: s.resolution, confirmed: true})
 			}
 		}
 		return out
@@ -1081,8 +1087,13 @@ func (g *compilerGroup) decide() []compilerDecision {
 	for d = range all {
 	}
 	for _, s := range sites {
+		if s.source == "compiler" {
+			continue
+		}
 		if s.resolution != "resolved" {
 			out = append(out, compilerDecision{rid: s.id, dst: d, from: s.resolution})
+		} else if s.bound == d {
+			out = append(out, compilerDecision{rid: s.id, dst: d, from: s.resolution, confirmed: true})
 		}
 	}
 	return out
@@ -1227,16 +1238,20 @@ func (r *Registry) MarkCompilerResolutions(ctx context.Context, runID int64) (Co
 			_ = ins.Close()
 			return st, fmt.Errorf("registry: mark compiler resolutions: bind: %w", err)
 		}
-		st.Bound++
-		switch {
-		case d.moved:
-			st.Corrected++
-		case Resolution(d.from) == ResolutionUnresolved:
-			st.FromUnresolved++
-		case Resolution(d.from) == ResolutionAmbiguous:
-			st.FromAmbiguous++
-		case Resolution(d.from) == ResolutionPending:
-			st.FromPending++
+		if d.confirmed {
+			st.Confirmed++
+		} else {
+			st.Bound++
+			switch {
+			case d.moved:
+				st.Corrected++
+			case Resolution(d.from) == ResolutionUnresolved:
+				st.FromUnresolved++
+			case Resolution(d.from) == ResolutionAmbiguous:
+				st.FromAmbiguous++
+			case Resolution(d.from) == ResolutionPending:
+				st.FromPending++
+			}
 		}
 	}
 	_ = ins.Close()

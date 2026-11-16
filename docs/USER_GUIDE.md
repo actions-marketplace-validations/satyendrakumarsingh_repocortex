@@ -345,11 +345,21 @@ name: RepoCortex Change-Safety Gate
 on:
   pull_request:
     branches: [main]
+    paths-ignore:
+      - 'docs/**'
+      - '*.md'
   push:
     branches: [main]
+    paths-ignore:
+      - 'docs/**'
+      - '*.md'
 
 permissions:
   contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
   # Lowest blindspot / architecture severity that fails the build: high|medium|low.

@@ -360,21 +360,51 @@ func extractGo(lines []string) []Route {
 
 var (
 	// @app.get("/path"), @router.post("/path"), @app.route("/path", methods=["POST"])
-	pyDecorator  = regexp.MustCompile(`^@\s*[\w.]+\.\s*(get|post|put|patch|delete|route)\s*\(\s*["']([^"']*)["']`)
-	pyMethodsArg = regexp.MustCompile(`methods\s*=\s*\[([^\]]*)\]`)
-	pyFuncDecl   = regexp.MustCompile(`^\s*(?:async\s+)?def\s+(\w+)\s*\(`)
+	pyDecorator      = regexp.MustCompile(`^@\s*[\w.]+\.\s*(get|post|put|patch|delete|route)\b`)
+	pyDecoratorStart = regexp.MustCompile(`^@\s*[\w.]+\.\s*(get|post|put|patch|delete|route)\s*\(`)
+	pyMethodsArg     = regexp.MustCompile(`methods\s*=\s*\[([^\]]*)\]`)
+	pyFuncDecl       = regexp.MustCompile(`^\s*(?:async\s+)?def\s+(\w+)\s*\(`)
 )
 
 func extractPython(lines []string) []Route {
 	var out []Route
-	for i, line := range lines {
-		trimmed := strings.TrimSpace(line)
-		m := pyDecorator.FindStringSubmatch(trimmed)
+	for i := 0; i < len(lines); i++ {
+		trimmed := strings.TrimSpace(lines[i])
+		m := pyDecoratorStart.FindStringSubmatch(trimmed)
 		if m == nil {
 			continue
 		}
 		verb := strings.ToUpper(m[1])
 		framework := FrameworkFastAPI
+
+		// Accumulate decorator lines until balanced parentheses.
+		var decText strings.Builder
+		endLine := i
+		depth := 0
+		for j := i; j < len(lines) && j < i+25; j++ {
+			lineText := lines[j]
+			decText.WriteString(lineText)
+			decText.WriteString(" ")
+			for _, r := range lineText {
+				if r == '(' {
+					depth++
+				} else if r == ')' {
+					depth--
+				}
+			}
+			if depth <= 0 {
+				endLine = j
+				break
+			}
+		}
+
+		fullDec := decText.String()
+		routePath := firstQuoted(fullDec)
+		if routePath == "" {
+			continue
+		}
+
+		handler := pyHandlerAfter(lines, endLine)
 
 		if verb == "ROUTE" {
 			// Flask spells the verb in methods=[...]; without it the route
@@ -382,14 +412,14 @@ func extractPython(lines []string) []Route {
 			// rather than a guess.
 			framework = FrameworkFlask
 			verb = "GET"
-			if mm := pyMethodsArg.FindStringSubmatch(trimmed); mm != nil {
+			if mm := pyMethodsArg.FindStringSubmatch(fullDec); mm != nil {
 				for _, v := range strings.Split(mm[1], ",") {
 					v = strings.ToUpper(strings.Trim(strings.TrimSpace(v), `"'`))
 					if httpMethods[v] {
 						out = append(out, Route{
-							Method: v, Path: m[2], Framework: FrameworkFlask,
+							Method: v, Path: routePath, Framework: FrameworkFlask,
 							Line: i + 1, Confidence: model.ConfidenceHigh,
-							Handler: handlerAfter(lines, i, pyFuncDecl),
+							Handler: handler,
 						})
 					}
 				}
@@ -400,12 +430,39 @@ func extractPython(lines []string) []Route {
 			continue
 		}
 		out = append(out, Route{
-			Method: verb, Path: m[2], Framework: framework,
+			Method: verb, Path: routePath, Framework: framework,
 			Line: i + 1, Confidence: model.ConfidenceHigh,
-			Handler: handlerAfter(lines, i, pyFuncDecl),
+			Handler: handler,
 		})
 	}
 	return out
+}
+
+func pyHandlerAfter(lines []string, from int) string {
+	inDec := false
+	for i := from + 1; i < len(lines) && i < from+25; i++ {
+		t := strings.TrimSpace(lines[i])
+		if t == "" || strings.HasPrefix(t, "#") {
+			continue
+		}
+		if inDec {
+			if strings.Contains(t, ")") {
+				inDec = false
+			}
+			continue
+		}
+		if strings.HasPrefix(t, "@") {
+			if strings.Contains(t, "(") && !strings.Contains(t, ")") {
+				inDec = true
+			}
+			continue
+		}
+		if m := pyFuncDecl.FindStringSubmatch(lines[i]); m != nil {
+			return m[1]
+		}
+		return ""
+	}
+	return ""
 }
 
 // ---------------------------------------------------------------- Django
