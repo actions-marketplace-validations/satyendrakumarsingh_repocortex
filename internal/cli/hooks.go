@@ -30,11 +30,11 @@ const (
 	hookBegin = "# >>> repocortex post-commit (managed) >>>"
 	hookEnd   = "# <<< repocortex post-commit (managed) <<<"
 
-	// postCommitName is the only hook RepoCortex writes. post-commit runs after
-	// the commit object exists, so the index it builds names a revision that a
-	// reader can actually check out — which pre-commit cannot promise.
+	// postCommitName is the primary hook RepoCortex writes.
 	postCommitName = "post-commit"
 )
+
+var managedHookNames = []string{"post-commit", "post-merge", "post-checkout"}
 
 // hookBody is the managed block. It re-indexes and re-resolves in the
 // background and swallows every failure, because a hook that can fail a commit
@@ -42,10 +42,10 @@ const (
 func hookBody(binary string) string {
 	var b strings.Builder
 	b.WriteString(hookBegin + "\n")
-	b.WriteString("# Re-indexes this repository after every commit so the graph, the portal\n")
-	b.WriteString("# and any connected agent describe the commit you just made.\n")
-	b.WriteString("# Runs detached and never fails the commit: a stale index is a problem,\n")
-	b.WriteString("# a blocked commit is a worse one.\n")
+	b.WriteString("# Re-indexes this repository after commits, merges and branch switches so the graph,\n")
+	b.WriteString("# the portal and any connected agent describe the code you just updated.\n")
+	b.WriteString("# Runs detached and never fails: a stale index is a problem,\n")
+	b.WriteString("# a blocked git operation is a worse one.\n")
 	b.WriteString("if command -v " + shellQuote(binary) + " >/dev/null 2>&1; then\n")
 	b.WriteString("  (" + shellQuote(binary) + " index --quiet >/dev/null 2>&1 && \\\n")
 	b.WriteString("   " + shellQuote(binary) + " resolve --quiet >/dev/null 2>&1) &\n")
@@ -193,7 +193,8 @@ func hooksDir(root string) (string, error) {
 	return filepath.Join(gitDir, "hooks"), nil
 }
 
-// InstallCommitHook writes (or updates) the managed block.
+// InstallCommitHook writes (or updates) the managed block in post-commit,
+// post-merge (on git pull/merge), and post-checkout (on branch switch).
 func InstallCommitHook(root, binary string) (HookState, error) {
 	dir, err := hooksDir(root)
 	if err != nil {
@@ -202,9 +203,21 @@ func InstallCommitHook(root, binary string) (HookState, error) {
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return HookState{}, fmt.Errorf("hooks: create %s: %w", dir, err)
 	}
-	path := filepath.Join(dir, postCommitName)
 	block := hookBody(binary)
+	var primary HookState
+	for _, name := range managedHookNames {
+		st, err := installSingleHook(filepath.Join(dir, name), block)
+		if err != nil {
+			return HookState{}, err
+		}
+		if name == postCommitName {
+			primary = st
+		}
+	}
+	return primary, nil
+}
 
+func installSingleHook(path, block string) (HookState, error) {
 	existing, err := os.ReadFile(path)
 	switch {
 	case errors.Is(err, fs.ErrNotExist):
@@ -272,14 +285,28 @@ func stripBlock(text string) (string, bool) {
 	return text[:start] + text[end:], true
 }
 
-// UninstallCommitHook removes the managed block, leaving any other hook content
-// exactly as it was. Reports whether anything was removed.
+// UninstallCommitHook removes the managed block from post-commit, post-merge,
+// and post-checkout, leaving any other hook content exactly as it was.
+// Reports whether anything was removed.
 func UninstallCommitHook(root string) (bool, error) {
 	dir, err := hooksDir(root)
 	if err != nil {
 		return false, err
 	}
-	path := filepath.Join(dir, postCommitName)
+	anyRemoved := false
+	for _, name := range managedHookNames {
+		removed, err := uninstallSingleHook(filepath.Join(dir, name))
+		if err != nil {
+			return false, err
+		}
+		if removed {
+			anyRemoved = true
+		}
+	}
+	return anyRemoved, nil
+}
+
+func uninstallSingleHook(path string) (bool, error) {
 	data, err := os.ReadFile(path)
 	if errors.Is(err, fs.ErrNotExist) {
 		return false, nil

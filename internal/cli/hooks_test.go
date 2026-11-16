@@ -255,3 +255,30 @@ func TestHookBodyCannotFailACommit(t *testing.T) {
 		t.Error("hook can exit non-zero, which would fail the commit")
 	}
 }
+
+func TestInstallCommitHookInstallsPostMergeAndCheckout(t *testing.T) {
+	t.Parallel()
+	root := newRepo(t)
+	if _, err := InstallCommitHook(root, "repocortex"); err != nil {
+		t.Fatalf("install: %v", err)
+	}
+	for _, name := range []string{"post-commit", "post-merge", "post-checkout"} {
+		path := filepath.Join(root, ".git", "hooks", name)
+		data, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatalf("expected hook %s to exist: %v", name, err)
+		}
+		if !strings.Contains(string(data), hookBegin) {
+			t.Errorf("hook %s missing managed marker", name)
+		}
+	}
+	if _, err := UninstallCommitHook(root); err != nil {
+		t.Fatalf("uninstall: %v", err)
+	}
+	for _, name := range []string{"post-commit", "post-merge", "post-checkout"} {
+		path := filepath.Join(root, ".git", "hooks", name)
+		if _, err := os.Stat(path); !os.IsNotExist(err) {
+			t.Errorf("hook %s should be deleted after uninstall", name)
+		}
+	}
+}
