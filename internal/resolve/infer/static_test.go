@@ -650,3 +650,30 @@ func TestSubprojectCandidateIsolation(t *testing.T) {
 		t.Fatalf("expected confidence low, got %s", edge.Confidence)
 	}
 }
+
+func TestConftestFixtureResolution(t *testing.T) {
+	testCaller := "backend/services/auth/tests/integration/test_login.py"
+	idx := index(
+		pyFunc(101, "backend/services/auth/tests/conftest.py", "auth_headers"),
+		pyFunc(102, "backend/services/billing/tests/conftest.py", "auth_headers"),
+	)
+	fr := registry.FileRefs{
+		FileID:  fileIDOf(testCaller),
+		Path:    testCaller,
+		Symbols: scopeAt(testCaller, "test_admin_login"),
+		Refs: []registry.Reference{
+			pyCall(20, "auth_headers", "", 12),
+		},
+	}
+	edges := resolvePython(t, idx, nil, fr)
+	edge, ok := edges[12]
+	if !ok {
+		t.Fatalf("expected edge for auth_headers fixture call, got none: %+v", edges)
+	}
+	if edge.DstID != 101 {
+		t.Fatalf("expected target to be auth conftest (ID 101), got %d", edge.DstID)
+	}
+	if edge.Confidence != model.ConfidenceHigh {
+		t.Fatalf("expected confidence high for conftest fixture, got %s", edge.Confidence)
+	}
+}

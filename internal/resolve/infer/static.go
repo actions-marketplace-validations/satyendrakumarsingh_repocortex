@@ -517,6 +517,11 @@ func (r *Resolver) pickQualified(
 				return candidate{first, model.ConfidenceHigh, reason}, true
 			}
 		}
+		if isPythonTest(fr.Path) {
+			if nearest, ok := resolveConftest(fr.Path, cands); ok {
+				return candidate{nearest, model.ConfidenceHigh, "defined in ancestor conftest.py"}, true
+			}
+		}
 		// The file neither defines the name nor imported it by name. What is
 		// left is a module the file imports that happens to define one — which
 		// is how a wildcard import supplies a name, and also how a builtin or a
@@ -659,6 +664,33 @@ func subprojectOf(p string) string {
 		}
 	}
 	return ""
+}
+
+// isPythonTest reports whether a file path points to a Python test file.
+func isPythonTest(p string) bool {
+	base := filepath.Base(p)
+	return strings.HasSuffix(p, ".py") && (strings.HasPrefix(base, "test_") || strings.HasSuffix(base, "_test.py") || strings.Contains(filepath.ToSlash(p), "/tests/"))
+}
+
+// resolveConftest finds the definition of a fixture or helper declared in the nearest ancestor
+// conftest.py for a Python test file.
+func resolveConftest(callerPath string, cands []registry.SymbolIndexEntry) (registry.SymbolIndexEntry, bool) {
+	callerDir := filepath.ToSlash(filepath.Dir(callerPath))
+	var nearest registry.SymbolIndexEntry
+	nearestLen := -1
+	for _, c := range cands {
+		cPath := filepath.ToSlash(c.FilePath)
+		if filepath.Base(cPath) == "conftest.py" && isModuleLevel(c) {
+			cDir := filepath.Dir(cPath)
+			if cDir == callerDir || strings.HasPrefix(callerDir, cDir+"/") {
+				if len(cDir) > nearestLen {
+					nearest = c
+					nearestLen = len(cDir)
+				}
+			}
+		}
+	}
+	return nearest, nearestLen >= 0
 }
 
 // nameOnly reports a binding made on a name alone, one confidence level below

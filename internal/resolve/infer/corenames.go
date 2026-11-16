@@ -74,7 +74,7 @@ func buildCoreMembers() map[string]map[string]struct{} {
 		floatValue shortValue byteValue booleanValue charValue parseInt parseLong parseDouble
 		name ordinal getName getMessage getCause printStackTrace close flush read write run
 		start interrupt sleep currentThread getKey getValue setValue peek push pop poll offer
-		first last`)
+		first last clear format onBackPressed`)
 	for _, lang := range []string{"java", "scala", "groovy"} {
 		coreMembers[lang] = jvm
 	}

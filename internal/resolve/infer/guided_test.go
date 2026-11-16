@@ -80,6 +80,29 @@ func TestAnOverCapNameWithNothingToGoOnStaysAmbiguous(t *testing.T) {
 	}
 }
 
+func TestAnOverCapNameInSameFileIsRescued(t *testing.T) {
+	file := "backend/python/auth/test_auth.py"
+	defs := manyDefs("_seed", "function", 15, file)
+	// Make defs[0] match the caller's FileID (100)
+	idx := map[string][]registry.SymbolIndexEntry{"_seed": defs}
+	fr := registry.FileRefs{
+		FileID:   100,
+		Path:     file,
+		Language: "python",
+		Symbols:  within(90, file, "test_login"),
+		Refs: []registry.Reference{
+			{ID: 1, Name: "_seed", Kind: "reference.call", Line: 5},
+		},
+	}
+	edges, outs, _ := resolveOne(t, New(idx, Options{}), fr)
+	if len(outs) == 0 || outs[1].Resolution != registry.ResolutionResolved || outs[1].SymbolID != 1000 {
+		t.Fatalf("outcome = %+v, want resolved to same-file definition (1000)", outs[1])
+	}
+	if len(edges) == 0 || edges[0].Confidence != model.ConfidenceHigh {
+		t.Fatalf("edges = %+v, want a high CALLS edge", edges)
+	}
+}
+
 // TestAGuidedSetNeverClaimsTheNameIsUniqueInTheRepository: the neighbour
 // defines the name once and the repository has ten more. The neighbour is
 // evidence of its own and is reported as that, never as "unique in the

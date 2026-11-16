@@ -924,23 +924,48 @@ func (r *Resolver) pickCapped(
 	stats *Stats,
 ) (candidate, bool) {
 	if len(cands) > spec.MaxCandidates {
-		// Too many to weigh — UNLESS the receiver settles it.
+		// Too many to weigh — UNLESS same-file, import, receiver, or service boundary narrows it.
 		//
-		// This cap used to run before pick(), so an over-subscribed name
-		// was abandoned without the receiver tier ever seeing it. On a
-		// 2,681-file Java service that discarded 643 references to
-		// `build`, which has 250 definitions and is almost always called
-		// as `someBuilder.build()` — the one piece of evidence that
-		// identifies it exactly.
-		//
-		// Narrowing first is not a weaker test than the cap, it is a
-		// stronger one: a receiver that leaves a single candidate has
-		// constrained the type as well as the name, which is precisely
-		// what the cap exists to admit it cannot do on names alone.
-		// A8 — count the drop before attempting the rescue, so the two
-		// counters bracket what narrowByReceiver saved.
+		// Lexical scoping means a definition in the calling file shadows identical
+		// names from across the repository. Likewise, an explicit import, receiver,
+		// or service boundary constraints the candidates directly.
 		stats.CapExceeded++
-		narrowed := narrowByReceiver(spec, ref, cands)
+		var narrowed []registry.SymbolIndexEntry
+		for _, c := range cands {
+			if c.FileID == fr.FileID {
+				narrowed = append(narrowed, c)
+			}
+		}
+		if len(narrowed) == 0 || len(narrowed) > spec.MaxCandidates {
+			if spec.QualifiedMembers && ref.Receiver == "" {
+				if group, _ := resolveMember(spec, imports, ref.Name, cands); len(group) > 0 && len(group) <= spec.MaxCandidates {
+					narrowed = group
+				}
+			}
+		}
+		if len(narrowed) == 0 || len(narrowed) > spec.MaxCandidates {
+			if isPythonTest(fr.Path) && ref.Receiver == "" {
+				if nearest, ok := resolveConftest(fr.Path, cands); ok {
+					narrowed = []registry.SymbolIndexEntry{nearest}
+				}
+			}
+		}
+		if len(narrowed) == 0 || len(narrowed) > spec.MaxCandidates {
+			narrowed = narrowByReceiver(spec, ref, cands)
+		}
+		if len(narrowed) == 0 || len(narrowed) > spec.MaxCandidates {
+			if proj := subprojectOf(fr.Path); proj != "" {
+				var sameProj []registry.SymbolIndexEntry
+				for _, c := range cands {
+					if subprojectOf(c.FilePath) == proj {
+						sameProj = append(sameProj, c)
+					}
+				}
+				if len(sameProj) > 0 && len(sameProj) <= spec.MaxCandidates {
+					narrowed = sameProj
+				}
+			}
+		}
 		if len(narrowed) == 0 || len(narrowed) > spec.MaxCandidates {
 			stats.CapDropped++
 			return candidate{}, false
