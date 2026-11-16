@@ -214,6 +214,9 @@ func buildCoreMembers() map[string]map[string]struct{} {
 		willReturnSelf willReturnMap willReturnOnConsecutiveCalls willThrowException
 		returnValue returnCallback withConsecutive onlyMethods disableOriginalConstructor
 		with expects method will
+		where whereIn whereNull whereNotNull orWhere orderBy groupBy select
+		first firstOrFail find findOrFail pluck paginate simplePaginate
+		exists doesntExist
 		getMock`)
 	coreMembers["swift"] = words(`
 		append insert remove removeAll contains count isEmpty first last map filter reduce

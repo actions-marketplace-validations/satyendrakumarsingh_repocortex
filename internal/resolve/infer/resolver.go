@@ -954,10 +954,10 @@ func (r *Resolver) pickCapped(
 			narrowed = narrowByReceiver(spec, ref, cands)
 		}
 		if len(narrowed) == 0 || len(narrowed) > spec.MaxCandidates {
-			if proj := subprojectOf(fr.Path); proj != "" {
+			if proj := r.subprojectOf(fr.Path); proj != "" {
 				var sameProj []registry.SymbolIndexEntry
 				for _, c := range cands {
-					if subprojectOf(c.FilePath) == proj {
+					if r.subprojectOf(c.FilePath) == proj {
 						sameProj = append(sameProj, c)
 					}
 				}
@@ -978,6 +978,17 @@ func (r *Resolver) pickCapped(
 		return candidate{}, false
 	}
 	return best, true
+}
+
+// subprojectOf returns the subproject root for a file path, consulting the
+// repository Layout first and falling back to static path patterns.
+func (r *Resolver) subprojectOf(p string) string {
+	if r != nil && r.layout != nil {
+		if proj := r.layout.ProjectOf(p); proj != "" {
+			return proj
+		}
+	}
+	return subprojectOf(p)
 }
 
 // fallbackByName is what the name alone answers for a call whose receiver's

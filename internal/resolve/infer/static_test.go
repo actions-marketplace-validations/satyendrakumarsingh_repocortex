@@ -613,6 +613,12 @@ func TestSubprojectOf(t *testing.T) {
 		{"packages/ui/button.tsx", "packages/ui"},
 		{"apps/web/page.tsx", "apps/web"},
 		{"modules/shared/util.py", "modules/shared"},
+		{"mobile/android/MainActivity.kt", "mobile/android"},
+		{"mobile/ios/AppDelegate.swift", "mobile/ios"},
+		{"components/table/data.tsx", "components/table"},
+		{"plugins/auth/index.js", "plugins/auth"},
+		{"clients/python/client.py", "clients/python"},
+		{"tools/migrator/run.go", "tools/migrator"},
 		{"single_service/main.py", ""},
 		{"main.py", ""},
 	}
@@ -676,4 +682,69 @@ func TestConftestFixtureResolution(t *testing.T) {
 	if edge.Confidence != model.ConfidenceHigh {
 		t.Fatalf("expected confidence high for conftest fixture, got %s", edge.Confidence)
 	}
+}
+
+func TestPolyglotParentFolderLayoutCandidateIsolation(t *testing.T) {
+	caller := "custom_service_auth/handler.py"
+	files := []string{
+		"custom_service_auth/pyproject.toml",
+		"custom_service_auth/handler.py",
+		"custom_service_auth/token.py",
+		"custom_service_billing/pyproject.toml",
+		"custom_service_billing/token.py",
+	}
+	layout := NewLayout(files, nil)
+	idx := index(
+		pyFunc(1, "custom_service_auth/token.py", "process_token"),
+		pyFunc(2, "custom_service_billing/token.py", "process_token"),
+	)
+	fr := registry.FileRefs{
+		FileID:  fileIDOf(caller),
+		Path:    caller,
+		Symbols: scopeAt(caller, "handle_request"),
+		Refs: []registry.Reference{
+			pyCall(10, "process_token", "", 15),
+		},
+	}
+	edges := resolvePythonWithLayout(t, idx, layout, fr)
+	edge, ok := edges[15]
+	if !ok {
+		t.Fatalf("expected edge for process_token call, got none: %+v", edges)
+	}
+	if edge.DstID != 1 {
+		t.Fatalf("expected target to be auth token (ID 1), got %d", edge.DstID)
+	}
+	if edge.Confidence != model.ConfidenceLow {
+		t.Fatalf("expected confidence low, got %s", edge.Confidence)
+	}
+}
+
+func resolvePythonWithLayout(
+	t *testing.T,
+	idx map[string][]registry.SymbolIndexEntry,
+	layout *Layout,
+	fr registry.FileRefs,
+) map[int]model.Edge {
+	t.Helper()
+	fr.Language = "python"
+	opts := Options{Layout: layout}
+	r := New(idx, opts)
+	ctx := context.Background()
+	var st Stats
+	edges, _, err := r.ResolveFile(ctx, fr, &st)
+	if err != nil {
+		t.Fatal(err)
+	}
+	late, _, err := r.ResolveDeferred(ctx, &st)
+	if err != nil {
+		t.Fatal(err)
+	}
+	byLine := map[int]model.Edge{}
+	for _, e := range append(edges, late...) {
+		if _, dup := byLine[e.Evidence.Range.Start.Line]; dup {
+			t.Fatalf("two edges from line %d", e.Evidence.Range.Start.Line)
+		}
+		byLine[e.Evidence.Range.Start.Line] = e
+	}
+	return byLine
 }

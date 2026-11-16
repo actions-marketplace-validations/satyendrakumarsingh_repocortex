@@ -76,12 +76,17 @@ var markerLanguages = map[string]Language{
 	// type-checks plain JavaScript with inferred settings. Detecting it does not
 	// mean reading it.
 	"package.json": LangTypeScript,
+	"deno.json":    LangTypeScript,
+	"deno.jsonc":   LangTypeScript,
 
-	"go.mod": LangGo,
+	"go.mod":  LangGo,
+	"go.work": LangGo,
 
 	"pyproject.toml":   LangPython,
 	"requirements.txt": LangPython,
 	"setup.py":         LangPython,
+	"setup.cfg":        LangPython,
+	"Pipfile":          LangPython,
 
 	// C and C++ have no manifest of their own. What scip-clang needs is a
 	// compilation database, so that file is the marker that lets it run; a

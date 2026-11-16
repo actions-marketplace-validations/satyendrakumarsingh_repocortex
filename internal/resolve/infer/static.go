@@ -633,10 +633,10 @@ func (r *Resolver) pickByName(
 	if len(cands) == 1 && cands[0].Exported && !r.specs.IsGenericName(ref.Name) {
 		return candidate{cands[0], model.ConfidenceLow, "unique name in repository, no import evidence"}, true
 	}
-	if proj := subprojectOf(fr.Path); proj != "" && !r.specs.IsGenericName(ref.Name) {
+	if proj := r.subprojectOf(fr.Path); proj != "" && !r.specs.IsGenericName(ref.Name) {
 		var sameProj []registry.SymbolIndexEntry
 		for _, c := range cands {
-			if subprojectOf(c.FilePath) == proj && c.Exported {
+			if r.subprojectOf(c.FilePath) == proj && c.Exported {
 				sameProj = append(sameProj, c)
 			}
 		}
@@ -654,7 +654,7 @@ func subprojectOf(p string) string {
 	parts := strings.Split(clean, "/")
 	if len(parts) >= 2 {
 		switch parts[0] {
-		case "services", "packages", "apps", "frontend", "modules":
+		case "services", "packages", "apps", "frontend", "modules", "components", "libs", "plugins", "microservices", "mobile", "projects", "clients", "tools":
 			return parts[0] + "/" + parts[1]
 		case "backend":
 			if len(parts) >= 3 {

@@ -2,6 +2,7 @@ package infer
 
 import (
 	"path"
+	"path/filepath"
 	"sort"
 	"strings"
 )
@@ -49,6 +50,12 @@ type Layout struct {
 	// is one module.
 	moduleRoots map[string]struct{}
 
+	// projectRoots holds the directories that contain a subproject manifest
+	// (e.g. package.json, go.mod, pyproject.toml, Cargo.toml, pom.xml, composer.json).
+	// Used in polyglot repositories and parent folders to partition candidate
+	// searches so unrelated subprojects do not contaminate each other.
+	projectRoots map[string]struct{}
+
 	// deps are the dependencies the repository's manifests declare.
 	deps map[string]struct{}
 }
@@ -57,16 +64,46 @@ type Layout struct {
 // name is the directory's.
 var packageMarkers = map[string]bool{"__init__.py": true, "__init__.pyi": true}
 
+// projectMarkers are manifest files that mark the root of a project or subproject
+// in monorepos and polyglot parent folders.
+var projectMarkers = map[string]bool{
+	"package.json":          true,
+	"tsconfig.json":         true,
+	"deno.json":             true,
+	"deno.jsonc":            true,
+	"go.mod":                true,
+	"go.work":               true,
+	"pyproject.toml":        true,
+	"requirements.txt":      true,
+	"setup.py":              true,
+	"setup.cfg":             true,
+	"Pipfile":               true,
+	"pom.xml":               true,
+	"build.gradle":          true,
+	"build.gradle.kts":      true,
+	"Cargo.toml":            true,
+	"composer.json":         true,
+	"Gemfile":               true,
+	"Package.swift":         true,
+	"pubspec.yaml":          true,
+	"mix.exs":               true,
+	"rebar.config":          true,
+	"compile_commands.json": true,
+	"CMakeLists.txt":        true,
+	"meson.build":           true,
+}
+
 // NewLayout builds a Layout from every indexed file's path and every declared
 // dependency's name.
 func NewLayout(filePaths, dependencies []string) *Layout {
 	l := &Layout{
-		dirs:        make(map[string]struct{}, len(filePaths)/4+1),
-		dirNames:    make(map[string]struct{}, len(filePaths)/4+1),
-		stems:       make(map[string]struct{}, len(filePaths)/2+1),
-		initDirs:    make(map[string]struct{}, 16),
-		moduleRoots: make(map[string]struct{}, 4),
-		deps:        make(map[string]struct{}, len(dependencies)),
+		dirs:         make(map[string]struct{}, len(filePaths)/4+1),
+		dirNames:     make(map[string]struct{}, len(filePaths)/4+1),
+		stems:        make(map[string]struct{}, len(filePaths)/2+1),
+		initDirs:     make(map[string]struct{}, 16),
+		moduleRoots:  make(map[string]struct{}, 4),
+		projectRoots: make(map[string]struct{}, 8),
+		deps:         make(map[string]struct{}, len(dependencies)),
 	}
 	for _, p := range filePaths {
 		dir := path.Dir(p)
@@ -78,6 +115,11 @@ func NewLayout(filePaths, dependencies []string) *Layout {
 		}
 		if base == "go.mod" {
 			l.moduleRoots[key] = struct{}{}
+		}
+		if projectMarkers[base] || strings.HasSuffix(base, ".csproj") || strings.HasSuffix(base, ".sln") {
+			if key != "" {
+				l.projectRoots[key] = struct{}{}
+			}
 		}
 		l.stems[strings.ToLower(strings.TrimSuffix(base, path.Ext(base)))] = struct{}{}
 		if _, seen := l.dirs[key]; seen {
@@ -271,4 +313,22 @@ func (l *Layout) DeclaresDependency(importPath string) bool {
 		}
 		p = p[:i]
 	}
+}
+
+// ProjectOf returns the innermost subproject root enclosing p, or "" if p is
+// not under any recognized subproject directory.
+func (l *Layout) ProjectOf(p string) string {
+	if l == nil || len(l.projectRoots) == 0 {
+		return ""
+	}
+	clean := filepath.ToSlash(p)
+	dir := path.Dir(clean)
+	segs := dirSegments(dir)
+	for n := len(segs); n > 0; n-- {
+		k := strings.Join(segs[:n], "/")
+		if _, ok := l.projectRoots[k]; ok {
+			return k
+		}
+	}
+	return ""
 }
